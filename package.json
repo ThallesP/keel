@@ -1,0 +1,56 @@
+{
+  "name": "my-better-t-app",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "zod": "^4.5.4",
+      "typescript": "^6.0.3",
+      "@types/node": "^26.4.1",
+      "varlock": "1.18.0",
+      "lucide-react": "^1.41.0",
+      "next-themes": "^0.4.6",
+      "react": "^19.2.8",
+      "react-dom": "^19.2.8",
+      "sonner": "^2.0.8",
+      "convex": "^1.45.0",
+      "better-auth": "1.6.17",
+      "@convex-dev/better-auth": "^0.12.5",
+      "@types/react": "^19.2.18",
+      "@types/react-dom": "^19.2.7",
+      "tailwindcss": "^4.3.3"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "dev:web": "turbo run dev -F web --",
+    "dev:server": "turbo run dev -F @my-better-t-app/backend --",
+    "dev:setup": "turbo run dev:setup -F @my-better-t-app/backend --",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "env:generate": "varlock codegen --path ./apps/web/",
+    "postinstall": "varlock codegen --path ./apps/web/",
+    "check": "oxlint && oxfmt --write"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@my-better-t-app/config": "workspace:*",
+    "@types/node": "catalog:",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "turbo": "^2.10.12",
+    "typescript": "catalog:",
+    "varlock": "catalog:"
+  },
+  "packageManager": "bun@1.4.0"
+}

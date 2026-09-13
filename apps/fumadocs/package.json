@@ -1,0 +1,46 @@
+{
+  "name": "fumadocs",
+  "version": "0.0.28",
+  "private": true,
+  "scripts": {
+    "build": "next build && node --env-file-if-exists=.env.local scripts/sync-content.ts .next/server/app/static.json.body",
+    "dev": "next dev --port=4000",
+    "start": "next start",
+    "types:check": "next typegen && tsc --noEmit",
+    "lint": "oxlint"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^4.0.96",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@orama/core": "^1.2.19",
+    "ai": "^7.0.93",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.2.6",
+    "flexsearch": "^0.8.212",
+    "fumadocs-core": "16.15.10",
+    "fumadocs-mdx": "15.4.0",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.15.10",
+    "hast-util-to-jsx-runtime": "^2.3.6",
+    "lucide-react": "^1.43.0",
+    "next": "16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "remark": "^15.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-rehype": "^11.1.2",
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/hast": "^3.0.5",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "oxlint": "^1.82.0",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}

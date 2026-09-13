@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "skills": {
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/best-practices/SKILL.md",
+      "computedHash": "0c30be0e118c2b7a0c4c57bd9e63bf110c7e420a79ec6ce7997153f3b1e066ee"
+    },
+    "better-auth-security-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "security/SKILL.md",
+      "computedHash": "7a230edf3a24ce18162cb4379f59b6a19b8d24ca04db530609d0f15cede556dc"
+    },
+    "convex-best-practices": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-best-practices/SKILL.md",
+      "computedHash": "3b24d2afbb5859e3a3640c1e47e2ac9ace81e9737ec76b891951999361c92ab1"
+    },
+    "convex-cron-jobs": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-cron-jobs/SKILL.md",
+      "computedHash": "e786347f192c02a97e703b41cb2d8727346092b7112a1c86da9fbe982247962e"
+    },
+    "convex-file-storage": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-file-storage/SKILL.md",
+      "computedHash": "a541556841d1a907059f73ef4a428a4655b3355baf160e5c0aca1cac86054c0b"
+    },
+    "convex-functions": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-functions/SKILL.md",
+      "computedHash": "a08fd9695ad0558ec12a312136d6a1483df04fcb5548207a99ce7d14c0df251a"
+    },
+    "convex-http-actions": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-http-actions/SKILL.md",
+      "computedHash": "c189703dd5d91f280b53d6bd903bf8313e935b1edab136bb7ffdb6c1512b95aa"
+    },
+    "convex-migrations": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-migrations/SKILL.md",
+      "computedHash": "869a862d35e7fb024d244830b0968e231f8ff99fefa0f879270e13e14c4934fe"
+    },
+    "convex-realtime": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-realtime/SKILL.md",
+      "computedHash": "aa08a2856778c09aa8c0f5eef431fc102115e04461d7d3f86e6ce97b5848b52f"
+    },
+    "convex-schema-validator": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-schema-validator/SKILL.md",
+      "computedHash": "97b7965f2bc665f1848196813c79e32bff2d8b58b3a701b313c4a96f0bf5ac95"
+    },
+    "convex-security-check": {
+      "source": "waynesutton/convexskills",
+      "sourceType": "github",
+      "skillPath": "skills/convex-security-check/SKILL.md",
+      "computedHash": "b53e061304bb81d037c6dd4e38762d27a596523bcbeab43c58e0b05140449802"
+    },
+    "email-and-password-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/emailAndPassword/SKILL.md",
+      "computedHash": "863886759f729081e265941f4f72c503835d55a1f34f6d63cebe6571159fff4a"
+    },
+    "shadcn": {
+      "source": "shadcn/ui",
+      "sourceType": "github",
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "f615de216e085a84e31593ad0fa9062232adc40cd87b7c7ab2b8e49abf6500be"
+    },
+    "turborepo": {
+      "source": "vercel/turborepo",
+      "sourceType": "github",
+      "skillPath": "skills/turborepo/SKILL.md",
+      "computedHash": "47a3efd6a45597eeff338b218183d4d67c2b99fa085ca255e970f5370dcd9dbd"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    }
+  }
+}

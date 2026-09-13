@@ -1,0 +1,29 @@
+name: my-better-t-app
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      secrets:
+        - web_env
+      args:
+        VITE_CONVEX_URL: ${VITE_CONVEX_URL:-}
+    init: true
+    ports:
+      - "3001:80"
+    env_file:
+      - path: apps/web/.env
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+# BuildKit makes these available only while install/build commands run.
+secrets:
+  web_env:
+    file: apps/web/.env

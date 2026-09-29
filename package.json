@@ -1,6 +1,7 @@
 {
   "name": "my-better-t-app",
   "private": true,
+  "license": "MIT",
   "workspaces": {
     "packages": [
       "apps/*",
@@ -32,10 +33,6 @@
     "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F @my-better-t-app/backend --",
     "dev:setup": "turbo run dev:setup -F @my-better-t-app/backend --",
-    "docker:build": "docker compose build",
-    "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f",
     "env:generate": "varlock codegen --path ./apps/web/",
     "postinstall": "varlock codegen --path ./apps/web/",
     "check": "oxlint && oxfmt --write"

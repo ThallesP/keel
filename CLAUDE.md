@@ -13,6 +13,12 @@ Differentiator: UI/UX and deploy DX.
   - Tailscale for user containers and control-plane/worker comms.
   - Public HTTP via Tailscale Funnel, one tsnet node per service (`<name>.<tailnet>.ts.net`). Custom domains later via Cloudflare Tunnel. See `docs/networking.md`.
 
+## Install and release
+
+- `install.sh` is the product's front door: one idempotent command, re-run = upgrade, `KEEL_JSON=1` for agents. Its contract (options, output, verification) is documented in `README.md`; keep the two in sync.
+- Control plane = `deploy/compose.yml` (self-hosted Convex + web). Images `ghcr.io/thallesp/keel-{web,functions,worker}` come from `.github/workflows/images.yml`. `ci.yml` runs `install.sh` end to end; anything that changes install behaviour must keep it green.
+- Web gets its Convex URLs at runtime (`/config.js`, `apps/web/src/lib/config.ts`). Never bake deployment URLs into the web build.
+
 ## Design docs
 
 - `docs/canvas.md` — v1 canvas UI spec (layout, nodes, edges, bottom panel, ship flow, tokens, React Flow mapping, where to start). Read before any UI work.

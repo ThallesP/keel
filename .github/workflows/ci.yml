@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run check-types
+
+  # Runs install.sh end to end on a fresh runner against images built from this commit, twice:
+  # the second run must be a no-op upgrade that keeps every secret.
+  install:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build images
+        run: |
+          docker buildx build --load -t local/keel-web:ci -f apps/web/Dockerfile .
+          docker buildx build --load -t local/keel-functions:ci -f deploy/functions.Dockerfile .
+          docker buildx build --load -t local/keel-worker:ci apps/worker
+      - name: Configure the installer for local images
+        run: |
+          # Swarm will not advertise on loopback; use the runner's primary address.
+          {
+            echo "KEEL_ADDR=$(hostname -I | awk '{print $1}')"
+            echo "KEEL_SRC=$PWD"
+            echo "KEEL_IMAGE_PREFIX=local"
+            echo "KEEL_VERSION=ci"
+            echo "KEEL_PULL=0"
+            echo "KEEL_JSON=1"
+          } >> "$GITHUB_ENV"
+      - run: sudo -E ./install.sh > first.json
+      - run: jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR' first.json
+      - name: Sign up and sign in against the installed control plane
+        run: |
+          site="http://$KEEL_ADDR:3211"
+          creds='"email":"ci@example.com","password":"correct-horse-battery"'
+          post() { curl -fsS -X POST -H 'Content-Type: application/json' -H "Origin: http://$KEEL_ADDR" "$site/api/auth/$1" -d "$2"; }
+          post sign-up/email "{$creds,\"name\":\"CI\"}" | jq -e .user.id
+          post sign-in/email "{$creds}" | jq -e .token
+      - name: Re-run is idempotent
+        run: |
+          secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }
+          before=$(secrets)
+          sudo -E ./install.sh > second.json
+          jq -e '.ok == true' second.json
+          [ "$before" = "$(secrets)" ]
+      - name: Diagnostics
+        if: failure()
+        run: |
+          cat first.json second.json 2>/dev/null || true
+          sudo docker compose -p keel ps || true
+          sudo docker compose -p keel logs --tail 200 || true
+          sudo docker service ps keel-worker --no-trunc || true
+          sudo docker service logs keel-worker --tail 100 || true

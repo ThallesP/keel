@@ -1,0 +1,52 @@
+# Keel control plane. Written to /opt/keel/compose.yml by install.sh and run as
+#   docker compose -p keel --env-file /opt/keel/.env -f /opt/keel/compose.yml up -d
+# Workers (user services, keel-worker) are Swarm services, not part of this file.
+# Every port binds to KEEL_ADDR (the tailnet IP), never 0.0.0.0: zero inbound ports on the
+# public interface (docs/networking.md).
+
+name: keel
+
+services:
+  backend:
+    # Pinned: backend upgrades can migrate the database. Bump deliberately.
+    image: ghcr.io/get-convex/convex-backend:5c7cb5bc7db457290f1769f95f1d1340912f7fd7
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    ports:
+      - "${KEEL_ADDR:?}:3210:3210"
+      - "${KEEL_ADDR:?}:3211:3211"
+    volumes:
+      - convex-data:/convex/data
+      # "use node" actions (convex/swarm.ts) drive Swarm through the manager's socket.
+      # Root-equivalent; see docs/workers.md, "How Convex reaches Docker".
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      INSTANCE_NAME: keel
+      INSTANCE_SECRET: ${INSTANCE_SECRET:?}
+      CONVEX_CLOUD_ORIGIN: http://${KEEL_ADDR}:3210
+      CONVEX_SITE_ORIGIN: http://${KEEL_ADDR}:3211
+      DISABLE_METRICS_ENDPOINT: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      start_period: 10s
+
+  web:
+    image: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel-web:${KEEL_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}:80"
+    environment:
+      KEEL_CONVEX_URL: http://${KEEL_ADDR}:3210
+      KEEL_CONVEX_SITE_URL: http://${KEEL_ADDR}:3211
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      start_period: 5s
+
+volumes:
+  convex-data:

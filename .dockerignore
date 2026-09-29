@@ -31,3 +31,7 @@ docker-compose.yml
 local.db
 local.db-*
 .data
+
+# Local Convex state, Keel install state
+**/.convex
+infra

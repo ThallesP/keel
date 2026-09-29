@@ -1,0 +1,16 @@
+{
+  "name": "worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Keel per-node worker: forwards Docker events to the control plane and streams container logs to the project's log sink.",
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@my-better-t-app/config": "workspace:*",
+    "@types/bun": "^1.3.0",
+    "typescript": "catalog:"
+  }
+}

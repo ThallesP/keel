@@ -2,6 +2,7 @@ import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { useState } from "react";
 
+import Loader from "@/components/loader";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 
@@ -10,7 +11,7 @@ export const Route = createFileRoute("/_auth")({
 });
 
 function AuthLayout() {
-  const [showSignIn, setShowSignIn] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(true);
 
   return (
     <>
@@ -18,14 +19,18 @@ function AuthLayout() {
         <Outlet />
       </Authenticated>
       <Unauthenticated>
-        {showSignIn ? (
-          <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
-        ) : (
-          <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
-        )}
+        <div className="flex h-svh items-center justify-center bg-canvas">
+          {showSignIn ? (
+            <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
+          ) : (
+            <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
+          )}
+        </div>
       </Unauthenticated>
       <AuthLoading>
-        <div>Loading...</div>
+        <div className="h-svh bg-canvas">
+          <Loader />
+        </div>
       </AuthLoading>
     </>
   );

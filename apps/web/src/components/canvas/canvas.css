@@ -1,0 +1,33 @@
+/* React Flow overrides. Loaded from canvas.tsx. */
+
+.react-flow__node {
+  font-family: var(--font-sans);
+}
+
+.react-flow__node-group {
+  padding: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+  box-shadow: none;
+  z-index: -1 !important; /* stay under the child nodes */
+}
+
+.react-flow__node-group.selected,
+.react-flow__node-group:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.react-flow__selection,
+.react-flow__nodesselection-rect {
+  background: rgba(31, 75, 255, 0.05);
+  border: 1px dashed var(--color-primary);
+}
+
+.react-flow__attribution {
+  background: transparent;
+  font-size: 9px;
+  color: var(--color-faint);
+}

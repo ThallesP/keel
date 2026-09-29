@@ -1,50 +1,46 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Authenticated, AuthLoading, Unauthenticated, useMutation } from "convex/react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-export const Route = createFileRoute("/")({
-  component: HomeComponent,
-});
+import Loader from "@/components/loader";
+import SignInForm from "@/components/sign-in-form";
+import SignUpForm from "@/components/sign-up-form";
 
-const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
+export const Route = createFileRoute("/")({ component: Index });
 
- ████████╗    ███████╗████████╗ █████╗  ██████╗██╗  ██╗
- ╚══██╔══╝    ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
-    ██║       ███████╗   ██║   ███████║██║     █████╔╝
-    ██║       ╚════██║   ██║   ██╔══██║██║     ██╔═██╗
-    ██║       ███████║   ██║   ██║  ██║╚██████╗██║  ██╗
-    ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
- `;
+/** Creates the user's first project on first use, then jumps to its canvas. */
+function Bootstrap() {
+  const ensureDefault = useMutation(api.projects.ensureDefault);
+  const navigate = useNavigate();
+  useEffect(() => {
+    ensureDefault({})
+      .then((slug) => navigate({ to: "/p/$projectId", params: { projectId: slug }, replace: true }))
+      .catch((err: Error) => toast.error(err.message));
+  }, [ensureDefault, navigate]);
+  return <Loader />;
+}
 
-function HomeComponent() {
-  const healthCheck = useQuery(api.healthCheck.get);
-
+function Index() {
+  const [showSignIn, setShowSignIn] = useState(true);
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-2">
-      <pre className="overflow-x-auto font-mono text-sm">{TITLE_TEXT}</pre>
-      <div className="grid gap-6">
-        <section className="rounded-lg border p-4">
-          <h2 className="mb-2 font-medium">API Status</h2>
-          <div className="flex items-center gap-2">
-            <div
-              className={`h-2 w-2 rounded-full ${healthCheck === "OK" ? "bg-green-500" : healthCheck === undefined ? "bg-orange-400" : "bg-red-500"}`}
-            />
-            <span className="text-sm text-muted-foreground">
-              {healthCheck === undefined
-                ? "Checking..."
-                : healthCheck === "OK"
-                  ? "Connected"
-                  : "Error"}
-            </span>
-          </div>
-        </section>
-      </div>
+    <div className="h-svh bg-canvas">
+      <Authenticated>
+        <Bootstrap />
+      </Authenticated>
+      <Unauthenticated>
+        <div className="flex h-full items-center justify-center">
+          {showSignIn ? (
+            <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
+          ) : (
+            <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
+          )}
+        </div>
+      </Unauthenticated>
+      <AuthLoading>
+        <Loader />
+      </AuthLoading>
     </div>
   );
 }

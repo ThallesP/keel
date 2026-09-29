@@ -1,3 +1,6 @@
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
+
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { ConvexReactClient } from "convex/react";
@@ -6,9 +9,9 @@ import ReactDOM from "react-dom/client";
 import { authClient } from "@/lib/auth-client";
 
 import Loader from "./components/loader";
-import { ENV as env } from "./env";
+import { ENV } from "./env";
 import { routeTree } from "./routeTree.gen";
-const convex = new ConvexReactClient(env.VITE_CONVEX_URL);
+const convex = new ConvexReactClient(ENV.VITE_CONVEX_URL);
 
 const router = createRouter({
   routeTree,

@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@convex-dev/better-auth": "catalog:",
+    "@types/dockerode": "^4.0.1",
     "better-auth": "catalog:",
     "convex": "catalog:",
+    "dockerode": "^5.0.1",
     "zod": "catalog:"
   },
   "devDependencies": {

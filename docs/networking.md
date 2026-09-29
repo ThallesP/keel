@@ -190,6 +190,20 @@ OAuth client scopes needed: auth keys (write), devices (write, for cleanup), DNS
 - **Personal plan is non-commercial.** Indie hackers hosting side projects are fine. Tell people running a business to move to Standard ($8/seat, same 50 tagged nodes).
 - **ToS.** Tailscale ToS bans reselling the service. Self-hosted Keel with the user's own tailnet is fine. A hosted Keel that bundles Tailscale needs an OEM deal with Tailscale sales. Don't ship hosted on this design without that conversation.
 
+## Dashboard over HTTPS
+
+The dashboard is tailnet-only and needs HTTPS: secure-context APIs (`crypto.subtle`, clipboard) are off on plain-http origins like a tailnet IP. Host `tailscaled` does it with `tailscale serve` on the node's own MagicDNS name, no extra device:
+
+| URL | Target |
+|---|---|
+| `https://<node>.<tailnet>.ts.net` | web |
+| `https://<node>.<tailnet>.ts.net:8443` | Convex API + sync websocket (3210) |
+| `https://<node>.<tailnet>.ts.net:10000` | Convex HTTP actions, auth (3211) |
+
+Convex must be https too or the browser blocks it as mixed content. The ports are exactly the three Funnel allows, so a public dashboard later is `tailscale funnel` on the same ports with the same URLs. Workers keep talking to the tailnet IP over plain http; the tailnet is already encrypted.
+
+Dev does this with `scripts/dev-https.sh`. `install.sh` still serves `http://<tailnet IP>`; moving it over means `KEEL_CONVEX_URL`, `KEEL_CONVEX_SITE_URL` and `SITE_URL` follow the MagicDNS name.
+
 ## "Sign in with Tailscale" (later, optional)
 
 Not an identity provider. Tailscale OAuth apps are alpha and same-tailnet only; useless for outside users. What works: serve the dashboard on a tsnet listener too, call `LocalClient().WhoIs(remoteAddr)` on the request, get the user's login, mint a better-auth session, redirect to the public dashboard URL. Only reachable from inside the tailnet, which is the point. `tsidp` does the same via OIDC if we want a standard flow.

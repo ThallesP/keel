@@ -34,13 +34,15 @@ Swarm caveats accepted: overlay MTU on WireGuard needs one config line, Swarm is
 Self-hosted Convex runs `"use node"` actions as a plain child `node` process inside the `convex-backend` container. No sandbox. Mount the manager socket into that container and use `dockerode`.
 
 ```yaml
-# docker-compose.yml, control plane
+# deploy/compose.yml (installed to /opt/keel/compose.yml by install.sh)
 backend:
-  image: ghcr.io/get-convex/convex-backend:latest
+  image: ghcr.io/get-convex/convex-backend:<pinned sha>
   volumes:
-    - data:/convex/data
+    - convex-data:/convex/data
     - /var/run/docker.sock:/var/run/docker.sock
 ```
+
+Verified 2026-09-29 by `install.sh` on a clean Docker host: `dockerode` installs as an external package on the self-hosted backend's first push (needs outbound npm), and `swarm:observeSwarmNodes` lists Swarm nodes through the mounted socket.
 
 Facts verified against `get-convex/convex-backend` source:
 
@@ -56,7 +58,7 @@ Security: mounting the Docker socket gives the Convex backend root-equivalent ac
 
 Runs once on the control plane during install.
 
-Script: `scripts/bootstrap-swarm.sh`. Idempotent.
+Script: `scripts/bootstrap-swarm.sh`. Idempotent. `install.sh` fetches and runs it (with `KEEL_WORKER_IMAGE` set to the published worker image) after the control plane is up; in dev you run it by hand.
 
 ```bash
 # advertise and listen on the tailnet IP only, so workers reach the manager over

@@ -1,19 +1,13 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { getRouteApi } from "@tanstack/react-router";
 import { AlignLeft, Braces, ChartLine, Settings, Workflow, type LucideIcon } from "lucide-react";
-import { useCallback, useState } from "react";
 
 import { notWired } from "./not-wired";
-import { SettingsDialog } from "./settings-dialog";
-import { useHotkey } from "./use-hotkey";
 
 type Item = { label: string; icon: LucideIcon; active?: boolean; onClick?: () => void };
 
-const top: Item[] = [
-  { label: "Canvas", icon: Workflow, active: true },
-  { label: "Logs", icon: AlignLeft },
-  { label: "Metrics", icon: ChartLine },
-  { label: "Variables", icon: Braces },
-];
+const route = getRouteApi("/_auth/p/$projectId");
+
 function RailButton({ label, icon: Icon, active, onClick }: Item) {
   return (
     <button
@@ -34,10 +28,18 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
   );
 }
 
+/** Canvas and Logs are views of the same project (`?view=`); the rest are still mockup. */
 export function Rail() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const openSettings = useCallback(() => setSettingsOpen(true), []);
-  useHotkey({ key: ",", mod: true }, openSettings);
+  const { view } = route.useSearch();
+  const navigate = route.useNavigate();
+  const show = (next: "logs" | undefined) =>
+    void navigate({ search: (prev) => ({ ...prev, view: next }) });
+  const top: Item[] = [
+    { label: "Canvas", icon: Workflow, active: !view, onClick: () => show(undefined) },
+    { label: "Logs", icon: AlignLeft, active: view === "logs", onClick: () => show("logs") },
+    { label: "Metrics", icon: ChartLine },
+    { label: "Variables", icon: Braces },
+  ];
   return (
     <nav className="flex w-[52px] shrink-0 flex-col items-center justify-between border-r border-line bg-bg py-3">
       <div className="flex flex-col gap-1.5">
@@ -46,9 +48,8 @@ export function Rail() {
         ))}
       </div>
       <div className="flex flex-col gap-1.5">
-        <RailButton label="Settings" icon={Settings} onClick={openSettings} />
+        <RailButton label="Settings" icon={Settings} />
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </nav>
   );
 }

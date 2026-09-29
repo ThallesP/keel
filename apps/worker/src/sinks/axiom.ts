@@ -1,14 +1,20 @@
 import { errorText, log, sleep } from "../log";
 import type { LogEvent, Sink, SinkConfig } from "./types";
 
-// Axiom sink: POST NDJSON to /v1/ingest/<dataset>. Field names are kept as-is; `_time` is the
-// event timestamp Axiom indexes on. Basic (ingest-only) API tokens are enough for this side.
+// Axiom sink: POST NDJSON to the dataset's ingest endpoint. Field names are kept as-is; `_time`
+// is the event timestamp Axiom indexes on. Basic (ingest-only) API tokens are enough for this
+// side. The path depends on the host, as in axiom-go: `api.axiom.co` / `api.eu.axiom.co` take
+// /v1/datasets/<dataset>/ingest (/v1/ingest/<dataset> is 404 there); regional edge hosts
+// (`*.edge.axiom.co`) take /v1/ingest/<dataset>.
 
 const baseUrl = (domain: string) =>
   (domain.includes("://") ? domain : `https://${domain}`).replace(/\/+$/, "");
 
 export function axiomSink(cfg: SinkConfig & { kind: "axiom" }, key: string): Sink {
-  const url = `${baseUrl(cfg.domain)}/v1/ingest/${encodeURIComponent(cfg.dataset)}`;
+  const dataset = encodeURIComponent(cfg.dataset);
+  const url = cfg.domain.endsWith(".edge.axiom.co")
+    ? `${baseUrl(cfg.domain)}/v1/ingest/${dataset}`
+    : `${baseUrl(cfg.domain)}/v1/datasets/${dataset}/ingest`;
   return {
     key,
     async send(events: LogEvent[]) {

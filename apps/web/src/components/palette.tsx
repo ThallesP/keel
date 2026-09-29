@@ -37,8 +37,6 @@ export type PalettePage = {
   submitLabel?: (text: string) => string;
   submitHint?: string;
   submitIcon?: ReactNode;
-  /** Mask the input (tokens, passwords). Filtering still works, the text just is not shown. */
-  secret?: boolean;
 };
 
 const SUBMIT_ID = "__submit__";
@@ -171,7 +169,7 @@ export function Palette({
           ))}
           <input
             ref={inputRef}
-            type={page.secret ? "password" : "text"}
+            type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={page.placeholder ?? "Type to filter…"}

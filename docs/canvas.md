@@ -56,7 +56,7 @@ Ship button states:
 
 ### Rail (52px)
 
-Icon-only vertical nav. Top: Canvas (active), Logs, Metrics, Variables. Bottom: Settings. Active item gets `--color-primary-soft` background and primary icon. 32 × 32 hit targets, 6px gap.
+Icon-only vertical nav. Top: Canvas (active), Observability (requests and logs in one stream, see [`logs.md`](./logs.md)), Metrics, Variables. Bottom: Settings. Active item gets `--color-primary-soft` background and primary icon. 32 × 32 hit targets, 6px gap.
 
 ### Canvas
 

@@ -12,7 +12,7 @@ type Search = { code?: string; state?: string; error?: string; error_description
 
 const str = (x: unknown) => (typeof x === "string" ? x : undefined);
 
-/** Axiom's OAuth redirect lands here; the code goes to the control plane, then back to Logs. */
+/** Axiom's OAuth redirect lands here; the code goes to the control plane, then back to Observability. */
 export const Route = createFileRoute("/_auth/axiom/callback")({
   component: AxiomCallback,
   validateSearch: (s: Record<string, unknown>): Search => ({
@@ -32,13 +32,13 @@ function AxiomCallback() {
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
-    const slug = takeAxiomReturn();
+    const from = takeAxiomReturn();
     const back = () =>
-      slug
+      from
         ? navigate({
             to: "/p/$projectId",
-            params: { projectId: slug },
-            search: { view: "logs" },
+            params: { projectId: from.slug },
+            search: { view: "observability" },
             replace: true,
           })
         : navigate({ to: "/", replace: true });
@@ -50,7 +50,7 @@ function AxiomCallback() {
     }
     signIn({ state: search.state, code: search.code })
       .then((r) => {
-        if (!r.choose) toast.success(`Logs now stream to Axiom · ${r.org} · ${r.dataset}`);
+        if (!r.choose) toast.success(`Logs and traces now go to Axiom · ${r.org} · ${r.dataset}`);
       })
       .catch((err) => toast.error(errorMessage(err)))
       .finally(() => void back());

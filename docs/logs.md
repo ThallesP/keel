@@ -1,6 +1,6 @@
-# Logs — sinks and providers
+# Logs and traces — sinks and providers
 
-> Where container logs go and where the Logs tab reads them from. Decided 2026-09-20. Read this before touching `convex/logs.ts`, `convex/logSinks.ts`, `convex/logProviders/*` or `apps/worker/src/logs.ts`. The worker itself is in [`workers.md`](./workers.md).
+> Where container logs go and where the Logs tab and the Observability page read them from (decided 2026-09-20), and where the Observability page reads OpenTelemetry traces from (2026-10-03, [Traces](#traces)). Read this before touching `convex/logs.ts`, `convex/traces.ts`, `convex/logSinks.ts`, `convex/logProviders/*`, `convex/traceProviders/*` or `apps/worker/src/logs.ts`. The worker itself is in [`workers.md`](./workers.md).
 
 ## Decision
 
@@ -44,7 +44,7 @@ Field names are the contract between `apps/worker/src/sinks/types.ts` and every 
 
 ```ts
 // schema.ts
-logSink = v.union(v.object({ kind: "axiom", domain, dataset, token, org? }))
+logSink = v.union(v.object({ kind: "axiom", domain, dataset, traces?, token, org? }))
 logSinks: { projectId, sink }  // by_project, at most one row per project
 axiomClients: { redirectUri, clientId }                    // by_redirect; DCR client per callback URL
 axiomSignIns: { projectId, clientId, state, verifier, redirectUri }  // by_state, by_project; 10 min, single use
@@ -53,15 +53,15 @@ axiomPending: { projectId, token, orgs }                   // by_project; 10 min
 
 `convex/logSinks.ts`:
 
-- `get(projectId)` — public. Kind, domain, dataset, org name, last four of the token. Never the token.
+- `get(projectId)` — public. Kind, domain, dataset, traces dataset (null on sinks from before traces), org name, last four of the token. Never the token.
 - `beginAxiomSignIn` / `signInAxiom` / `chooseAxiomOrg` / `cancelAxiomSignIn` / `pendingOrgs` — Sign in with Axiom, below.
-- `connectAxiom(projectId, domain, dataset, token)` — public action, token paste. No UI any more; kept for scripts and agents (`convex run`) and as the fallback if the OAuth client stops working. Validates region (`api.axiom.co` / `api.eu.axiom.co`; a full origin is accepted only with `KEEL_ALLOW_LOCAL_SINKS=1`, for the mock), creates the dataset if missing (`POST /v2/datasets`, 409 ignored), runs `['ds'] | limit 1` to prove the token can query, then saves. A bad token fails here, nothing is stored.
+- `connectAxiom(projectId, domain, dataset, traces?, token)` — public action, token paste. No UI any more; kept for scripts and agents (`convex run`) and as the fallback if the OAuth client stops working. Validates region (`api.axiom.co` / `api.eu.axiom.co`; a full origin is accepted only with `KEEL_ALLOW_LOCAL_SINKS=1`, for the mock), creates the dataset if missing (`POST /v2/datasets`, 409 ignored), runs `['ds'] | limit 1` to prove the token can query, then saves. A bad token fails here, nothing is stored.
 - `disconnect(projectId)` — back to Docker. Shipped data stays in Axiom.
 - `forNode` / `owns` / `save` — internal.
 
 `convex/logs.ts tail(nodeId, tail)` — the one read entry point. Looks up the node's project sink and dispatches. `convex/worker.ts config` — what the worker polls: every sink with the service ids it covers and when it was connected.
 
-`convex/logs.ts recent(environmentId, search?, tail)` — the Logs page: last lines across every service of the environment, `where message contains` for search. Axiom only; Docker has no cross-service query.
+`convex/logs.ts recent(environmentId, search?, tail, range?)` — the Observability page's stream: last lines across every service of the environment, `where message contains` for search, within `range` (`15m | 1h | 24h | 7d`, `convex/timeRange.ts`). `around(environmentId, at)` — every service's lines within 30s either side of `at`, oldest first: a line's surrounding context. Axiom only; Docker has no cross-service query.
 
 Token scope: the worker only ingests, the control plane queries. One API token with ingest + query on the dataset covers both; it is stored once in `logSinks` and reaches the worker through `GET /worker/config`, which is bearer-protected by `KEEL_WORKER_TOKEN`.
 
@@ -69,10 +69,10 @@ Token scope: the worker only ingests, the control plane queries. One API token w
 
 Axiom has no app console for third-party OAuth clients, but the authorization server behind its MCP server does Dynamic Client Registration (`mcp.axiom.co/.well-known/oauth-authorization-server` → `authorization.axiom.co`, `/oauth2/{register,authorize,token}`). Its tokens are accepted by `api.axiom.co` (verified 2026-09-29). Two dead ends first: the 2026-09-20 note here said "no OAuth at all", and the CLI's `login.axiom.co` client (`axiom auth login`) only accepts loopback redirects (`redirect_uri is not permitted for this client`).
 
-1. Logs page → Sign in with Axiom → `beginAxiomSignIn(projectId, <origin>/axiom/callback)`. First time for that callback URL, Keel registers a public client (`client_name: Keel`, `token_endpoint_auth_method: none`) and caches its id in `axiomClients`. Then it makes verifier + state (server-side: the browser may be on plain http, where `crypto.subtle` does not exist), stores them in `axiomSignIns`, and returns the authorize URL. The browser keeps only the project slug to come back to.
+1. Observability page → Sign in with Axiom → `beginAxiomSignIn(projectId, <origin>/axiom/callback)`. First time for that callback URL, Keel registers a public client (`client_name: Keel`, `token_endpoint_auth_method: none`) and caches its id in `axiomClients`. Then it makes verifier + state (server-side: the browser may be on plain http, where `crypto.subtle` does not exist), stores them in `axiomSignIns`, and returns the authorize URL. The browser keeps only the project slug and tab to come back to.
 2. Axiom redirects to `/axiom/callback?code&state` → `signInAxiom(state, code)`: takes the row (must belong to the caller), exchanges the code, lists `/v2/orgs`.
-3. One org: provision now. Several: the user token waits in `axiomPending` and the Logs page shows an org picker → `chooseAxiomOrg`.
-4. Provision, with the user token + `x-axiom-org-id`: create `keel-<project slug>` (409 ignored), mint an API token with `ingest:create` + `query:read` on that dataset only (`POST /v2/tokens`), prove it can query, save the sink. The user token is dropped; only the scoped token is stored.
+3. One org: provision now. Several: the user token waits in `axiomPending` and the page shows an org picker → `chooseAxiomOrg`.
+4. Provision, with the user token + `x-axiom-org-id`: create `keel-<project slug>` and `keel-<project slug>-traces` (409 ignored), mint one API token with `ingest:create` + `query:read` on those two datasets only (`POST /v2/tokens`), prove it can query both, save the sink. The user token is dropped; only the scoped token is stored. Signing in again on a connected project replaces the sink; that is how a sink from before traces gets its traces dataset.
 
 **Keel must be served over https** (or `http://localhost`): DCR refuses a plain-http IP redirect URI (`invalid_redirect_uri`). Dev: Tailscale Serve (`scripts/dev-https.sh`). An installed Keel reached by tailnet IP needs the same before Sign in with Axiom works; `connectAxiom` (token paste) is the fallback.
 
@@ -84,7 +84,12 @@ Mock for local testing: `KEEL_ALLOW_LOCAL_SINKS=1` plus `KEEL_AXIOM_AUTH_URL` an
 
 ## UI
 
-Rail → Logs (`?view=logs`, `apps/web/src/components/canvas/logs-page.tsx`), drawn over the canvas (which stays mounted, `inert`). Without an Axiom sink it is a gate: a blurred fake stream behind a card, "Set up Axiom", one line of copy, and a Sign in with Axiom button in Axiom's brand orange with its logo mark (or the org picker while one is pending). With one: every service's lines interleaved, service name per line, stderr in the warning tone, search box, following toggle, Disconnect (back to Docker; shipped data stays in Axiom). Polls `logs.recent` every 3s.
+Rail → Observability (`?view=observability`, `apps/web/src/components/canvas/observability/`; old `?view=logs` links land there), drawn over the canvas (which stays mounted, `inert`). Logs and traces are one page, no tabs, ClickStack-style (see [Traces](#traces) for the parts that read spans). Without an Axiom sink it is a gate (`axiom-gate.tsx`): a blurred fake stream behind a card, "Set up Axiom", one line of copy, and a Sign in with Axiom button in Axiom's brand orange with its logo mark (or the org picker while one is pending).
+
+With a sink (`explorer.tsx`): header with All / Requests / Logs, a filter (searches lines and request names), the range, Disconnect (back to Docker, no traces; shipped data stays in Axiom). Then the request numbers and charts, then one stream (`stream.tsx`): log lines and requests (root spans) interleaved, newest first, mono 11px, never wrapping. A line is tagged with its service and, if it names a trace, a `trace` link; a request is a `req` row with status, duration and span count. Each kind is the latest N (300 lines, 100 requests), so the stream stops at the later of the two cut-offs and says how far back it goes. Polls every 10s while visible; a new range or filter keeps the previous data up, dimmed. Every row opens full screen:
+
+- a request, or a line that names a trace → the trace (`&trace=<id>`, `trace.tsx`): spans and the trace's lines in one waterfall, the clicked line selected;
+- any other line → its context (`&around=<ms>`, `log-context.tsx`): every service's lines from 30s either side with the line highlighted, and the requests that started in that minute, each one click from its trace.
 
 The per-service Logs tab in the bottom panel works either way and shows `· via Axiom` in its meta line when the provider is Axiom.
 
@@ -94,7 +99,7 @@ The per-service Logs tab in the bottom panel works either way and shows `· via 
 2. `apps/worker/src/sinks/<kind>.ts`: implement `Sink.send(events)` (`true` once delivered or rejected as malformed, `false` when unreachable so the worker keeps the batch); register it in `sinks/index.ts buildSink`.
 3. `convex/logProviders/<kind>.ts`: `<kind>Tail(cfg, serviceId, n): Tail` and a `<kind>Verify(cfg)`.
 4. `convex/logs.ts`: one branch in `tail`. `convex/logSinks.ts`: a `connect<Kind>` action.
-5. `logs-page.tsx`: a way to connect it on the gate.
+5. `observability/axiom-gate.tsx`: a way to connect it on the gate.
 
 Nothing else knows the kind.
 
@@ -105,3 +110,27 @@ Connect with a wrong token → `Axiom 403: forbidden`, nothing saved. Connect wi
 Sign in with Axiom verified 2026-09-29 against a mock (authorize auto-approves, PKCE checked on `/oauth/token`, `/v2/orgs|datasets|tokens`, APL): two orgs → picker → pick → dataset + scoped token minted with the org header, sink saved with only the scoped token; one org → connected straight from the callback; Logs page shows only lines of the environment's services (a foreign `service_id` in the same dataset is filtered out), search narrows via APL, Disconnect returns to the gate. Against real Axiom (2026-09-29, US org, Keel on `https://dev.<tailnet>.ts.net`): DCR, sign-in, org listing, dataset + scoped token creation all worked first try. The worker's ingest path was wrong (`/v1/ingest/<dataset>` → 404 on `api.axiom.co`; the mock had accepted it), fixed to `/v1/datasets/<dataset>/ingest`; nginx requests then showed up in the dataset within seconds, stdout and stderr, with `service`/`replica` set.
 
 Not there yet: retention setting, metrics, the ClickHouse provider, a live stream (the tab still polls `logs.tail` every 3s).
+
+## Traces
+
+OpenTelemetry traces live next to the logs, in the same sink. Axiom wants a dedicated dataset per OTel signal ("You must use a different, dedicated dataset for each OTel component"), so an Axiom sink carries a second dataset, `traces` (`keel-<slug>-traces`), covered by the same scoped token. Sinks connected before 2026-10-03 have none; their Observability page shows logs with a "Traces are off" banner that runs Sign in with Axiom again.
+
+**Read side only, for now.** Spans get into the dataset from whatever exports them: an app's OTel SDK pointed at Axiom (`OTEL_EXPORTER_OTLP_ENDPOINT=https://api.axiom.co`, `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<token>,X-Axiom-Dataset=<traces dataset>`; the page shows exactly this when no request is in range). Keel does not forward OTLP yet. The plan: an OTLP receiver in the worker (apps keep no Axiom token, a sink change needs no redeploy, same shape as log shipping) plus `OTEL_*` and `OTEL_RESOURCE_ATTRIBUTES=keel.service_id=…` set on every service at apply time, which is also what will scope traces to an environment and map them to canvas nodes. Until then the page shows every trace in the project's dataset.
+
+**Axiom's span rows.** One row per span: `_time` (start, RFC3339 to the nanosecond), `trace_id`, `span_id`, `parent_span_id`, `name`, `kind`, `duration` (nanoseconds), `error` (bool), `status.code` / `status.message`, `service.name`, `scope.name`, `attributes.*` for semantic-convention attributes with everything else in the `attributes.custom` map, `resource.*`, `events`. A field no span has carried yet does not exist and APL rejects it with 400 `invalid field`, so optional ones go through `ensure_field()` and an empty dataset reads as "no traces yet".
+
+**A request is a root span** (`isempty(parent_span_id)`), as in Axiom's own trace dashboards: rate, error rate and p50/p95/p99 count roots only; aggregating every span would mix each request's children in.
+
+**Logs ↔ traces.** Container lines carry no trace context of their own, but an OpenTelemetry-instrumented logger writes the active trace and span into each line: JSON (`"trace_id"`, `"traceId"`, `"otelTraceID"`, `"trace.id"` …), logfmt (`trace_id=…`) or a W3C `traceparent`. That is the whole correlation, done on the read side (`observability/correlate.ts traceRef`): a line opens the trace it names, and a trace's lines are the environment's lines that contain its id (`where message contains "<trace id>"`, over the spans' time ± 5s). Nothing changes in the worker or the event shape, and it works on lines shipped before. In the waterfall a line hangs under the span it names (else under the root), among that span's children by time, as a point; HyperDX does the same with OTel log records' `SpanId`. If this gets slow on big datasets, the worker can extract `trace_id`/`span_id` into fields at ship time (additive to the event shape). Lines that name no trace link to requests by time only (the context view).
+
+`convex/traces.ts` (default runtime, no Docker fallback: traces need a store):
+
+- `overview(environmentId, range, search?)` — `range` is `15m | 1h | 24h | 7d` (~30 buckets each: 30s, 2m, 1h, 6h). Three parallel APL queries over root spans (totals, `summarize … by bin(_time, …)`, the latest 100), then one for span/error counts of those traces. `search` filters root span name or `service.name` and scopes every number.
+- `get(environmentId, traceId, at?)` — every span of one trace (max 2000) and the lines naming it (max 500), oldest first. `at` (a moment inside the trace: the root's start, or the clicked line's time) narrows the spans' window to the hour before it (a long trace opened from a late line still gets its root), and the lines' window always stretches to it (the clicked line is always found); a pasted `&trace=` link searches the last week. Works without a traces dataset (lines only).
+- `around(environmentId, at)` — requests that started within 30s either side of `at`; empty without a traces dataset.
+
+`convex/traceProviders/types.ts` is the contract every trace provider returns (`TraceOverview`, `Trace`, `Span`: times in epoch ms, durations in ms, both fractional). `traceProviders/axiom.ts` parses rows defensively (flat dotted keys or nested objects, numbers or Go/.NET duration strings, `custom` maps folded back into the attribute list), so a change in Axiom's serialisation does not blank the page. A ClickHouse provider is a `traceProviders/clickhouse.ts` plus one branch in `traces.ts`.
+
+**UI** (`observability/charts.tsx`, `trace.tsx`; the page is under [UI](#ui)): above the stream, a KPI row (requests + rate, error rate, p50, p95, p99) and two hand-drawn SVG charts sharing one hover (requests per bucket with the failed share stacked on top in the danger tone; latency p50/p95/p99 as one blue ramp, colour-vision checked); with no request in range, a collapsed "how to send them" with the `OTEL_*` variables; on a sink without a traces dataset, a banner to sign in again. The trace view: spans indented under their parent as bars on the trace's timeline (the spans' extent; lines outside it sit on its edge), errors in the danger tone with a dot, lines as points with a `log` tag; on the right the selected span's attributes, events (exceptions with their stack traces) and resource, or the selected line in full with its JSON/logfmt fields.
+
+Verified 2026-10-03: the APL (`ensure_field`, `isempty`, `countif`, `percentile`, `bin`, `in`, `contains`) parses on real Axiom (read-only queries against an existing logs dataset; only `invalid field` for the span fields that dataset lacks). End to end against a mock that flattens OTLP/JSON spans the way the rows above describe: Sign in with Axiom creates both datasets and one token scoped to both; an empty traces dataset shows the setup card; 700 synthetic spans across `api` and `worker` give bucket sums equal to the totals in every range, a filter scopes them, a failed deploy opens as a 5-span waterfall across both services with its exception event; a project with a pre-traces sink shows the reconnect card. Same day, the merged page against the mock with correlated data (pino JSON and logfmt lines carrying `trace_id`/`span_id`, plus uncorrelated access-log and checkpoint noise): the stream interleaves requests and lines; a "deploy failed" stderr line opens its 3-span trace with its 5 lines under their spans and itself selected, fields parsed; a checkpoint line opens its ±30s context with that minute's requests, one of which opens its trace; the kind filter, cut-off note and old `?view=logs` links work. Not checked against real spans in Axiom yet: the exact serialisation of `duration` and `events` in tabular results is assumed from Axiom's docs and its CLI skill.

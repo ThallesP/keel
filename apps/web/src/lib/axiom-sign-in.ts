@@ -6,14 +6,21 @@ const RETURN_KEY = "keel.axiom.return";
 
 export const axiomRedirectUri = () => `${window.location.origin}/axiom/callback`;
 
-export function goToAxiom(url: string, slug: string) {
-  sessionStorage.setItem(RETURN_KEY, slug);
+export type AxiomReturn = { slug: string };
+
+export function goToAxiom(url: string, back: AxiomReturn) {
+  sessionStorage.setItem(RETURN_KEY, JSON.stringify(back));
   window.location.assign(url);
 }
 
-/** Project slug the sign-in started from, removed on read. */
-export function takeAxiomReturn(): string | null {
-  const slug = sessionStorage.getItem(RETURN_KEY);
+/** Project the sign-in started from, removed on read. */
+export function takeAxiomReturn(): AxiomReturn | null {
+  const raw = sessionStorage.getItem(RETURN_KEY);
   sessionStorage.removeItem(RETURN_KEY);
-  return slug;
+  try {
+    const back = JSON.parse(raw ?? "null") as Partial<AxiomReturn> | null;
+    return typeof back?.slug === "string" ? { slug: back.slug } : null;
+  } catch {
+    return null;
+  }
 }

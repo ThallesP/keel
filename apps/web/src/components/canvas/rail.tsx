@@ -1,6 +1,6 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { getRouteApi } from "@tanstack/react-router";
-import { AlignLeft, Braces, ChartLine, Settings, Workflow, type LucideIcon } from "lucide-react";
+import { Activity, Braces, ChartLine, Settings, Workflow, type LucideIcon } from "lucide-react";
 
 import { notWired } from "./not-wired";
 
@@ -28,15 +28,25 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
   );
 }
 
-/** Canvas and Logs are views of the same project (`?view=`); the rest are still mockup. */
+/**
+ * Canvas and Observability (requests and logs in one stream) are views of the same project
+ * (`?view=`); the rest are still mockup.
+ */
 export function Rail() {
   const { view } = route.useSearch();
   const navigate = route.useNavigate();
-  const show = (next: "logs" | undefined) =>
-    void navigate({ search: (prev) => ({ ...prev, view: next }) });
+  const show = (next: "observability" | undefined) =>
+    void navigate({
+      search: (prev) => ({ ...prev, view: next, trace: undefined, around: undefined }),
+    });
   const top: Item[] = [
     { label: "Canvas", icon: Workflow, active: !view, onClick: () => show(undefined) },
-    { label: "Logs", icon: AlignLeft, active: view === "logs", onClick: () => show("logs") },
+    {
+      label: "Observability",
+      icon: Activity,
+      active: view !== undefined,
+      onClick: () => show("observability"),
+    },
     { label: "Metrics", icon: ChartLine },
     { label: "Variables", icon: Braces },
   ];

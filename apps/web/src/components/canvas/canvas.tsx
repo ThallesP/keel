@@ -1,3 +1,4 @@
+import { getRouteApi } from "@tanstack/react-router";
 import {
   Background,
   BackgroundVariant,
@@ -16,6 +17,7 @@ import { CanvasActionsProvider, useCanvasActions } from "./actions";
 import { BottomPanel } from "./bottom-panel/panel";
 import { Controls } from "./controls";
 import { EnvironmentProvider, type EnvironmentScope } from "./environment";
+import { LogsPage } from "./logs-page";
 import { nodeTypes } from "./nodes";
 import { Rail } from "./rail";
 import { StatusBar } from "./status-bar";
@@ -131,8 +133,15 @@ function Panel() {
   return <BottomPanel />;
 }
 
-/** Full-bleed project canvas: topbar / rail + flow + bottom panel / status bar. */
+const route = getRouteApi("/_auth/p/$projectId");
+
+/**
+ * Full-bleed project canvas: topbar / rail + flow + bottom panel / status bar. Rail views other
+ * than the canvas (`?view=logs`) cover the flow and panel; the flow stays mounted underneath so
+ * coming back keeps the viewport.
+ */
 export function Canvas({ scope }: { scope: EnvironmentScope }) {
+  const { view } = route.useSearch();
   return (
     <ReactFlowProvider>
       <EnvironmentProvider scope={scope}>
@@ -142,11 +151,18 @@ export function Canvas({ scope }: { scope: EnvironmentScope }) {
               <Topbar />
               <div className="flex min-h-0 flex-1">
                 <Rail />
-                <main className="flex min-w-0 flex-1 flex-col">
-                  <div className="relative min-h-0 flex-1">
-                    <Flow />
+                <main className="relative flex min-w-0 flex-1 flex-col">
+                  <div className="relative flex min-h-0 flex-1 flex-col" inert={view === "logs"}>
+                    <div className="relative min-h-0 flex-1">
+                      <Flow />
+                    </div>
+                    <Panel />
                   </div>
-                  <Panel />
+                  {view === "logs" && (
+                    <div className="absolute inset-0 z-20">
+                      <LogsPage />
+                    </div>
+                  )}
                 </main>
               </div>
               <StatusBar />

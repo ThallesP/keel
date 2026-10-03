@@ -88,6 +88,8 @@ export const logSink = v.union(
     domain: v.string(),
     dataset: v.string(),
     token: v.string(),
+    // Axiom org name, when connected through Sign in with Axiom. Display only.
+    org: v.optional(v.string()),
   }),
 );
 
@@ -171,5 +173,32 @@ export default defineSchema({
   logSinks: defineTable({
     projectId: v.id("projects"),
     sink: logSink,
+  }).index("by_project", ["projectId"]),
+
+  // Sign in with Axiom: the OAuth client this install registered with Axiom (DCR), one per
+  // callback URL. Public client ids, not secrets. See logProviders/axiom.ts.
+  axiomClients: defineTable({
+    redirectUri: v.string(),
+    clientId: v.string(),
+  }).index("by_redirect", ["redirectUri"]),
+
+  // Sign in with Axiom, between beginAxiomSignIn and Axiom's redirect back: the PKCE verifier
+  // for `state`. Single use, 10 minutes. See logSinks.ts.
+  axiomSignIns: defineTable({
+    projectId: v.id("projects"),
+    clientId: v.string(),
+    state: v.string(),
+    verifier: v.string(),
+    redirectUri: v.string(),
+  })
+    .index("by_state", ["state"])
+    .index("by_project", ["projectId"]),
+
+  // Sign in with Axiom, between the code exchange and the user picking one of several orgs.
+  // Holds the personal token for at most 10 minutes; deleted on pick. See logSinks.ts.
+  axiomPending: defineTable({
+    projectId: v.id("projects"),
+    token: v.string(),
+    orgs: v.array(v.object({ id: v.string(), name: v.string(), domain: v.string() })),
   }).index("by_project", ["projectId"]),
 });

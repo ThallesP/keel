@@ -19,3 +19,8 @@ export type Replica = {
 export type LogSource = "docker" | "axiom";
 
 export type Tail = { source: LogSource; lines: LogLine[]; replicas: Replica[] };
+
+/** A line on the project-wide Logs page: which service wrote it. */
+export type ProjectLine = LogLine & { serviceId: string };
+
+export type ProjectTail = { source: LogSource; lines: ProjectLine[] };

@@ -5,11 +5,15 @@ import { useQuery } from "convex/react";
 import { Canvas } from "@/components/canvas/canvas";
 import Loader from "@/components/loader";
 
-/** `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable. */
+/**
+ * `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable.
+ * `?view=logs` is the rail's Logs page instead of the canvas.
+ */
 export const Route = createFileRoute("/_auth/p/$projectId")({
   component: ProjectPage,
-  validateSearch: (search: Record<string, unknown>): { deployment?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { deployment?: string; view?: "logs" } => ({
     deployment: typeof search.deployment === "string" ? search.deployment : undefined,
+    view: search.view === "logs" ? "logs" : undefined,
   }),
 });
 

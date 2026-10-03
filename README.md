@@ -116,8 +116,11 @@ Requirements: [Bun](https://bun.sh) 1.4+, Docker, Tailscale.
 bun install
 bun run dev:setup                 # configure a Convex deployment (a local one works)
 bun run dev                       # web on http://localhost:3001 + `convex dev`
+scripts/dev-https.sh              # optional: https://<node>.<tailnet>.ts.net, tailnet-only
 scripts/bootstrap-swarm.sh        # one-time: Swarm on the tailnet IP, `keel` network, keel-worker
 ```
+
+`scripts/dev-https.sh` puts web and Convex behind `tailscale serve` on this machine's MagicDNS name (443, 8443, 10000), then points `apps/web/.env` and the deployment's `SITE_URL` at it. Needs HTTPS certificates enabled for the tailnet. Undo with `sudo tailscale serve reset`.
 
 `scripts/deploy-worker.sh` rebuilds and redeploys the worker after changes to `apps/worker`. Against a local anonymous Convex deployment, export `CONVEX_AGENT_MODE=anonymous` first.
 

@@ -7,6 +7,10 @@ import { defineConfig } from "vite";
 export default defineConfig({
   server: {
     port: 3001,
+    // Loopback only. The tailnet reaches it as https://<node>.<tailnet>.ts.net through
+    // `tailscale serve` (scripts/dev-https.sh), which keeps the original Host header.
+    host: "127.0.0.1",
+    allowedHosts: [".ts.net"],
   },
   resolve: {
     tsconfigPaths: true,

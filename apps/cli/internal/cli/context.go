@@ -200,7 +200,7 @@ func (a *app) project(ctx context.Context, s *session) (*keel.Project, *keel.Env
 	if err != nil {
 		return nil, nil, err
 	}
-	p, err := pickProject(projects, a.projectSlug(s), s.inst.URL)
+	p, err := pickProject(projects, a.projectSlug(s))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -211,9 +211,9 @@ func (a *app) project(ctx context.Context, s *session) (*keel.Project, *keel.Env
 	return p, &p.Environments[0], nil
 }
 
-func pickProject(projects []keel.Project, slug, webURL string) (*keel.Project, error) {
+func pickProject(projects []keel.Project, slug string) (*keel.Project, error) {
 	if len(projects) == 0 {
-		return nil, output.Errorf(output.CodeNoProjects, "Open "+webURL+" to create one", "No projects yet")
+		return nil, output.Errorf(output.CodeNoProjects, "keel project create <name> --link", "No projects yet")
 	}
 	slugs := make([]string, len(projects))
 	for i := range projects {

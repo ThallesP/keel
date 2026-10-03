@@ -3,8 +3,10 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -45,6 +47,25 @@ Environment:
 // Execute runs the CLI and returns the process exit code.
 func Execute(ctx context.Context, version string) int {
 	a := &app{}
+	cmd, err := a.root(version).ExecuteContextC(ctx)
+	if err == nil {
+		return 0
+	}
+	if a.out == nil { // failed before PersistentPreRun: bad flag or unknown command
+		a.out = output.New(a.jsonMode() || jsonArg(os.Args[1:]))
+	}
+	var oe *output.Error
+	switch {
+	case errors.As(err, &oe):
+	case ctx.Err() != nil:
+		oe = output.Errorf(output.CodeCancelled, "", "Cancelled")
+	default: // cobra's own errors: unknown command, wrong number of arguments
+		oe = usage(cmd, "%v", err)
+	}
+	return a.out.Fail(oe)
+}
+
+func (a *app) root(version string) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "keel",
 		Short:         "Deploy and operate Keel projects",
@@ -71,28 +92,25 @@ func Execute(ctx context.Context, version string) int {
 		a.serviceCmd(), a.logsCmd(), a.varCmd(),
 		a.shipCmd(), a.redeployCmd(), a.deploymentCmd(),
 	)
-
-	cmd, err := root.ExecuteContextC(ctx)
-	if err == nil {
-		return 0
-	}
-	if a.out == nil { // failed before PersistentPreRun: bad flag or unknown command
-		a.out = output.New(a.jsonMode() || jsonArg(os.Args[1:]))
-	}
-	var oe *output.Error
-	switch {
-	case errors.As(err, &oe):
-	case ctx.Err() != nil:
-		oe = output.Errorf(output.CodeCancelled, "", "Cancelled")
-	default: // cobra's own errors: unknown command, wrong number of arguments
-		oe = usage(cmd, "%v", err)
-	}
-	return a.out.Fail(oe)
+	return root
 }
 
 func (a *app) jsonMode() bool {
 	v := os.Getenv("KEEL_JSON")
 	return a.json || v == "1" || v == "true"
+}
+
+// interactive is whether keel may ask: a person at a terminal, and no JSON for a program.
+func (a *app) interactive() bool {
+	return !a.out.JSON && output.IsTerminal(os.Stdin)
+}
+
+// confirm asks a yes/no question on stderr; only y or yes is yes.
+func (a *app) confirm(question string) bool {
+	fmt.Fprintf(a.out.Err, "%s [y/N] ", question)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 // jsonArg finds --json in arguments cobra could not parse, in every form pflag accepts

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -25,13 +26,40 @@ func TestPickProject(t *testing.T) {
 		{"ambiguous", two, "", output.CodeProjectRequired},
 		{"unknown", two, "nope", output.CodeProjectNotFound},
 	} {
-		p, err := pickProject(tc.projects, tc.slug, "https://keel.test")
+		p, err := pickProject(tc.projects, tc.slug)
 		got := output.CodeOf(err)
 		if p != nil {
 			got = p.Slug
 		}
 		if got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// Missing or bad input fails as USAGE before keel connects anywhere; no install is configured
+// here, so getting past the checks is NOT_AUTHENTICATED.
+func TestUsageBeforeConnecting(t *testing.T) {
+	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
+	t.Setenv("KEEL_URL", "")
+	t.Setenv("KEEL_INSTANCE", "")
+	for args, want := range map[string]string{
+		"project create --json":                                            output.CodeUsage,
+		"project create acme-api --link --json":                            output.CodeNotAuthenticated,
+		"service create api --json":                                        output.CodeUsage, // no --image
+		"service create api --image nginx --port x --json":                 output.CodeUsage,
+		"service create api --image nginx --port 3000 --replicas 2 --json": output.CodeNotAuthenticated,
+		"service delete api --json":                                        output.CodeUsage, // no terminal to ask, no --yes
+		"service delete api --yes --json":                                  output.CodeNotAuthenticated,
+		"service rm api -y --json":                                         output.CodeNotAuthenticated,
+	} {
+		root := (&app{}).root("test")
+		root.SetArgs(strings.Fields(args))
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		_, err := root.ExecuteC()
+		if got := output.CodeOf(err); got != want {
+			t.Errorf("keel %s: %q (%v), want %s", args, got, err, want)
 		}
 	}
 }

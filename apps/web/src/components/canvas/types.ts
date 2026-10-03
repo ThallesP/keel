@@ -28,6 +28,12 @@ export type RuntimeData = {
   stoppedAt?: number;
   /** Present while status === "done": when the last task exited 0. */
   finishedAt?: number;
+  /** Exposed to the internet (services only). */
+  public: boolean;
+  /** https://… once the tunnel is live. Quick Tunnel: temporary, changes when the tunnel restarts. */
+  publicUrl?: string;
+  /** Present while `public`. */
+  ingress?: { state: "starting" | "live" | "failed"; error?: string };
 };
 
 export type ServiceData = RuntimeData & {

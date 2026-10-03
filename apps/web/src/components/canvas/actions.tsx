@@ -30,6 +30,9 @@ export type CanvasActions = {
   redeploy: (id: string, refresh: boolean) => Promise<void>;
   move: (id: string, position: Position) => void;
   rename: (id: string, name: string) => Promise<void>;
+  /** Public internet via a Cloudflare Quick Tunnel; immediate, not a ship. */
+  expose: (id: string) => Promise<void>;
+  unexpose: (id: string) => Promise<void>;
   duplicate: (id: string) => Promise<void>;
   removeNodes: (ids: string[]) => void;
   /** Ship every dirty node, or `only` these (re-pulling their images). */
@@ -54,6 +57,8 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   const stopNode = useMutation(api.nodes.stop);
   const moveRaw = useMutation(api.nodes.move);
   const removeNodeRaw = useMutation(api.nodes.remove);
+  const exposeNode = useMutation(api.nodes.expose);
+  const unexposeNode = useMutation(api.nodes.unexpose);
 
   // Drag end and delete update the local graph instantly; optimistic updates keep the
   // subscription in step so a concurrent server push cannot snap things back.
@@ -104,6 +109,12 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
       rename: async (id, name) => {
         await attempt(renameNode({ id: asNodeId(id), name }));
       },
+      expose: async (id) => {
+        await attempt(exposeNode({ id: asNodeId(id) }));
+      },
+      unexpose: async (id) => {
+        await attempt(unexposeNode({ id: asNodeId(id) }));
+      },
       duplicate: async (id) => {
         const copy = await attempt(duplicateNode({ id: asNodeId(id) }));
         if (copy) selectOnArrival.current.add(copy);
@@ -129,6 +140,8 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
       createNode,
       moveNode,
       renameNode,
+      exposeNode,
+      unexposeNode,
       duplicateNode,
       removeNode,
       startDeployment,

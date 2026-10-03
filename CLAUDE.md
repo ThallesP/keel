@@ -11,7 +11,7 @@ Differentiator: UI/UX and deploy DX.
 - **Multi-server by default.** Scaling past one machine must be effortless. Single-node clusters stay first-class.
 - **Zero networking for the user.** We handle it:
   - Tailscale for user containers and control-plane/worker comms.
-  - Public HTTP via Tailscale Funnel, one tsnet node per service (`<name>.<tailnet>.ts.net`). Custom domains later via Cloudflare Tunnel. See `docs/networking.md`.
+  - Public HTTP via Cloudflare Tunnel: a Quick Tunnel per exposed service today (temporary `trycloudflare.com` URL, zero setup), a named tunnel with the user's own domain next. Tailscale Funnel was rejected 2026-10-01. See `docs/networking.md`.
 
 ## Install and release
 
@@ -26,5 +26,5 @@ Differentiator: UI/UX and deploy DX.
 - `docs/workers.md` — worker layer: Docker Swarm as reconciler, Convex as control plane, node join flow, schema, apply/observe actions. Read before any Swarm or node-join code.
 - `docs/volumes.md` — persistent data: pin + backup, no distributed storage, two-pass rsync migration between nodes, backup by kind, schema. Read before anything that mounts a volume, schedules a backup, or moves a service between servers.
 - `docs/logs.md` — log sinks and providers: per-project sink (Axiom today, Docker default), worker ships lines, `logs.tail` dispatches on provider, event shape contract, how to add ClickHouse. Read before touching `convex/logs*`, `convex/logProviders`, or `apps/worker/src/logs.ts`.
-- `docs/networking.md` — Tailscale mesh, per-service Funnel ingress container (own Go proxy on tsnet), tailnet onboarding steps, zero-inbound-port invariant, why not Cloudflare/NetBird/Caddy/Traefik. Read before any ingress, domain, or auth code.
-- Mockups: Paper file "*Ship*".
+- `docs/networking.md` — Tailscale mesh, public ingress via Cloudflare Tunnel (Quick Tunnel per service now, named tunnel next, why Funnel was dropped), zero-inbound-port invariant, why not NetBird/Caddy/Traefik. Read before any ingress, domain, or auth code.
+- Mockups: Paper file "_Ship_".

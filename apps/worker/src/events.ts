@@ -5,7 +5,7 @@ import { postEvents } from "./controlPlane";
 
 // Forwards `docker events` to the control plane, which turns each one into a targeted Swarm
 // observation (convex/events.ts). Only what the control plane can act on is sent: container
-// and service events for our `svc-*` services, and node events. exec_* and health_status
+// and service events for our `svc-*` / `ingress-*` services, and node events. exec_* and health_status
 // chatter (postgres health checks fire every few seconds) never leaves the node.
 //
 // Each accepted batch after a (re)connect carries `X-Keel-Resync: 1` so the control plane
@@ -25,12 +25,15 @@ export type OnContainerEvent = (
   attrs: Record<string, string>,
 ) => void;
 
+// `svc-*` runs a node, `ingress-*` is its public tunnel (convex/swarm.ts); both observe the node.
+const ours = (name: string | undefined) =>
+  name !== undefined && (name.startsWith("svc-") || name.startsWith("ingress-"));
+
 function relevant(e: DockerEvent) {
   if (e.Action.startsWith("exec_") || e.Action.startsWith("health_status")) return false;
   const attrs = e.Actor?.Attributes ?? {};
-  if (e.Type === "container")
-    return attrs["com.docker.swarm.service.name"]?.startsWith("svc-") ?? false;
-  if (e.Type === "service") return attrs.name?.startsWith("svc-") ?? false;
+  if (e.Type === "container") return ours(attrs["com.docker.swarm.service.name"]);
+  if (e.Type === "service") return ours(attrs.name);
   return e.Type === "node";
 }
 

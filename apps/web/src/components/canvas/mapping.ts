@@ -41,7 +41,20 @@ function runtime(n: NodeDoc): RuntimeData {
     error: n.error,
     stoppedAt: n.stoppedAt,
     finishedAt: n.finishedAt,
+    public: n.public,
+    publicUrl: n.publicUrl,
+    ingress: n.ingress,
   };
+}
+
+/** `https://x.trycloudflare.com` → `x.trycloudflare.com` */
+function hostOf(url: string | undefined) {
+  if (!url) return undefined;
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 export function toCanvasNode(n: NodeDoc): CanvasNode {
@@ -52,7 +65,7 @@ export function toCanvasNode(n: NodeDoc): CanvasNode {
   };
   switch (n.type) {
     case "service":
-      return { ...base, type: "service", data: runtime(n) };
+      return { ...base, type: "service", data: { ...runtime(n), domain: hostOf(n.publicUrl) } };
     case "database":
       return {
         ...base,

@@ -44,6 +44,25 @@ export const observed = v.object({
   at: v.number(),
 });
 
+// Public ingress, set by nodes.expose / nodes.unexpose and applied right away by
+// swarm.applyIngress (not by Ship: it is its own Swarm service and never touches the app's).
+// `quick-tunnel`: a Cloudflare Quick Tunnel, no account, temporary trycloudflare.com URL.
+// A named Cloudflare tunnel (stable custom hostnames) is the next provider. See docs/networking.md.
+export const publicIngress = v.object({
+  provider: v.literal("quick-tunnel"),
+  at: v.number(),
+});
+
+// What the ingress service reports. Written only by nodesInternal.setIngress (from swarm.*).
+export const ingress = v.object({
+  state: v.union(v.literal("starting"), v.literal("live"), v.literal("failed")),
+  url: v.optional(v.string()), // https://<random>.trycloudflare.com
+  error: v.optional(v.string()),
+  at: v.number(),
+});
+
+export type Ingress = Infer<typeof ingress>;
+
 export const position = v.object({ x: v.number(), y: v.number() });
 
 // Type-specific, non-deploy settings. Volumes: sizeGb. Groups: width/height.
@@ -122,6 +141,10 @@ export default defineSchema({
     // service | database | cache only. volume and group never reach Swarm in v1.
     desired: v.optional(desired),
     observed: v.optional(observed),
+    // service only: exposed to the internet. Top-level on purpose: `desired` is revision-bumped
+    // by Ship and `observed` is replaced wholesale by every scan.
+    public: v.optional(publicIngress),
+    ingress: v.optional(ingress),
     // Last revision observe saw fully converged.
     deployedRevision: v.optional(v.number()),
     // Config/vars (or a variable it references) changed since the last ship. Drives "Ship · N changes".

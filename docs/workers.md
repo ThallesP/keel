@@ -19,13 +19,13 @@ Let Swarm pick nodes. No custom scheduler, no resource reservations for v1. `Pla
 
 ## Why not the alternatives
 
-| Option | Why not |
-|---|---|
-| Agent per node + own reconciler | Works, but we own restart, crash-loop, drift detection, per-node event streams. Swarm already does all of it. |
-| Restate / Temporal / Hatchet | Orchestrate multi-step work. Converge is one idempotent step. Restate also pushes to workers, so every node exposes a port. Second state store next to Convex. |
-| Nomad | Real scheduler, but one more server on the control plane and BSL license. |
-| k3s / Kubernetes | 1GB RAM idle, networking fights Tailscale, kills the cheap-VPS story. |
-| Compose per project (Coolify) | Single node only, still needs an agent to run it on each box. |
+| Option                          | Why not                                                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent per node + own reconciler | Works, but we own restart, crash-loop, drift detection, per-node event streams. Swarm already does all of it.                                                  |
+| Restate / Temporal / Hatchet    | Orchestrate multi-step work. Converge is one idempotent step. Restate also pushes to workers, so every node exposes a port. Second state store next to Convex. |
+| Nomad                           | Real scheduler, but one more server on the control plane and BSL license.                                                                                      |
+| k3s / Kubernetes                | 1GB RAM idle, networking fights Tailscale, kills the cheap-VPS story.                                                                                          |
+| Compose per project (Coolify)   | Single node only, still needs an agent to run it on each box.                                                                                                  |
 
 Swarm caveats accepted: overlay MTU on WireGuard needs one config line, Swarm is in maintenance mode at Docker Inc. Stable, not evolving. Fine for our scope.
 
@@ -177,7 +177,7 @@ function toSpec(s: Desired & { id: string; pinSwarmNodeId?: string }) {
 }
 
 export const apply = internalAction({
-  args: { id: v.string(), /* ...Desired fields */ },
+  args: { id: v.string() /* ...Desired fields */ },
   handler: async (_ctx, s) => {
     const spec = toSpec(s);
     const svc = docker.getService(spec.Name);
@@ -195,15 +195,15 @@ export const remove = internalAction({
 
 User actions map to `desired` writes followed by `ctx.scheduler.runAfter(0, internal.swarm.apply, ...)`:
 
-| User action | `desired` change |
-|---|---|
-| Ship | `image`, `revision + 1` |
-| Stop | `replicas: 0` |
-| Start | `replicas: 1` |
-| Scale | `replicas: n` |
-| Rollback | `image` = previous, `revision + 1` |
-| Pin to node | `pinNodeId` |
-| Delete | row deleted, `remove` scheduled |
+| User action | `desired` change                   |
+| ----------- | ---------------------------------- |
+| Ship        | `image`, `revision + 1`            |
+| Stop        | `replicas: 0`                      |
+| Start       | `replicas: 1`                      |
+| Scale       | `replicas: n`                      |
+| Rollback    | `image` = previous, `revision + 1` |
+| Pin to node | `pinNodeId`                        |
+| Delete      | row deleted, `remove` scheduled    |
 
 ### `observe` — Swarm to observed
 
@@ -242,7 +242,7 @@ Cross-node choreography (rolling a revision across pinned nodes one at a time, h
 
 ## Networking notes
 
-- Public HTTP is a per-service Funnel ingress container on the overlay, not a tunnel to the manager. Full design in [`networking.md`](./networking.md). Do not publish host ports via `EndpointSpec` for public services; the ingress container dials `svc-<id>:<port>` over the overlay.
+- Public HTTP is a per-service `cloudflared` Quick Tunnel (`ingress-<id>`, label `keel.ingress`) on the overlay, not a tunnel to the manager. Full design in [`networking.md`](./networking.md). Do not publish host ports via `EndpointSpec` for public services; the ingress container dials `svc-<id>:<port>` over the overlay.
 - Service-to-service traffic uses the `keel` overlay. DNS name is the service name, `svc-<id>`.
 - User containers do not get Tailscale directly. Overlay is enough for v1.
 

@@ -202,6 +202,38 @@ export const start = mutation({
   },
 });
 
+/**
+ * Expose to the internet through a Cloudflare Quick Tunnel: one `cloudflared` Swarm service
+ * dialling `svc-<id>:<port>` over the overlay. Immediate, not Ship-gated. The URL is temporary
+ * (changes when that tunnel restarts); a named tunnel with a stable hostname is the next provider.
+ */
+export const expose = mutation({
+  args: { id: v.id("nodes") },
+  handler: async (ctx, { id }) => {
+    const { node } = await requireNode(ctx, id);
+    if (node.type !== "service" || !node.desired?.port) {
+      throw new ConvexError("Only services with a port can be exposed");
+    }
+    if (node.public) return;
+    const at = Date.now();
+    await ctx.db.patch(id, {
+      public: { provider: "quick-tunnel", at },
+      ingress: { state: "starting", at },
+    });
+    await ctx.scheduler.runAfter(0, internal.swarm.applyIngress, { id });
+  },
+});
+
+export const unexpose = mutation({
+  args: { id: v.id("nodes") },
+  handler: async (ctx, { id }) => {
+    const { node } = await requireNode(ctx, id);
+    if (!node.public) return;
+    await ctx.db.patch(id, { public: undefined, ingress: undefined });
+    await ctx.scheduler.runAfter(0, internal.swarm.removeIngress, { id });
+  },
+});
+
 export const duplicate = mutation({
   args: { id: v.id("nodes") },
   handler: async (ctx, { id }) => {
@@ -214,6 +246,8 @@ export const duplicate = mutation({
       deployedRevision: _d,
       applyError: _e,
       observeScheduled: _s,
+      public: _p,
+      ingress: _i,
       ...rest
     } = node;
     const taken = await takenNames(ctx, node.environmentId);

@@ -72,6 +72,7 @@ Pass them to the root side of the pipe: `curl -fsSL … | sudo KEEL_VERSION=1.2.
 sudo docker compose -p keel -f /opt/keel/compose.yml down   # control plane
 sudo docker service rm keel-worker                          # per-node worker
 sudo docker service ls -q --filter label=keel.service | xargs -r sudo docker service rm  # your services
+sudo docker service ls -q --filter label=keel.ingress | xargs -r sudo docker service rm  # their public tunnels
 ```
 
 Data is kept: the Convex volume `keel_convex-data` and your services' volumes. Remove them with `docker volume rm` and delete `/opt/keel` to start from scratch. Leave the Swarm with `docker swarm leave --force` only if nothing else uses it.

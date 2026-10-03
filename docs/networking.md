@@ -1,6 +1,6 @@
 # Networking — Tailscale mesh + per-service Funnel ingress
 
-> How servers reach each other and how the public reaches a service. Decided 2026-09-13 after evaluating Tailscale, tailcat, Cloudflare Mesh/Tunnel, NetBird, Pangolin, Headscale, Nebula, ZeroTier and OpenZiti. Read this before touching node join, ingress, domains or auth. Worker scheduling lives in [`workers.md`](./workers.md). This file supersedes the "Networking notes" section there.
+> How servers reach each other and how the public reaches a service. Mesh decided 2026-09-13 after evaluating Tailscale, tailcat, Cloudflare Mesh/Tunnel, NetBird, Pangolin, Headscale, Nebula, ZeroTier and OpenZiti. **Public ingress revised 2026-10-01: Cloudflare Tunnel, not Tailscale Funnel** (see "Public ingress"). Read this before touching node join, ingress, domains or auth. Worker scheduling lives in [`workers.md`](./workers.md). This file supersedes the "Networking notes" section there.
 
 ## Invariant
 
@@ -9,31 +9,60 @@
 ## Decision
 
 - **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) rides the tailnet, see `workers.md`. The per-node event forwarder (`keel-events`) makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing.
-- **Public HTTP:** Tailscale Funnel, one tsnet node per public service, URL is `<name>.<tailnet>.ts.net`. Traffic goes Tailscale ingress → that node directly. The control plane is never in the request path.
-- **Proxy:** our own, ~200 lines of Go around `httputil.ReverseProxy`, embedded with tsnet in a small container. Not Traefik, not Caddy, not Envoy.
+- **Public HTTP:** Cloudflare Tunnel. Today a **Quick Tunnel** per exposed service (`cloudflared tunnel --url http://svc-<id>:<port>`, no account, temporary `https://<random>.trycloudflare.com`). Next: one **named tunnel** per cluster with stable hostnames on the user's own domain. The control plane is never in the request path. Details under "Public ingress".
+- **Proxy:** none of ours. `cloudflared` dials the app's Swarm VIP over the overlay.
 - **Auth:** ours (better-auth). Tailscale identity is optional sign-in sugar later, never the account system.
-- **Custom domains:** not in v1. Audience is indie hackers on homelabs who accept the `ts.net` hostname. Known path when needed: Cloudflare Tunnel per node. Watch [tailscale/tailscale#11563](https://github.com/tailscale/tailscale/issues/11563) (Funnel custom domains, open since March 2024, no maintainer response).
+- **Custom domains:** the named-tunnel slice. Any zone on the user's Cloudflare account.
 
 ## Why not the alternatives
 
-| Option | Why not |
-|---|---|
-| **tailcat** | No control plane, no identity, address is a bearer secret ("treat it like a password"). Userspace pipe, containers can't route over it. README: no API/CLI/wire stability promises, public relays revocable any time. Maybe later for `keel connect` dev pipes. |
-| **Cloudflare Mesh** | No peer-to-peer at all, every packet hairpins through a Cloudflare PoP. NetBird's benchmark: Hetzner→Hetzner 250 Mbps vs 1,300 on Tailscale. 50 nodes then Enterprise sales. Cloudflare decrypts at the edge. |
-| **Cloudflare Tunnel** (for v1 ingress) | Works, free, has an API. Rejected for v1 only because it needs a domain on Cloudflare DNS and a second vendor. It is the custom-domain answer later. Video/large-file ToS restriction on public hostnames. |
-| **NetBird self-hosted** | Strongest runner-up: BSD-3 client + AGPL server, embed SDK, ingress proxy with custom domains, no node cap. Costs us four containers on the control plane and the control plane must open UDP 3478. User picked Tailscale's NAT traversal and simpler install. |
-| **Pangolin** | Client-to-site only. No site-to-site mesh. AGPL and commercial license mixed per file. |
-| **Headscale** | Single tailnet, two maintainers, no ingress. Kept as escape hatch via `ControlURL`. |
-| **Nebula / ZeroTier / OpenZiti** | No ingress (Nebula, $1/host past 100), BSL with SaaS-controller trigger (ZeroTier), you run a PKI + controller + router fleet (OpenZiti). |
+| Option                                | Why not                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **tailcat**                           | No control plane, no identity, address is a bearer secret ("treat it like a password"). Userspace pipe, containers can't route over it. README: no API/CLI/wire stability promises, public relays revocable any time. Maybe later for `keel connect` dev pipes.                                                                                                    |
+| **Cloudflare Mesh**                   | No peer-to-peer at all, every packet hairpins through a Cloudflare PoP. NetBird's benchmark: Hetzner→Hetzner 250 Mbps vs 1,300 on Tailscale. 50 nodes then Enterprise sales. Cloudflare decrypts at the edge.                                                                                                                                                      |
+| **Cloudflare Tunnel** (as the mesh)   | Adopted for public ingress on 2026-10-01, see below. Not the mesh: that stays Tailscale. Video/large-file ToS restriction on public hostnames.                                                                                                                                                                                                                     |
+| **Tailscale Funnel** (public ingress) | One hostname per Tailscale node, `ts.net` names only ([#11563](https://github.com/tailscale/tailscale/issues/11563) open since 2024), no Funnel for Tailscale Services ([#17849](https://github.com/tailscale/tailscale/issues/17849)), so every public service is its own userspace WireGuard node needing a key or a browser authorization. Rejected 2026-10-01. |
+| **NetBird self-hosted**               | Strongest runner-up: BSD-3 client + AGPL server, embed SDK, ingress proxy with custom domains, no node cap. Costs us four containers on the control plane and the control plane must open UDP 3478. User picked Tailscale's NAT traversal and simpler install.                                                                                                     |
+| **Pangolin**                          | Client-to-site only. No site-to-site mesh. AGPL and commercial license mixed per file.                                                                                                                                                                                                                                                                             |
+| **Headscale**                         | Single tailnet, two maintainers, no ingress. Kept as escape hatch via `ControlURL`.                                                                                                                                                                                                                                                                                |
+| **Nebula / ZeroTier / OpenZiti**      | No ingress (Nebula, $1/host past 100), BSL with SaaS-controller trigger (ZeroTier), you run a PKI + controller + router fleet (OpenZiti).                                                                                                                                                                                                                          |
 
 Proxy choice:
 
-| Option | Why not |
-|---|---|
-| **Caddy** | Best REST admin API of the shelf (push, granular, ETag). But `caddy-tailscale` is "highly experimental" and has no Funnel ([#26](https://github.com/tailscale/caddy-tailscale/issues/26) open since Dec 2023). Would mean embedding Caddy as a library with our own listener. Revisit if we want its plugin ecosystem. |
-| **Traefik** | v3 HTTP provider is poll-only (default 5s), no push endpoint. Docker-label discovery we don't need. |
-| **Envoy** | xDS gRPC, heavy. Railway left it because rolling config diffs took 45s at scale. Wrong tool for one process per service. |
-| **Own proxy** | Certs, ingress, TLS and NAT are all Tailscale's problem. What's left is "forward HTTP to one target". Go's `ReverseProxy` does websockets and h2c. Config is a struct in memory. |
+| Option        | Why not                                                                                                                                                                                                                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Caddy**     | Best REST admin API of the shelf (push, granular, ETag). But `caddy-tailscale` is "highly experimental" and has no Funnel ([#26](https://github.com/tailscale/caddy-tailscale/issues/26) open since Dec 2023). Would mean embedding Caddy as a library with our own listener. Revisit if we want its plugin ecosystem. |
+| **Traefik**   | v3 HTTP provider is poll-only (default 5s), no push endpoint. Docker-label discovery we don't need.                                                                                                                                                                                                                    |
+| **Envoy**     | xDS gRPC, heavy. Railway left it because rolling config diffs took 45s at scale. Wrong tool for one process per service.                                                                                                                                                                                               |
+| **Own proxy** | Certs, ingress, TLS and NAT are all Tailscale's problem. What's left is "forward HTTP to one target". Go's `ReverseProxy` does websockets and h2c. Config is a struct in memory.                                                                                                                                       |
+
+## Public ingress (2026-10-01)
+
+Verified before deciding: Funnel publishes exactly the node's own MagicDNS name on 443/8443/10000, cannot use custom domains, and does not support Tailscale Services. Per-service hostnames therefore mean per-service tsnet nodes (tens of MB each, a tailnet device each, an auth key or a browser authorization each). Hosting on the host `tailscaled` instead gives one hostname per _server_ with path or port routing, and `tailscale serve` only proxies to loopback. Thalles rejected both. Cloudflare Tunnel is "one connector, many hostnames", which is Railway's model.
+
+### Quick Tunnel (shipped)
+
+- **Expose** on a service is one click and immediate, not Ship-gated: `nodes.expose` sets `nodes.public = { provider: "quick-tunnel" }` and schedules `swarm.applyIngress`, which creates Swarm service `ingress-<id>` (label `keel.ingress=<id>`, image `cloudflare/cloudflared:<pinned>`, args `tunnel --url http://svc-<id>:<port>`, 1 replica, `stop-first`, on the `keel` overlay, no ports, no mounts). Nothing is pasted or stored. A shipped port change re-runs `applyIngress`.
+- **URL discovery.** `cloudflared` prints the assigned hostname 2–5 s after start. `swarm.observeNode` lists `keel.ingress=<id>` tasks next to the app's, reads `docker service logs ingress-<id>` on the manager (timestamp-sorted, last `*.trycloudflare.com` match wins, so a restart's new URL replaces the old one) and writes `nodes.ingress = { state: starting | live | failed, url?, error? }`. While `starting` it re-checks every 3 s, at most 10 times. The worker forwards `ingress-*` Docker events like `svc-*` ones, so a restart is observed without polling.
+- **Canvas.** Card subtitle is the domain while live (link), "Exposing…" / "Expose failed" otherwise; the Deployments meta strip has the link and a copy button. Both say the URL is temporary. ⋯ → Make private removes the tunnel; deleting the node removes both services.
+- **Limits, stated to users:** the URL changes whenever that `cloudflared` restarts (node reboot, reschedule, Make private then Expose). Redeploying the app does not change it (target is the Swarm VIP). 200 in-flight requests then 429. No Server-Sent Events. No uptime guarantee; Cloudflare: "testing and development". Anyone with the URL can reach the service, and `trycloudflare.com` hosts get indexed. Outbound only: UDP 7844 (QUIC) with HTTP/2 over TCP 7844 fallback. One `cloudflared` per exposed service, ~25 MB image, tens of MB RSS.
+- Stopping a service leaves its tunnel up (answers 502 until Start). Databases and raw TCP are never exposed.
+
+### Named tunnel (next)
+
+Removes every limit above and needs no per-service process. One-time: the user pastes a Cloudflare API token (Account → Cloudflare Tunnel: Edit, Zone → DNS: Edit) and picks a zone; the domain must be on Cloudflare DNS (free plan is fine).
+
+- `POST /accounts/{id}/cfd_tunnel` `{"name":"keel-<cluster>","config_src":"cloudflare"}` → tunnel id + run token. One Swarm service `keel-tunnel` on the overlay, `cloudflared tunnel run --token …`, 2 replicas for HA (connectors of one tunnel).
+- Expose = `PUT /accounts/{id}/cfd_tunnel/{tid}/configurations` with the full ingress list (`<service>.<zone> → http://svc-<id>:<port>` per public node, catch-all `http_status:404` last) plus `POST /zones/{zid}/dns_records` CNAME `<service>.<zone> → <tid>.cfargotunnel.com`, proxied. Remote config is picked up live; no restart.
+- Health: `GET …/cfd_tunnel/{tid}` → `status`, `connections`.
+- `nodes.public.provider = "cloudflare"` with the hostname; `nodes.ingress` keeps the same shape.
+- Caveats: TLS terminates at Cloudflare's edge, 100 MB request body on Free/Pro, video/large-file terms on non-Enterprise, Cloudflare's uptime becomes yours.
+
+Later, if a hosted Keel ever exists, `*.keel.sh`-style generated domains would be a named tunnel in Keel's own account; not possible for self-hosted installs.
+
+---
+
+> **Everything from here to "Naming" is the per-service tsnet Funnel design rejected on 2026-10-01.** Kept for reference. Nothing in code implements it.
 
 ## Traffic path
 
@@ -194,7 +223,7 @@ OAuth client scopes needed: auth keys (write), devices (write, for cleanup), DNS
 
 Not an identity provider. Tailscale OAuth apps are alpha and same-tailnet only; useless for outside users. What works: serve the dashboard on a tsnet listener too, call `LocalClient().WhoIs(remoteAddr)` on the request, get the user's login, mint a better-auth session, redirect to the public dashboard URL. Only reachable from inside the tailnet, which is the point. `tsidp` does the same via OIDC if we want a standard flow.
 
-## Custom domains (not v1)
+## Custom domains (superseded by "Named tunnel" above)
 
 When someone needs `app.example.com`, the zero-inbound-port path is Cloudflare Tunnel:
 
@@ -208,10 +237,10 @@ Caveats: TLS terminates at Cloudflare's edge; video/large-file hosting on public
 
 ## Not doing in v1
 
-- Custom domains.
+- Custom domains (next slice: named Cloudflare tunnel).
 - Raw TCP/UDP public exposure.
 - Per-node agent. The ingress container is a Swarm service like everything else (`workers.md`: no agent).
-- Cloudflare as a second mesh backend. Abstract `NetworkProvider` in code so it stays possible.
+- Cloudflare as a mesh backend. The tailnet stays the mesh.
 - Sign in with Tailscale.
 
 ## Sources

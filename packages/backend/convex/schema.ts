@@ -101,10 +101,14 @@ export default defineSchema({
   projects: defineTable({
     name: v.string(),
     slug: v.string(),
-    ownerId: v.string(),
+    // The organization this project belongs to: a Better Auth organization-plugin row id (see
+    // auth.ts, access.ts). Unset only on rows from before organizations existed; projects.ensureDefault
+    // adopts those into the install's organization and clears `ownerId`.
+    organizationId: v.optional(v.string()),
+    ownerId: v.optional(v.string()),
   })
-    .index("by_owner", ["ownerId"])
-    .index("by_slug", ["ownerId", "slug"]),
+    .index("by_organization", ["organizationId"])
+    .index("by_slug", ["organizationId", "slug"]),
 
   environments: defineTable({
     projectId: v.id("projects"),

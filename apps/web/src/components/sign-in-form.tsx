@@ -7,7 +7,8 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () => void }) {
+/** `onSwitchToSignUp` is only offered while sign-up is open (no account yet); see AuthForms. */
+export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp?: () => void }) {
   const form = useForm({
     defaultValues: {
       email: "",
@@ -107,13 +108,19 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
       </form>
 
       <div className="mt-4 text-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignUp}
-          className="text-indigo-600 hover:text-indigo-800"
-        >
-          Need an account? Sign Up
-        </Button>
+        {onSwitchToSignUp ? (
+          <Button
+            variant="link"
+            onClick={onSwitchToSignUp}
+            className="text-indigo-600 hover:text-indigo-800"
+          >
+            Need an account? Sign Up
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Need an account? Ask a member for an invite link.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 
+import { components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authComponent } from "./auth";
@@ -12,12 +13,36 @@ export async function requireUser(ctx: Ctx) {
   return user;
 }
 
-/** Project owned by the signed-in user, or null (missing, foreign, or signed out). */
-export async function ownedProject(ctx: Ctx, id: Id<"projects">) {
+export type Membership = {
+  user: NonNullable<Awaited<ReturnType<typeof authComponent.safeGetAuthUser>>>;
+  organizationId: string;
+  role: string;
+};
+
+/**
+ * The signed-in user's organization membership, or null (signed out, or no organization yet).
+ * Members and organizations are Better Auth's organization-plugin rows, read from the component.
+ * One organization per install for now, so a user has at most one membership.
+ */
+export async function currentMembership(ctx: Ctx): Promise<Membership | null> {
   const user = await authComponent.safeGetAuthUser(ctx);
   if (!user) return null;
+  const member = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "member",
+    where: [{ field: "userId", value: user._id }],
+  })) as { organizationId: string; role: string } | null;
+  return member ? { user, organizationId: member.organizationId, role: member.role } : null;
+}
+
+export const NO_ORGANIZATION =
+  "You're not in an organization yet. Ask a member for an invite link.";
+
+/** Project of the signed-in user's organization, or null (missing, foreign, or signed out). */
+export async function ownedProject(ctx: Ctx, id: Id<"projects">) {
+  const membership = await currentMembership(ctx);
+  if (!membership) return null;
   const project = await ctx.db.get(id);
-  return project && project.ownerId === user._id ? project : null;
+  return project && project.organizationId === membership.organizationId ? project : null;
 }
 
 export async function ownedEnvironment(ctx: Ctx, id: Id<"environments">) {

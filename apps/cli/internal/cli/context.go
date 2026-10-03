@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ThallesP/keel/apps/cli/internal/config"
 	"github.com/ThallesP/keel/apps/cli/internal/keel"
@@ -110,11 +111,71 @@ func (a *app) connect(ctx context.Context) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := a.finishLogin(ctx, cfg, name, inst); err != nil {
+		return nil, err
+	}
 	api, err := keel.Connect(ctx, inst)
 	if err != nil {
 		return nil, err
 	}
 	return &session{cfg: cfg, name: name, inst: inst, api: api}, nil
+}
+
+// finishLogin completes the login keel login left pending, once someone approved it in the
+// dashboard: the token is saved and the command runs as usual. Not approved yet is
+// AUTHORIZATION_PENDING. An instance with a token (or KEEL_TOKEN) has nothing to finish.
+func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, inst *config.Instance) error {
+	p := inst.Pending
+	if inst.Token != "" || p == nil {
+		return nil
+	}
+	if p.Expired() {
+		return output.Errorf(output.CodeNotAuthenticated, "keel login "+inst.URL,
+			"The login link expired before anyone approved it")
+	}
+	token, slowDown, err := keel.PollLogin(ctx, inst)
+	if slowDown {
+		// An earlier run polled moments ago; wait out the interval for a real answer.
+		select {
+		case <-ctx.Done():
+			return output.Errorf(output.CodeCancelled, "", "Cancelled")
+		case <-time.After(time.Duration(p.Interval) * time.Second):
+		}
+		token, _, err = keel.PollLogin(ctx, inst)
+	}
+	if err != nil {
+		fresh, ferr := config.Load()
+		if ferr != nil {
+			return err
+		}
+		f := fresh.Instances[name]
+		if f == nil || f.URL != inst.URL {
+			return err
+		}
+		// A keel run alongside this one may have taken the token: it is handed out only once.
+		if f.Token != "" {
+			*inst = *f
+			return nil
+		}
+		// Turned down, expired or used up: the install has dropped the code, so forget it and
+		// later runs say "Not logged in" instead of polling a code that is gone.
+		if output.CodeOf(err) == output.CodeNotAuthenticated && f.Pending != nil && f.Pending.DeviceCode == p.DeviceCode {
+			f.Pending = nil
+			fresh.Save()
+		}
+		return err
+	}
+	if token == "" {
+		return output.Errorf(output.CodeAuthorizationPending,
+			"Open "+p.URL+" and approve (agents: send it to your human), then retry; or keel login --wait",
+			"Waiting for someone to approve the login")
+	}
+	inst.Token, inst.Pending = token, nil
+	if err := saveConfig(cfg); err != nil {
+		return err
+	}
+	a.out.Progress("Login approved; saved for %s", name)
+	return nil
 }
 
 // projectSlug is the project asked for: --project, KEEL_PROJECT, then the directory's link; ""

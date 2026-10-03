@@ -74,15 +74,27 @@ jobs:
         with:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
-      - name: keel CLI finds the install from the dashboard URL and signs in
+      - name: keel CLI finds the install from the dashboard URL and logs in through an approved link
         working-directory: apps/cli
         run: |
           go build -o "$RUNNER_TEMP/keel" ./cmd/keel
           export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
-          printf %s correct-horse-battery |
-            "$RUNNER_TEMP/keel" login "http://$KEEL_ADDR" --email ci@example.com --password-stdin |
-            jq -e '.ok and .user.email == "ci@example.com"'
-          "$RUNNER_TEMP/keel" whoami | jq -e '.ok and .url == "http://" + env.KEEL_ADDR'
+          keel() { "$RUNNER_TEMP/keel" "$@"; }
+          site="http://$KEEL_ADDR:3211"
+          auth() { curl -fsS -H 'Content-Type: application/json' -H "Origin: http://$KEEL_ADDR" "$@"; }
+          # No terminal: login returns at once with the link, and commands wait for the approval.
+          keel login "http://$KEEL_ADDR" > pending.json
+          jq -e '.ok and .status == "pending" and (.approvalUrl | startswith("http://" + env.KEEL_ADDR + "/device?user_code="))' pending.json
+          code=$(jq -r .code pending.json)
+          ! keel whoami > early.json
+          jq -e '.code == "AUTHORIZATION_PENDING"' early.json
+          # The human: signed in, opens the link (binds the code to them) and approves.
+          token=$(auth -X POST "$site/api/auth/sign-in/email" -d '{"email":"ci@example.com","password":"correct-horse-battery"}' | jq -r .token)
+          auth -H "Authorization: Bearer $token" "$site/api/auth/device?user_code=$code" | jq -e '.status == "pending"'
+          auth -X POST -H "Authorization: Bearer $token" "$site/api/auth/device/approve" -d "{\"userCode\":\"$code\"}" | jq -e .success
+          # The next command finishes the login.
+          keel whoami | jq -e '.ok and .user.email == "ci@example.com" and .url == "http://" + env.KEEL_ADDR'
+          keel login | jq -e '.ok and .status == "loggedIn"'
       - name: Re-run is idempotent
         run: |
           secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }

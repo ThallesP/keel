@@ -10,6 +10,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,25 +20,27 @@ import (
 
 // Error codes. Stable: agents branch on them.
 const (
-	CodeUsage              = "USAGE"
-	CodeNotAuthenticated   = "NOT_AUTHENTICATED"
-	CodeNoOrganization     = "NO_ORGANIZATION"
-	CodeNoProjects         = "NO_PROJECTS"
-	CodeProjectRequired    = "PROJECT_REQUIRED"
-	CodeProjectNotFound    = "PROJECT_NOT_FOUND"
-	CodeServiceNotFound    = "SERVICE_NOT_FOUND"
-	CodeVariableNotFound   = "VARIABLE_NOT_FOUND"
-	CodeDeploymentNotFound = "DEPLOYMENT_NOT_FOUND"
-	CodeDeploymentRunning  = "DEPLOYMENT_RUNNING"
-	CodeDeploymentFailed   = "DEPLOYMENT_FAILED"
-	CodeNothingToShip      = "NOTHING_TO_SHIP"
-	CodeInvalidInput       = "INVALID_INPUT"
-	CodeDiscoveryFailed    = "DISCOVERY_FAILED"
-	CodeNetwork            = "NETWORK_ERROR"
-	CodeServer             = "SERVER_ERROR"
-	CodeConfig             = "CONFIG_ERROR"
-	CodeTimeout            = "TIMEOUT"
-	CodeCancelled          = "CANCELLED"
+	CodeUsage            = "USAGE"
+	CodeNotAuthenticated = "NOT_AUTHENTICATED"
+	// keel login is waiting for someone to approve its link in the dashboard.
+	CodeAuthorizationPending = "AUTHORIZATION_PENDING"
+	CodeNoOrganization       = "NO_ORGANIZATION"
+	CodeNoProjects           = "NO_PROJECTS"
+	CodeProjectRequired      = "PROJECT_REQUIRED"
+	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
+	CodeServiceNotFound      = "SERVICE_NOT_FOUND"
+	CodeVariableNotFound     = "VARIABLE_NOT_FOUND"
+	CodeDeploymentNotFound   = "DEPLOYMENT_NOT_FOUND"
+	CodeDeploymentRunning    = "DEPLOYMENT_RUNNING"
+	CodeDeploymentFailed     = "DEPLOYMENT_FAILED"
+	CodeNothingToShip        = "NOTHING_TO_SHIP"
+	CodeInvalidInput         = "INVALID_INPUT"
+	CodeDiscoveryFailed      = "DISCOVERY_FAILED"
+	CodeNetwork              = "NETWORK_ERROR"
+	CodeServer               = "SERVER_ERROR"
+	CodeConfig               = "CONFIG_ERROR"
+	CodeTimeout              = "TIMEOUT"
+	CodeCancelled            = "CANCELLED"
 )
 
 // Exit codes: 0 ok, 1 error, 2 usage, 4 needs login (as gh), 130 interrupted.
@@ -63,12 +66,21 @@ func (e *Error) ExitCode() int {
 	switch e.Code {
 	case CodeUsage:
 		return ExitUsage
-	case CodeNotAuthenticated:
+	case CodeNotAuthenticated, CodeAuthorizationPending:
 		return ExitAuth
 	case CodeCancelled:
 		return ExitCancelled
 	}
 	return ExitError
+}
+
+// CodeOf is the code of err if it is (or wraps) an *Error, "" otherwise.
+func CodeOf(err error) string {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
 }
 
 func Errorf(code, fix, format string, args ...any) *Error {

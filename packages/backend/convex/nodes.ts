@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import {
   ownedEnvironment,
@@ -11,6 +11,7 @@ import {
   validImage,
   validName,
   validPort,
+  validReplicas,
 } from "./access";
 import {
   DEFAULTS,
@@ -26,13 +27,33 @@ import { beginDeployment } from "./deployments";
 import { DEPLOYABLE } from "./status";
 import { markReferrersDirty, renameReferences } from "./variables";
 
-/** Names are unique per environment: `${{ name.KEY }}` references resolve by name. */
-async function takenNames(ctx: QueryCtx, environmentId: Id<"environments">) {
-  const siblings = await ctx.db
+async function nodesOf(ctx: QueryCtx, environmentId: Id<"environments">) {
+  return await ctx.db
     .query("nodes")
     .withIndex("by_environment", (q) => q.eq("environmentId", environmentId))
     .collect();
-  return new Set(siblings.map((n) => n.name));
+}
+
+/** Names are unique per environment: `${{ name.KEY }}` references resolve by name. */
+async function takenNames(ctx: QueryCtx, environmentId: Id<"environments">) {
+  return new Set((await nodesOf(ctx, environmentId)).map((n) => n.name));
+}
+
+/** Width of a canvas node (node-shell.tsx); groups carry their own in `config.width`. */
+const NODE_WIDTH = 220;
+
+/**
+ * Where a node created without a position lands (the CLI has no canvas to drop it on): right of
+ * the rightmost top-level node, level with it, so it neither stacks at 0,0 nor overlaps.
+ */
+function nextPosition(nodes: Doc<"nodes">[]) {
+  let at: { x: number; y: number } | undefined;
+  for (const n of nodes) {
+    if (n.parentId) continue; // relative to its group
+    const x = n.position.x + (n.config.width ?? NODE_WIDTH) + 60;
+    if (!at || x > at.x) at = { x, y: n.position.y };
+  }
+  return at ?? { x: 0, y: 0 };
 }
 
 export const list = query({
@@ -63,24 +84,32 @@ export const create = mutation({
     environmentId: v.id("environments"),
     type: nodeType,
     name: v.optional(v.string()),
-    position,
-    // service only: image to run. Port comes from the type default; edit later via setDesired.
+    // Omitted by the CLI: see nextPosition.
+    position: v.optional(position),
+    // service only: image to run.
     image: v.optional(v.string()),
     // database | cache only: picks image + port from ENGINES.
     engine: v.optional(engine),
+    // service | database | cache: instead of the type's port and 1 replica. Same rules as setDesired.
+    port: v.optional(v.number()),
+    replicas: v.optional(v.number()),
     // Ship right away. Skipped silently when a deployment is already running (node stays dirty).
     deploy: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
-    { environmentId, type, name, position, image, engine: engineKey, deploy },
+    { environmentId, type, name, position, image, engine: engineKey, port, replicas, deploy },
   ) => {
     await requireEnvironment(ctx, environmentId);
-    const taken = await takenNames(ctx, environmentId);
+    const siblings = await nodesOf(ctx, environmentId);
+    const taken = new Set(siblings.map((n) => n.name));
     const defaults = DEFAULTS[type];
     const deployable = DEPLOYABLE.has(type);
     if (image !== undefined && type !== "service") {
       throw new ConvexError("Only services take a custom image");
+    }
+    if ((port !== undefined || replicas !== undefined) && !("image" in defaults)) {
+      throw new ConvexError("This node type has no runtime settings");
     }
     if (engineKey !== undefined && ENGINES[engineKey].type !== type) {
       throw new ConvexError(`${engineKey} is not a ${type}`);
@@ -98,15 +127,15 @@ export const create = mutation({
         ? {
             image: finalImage ?? defaults.image,
             revision: 0,
-            replicas: 1,
-            port: picked?.port ?? defaults.port,
+            replicas: validReplicas(replicas) ?? 1,
+            port: validPort(port) ?? picked?.port ?? defaults.port,
           }
         : undefined;
     const id = await ctx.db.insert("nodes", {
       environmentId,
       type,
       name: finalName,
-      position,
+      position: position ?? nextPosition(siblings),
       config:
         type === "volume" ? { sizeGb: 10 } : type === "group" ? { width: 300, height: 180 } : {},
       desired,
@@ -161,15 +190,12 @@ export const setDesired = mutation({
   handler: async (ctx, { id, image, port, replicas }) => {
     const { node } = await requireNode(ctx, id);
     if (!node.desired) throw new ConvexError("This node type has no runtime settings");
-    if (replicas !== undefined && (!Number.isInteger(replicas) || replicas < 0 || replicas > 20)) {
-      throw new ConvexError("Replicas must be 0–20");
-    }
     await ctx.db.patch(id, {
       desired: {
         ...node.desired,
         image: image === undefined ? node.desired.image : validImage(image),
         port: port === undefined ? node.desired.port : validPort(port),
-        replicas: replicas ?? node.desired.replicas,
+        replicas: validReplicas(replicas) ?? node.desired.replicas,
       },
       dirty: true,
     });

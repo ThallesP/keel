@@ -139,6 +139,15 @@ func (a *API) Projects(ctx context.Context) ([]Project, error) {
 	return ps, err
 }
 
+// CreateProject makes a project with its production environment; the slug comes from the name.
+func (a *API) CreateProject(ctx context.Context, name string) (*Project, error) {
+	var p *Project
+	if err := a.mutation(ctx, "projects:create", args{"name": name}, &p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 func (a *API) Summary(ctx context.Context, environmentID string) (*Summary, error) {
 	var s *Summary
 	if err := a.query(ctx, "environments:summary", args{"environmentId": environmentID}, &s); err != nil {
@@ -185,6 +194,40 @@ func (a *API) Variables(ctx context.Context, serviceID string) ([]Variable, erro
 		vars[i] = Variable(r)
 	}
 	return vars, nil
+}
+
+// CreateService stages a service running image, as dropping one on the canvas does: nothing runs
+// until `keel ship`. port and replicas are the server's defaults (80, 1) when nil.
+func (a *API) CreateService(ctx context.Context, environmentID, name, image string, port, replicas *int) (*Service, error) {
+	in := args{"environmentId": environmentID, "type": "service", "name": name, "image": image}
+	if port != nil {
+		in["port"] = *port
+	}
+	if replicas != nil {
+		in["replicas"] = *replicas
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := a.mutation(ctx, "nodes:create", in, &created); err != nil {
+		return nil, err
+	}
+	services, err := a.Services(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range services {
+		if services[i].ID == created.ID {
+			return &services[i], nil
+		}
+	}
+	return nil, output.Errorf(output.CodeServiceNotFound, "keel service list", "Service %s was deleted right after it was created", name)
+}
+
+// DeleteService removes a service now, not at the next ship: its Swarm service, variables and
+// canvas node go. Services that reference its variables get staged changes.
+func (a *API) DeleteService(ctx context.Context, id string) error {
+	return a.mutation(ctx, "nodes:remove", args{"id": id}, nil)
 }
 
 // SetVariable upserts one variable. Like the dashboard, it only stages: `keel ship` deploys.
@@ -331,6 +374,12 @@ func translate(err error, webURL string) error {
 			return output.Errorf(output.CodeServiceNotFound, "keel service list", "Service not found")
 		case msg == "Environment not found":
 			return output.Errorf(output.CodeProjectNotFound, "keel project list", "Environment not found")
+		case strings.HasPrefix(msg, `Project "`) && strings.HasSuffix(msg, `" already exists`):
+			return output.Errorf(output.CodeNameTaken,
+				"Pick another name, or use it: keel link "+strings.TrimSuffix(strings.TrimPrefix(msg, `Project "`), `" already exists`),
+				"%s", msg)
+		case strings.HasSuffix(msg, `" is already taken`):
+			return output.Errorf(output.CodeNameTaken, "Pick another name; keel service list shows the taken ones", "%s", msg)
 		case msg != "":
 			return output.Errorf(output.CodeInvalidInput, "", "%s", msg)
 		}

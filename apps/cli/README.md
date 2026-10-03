@@ -16,6 +16,7 @@ Go 1.27. Its own module, outside bun and turbo; CI runs `gofmt`, `go vet` and `g
 keel login https://keel.example.ts.net          # prints a link; approve it in the dashboard
 keel link acme-support                          # this directory → that project
 keel status
+keel service create api --image ghcr.io/acme/api:1.4 --port 3000   # staged, like a canvas drop
 keel logs api -n 200
 keel var set api LOG_LEVEL=debug                # staged, like the dashboard
 keel ship                                       # deploy staged changes, wait for the result
@@ -29,9 +30,12 @@ keel redeploy api                               # pull the image again and roll 
 | `whoami` | Account, organization, install |
 | `token` | Print the session token, for `KEEL_TOKEN` |
 | `project list` | Projects of the organization |
+| `project create <name> [--link]` | New project with a production environment; the slug comes from the name (`Acme API` → `acme-api`). `--link` links this directory to it |
 | `link [project]` / `unlink` | Pin a directory (and its subdirectories) to a project |
 | `status` | Services, staged changes, last deployment |
 | `service list` | Services, databases, caches, volumes |
+| `service create <name> --image <ref> [--port N] [--replicas N]` | Stage a service, as dropping one on the canvas does; `keel ship <name>` deploys it. Port defaults to 80, replicas to 1 |
+| `service delete <service> [-y]` | Delete now, **not staged**: containers and variables go, services referencing it get staged changes. Asks with a terminal, needs `--yes` without one |
 | `logs <service> [-n N] [-f]` | Last N lines (default 100); `-f` polls until interrupted |
 | `var list <service> [--show-secrets]` | Variables; secret values are `null` unless asked |
 | `var set <service> KEY=VALUE... [--secret]` | Stage variables |
@@ -49,7 +53,7 @@ What agents rely on. Fields and codes are only ever added.
 
 - **stdout is results only.** Text or a table, or with `--json` / `KEEL_JSON=1` exactly one JSON object: `{"ok":true,...}`. `logs --follow --json` prints one object per line instead. Progress and warnings go to stderr.
 - **Errors** are `{"ok":false,"code":"…","error":"…","fix":"…"}` on stdout in JSON mode, and `error:` / `fix:` lines on stderr always, the same shape as `install.sh`. `fix` is the next command to run. A failed deployment adds `"deployment"`.
-- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`.
+- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `NAME_TAKEN` (project slug or service name in use), `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`.
 - **Exit codes:** 0 ok, 1 error, 2 usage, 4 not logged in (or the login awaits approval), 130 interrupted (`logs -f` exits 0 on Ctrl-C).
 - **No prompts without a terminal.** Missing input is a `USAGE` error naming the flag.
 - **Times** are RFC 3339 in UTC.
@@ -67,7 +71,7 @@ The session token is saved in `~/.config/keel/config.json` (0600; `KEEL_CONFIG_D
 Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). A dev server's `/config.js` is empty: pass `--convex-url` / `--convex-site-url` to `login`, or set `KEEL_CONVEX_URL` / `KEEL_CONVEX_SITE_URL`.
 
 - **Install:** `KEEL_URL`, else `--instance` / `KEEL_INSTANCE`, else the directory's link, else the last login.
-- **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`.
+- **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`; none at all is `NO_PROJECTS`. On a fresh install the first account founds the organization with its first `keel project create`, if it never opened the dashboard's home page.
 - **Environment:** production for now.
 - **Services:** named by name (unique per environment) or id.
 
@@ -87,7 +91,7 @@ A new command: add the Convex call to `internal/keel/api.go` (its types are the 
 ## Next
 
 - Scoped API tokens for CI (better-auth `apiKey`), instead of a full session in `KEEL_TOKEN`.
-- `service create --image`, `stop` / `start`, `expose` (returns the Quick Tunnel URL).
+- `stop` / `start`, `expose` (returns the Quick Tunnel URL); `database create` / `cache create` with `--engine`.
 - `run -- <cmd>` with the service's resolved variables; `var set --stdin` so secrets stay out of argv.
 - `node list`, `--environment` once there is more than production.
 - `keel mcp` and an `llms.txt` generated from the command tree.

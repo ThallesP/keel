@@ -34,6 +34,7 @@ const (
 	CodeDeploymentRunning    = "DEPLOYMENT_RUNNING"
 	CodeDeploymentFailed     = "DEPLOYMENT_FAILED"
 	CodeNothingToShip        = "NOTHING_TO_SHIP"
+	CodeNameTaken            = "NAME_TAKEN" // a project slug or service name already in use
 	CodeInvalidInput         = "INVALID_INPUT"
 	CodeDiscoveryFailed      = "DISCOVERY_FAILED"
 	CodeNetwork              = "NETWORK_ERROR"

@@ -95,6 +95,28 @@ jobs:
           # The next command finishes the login.
           keel whoami | jq -e '.ok and .user.email == "ci@example.com" and .url == "http://" + env.KEEL_ADDR'
           keel login | jq -e '.ok and .status == "loggedIn"'
+      - name: keel CLI creates a project and stages a service in it, as an agent would
+        working-directory: apps/cli
+        run: |
+          export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
+          keel() { "$RUNNER_TEMP/keel" "$@"; }
+          # This account never opened the dashboard, so there is no organization yet: no projects,
+          # and the first project create founds it.
+          keel project list | jq -e '.ok and .projects == []'
+          keel project create "CI App" --link | jq -e '.ok and .project.slug == "ci-app" and .project.environments[0].name == "production"'
+          ! keel project create ci-app > taken.json
+          jq -e '.code == "NAME_TAKEN"' taken.json
+          keel service create api --image nginx:alpine --port 8080 --replicas 2 \
+            | jq -e '.ok and .project.slug == "ci-app" and .service.staged and .service.port == 8080 and .service.replicas == 2'
+          ! keel service create api --image nginx:alpine > taken.json
+          jq -e '.code == "NAME_TAKEN"' taken.json
+          keel var set api GREETING=hello | jq -e '.ok and .staged'
+          keel status | jq -e '.pendingChanges == 1'
+          # Deleting is immediate, so without a terminal it takes --yes.
+          ! keel service delete api > unconfirmed.json
+          jq -e '.code == "USAGE"' unconfirmed.json
+          keel service delete api --yes | jq -e '.ok and .deleted'
+          keel service list | jq -e '.services == []'
       - name: Re-run is idempotent
         run: |
           secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }

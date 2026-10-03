@@ -26,8 +26,13 @@ export type LogEvent = {
 
 export interface Sink {
   readonly key: string;
-  /** Delivers a batch. Must not throw on transient failure: retry inside, drop with a log on 4xx. */
-  send(events: LogEvent[]): Promise<void>;
+  /**
+   * Delivers a batch. Never throws. Resolves `true` once the sink has the events, or when it
+   * rejected them as malformed (4xx: retrying cannot help, so they are dropped with a log).
+   * Resolves `false` when the sink stayed unreachable after the sink's own retries; the caller
+   * keeps the batch and its resume points, and tries again later.
+   */
+  send(events: LogEvent[]): Promise<boolean>;
 }
 
 export type SinkConfig = { kind: "axiom"; domain: string; dataset: string; token: string };

@@ -24,11 +24,11 @@ export function axiomSink(cfg: SinkConfig & { kind: "axiom" }, key: string): Sin
             body,
             signal: AbortSignal.timeout(15_000),
           });
-          if (res.ok) return;
+          if (res.ok) return true;
           const text = (await res.text().catch(() => "")).slice(0, 200);
           if (res.status >= 400 && res.status < 500 && res.status !== 429) {
             log("axiom", `rejected ${res.status}, dropping ${events.length} events`, { text });
-            return;
+            return true;
           }
           log("axiom", `ingest ${res.status}, retry ${attempt + 1}`, { text });
         } catch (err) {
@@ -36,7 +36,8 @@ export function axiomSink(cfg: SinkConfig & { kind: "axiom" }, key: string): Sin
         }
         await sleep(1000 * 2 ** attempt);
       }
-      log("axiom", `giving up on ${events.length} events`);
+      log("axiom", `unreachable, keeping ${events.length} events for a later attempt`);
+      return false;
     },
   };
 }

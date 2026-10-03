@@ -2,7 +2,8 @@ import { log } from "./log";
 
 // Resume points, persisted to a per-node volume so a restart does not replay or skip:
 // `eventsSince` for the Docker event stream, `logsSince[containerId]` for each container tail.
-// Losing the file costs one full observe sweep and at most `tail: 0` (new lines only) for logs.
+// Losing the file costs one full observe sweep and, for logs, re-reading every container from
+// its sink's connect time (duplicates in the sink, never a gap).
 
 const PATH = process.env.KEEL_STATE ?? "/var/lib/keel-worker/state.json";
 

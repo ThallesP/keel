@@ -17,7 +17,15 @@ export const config = internalQuery({
         const serviceIds = nodes
           .filter((n) => n.desired && projectOfEnv.get(n.environmentId) === row.projectId)
           .map((n) => n._id as string);
-        return { projectId: row.projectId as string, serviceIds, sink: row.sink };
+        // `since`: when the project connected this sink. A container the worker has no resume
+        // point for is read from here, so nothing written between a container's start and the
+        // worker's next poll is skipped, and nothing older than the connect is replayed.
+        return {
+          projectId: row.projectId as string,
+          serviceIds,
+          sink: row.sink,
+          since: row._creationTime,
+        };
       }),
     };
   },

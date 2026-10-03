@@ -26,7 +26,7 @@ func TestPickProject(t *testing.T) {
 		{"unknown", two, "nope", output.CodeProjectNotFound},
 	} {
 		p, err := pickProject(tc.projects, tc.slug, "https://keel.test")
-		got := errCode(err)
+		got := output.CodeOf(err)
 		if p != nil {
 			got = p.Slug
 		}
@@ -45,7 +45,7 @@ func TestFindService(t *testing.T) {
 		t.Errorf("by id: %v, %v", s, err)
 	}
 	_, err := findService(services, "apu")
-	if errCode(err) != output.CodeServiceNotFound || err.(*output.Error).Fix != "Services: api, postgres" {
+	if output.CodeOf(err) != output.CodeServiceNotFound || err.(*output.Error).Fix != "Services: api, postgres" {
 		t.Errorf("unknown: %v", err)
 	}
 }

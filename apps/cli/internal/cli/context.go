@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -145,12 +144,24 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 		token, _, err = keel.PollLogin(ctx, inst)
 	}
 	if err != nil {
+		fresh, ferr := config.Load()
+		if ferr != nil {
+			return err
+		}
+		f := fresh.Instances[name]
+		if f == nil || f.URL != inst.URL {
+			return err
+		}
 		// A keel run alongside this one may have taken the token: it is handed out only once.
-		if fresh, ferr := config.Load(); ferr == nil {
-			if f := fresh.Instances[name]; f != nil && f.URL == inst.URL && f.Token != "" {
-				*inst = *f
-				return nil
-			}
+		if f.Token != "" {
+			*inst = *f
+			return nil
+		}
+		// Turned down, expired or used up: the install has dropped the code, so forget it and
+		// later runs say "Not logged in" instead of polling a code that is gone.
+		if output.CodeOf(err) == output.CodeNotAuthenticated && f.Pending != nil && f.Pending.DeviceCode == p.DeviceCode {
+			f.Pending = nil
+			fresh.Save()
 		}
 		return err
 	}
@@ -255,15 +266,6 @@ func normalizeURL(raw string) (string, error) {
 		return "", fmt.Errorf("%q is not a dashboard URL (http:// or https:// and a host)", raw)
 	}
 	return u.Scheme + "://" + u.Host, nil
-}
-
-// errCode is the output code of err, "" when it has none.
-func errCode(err error) string {
-	var oe *output.Error
-	if errors.As(err, &oe) {
-		return oe.Code
-	}
-	return ""
 }
 
 func hostOf(webURL string) string {

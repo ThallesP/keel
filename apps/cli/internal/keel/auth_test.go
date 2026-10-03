@@ -3,7 +3,6 @@ package keel
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,14 +29,6 @@ func fakeAuth(t *testing.T, path string, status int, body string) (*config.Insta
 	}))
 	t.Cleanup(srv.Close)
 	return &config.Instance{URL: "https://keel.test", ConvexSiteURL: srv.URL}, &got
-}
-
-func codeOf(err error) string {
-	var oe *output.Error
-	if errors.As(err, &oe) {
-		return oe.Code
-	}
-	return ""
 }
 
 func TestStartLogin(t *testing.T) {
@@ -81,7 +72,7 @@ func TestPollLogin(t *testing.T) {
 			inst, sent := fakeAuth(t, "/api/auth/device/token", tc.status, tc.body)
 			inst.Pending = &config.PendingLogin{DeviceCode: "dev"}
 			token, slowDown, err := PollLogin(context.Background(), inst)
-			if token != tc.token || slowDown != tc.slowDown || codeOf(err) != tc.code {
+			if token != tc.token || slowDown != tc.slowDown || output.CodeOf(err) != tc.code {
 				t.Errorf("got %q, %v, %v; want %q, %v, %s", token, slowDown, err, tc.token, tc.slowDown, tc.code)
 			}
 			if (*sent)["device_code"] != "dev" || (*sent)["client_id"] != "keel-cli" ||

@@ -10,6 +10,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -71,6 +72,15 @@ func (e *Error) ExitCode() int {
 		return ExitCancelled
 	}
 	return ExitError
+}
+
+// CodeOf is the code of err if it is (or wraps) an *Error, "" otherwise.
+func CodeOf(err error) string {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
 }
 
 func Errorf(code, fix, format string, args ...any) *Error {

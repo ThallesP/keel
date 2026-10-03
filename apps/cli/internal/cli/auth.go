@@ -86,7 +86,7 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 			if inst.Token != "" {
 				// Already logged in, unless the session is gone.
 				api, err := keel.Connect(ctx, inst)
-				if errCode(err) == output.CodeNotAuthenticated {
+				if output.CodeOf(err) == output.CodeNotAuthenticated {
 					inst.Token = ""
 				} else if err != nil {
 					return err
@@ -97,7 +97,7 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 			if p := inst.Pending; p != nil && !p.Expired() {
 				// The same link again, unless it was approved or turned down meanwhile.
 				token, _, err = keel.PollLogin(ctx, inst)
-				if errCode(err) == output.CodeNotAuthenticated {
+				if output.CodeOf(err) == output.CodeNotAuthenticated {
 					inst.Pending = nil
 				} else if err != nil {
 					return err
@@ -131,7 +131,11 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 				}
 			}
 
+			// The install hands the token out once: keep it before anything else can fail.
 			inst.Token, inst.Pending = token, nil
+			if err := saveConfig(cfg); err != nil {
+				return err
+			}
 			api, err := keel.Connect(ctx, inst)
 			if err != nil {
 				return err
@@ -158,10 +162,12 @@ func (a *app) loginTarget(cmd *cobra.Command, cfg *config.Config, args []string,
 		if os.Getenv("KEEL_URL") != "" || len(cfg.Instances) == 0 {
 			return "", nil, usage(cmd, "pass the dashboard URL: keel login <dashboard-url>")
 		}
+		// Only the name: a.target's instance carries KEEL_TOKEN, which must not reach the file.
 		var err error
-		if name, inst, err = a.target(ctx, cfg); err != nil {
+		if name, _, err = a.target(ctx, cfg); err != nil {
 			return "", nil, err
 		}
+		inst = cfg.Instances[name]
 	} else {
 		webURL, err := normalizeURL(args[0])
 		if err != nil {

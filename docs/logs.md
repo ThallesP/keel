@@ -19,10 +19,10 @@ Docker is not a real log store: it holds what the node's `json-file` driver kept
 
 Docker has no native "stream all containers on this node" API, and the two ways to get one both cost more than they give:
 
-- A **logging driver** per service (`fluentd`, `gelf`, `awslogs`) would put the sink config in every `ServiceSpec`, make `docker service logs` stop working (the daemon no longer keeps the file), and need a driver that speaks the sink's protocol. Axiom has none.
+- A **logging driver** per service (`fluentd`, `gelf`, `syslog`, `awslogs`) is Docker shipping on its own, but it needs a driver that speaks the sink's protocol, and Axiom has none (no syslog, GELF or fluentd intake; only HTTP ingest and OTLP). Even where one exists it puts the sink config in every `ServiceSpec`, so connecting or changing a sink restarts every task, and under an outage the driver either blocks the container's stdout (`mode=blocking`, the default) or drops from a ring buffer (`non-blocking`). `docker service logs` itself keeps working with any driver: the daemon keeps a local cache alongside (dual logging, Docker 20.10+).
 - **Vector / Fluent Bit** as the global service would work, but it is a second binary to configure per sink kind, and the worker already has the socket, the labels, the config poll and the resume state.
 
-So the worker does `GET /containers/<id>/logs?follow=1` per `svc-*` container (`apps/worker/src/logs.ts`). Followers start on `container start` events and on every config poll (30s), stop on `die`, and resume from a per-container `since` saved in the node's state volume so a worker restart neither replays nor skips. Lines batch per sink (1s or 500 lines) and are sent in order; a slow sink backs up its own queue (capped at 20k lines, oldest dropped) and never another's.
+So the worker does `GET /containers/<id>/logs?follow=1` per `svc-*` container (`apps/worker/src/logs.ts`), the same tail-the-daemon's-file approach Vector, Fluent Bit and Promtail take on a node. Followers start on `container start` events and on every config poll (30s), end with the container's stream (EOF on exit), and resume from a per-container `since` saved in the node's state volume. A container with no resume point yet is read from the moment its project's sink was connected (`since` in `worker.config`, the `logSinks` row's creation time): lines written between a container's start and the worker's next config poll are not skipped, and a container that was already running before the connect does not replay its history. A `svc-*` container starting for a project the worker has no sink for makes it fetch the config right away instead of waiting for the next poll. That `since` advances only once the sink accepted the batch holding the line, so a restart re-reads what was still undelivered from Docker's file instead of skipping it; a restart mid-outage finishes reading exited containers too (Swarm keeps the last few per service). Lines batch per sink (1s or 500 lines) and are sent in order. A sink that stays down backs up its own queue and never another's; at 20k queued lines its followers stop reading until it drains, and Docker's file is the buffer. Nothing is dropped on the worker's side; a batch the sink rejects as malformed (4xx) is the one exception.
 
 ## Event shape
 
@@ -59,7 +59,7 @@ axiomPending: { projectId, token, orgs }                   // by_project; 10 min
 - `disconnect(projectId)` — back to Docker. Shipped data stays in Axiom.
 - `forNode` / `owns` / `save` — internal.
 
-`convex/logs.ts tail(nodeId, tail)` — the one read entry point. Looks up the node's project sink and dispatches. `convex/worker.ts config` — what the worker polls: every sink with the service ids it covers.
+`convex/logs.ts tail(nodeId, tail)` — the one read entry point. Looks up the node's project sink and dispatches. `convex/worker.ts config` — what the worker polls: every sink with the service ids it covers and when it was connected.
 
 `convex/logs.ts recent(environmentId, search?, tail)` — the Logs page: last lines across every service of the environment, `where message contains` for search. Axiom only; Docker has no cross-service query.
 
@@ -91,7 +91,7 @@ The per-service Logs tab in the bottom panel works either way and shows `· via 
 ## Adding a provider (e.g. ClickHouse)
 
 1. `schema.ts`: add a variant to `logSink`.
-2. `apps/worker/src/sinks/<kind>.ts`: implement `Sink.send(events)`; register it in `sinks/index.ts buildSink`.
+2. `apps/worker/src/sinks/<kind>.ts`: implement `Sink.send(events)` (`true` once delivered or rejected as malformed, `false` when unreachable so the worker keeps the batch); register it in `sinks/index.ts buildSink`.
 3. `convex/logProviders/<kind>.ts`: `<kind>Tail(cfg, serviceId, n): Tail` and a `<kind>Verify(cfg)`.
 4. `convex/logs.ts`: one branch in `tail`. `convex/logSinks.ts`: a `connect<Kind>` action.
 5. `logs-page.tsx`: a way to connect it on the gate.

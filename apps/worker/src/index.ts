@@ -12,7 +12,14 @@ import { fetchConfig } from "./controlPlane";
 import { info } from "./docker";
 import { forwardEvents } from "./events";
 import { errorText, log, sleep } from "./log";
-import { applyConfig, flushLogs, onContainerEvent, reconcileFollowers, setNodeId } from "./logs";
+import {
+  applyConfig,
+  flushLogs,
+  onConfigRefresh,
+  onContainerEvent,
+  reconcileFollowers,
+  setNodeId,
+} from "./logs";
 import { loadState, startStateWriter } from "./state";
 
 const CONFIG_POLL_MS = Number(process.env.KEEL_CONFIG_POLL_MS ?? 30_000);
@@ -24,6 +31,20 @@ const me = await info();
 setNodeId(me.Swarm?.NodeID ?? me.Name ?? "");
 log("worker", `starting on node ${me.Swarm?.NodeID ?? "?"} (${me.Name ?? "?"})`);
 
+/** Until the next poll, or sooner when logs.ts asks for the config early (onConfigRefresh). */
+let wake: (() => void) | null = null;
+const untilNextPoll = () =>
+  new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      wake = null;
+      resolve();
+    };
+    const timer = setTimeout(done, CONFIG_POLL_MS);
+    wake = done;
+  });
+onConfigRefresh(() => wake?.());
+
 async function pollConfig() {
   for (;;) {
     try {
@@ -33,7 +54,7 @@ async function pollConfig() {
     } catch (err) {
       log("config", `poll failed: ${errorText(err)}`);
     }
-    await sleep(CONFIG_POLL_MS);
+    await untilNextPoll();
   }
 }
 

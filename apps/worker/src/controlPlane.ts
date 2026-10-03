@@ -21,6 +21,8 @@ export type WorkerConfig = {
     projectId: string;
     serviceIds: string[];
     sink: { kind: "axiom"; domain: string; dataset: string; token: string };
+    /** When the project connected the sink, epoch ms: where a container's first tail starts. */
+    since?: number;
   }[];
 };
 

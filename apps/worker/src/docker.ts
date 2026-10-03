@@ -23,10 +23,13 @@ export async function info(): Promise<{ Swarm?: { NodeID?: string }; Name?: stri
   return (await get("/info")).json() as Promise<{ Swarm?: { NodeID?: string }; Name?: string }>;
 }
 
-/** Running Swarm task containers. */
+/** Swarm task containers, running or exited (Swarm keeps the last few of each service around). */
 export async function listSwarmContainers(): Promise<Container[]> {
   const res = await get("/containers/json", {
-    filters: JSON.stringify({ label: ["com.docker.swarm.service.name"], status: ["running"] }),
+    filters: JSON.stringify({
+      label: ["com.docker.swarm.service.name"],
+      status: ["running", "exited"],
+    }),
   });
   return res.json() as Promise<Container[]>;
 }

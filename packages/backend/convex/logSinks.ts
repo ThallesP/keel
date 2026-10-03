@@ -105,8 +105,10 @@ export const save = internalMutation({
       .query("logSinks")
       .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .unique();
-    if (row) await ctx.db.patch(row._id, { sink });
-    else await ctx.db.insert("logSinks", { projectId, sink });
+    // A fresh row rather than a patch: its _creationTime is the connect time the worker starts
+    // reading containers from (worker.config `since`).
+    if (row) await ctx.db.delete(row._id);
+    await ctx.db.insert("logSinks", { projectId, sink });
   },
 });
 

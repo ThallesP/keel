@@ -51,39 +51,51 @@ async function environmentNodes(ctx: Ctx, environmentId: Id<"environments">) {
     .collect();
 }
 
+/** Reads one of a node's own variables, references expanded, or `fallback` when it has none. */
+type Getter = (key: string, fallback: string) => Promise<string>;
+
 /**
  * What a runtime node offers to references without storing it: a ready-made connection URL,
- * then its overlay HOST and PORT. These are not in the node's own env.
+ * then its overlay HOST and PORT. These are not in the node's own env. Credentials come through
+ * `get`, so a password that is itself a reference lands in the URL resolved, not as `${{ … }}`.
+ * Userinfo and database name are percent-encoded (RFC 3986): libpq, MySQL, Mongo and every
+ * URL-parsing driver decode them, and a `@`, `/` or `#` in a password no longer breaks the URL.
  */
-function provided(node: Doc<"nodes">, own: Doc<"variables">[]): Map<string, Resolved> {
+async function provided(node: Doc<"nodes">, get: Getter): Promise<Map<string, Resolved>> {
   const out = new Map<string, Resolved>();
   if (!node.desired) return out;
   const host = serviceHost(node._id);
   const port = node.desired.port;
-  const get = (k: string, fallback: string) => own.find((r) => r.key === k)?.value ?? fallback;
+  const enc = encodeURIComponent;
   switch (node.type) {
     case "database":
       switch (engineOf(node.desired.image)) {
         case "mysql": {
-          const user = get("MYSQL_USER", "app");
-          const pass = get("MYSQL_PASSWORD", "");
-          const db = get("MYSQL_DATABASE", "app");
-          const value = `mysql://${user}:${pass}@${host}:${port ?? 3306}/${db}`;
+          const [user, pass, db] = await Promise.all([
+            get("MYSQL_USER", "app"),
+            get("MYSQL_PASSWORD", ""),
+            get("MYSQL_DATABASE", "app"),
+          ]);
+          const value = `mysql://${enc(user)}:${enc(pass)}@${host}:${port ?? 3306}/${enc(db)}`;
           out.set("DATABASE_URL", { value, secret: true });
           break;
         }
         case "mongo": {
-          const user = get("MONGO_INITDB_ROOT_USERNAME", "app");
-          const pass = get("MONGO_INITDB_ROOT_PASSWORD", "");
-          const value = `mongodb://${user}:${pass}@${host}:${port ?? 27017}`;
+          const [user, pass] = await Promise.all([
+            get("MONGO_INITDB_ROOT_USERNAME", "app"),
+            get("MONGO_INITDB_ROOT_PASSWORD", ""),
+          ]);
+          const value = `mongodb://${enc(user)}:${enc(pass)}@${host}:${port ?? 27017}`;
           out.set("DATABASE_URL", { value, secret: true });
           break;
         }
         default: {
-          const user = get("POSTGRES_USER", "app");
-          const pass = get("POSTGRES_PASSWORD", "");
-          const db = get("POSTGRES_DB", "app");
-          const value = `postgres://${user}:${pass}@${host}:${port ?? 5432}/${db}`;
+          const [user, pass, db] = await Promise.all([
+            get("POSTGRES_USER", "app"),
+            get("POSTGRES_PASSWORD", ""),
+            get("POSTGRES_DB", "app"),
+          ]);
+          const value = `postgres://${enc(user)}:${enc(pass)}@${host}:${port ?? 5432}/${enc(db)}`;
           out.set("DATABASE_URL", { value, secret: true });
         }
       }
@@ -114,9 +126,17 @@ async function resolver(ctx: Ctx, environmentId: Id<"environments">) {
   async function lookup(node: Doc<"nodes">, key: string, depth: number): Promise<Resolved | null> {
     const rows = await own(node._id);
     const row = rows.find((r) => r.key === key);
-    if (!row) return provided(node, rows).get(key) ?? null;
-    const inner = await expand(node, row.value, depth + 1);
-    return { value: inner.resolved, secret: row.secret || inner.secret };
+    if (row) {
+      const inner = await expand(node, row.value, depth + 1);
+      return { value: inner.resolved, secret: row.secret || inner.secret };
+    }
+    // Only own rows expand here (never provided ones again), so this cannot recurse on itself;
+    // `expand` stops at MAX_DEPTH for anything the row's value points to.
+    const get: Getter = async (k, fallback) => {
+      const r = rows.find((x) => x.key === k);
+      return r ? (await expand(node, r.value, depth + 1)).resolved : fallback;
+    };
+    return (await provided(node, get)).get(key) ?? null;
   }
 
   async function expand(node: Doc<"nodes">, value: string, depth = 0) {
@@ -155,29 +175,64 @@ export async function computeEnv(ctx: Ctx, node: Doc<"nodes">): Promise<string[]
   return env;
 }
 
-/** Variable rows anywhere in the environment whose value references `node` by name. */
+/**
+ * Does a reference found in a row of `rowNodeId` point at `node`? `${{ other.KEY }}` names the
+ * target; an unqualified `${{ KEY }}` means the row's own node.
+ */
+function pointsAt(name: string | undefined, rowNodeId: Id<"nodes">, node: Doc<"nodes">) {
+  return name === undefined ? rowNodeId === node._id : name === node.name;
+}
+
+/** Variable rows anywhere in the environment whose value references `node`. */
 async function referencing(ctx: Ctx, node: Doc<"nodes">) {
   const rows: Doc<"variables">[] = [];
   for (const n of await environmentNodes(ctx, node.environmentId)) {
     for (const row of await ownVariables(ctx, n._id)) {
-      for (const m of row.value.matchAll(REF_RE)) {
-        if (m[1] !== node.name) continue;
-        rows.push(row);
-        break;
-      }
+      const refs = [...row.value.matchAll(REF_RE)];
+      if (refs.some((m) => pointsAt(m[1], row.nodeId, node))) rows.push(row);
     }
   }
   return rows;
 }
 
-/** Something `node` provides changed (vars, port, the node itself): its referrers need a ship. */
+/**
+ * Something `node` provides changed (vars, port, the node itself): every node whose env depends
+ * on it needs a ship. Dependence is transitive (`api` → `worker.QUEUE_URL` → `redis.REDIS_URL`
+ * changes when redis's port does), so referrers are walked to a fixpoint. The environment's
+ * variables load once; `node` itself is the caller's to mark.
+ */
 export async function markReferrersDirty(ctx: MutationCtx, node: Doc<"nodes">) {
-  const ids = new Set((await referencing(ctx, node)).map((r) => r.nodeId));
-  ids.delete(node._id);
-  for (const id of ids) await ctx.db.patch(id, { dirty: true });
+  const nodes = await environmentNodes(ctx, node.environmentId);
+  const byName = new Map(nodes.map((n) => [n.name, n._id]));
+  // target node → nodes with a variable that references it
+  const referrers = new Map<Id<"nodes">, Set<Id<"nodes">>>();
+  for (const n of nodes) {
+    for (const row of await ownVariables(ctx, n._id)) {
+      for (const m of row.value.matchAll(REF_RE)) {
+        const target = m[1] === undefined ? n._id : byName.get(m[1]);
+        if (!target || target === n._id) continue;
+        let set = referrers.get(target);
+        if (!set) referrers.set(target, (set = new Set()));
+        set.add(n._id);
+      }
+    }
+  }
+  const seen = new Set<Id<"nodes">>([node._id]);
+  const queue = [node._id];
+  for (let at = 0; at < queue.length; at++) {
+    for (const id of referrers.get(queue[at]!) ?? []) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      queue.push(id);
+      await ctx.db.patch(id, { dirty: true });
+    }
+  }
 }
 
-/** Rewrites every `${{ node.KEY }}` pointing at `node`; `to` returns the new name and key. */
+/**
+ * Rewrites every reference pointing at `node`; `to` returns the new name and key. Qualified
+ * references take both; unqualified ones on the node itself keep their form and take the key.
+ */
 async function rewriteReferences(
   ctx: MutationCtx,
   node: Doc<"nodes">,
@@ -185,11 +240,11 @@ async function rewriteReferences(
 ) {
   for (const row of await referencing(ctx, node)) {
     const value = row.value.replace(REF_RE, (whole, name: string | undefined, key: string) => {
-      if (name !== node.name) return whole;
+      if (!pointsAt(name, row.nodeId, node)) return whole;
       const next = to(key);
-      return `\${{ ${next.name}.${next.key} }}`;
+      return name === undefined ? `\${{ ${next.key} }}` : `\${{ ${next.name}.${next.key} }}`;
     });
-    await ctx.db.patch(row._id, { value });
+    if (value !== row.value) await ctx.db.patch(row._id, { value });
   }
 }
 
@@ -230,7 +285,8 @@ export const referenceable = query({
     for (const n of await environmentNodes(ctx, scope.node.environmentId)) {
       if (n._id === nodeId || n.type === "group" || !DEPLOYABLE.has(n.type)) continue;
       const own = await ownVariables(ctx, n._id);
-      const keys = [...provided(n, own)]
+      // Only the key names and secret flags matter here, so credentials stay unread.
+      const keys = [...(await provided(n, async (_k, fallback) => fallback))]
         .filter(([key]) => !own.some((r) => r.key === key))
         .map(([key, { secret }]) => ({ key, secret, provided: true }));
       for (const row of own) keys.push({ key: row.key, secret: row.secret, provided: false });
@@ -240,7 +296,10 @@ export const referenceable = query({
   },
 });
 
-/** Upsert by key. `previousKey` renames that row instead; references to it follow the rename. */
+/**
+ * Upsert by key. `previousKey` renames that row instead; references to it follow the rename,
+ * both `${{ node.KEY }}` elsewhere and `${{ KEY }}` on the node itself.
+ */
 export const set = mutation({
   args: {
     nodeId: v.id("nodes"),

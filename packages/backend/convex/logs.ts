@@ -7,7 +7,7 @@ import { action } from "./_generated/server";
 import { axiomLines, axiomRecent, axiomTail } from "./logProviders/axiom";
 import { dockerTail } from "./logProviders/docker";
 import type { LogSink } from "./schema";
-import { RANGES, timeRange } from "./timeRange";
+import { rangeWindow, timeRange } from "./timeRange";
 import type { ProjectLine, ProjectTail, Tail } from "./logProviders/types";
 
 export type {
@@ -56,7 +56,8 @@ export const recent = action({
     if (!scope) throw new ConvexError("Environment not found");
     if (scope.sink?.kind !== "axiom") throw new ConvexError("Connect Axiom to search all logs");
     const n = Math.min(Math.max(1, Math.floor(tail)), 1000);
-    const from = range ? Date.now() - RANGES[range].ms : undefined;
+    // The same bucket-aligned start as traces.overview, so lines and requests cover one window.
+    const from = range ? rangeWindow(range).from : undefined;
     try {
       return await axiomRecent(scope.sink, scope.serviceIds, n, search.slice(0, 200), from);
     } catch (err) {

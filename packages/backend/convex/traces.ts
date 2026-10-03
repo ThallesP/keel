@@ -89,14 +89,16 @@ export const get = action({
     try {
       const spans = traces ? await axiomTraceSpans(traces, id, at) : [];
       // The lines can only have been written while the trace ran: look there when its spans say
-      // when that was, else around `at`, else over the last week like the spans.
+      // when that was (stretched to `at`, so the line it was opened from is always found, even
+      // logged after the root ended or with clock skew), else around `at`, else over the last
+      // week like the spans.
       const from = spans.length
-        ? Math.min(...spans.map((s) => s.start)) - LOG_SLACK_MS
+        ? Math.min(...spans.map((s) => s.start), at ?? Infinity) - LOG_SLACK_MS
         : at
           ? at - LOG_WINDOW_MS
           : Date.now() - 7 * 24 * 60 * 60_000;
       const to = spans.length
-        ? Math.max(...spans.map((s) => s.start + s.duration)) + LOG_SLACK_MS
+        ? Math.max(...spans.map((s) => s.start + s.duration), at ?? -Infinity) + LOG_SLACK_MS
         : at
           ? at + LOG_WINDOW_MS
           : undefined;

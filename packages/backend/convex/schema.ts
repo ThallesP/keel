@@ -108,7 +108,7 @@ export const logSink = v.union(
     domain: v.string(),
     dataset: v.string(),
     // Traces dataset: Axiom wants a dedicated dataset per OTel signal. Same token as `dataset`.
-    // Unset on sinks connected before traces existed; the Traces tab asks to reconnect.
+    // Unset on sinks connected before traces existed; the Observability page asks to sign in again.
     traces: v.optional(v.string()),
     token: v.string(),
     // Axiom org name, when connected through Sign in with Axiom. Display only.

@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { formatCount, formatDuration } from "../format";
 
-// The Traces tab's numbers: a KPI row and two small charts over the same buckets, hand-drawn in
+// The Observability page's request numbers: a KPI row and two small charts over the same buckets, hand-drawn in
 // SVG. One hover drives both charts (the crosshair finds the same bucket in each). Requests wear
 // the accent, errors the danger tone (a status, labelled), latency percentiles one blue ramp
 // light → dark (p50 → p99); both sets pass the colour-vision checks of the dataviz method.

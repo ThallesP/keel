@@ -1,5 +1,5 @@
 import { type AxiomConfig, query } from "../logProviders/axiom";
-import { RANGES, type TimeRange } from "../timeRange";
+import { RANGES, rangeWindow, type TimeRange } from "../timeRange";
 import type {
   Attribute,
   Span,
@@ -119,14 +119,10 @@ export async function axiomTraceOverview(
   range: TimeRange,
   search: string,
 ): Promise<TraceOverview> {
-  const { ms, bin, binMs } = RANGES[range];
-  const now = Date.now();
-  const count = Math.round(ms / binMs);
-  // Buckets are aligned like APL's bin(): the last one holds now, the first starts `ms` earlier.
-  const from = Math.floor(now / binMs) * binMs - (count - 1) * binMs;
+  const { bin, binMs } = RANGES[range];
   // Totals and series stop where the last bucket does, so the totals are the buckets' sum (a span
   // stamped ahead of this clock would otherwise count in the totals but in no bucket).
-  const to = from + count * binMs;
+  const { from, to, count } = rangeWindow(range);
   const matching = roots(cfg, search);
 
   const [totals, series, traces] = await Promise.all([
@@ -168,15 +164,17 @@ export async function axiomRequestsBetween(cfg: AxiomConfig, from: number, to: n
 }
 
 /**
- * Every span of one trace, oldest first. `at` (when the trace started, if known) narrows the
- * query window; without it the last week is searched.
+ * Every span of one trace, oldest first. `at` (a moment inside the trace, if known: its root's
+ * start, or the time of a line it wrote) narrows the query window to the hour before it, so a
+ * long trace opened from a late line still gets its root; without it the last week is searched.
+ * The query is an equality on trace_id, so the wider window costs little.
  */
 export async function axiomTraceSpans(
   cfg: AxiomConfig,
   traceId: string,
   at?: number,
 ): Promise<Span[]> {
-  const since = at ? at - MIN : Date.now() - TRACE_WINDOW_MS;
+  const since = at ? at - HOUR : Date.now() - TRACE_WINDOW_MS;
   const rows = await spans(
     cfg,
     `['${cfg.dataset}'] | where trace_id == ${lit(traceId)} | sort by _time asc | limit ${MAX_SPANS}`,
@@ -190,7 +188,7 @@ export async function axiomTraceSpans(
 // Rows come back with every field of the dataset as a column, dotted names flat
 // (`attributes.http.method`), maps as objects (`attributes.custom`). The helpers below also take
 // nested objects and string-typed numbers, so a change in how Axiom serialises does not blank
-// the tab.
+// the page.
 
 const str = (x: unknown) => (typeof x === "string" ? x : x == null ? "" : String(x));
 const num = (x: unknown) => (typeof x === "number" ? x : Number(x) || 0);

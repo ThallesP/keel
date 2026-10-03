@@ -21,3 +21,15 @@ export const RANGES: Record<TimeRange, { ms: number; bin: string; binMs: number 
   "24h": { ms: 24 * HOUR, bin: "1h", binMs: HOUR },
   "7d": { ms: 7 * 24 * HOUR, bin: "6h", binMs: 6 * HOUR },
 };
+
+/**
+ * The window a range covers, aligned like APL's bin(): `count` buckets, the last one holding
+ * `now`. The page's log lines and request numbers both start at `from`, so neither list reaches
+ * back past the other.
+ */
+export function rangeWindow(range: TimeRange, now = Date.now()) {
+  const { ms, binMs } = RANGES[range];
+  const count = Math.round(ms / binMs);
+  const from = Math.floor(now / binMs) * binMs - (count - 1) * binMs;
+  return { from, to: from + count * binMs, count };
+}

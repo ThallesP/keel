@@ -29,21 +29,23 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
 }
 
 /**
- * Canvas and Observability (traces + logs) are views of the same project (`?view=`); the rest
- * are still mockup.
+ * Canvas and Observability (requests and logs in one stream) are views of the same project
+ * (`?view=`); the rest are still mockup.
  */
 export function Rail() {
   const { view } = route.useSearch();
   const navigate = route.useNavigate();
-  const show = (next: "traces" | undefined) =>
-    void navigate({ search: (prev) => ({ ...prev, view: next, trace: undefined }) });
+  const show = (next: "observability" | undefined) =>
+    void navigate({
+      search: (prev) => ({ ...prev, view: next, trace: undefined, around: undefined }),
+    });
   const top: Item[] = [
     { label: "Canvas", icon: Workflow, active: !view, onClick: () => show(undefined) },
     {
       label: "Observability",
       icon: Activity,
       active: view !== undefined,
-      onClick: () => show("traces"),
+      onClick: () => show("observability"),
     },
     { label: "Metrics", icon: ChartLine },
     { label: "Variables", icon: Braces },

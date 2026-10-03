@@ -1,4 +1,5 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
+import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
 import type { Attribute, Span, Trace } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useAction } from "convex/react";
@@ -7,53 +8,90 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
-import { formatDuration, formatTimestamp } from "../format";
+import { formatDuration, formatLogTime, formatTimestamp } from "../format";
 import { SectionLabel } from "../primitives";
+import { type ServiceLabel, useServices } from "./chrome";
+import { lineFields, traceRef } from "./correlate";
 
 /**
- * One trace: every span as a waterfall row (indented under its parent, bar placed on the trace's
- * timeline) and the selected span's attributes, resource and events on the right. Error spans
- * get the danger tone plus a dot, never colour alone.
+ * One trace, full screen: its spans and its log lines in one waterfall (ClickStack-style). Spans
+ * nest under their parent; a line nests under the span it names, else under the root, among the
+ * span's children by time. Spans are bars on the trace's timeline, lines are points. The selected
+ * row's details (attributes, events, resource; or the line and its fields) are on the right.
+ * Error spans get the danger tone plus a dot, never colour alone.
  */
 
-type Row = { span: Span; depth: number };
+type Item =
+  | { kind: "span"; key: string; time: number; span: Span }
+  | { kind: "log"; key: string; time: number; line: ProjectLine };
 
-/** Depth-first under each root, siblings by start. A span whose parent is missing is a root. */
-function tree(spans: Span[]): Row[] {
+type Row = { item: Item; depth: number };
+
+/** Depth-first under each root, children (spans and lines) by time. */
+function tree(spans: Span[], logs: ProjectLine[]): Row[] {
   const ids = new Set(spans.map((s) => s.spanId));
-  const children = new Map<string, Span[]>();
-  const roots: Span[] = [];
-  for (const s of spans) {
-    if (s.parentId && s.parentId !== s.spanId && ids.has(s.parentId)) {
-      const list = children.get(s.parentId) ?? [];
-      list.push(s);
-      children.set(s.parentId, list);
-    } else {
-      roots.push(s);
-    }
+  const children = new Map<string, Item[]>();
+  const roots: Item[] = [];
+  const add = (parent: string | null, item: Item) => {
+    if (parent === null) return void roots.push(item);
+    const list = children.get(parent) ?? [];
+    list.push(item);
+    children.set(parent, list);
+  };
+  for (const span of spans) {
+    const parented = span.parentId && span.parentId !== span.spanId && ids.has(span.parentId);
+    add(parented ? span.parentId : null, {
+      kind: "span",
+      key: `span:${span.spanId}`,
+      time: span.start,
+      span,
+    });
   }
-  const byStart = (a: Span, b: Span) => a.start - b.start;
+  // Lines go under their span; a line naming no known span under the first root span.
+  const firstRoot = spans.find((s) => !s.parentId || !ids.has(s.parentId))?.spanId ?? null;
+  logs.forEach((line, i) => {
+    const spanId = traceRef(line.text)?.spanId;
+    const parent = spanId && ids.has(spanId) ? spanId : firstRoot;
+    add(parent, {
+      kind: "log",
+      key: `log:${line.time}:${line.serviceId}:${i}`,
+      time: line.time,
+      line,
+    });
+  });
+
+  const byTime = (a: Item, b: Item) => a.time - b.time;
   const rows: Row[] = [];
   const seen = new Set<string>();
-  const walk = (span: Span, depth: number) => {
-    if (seen.has(span.spanId)) return;
-    seen.add(span.spanId);
-    rows.push({ span, depth });
-    for (const child of (children.get(span.spanId) ?? []).sort(byStart)) walk(child, depth + 1);
+  const walk = (item: Item, depth: number) => {
+    if (seen.has(item.key)) return;
+    seen.add(item.key);
+    rows.push({ item, depth });
+    if (item.kind === "span") {
+      for (const child of (children.get(item.span.spanId) ?? []).sort(byTime))
+        walk(child, depth + 1);
+    }
   };
-  for (const root of roots.sort(byStart)) walk(root, 0);
+  for (const root of roots.sort(byTime)) walk(root, 0);
   // A parent cycle is unreachable from any root; still show those spans.
-  for (const s of spans) if (!seen.has(s.spanId)) rows.push({ span: s, depth: 0 });
+  for (const list of children.values()) for (const item of list) walk(item, 0);
   return rows;
 }
+
+const itemEnd = (item: Item) =>
+  item.kind === "span" ? item.span.start + item.span.duration : item.time;
 
 export function TraceDetail({
   traceId,
   at,
+  focus,
   onBack,
 }: {
   traceId: string;
+  /** A moment inside the trace, when known: narrows the lookup. */
   at?: number;
+  /** The log line it was opened from: selected first. */
+  focus?: ProjectLine;
   onBack: () => void;
 }) {
   const { environmentId } = useEnvironment();
@@ -64,9 +102,6 @@ export function TraceDetail({
 
   useEffect(() => {
     let cancelled = false;
-    setTrace(null);
-    setError(null);
-    setSelected(null);
     get({ environmentId, traceId, at })
       .then((t) => !cancelled && setTrace(t))
       .catch((err) => !cancelled && setError(errorMessage(err)));
@@ -75,7 +110,7 @@ export function TraceDetail({
     };
   }, [environmentId, traceId, at, get]);
 
-  const rows = useMemo(() => (trace ? tree(trace.spans) : []), [trace]);
+  const rows = useMemo(() => (trace ? tree(trace.spans, trace.logs) : []), [trace]);
 
   const back = (
     <button
@@ -84,7 +119,7 @@ export function TraceDetail({
       className="flex items-center gap-1 text-2xs text-muted-foreground hover:text-ink"
     >
       <ArrowLeft size={12} strokeWidth={1.6} aria-hidden />
-      All traces
+      All events
     </button>
   );
   if (error || !trace || rows.length === 0) {
@@ -92,19 +127,38 @@ export function TraceDetail({
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3">
         {back}
         <p className={cn("text-xs", error ? "text-danger" : "text-faint")}>
-          {error ?? (trace ? `No spans for trace ${traceId} in the last week.` : "Loading trace…")}
+          {error ??
+            (trace
+              ? `Nothing for trace ${traceId}: no spans in the traces dataset and no log line naming it.`
+              : "Loading trace…")}
         </p>
       </div>
     );
   }
 
-  const start = Math.min(...rows.map((r) => r.span.start));
-  const end = Math.max(...rows.map((r) => r.span.start + r.span.duration));
+  const items = rows.map((r) => r.item);
+  // The timeline is the spans' when there are any: a line's clock (the app's, through Docker) is
+  // not the SDK's, so a line written as a request began can land a hair before its root span.
+  // Lines outside it sit on its edge.
+  const timed = items.some((i) => i.kind === "span")
+    ? items.filter((i) => i.kind === "span")
+    : items;
+  const start = Math.min(...timed.map((i) => i.time));
+  const end = Math.max(...timed.map(itemEnd));
   const total = Math.max(end - start, 0.001);
-  const services = [...new Set(rows.map((r) => r.span.service).filter(Boolean))];
-  const errors = rows.filter((r) => r.span.status === "error").length;
-  const root = rows[0]!.span;
-  const current = rows.find((r) => r.span.spanId === selected)?.span ?? root;
+  const spanCount = trace.spans.length;
+  const lineCount = trace.logs.length;
+  const services = [...new Set(trace.spans.map((s) => s.service).filter(Boolean))];
+  const errors = trace.spans.filter((s) => s.status === "error").length;
+  const root = items.find((i) => i.kind === "span");
+  const focusKey = focus
+    ? items.find(
+        (i) => i.kind === "log" && i.line.time === focus.time && i.line.text === focus.text,
+      )?.key
+    : undefined;
+  const current = items.find((i) => i.key === (selected ?? focusKey)) ?? root ?? items[0]!;
+  const title =
+    root?.kind === "span" ? root.span.name || "(unnamed)" : `Trace ${traceId.slice(0, 8)}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -112,16 +166,18 @@ export function TraceDetail({
         <div className="min-w-0">
           {back}
           <h2 className="mt-2 truncate text-md font-semibold tracking-[-0.02em] text-ink">
-            {root.name || "(unnamed)"}
+            {title}
           </h2>
           <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-faint">
             {errors > 0 && <span className="size-1.5 rounded-full bg-danger" />}
             {[
               formatTimestamp(start),
               formatDuration(total),
-              `${rows.length} ${rows.length === 1 ? "span" : "spans"}`,
+              `${spanCount} ${spanCount === 1 ? "span" : "spans"}`,
+              `${lineCount} ${lineCount === 1 ? "log line" : "log lines"}`,
               services.join(", "),
               errors > 0 && `${errors} ${errors === 1 ? "error" : "errors"}`,
+              spanCount === 0 && "no spans in the traces dataset",
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -134,11 +190,15 @@ export function TraceDetail({
           rows={rows}
           start={start}
           total={total}
-          selected={current.spanId}
+          selected={current.key}
           onSelect={setSelected}
         />
         <aside className="w-[360px] shrink-0 overflow-auto border-l border-line">
-          <SpanDetail span={current} traceStart={start} />
+          {current.kind === "span" ? (
+            <SpanDetail span={current.span} traceStart={start} />
+          ) : (
+            <LineDetail line={current.line} traceStart={start} />
+          )}
         </aside>
       </div>
     </div>
@@ -161,13 +221,14 @@ function Waterfall({
   start: number;
   total: number;
   selected: string;
-  onSelect: (spanId: string) => void;
+  onSelect: (key: string) => void;
 }) {
+  const services = useServices();
   return (
     <div className="min-w-0 flex-1 overflow-auto">
       <div className="sticky top-0 z-10 flex h-8 items-center border-b border-line bg-bg">
         <span className={cn(NAME_COL, "pl-5")}>
-          <SectionLabel>Span</SectionLabel>
+          <SectionLabel>Spans and logs</SectionLabel>
         </span>
         <span className="relative mr-5 h-full flex-1">
           {[0, 0.25, 0.5, 0.75, 1].map((q) => (
@@ -184,64 +245,123 @@ function Waterfall({
           ))}
         </span>
       </div>
-      {rows.map(({ span, depth }) => {
-        const left = ((span.start - start) / total) * 100;
-        const width = (span.duration / total) * 100;
-        const failed = span.status === "error";
-        // Duration label after the bar; near the right edge, inside a bar wide enough to hold
-        // it, else before the bar.
-        const place = left + width <= 80 ? "after" : width >= 20 ? "inside" : "before";
+      {rows.map(({ item, depth }) => {
+        const isSelected = item.key === selected;
         return (
           <button
-            key={span.spanId}
+            key={item.key}
             type="button"
-            aria-current={span.spanId === selected ? "true" : undefined}
-            onClick={() => onSelect(span.spanId)}
+            aria-current={isSelected ? "true" : undefined}
+            onClick={() => onSelect(item.key)}
             className={cn(
               "flex h-7 w-full items-center text-left text-xs",
-              span.spanId === selected ? "bg-primary-soft" : "hover:bg-surface-2",
+              isSelected ? "bg-primary-soft" : "hover:bg-surface-2",
             )}
           >
             <span
               className={cn(NAME_COL, "flex min-w-0 items-center gap-2 pr-3")}
               style={{ paddingLeft: 20 + depth * 14 }}
             >
-              {failed && (
-                <span className="size-1.5 shrink-0 rounded-full bg-danger" aria-label="error" />
+              {item.kind === "span" ? (
+                <SpanName span={item.span} service={services.ofSpan(item.span.service)} />
+              ) : (
+                <LineName line={item.line} service={services.ofLine(item.line.serviceId)} />
               )}
-              <span className="max-w-[45%] shrink-0 truncate font-mono text-2xs text-faint">
-                {span.service}
-              </span>
-              <span className="truncate text-ink">{span.name || "(unnamed)"}</span>
             </span>
             <span className={cn("relative mr-5 h-full flex-1", QUARTERS)}>
-              <span
-                className={cn(
-                  "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-sm",
-                  failed ? "bg-danger" : "bg-primary",
-                )}
-                style={{ left: `${left}%`, width: `max(2px, ${width}%)` }}
-              />
-              <span
-                className={cn(
-                  "absolute top-1/2 -translate-y-1/2 font-mono text-2xs whitespace-nowrap tabular-nums",
-                  place === "inside" ? "text-white" : "text-muted-foreground",
-                )}
-                style={
-                  place === "after"
-                    ? { left: `calc(${left + width}% + 6px)` }
-                    : place === "inside"
-                      ? { right: `calc(${100 - left - width}% + 6px)` }
-                      : { right: `calc(${100 - left}% + 6px)` }
-                }
-              >
-                {formatDuration(span.duration)}
-              </span>
+              {item.kind === "span" ? (
+                <SpanBar span={item.span} start={start} total={total} />
+              ) : (
+                <LinePoint line={item.line} start={start} total={total} />
+              )}
             </span>
           </button>
         );
       })}
     </div>
+  );
+}
+
+function SpanName({ span, service }: { span: Span; service: ServiceLabel }) {
+  return (
+    <>
+      {span.status === "error" && (
+        <span className="size-1.5 shrink-0 rounded-full bg-danger" aria-label="error" />
+      )}
+      <span className={cn("max-w-[45%] shrink-0 truncate font-mono text-2xs", service.tone)}>
+        {service.text}
+      </span>
+      <span className="truncate text-ink">{span.name || "(unnamed)"}</span>
+    </>
+  );
+}
+
+function LineName({ line, service }: { line: ProjectLine; service: ServiceLabel }) {
+  return (
+    <>
+      <span className="shrink-0 rounded-sm bg-surface-2 px-1 font-mono text-[10px] text-muted-foreground">
+        log
+      </span>
+      <span className={cn("max-w-[30%] shrink-0 truncate font-mono text-2xs", service.tone)}>
+        {service.text}
+      </span>
+      <span
+        className={cn(
+          "truncate font-mono text-2xs",
+          line.stream === "stderr" ? "text-warning" : "text-muted-foreground",
+        )}
+      >
+        {line.text}
+      </span>
+    </>
+  );
+}
+
+function SpanBar({ span, start, total }: { span: Span; start: number; total: number }) {
+  const left = ((span.start - start) / total) * 100;
+  const width = (span.duration / total) * 100;
+  const failed = span.status === "error";
+  // Duration label after the bar; near the right edge, inside a bar wide enough to hold it,
+  // else before the bar.
+  const place = left + width <= 80 ? "after" : width >= 20 ? "inside" : "before";
+  return (
+    <>
+      <span
+        className={cn(
+          "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-sm",
+          failed ? "bg-danger" : "bg-primary",
+        )}
+        style={{ left: `${left}%`, width: `max(2px, ${width}%)` }}
+      />
+      <span
+        className={cn(
+          "absolute top-1/2 -translate-y-1/2 font-mono text-2xs whitespace-nowrap tabular-nums",
+          place === "inside" ? "text-white" : "text-muted-foreground",
+        )}
+        style={
+          place === "after"
+            ? { left: `calc(${left + width}% + 6px)` }
+            : place === "inside"
+              ? { right: `calc(${100 - left - width}% + 6px)` }
+              : { right: `calc(${100 - left}% + 6px)` }
+        }
+      >
+        {formatDuration(span.duration)}
+      </span>
+    </>
+  );
+}
+
+/** A line is a moment: an 8px point on the timeline, ringed so it reads over a bar's end. */
+function LinePoint({ line, start, total }: { line: ProjectLine; start: number; total: number }) {
+  return (
+    <span
+      className={cn(
+        "absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-bg",
+        line.stream === "stderr" ? "bg-warning" : "bg-muted-foreground",
+      )}
+      style={{ left: `${Math.min(100, Math.max(0, ((line.time - start) / total) * 100))}%` }}
+    />
   );
 }
 
@@ -295,6 +415,41 @@ function SpanDetail({ span, traceStart }: { span: Span; traceStart: number }) {
   );
 }
 
+/** A log line: the whole text, when it was written, and its fields when it is structured. */
+export function LineDetail({ line, traceStart }: { line: ProjectLine; traceStart?: number }) {
+  const services = useServices();
+  const fields = lineFields(line.text);
+  const facts: Attribute[] = [["time", formatLogTime(line.time)]];
+  if (traceStart !== undefined) {
+    facts.push(["in trace", `+${formatDuration(Math.max(0, line.time - traceStart))}`]);
+  }
+  facts.push(["task", line.task || "—"]);
+  return (
+    <div className="flex flex-col gap-5 px-4 py-3">
+      <div>
+        <div className="text-sm font-semibold text-ink">Log line</div>
+        <div className="mt-0.5 text-2xs text-muted-foreground">
+          {services.ofLine(line.serviceId).text} · {line.stream}
+        </div>
+      </div>
+      <p
+        className={cn(
+          "rounded-md bg-surface-2 px-2.5 py-2 font-mono text-2xs break-all whitespace-pre-wrap",
+          line.stream === "stderr" ? "text-warning" : "text-ink",
+        )}
+      >
+        {line.text}
+      </p>
+      <Pairs pairs={facts} />
+      {fields.length > 0 && (
+        <Section title="Fields">
+          <Pairs pairs={fields} />
+        </Section>
+      )}
+    </div>
+  );
+}
+
 function Section({
   title,
   empty,
@@ -316,8 +471,8 @@ function Section({
 function Pairs({ pairs }: { pairs: Attribute[] }) {
   return (
     <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 font-mono text-2xs">
-      {pairs.map(([k, v]) => (
-        <div key={k} className="contents">
+      {pairs.map(([k, v], i) => (
+        <div key={`${k}:${i}`} className="contents">
           <dt className="break-all text-faint">{k}</dt>
           <dd className="break-all whitespace-pre-wrap text-ink">{v}</dd>
         </div>

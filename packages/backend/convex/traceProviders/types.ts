@@ -1,11 +1,12 @@
-// Shared shape of what the Traces tab renders, whatever store backs it. Every trace provider
-// (Axiom today, later ClickHouse) parses its OpenTelemetry spans into this; the tab never knows
-// which one answered. Times are epoch milliseconds and durations milliseconds, both fractional:
-// spans are often well under a millisecond and the waterfall needs that precision.
+import type { ProjectLine } from "../logProviders/types";
+
+// Shared shape of the traces the Observability page renders, whatever store backs them. Every
+// trace provider (Axiom today, later ClickHouse) parses its OpenTelemetry spans into this; the
+// page never knows which one answered. Times are epoch milliseconds and durations milliseconds,
+// both fractional: spans are often well under a millisecond and the waterfall needs that
+// precision.
 
 export type TraceSource = "axiom";
-
-export type TraceRange = "15m" | "1h" | "24h" | "7d";
 
 export type SpanStatus = "ok" | "error" | "unset";
 
@@ -74,4 +75,15 @@ export type TraceOverview = {
   traces: TraceSummary[];
 };
 
-export type Trace = { source: TraceSource; traceId: string; spans: Span[] };
+/**
+ * One trace: its spans, and the log lines that name its trace id (an OTel-instrumented logger
+ * writes the active trace and span ids into each line). Either list may be empty: a trace can
+ * have no logs, and a line's trace can be missing from the traces dataset (sampled out, or no
+ * traces dataset at all).
+ */
+export type Trace = {
+  source: TraceSource;
+  traceId: string;
+  spans: Span[];
+  logs: ProjectLine[];
+};

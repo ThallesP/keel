@@ -42,13 +42,13 @@ type Tabular = {
  * POST /v1/datasets/_apl?format=tabular → rows as objects keyed by field name. Shared with the
  * traces provider (traceProviders/axiom.ts).
  */
-export async function query(cfg: AxiomConfig, apl: string, sinceMs: number) {
+export async function query(cfg: AxiomConfig, apl: string, sinceMs: number, untilMs?: number) {
   const res = await call(cfg, "/v1/datasets/_apl?format=tabular", {
     method: "POST",
     body: JSON.stringify({
       apl,
       startTime: new Date(sinceMs).toISOString(),
-      endTime: new Date(Date.now() + 60_000).toISOString(),
+      endTime: new Date(untilMs ?? Date.now() + 60_000).toISOString(),
     }),
   });
   const data = (await res.json()) as Tabular;
@@ -92,9 +92,14 @@ export async function axiomCanQuery(cfg: AxiomConfig) {
  * A tail query over the last 30 days. A dataset nothing was shipped to yet has no fields, and APL
  * rejects `where service_id …` with 400 "invalid field": that is "no lines yet", not an error.
  */
-async function tailQuery(cfg: AxiomConfig, apl: string) {
+async function tailQuery(
+  cfg: AxiomConfig,
+  apl: string,
+  sinceMs = Date.now() - QUERY_WINDOW_MS,
+  untilMs?: number,
+) {
   try {
-    return await query(cfg, apl, Date.now() - QUERY_WINDOW_MS);
+    return await query(cfg, apl, sinceMs, untilMs);
   } catch (err) {
     if (err instanceof Error && /Axiom 400.*invalid field/.test(err.message)) return [];
     throw err;
@@ -103,6 +108,18 @@ async function tailQuery(cfg: AxiomConfig, apl: string) {
 
 const str = (x: unknown) => (typeof x === "string" ? x : x == null ? "" : String(x));
 const QUERY_WINDOW_MS = 30 * 24 * 60 * 60_000;
+
+/**
+ * `_time` with the sub-millisecond digits Docker's RFC3339Nano stamp carries (Date.parse keeps
+ * milliseconds): next to spans, a line written 0.2ms into a request must not sort before it.
+ */
+function preciseTime(x: unknown) {
+  const iso = str(x);
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return 0;
+  const frac = /\.\d{3}(\d+)/.exec(iso)?.[1];
+  return frac ? ms + Number(`0.${frac}`) : ms;
+}
 
 /** Last `n` lines of one service from the dataset, oldest first, plus the replicas seen. */
 export async function axiomTail(cfg: AxiomConfig, serviceId: string, n: number): Promise<Tail> {
@@ -128,30 +145,52 @@ export async function axiomTail(cfg: AxiomConfig, serviceId: string, n: number):
   return { source: "axiom", lines, replicas };
 }
 
-/** Last `n` lines across the given services (newest window), oldest first. For the Logs page. */
+/**
+ * Up to `n` lines of the given services in [from, to), oldest first: the newest ones, or with
+ * `oldestFirst` the earliest. `search` is a substring of the line (APL `contains`, case
+ * insensitive). Backs the Observability page's stream, a log line's surrounding context and a
+ * trace's logs (search = its trace id).
+ */
+export async function axiomLines(
+  cfg: AxiomConfig,
+  serviceIds: string[],
+  { n, search = "", from, to, oldestFirst = false }: LinesQuery,
+): Promise<ProjectLine[]> {
+  if (serviceIds.length === 0) return [];
+  // Convex ids are alphanumeric, safe to inline. The search term is an APL string literal.
+  const ids = serviceIds.map((id) => `"${id}"`).join(", ");
+  const term = search.trim();
+  const where = term ? ` | where message contains "${term.replace(/[\\"]/g, "\\$&")}"` : "";
+  const order = oldestFirst ? "asc" : "desc";
+  const apl = `${ds(cfg)} | where service_id in (${ids})${where} | sort by _time ${order} | limit ${n} | project _time, message, stream, task, service_id`;
+  const rows = await tailQuery(cfg, apl, from, to);
+  const lines: ProjectLine[] = rows.map((r) => ({
+    time: preciseTime(r._time),
+    text: str(r.message),
+    stream: r.stream === "stderr" ? ("stderr" as const) : ("stdout" as const),
+    task: str(r.task),
+    serviceId: str(r.service_id),
+  }));
+  return oldestFirst ? lines : lines.reverse();
+}
+
+export type LinesQuery = {
+  n: number;
+  search?: string;
+  from?: number;
+  to?: number;
+  oldestFirst?: boolean;
+};
+
+/** Last `n` lines across the given services since `from` (default 30 days), oldest first. */
 export async function axiomRecent(
   cfg: AxiomConfig,
   serviceIds: string[],
   n: number,
   search: string,
+  from?: number,
 ): Promise<ProjectTail> {
-  if (serviceIds.length === 0) return { source: "axiom", lines: [] };
-  // Convex ids are alphanumeric, safe to inline. The search term is an APL string literal.
-  const ids = serviceIds.map((id) => `"${id}"`).join(", ");
-  const term = search.trim();
-  const where = term ? ` | where message contains "${term.replace(/[\\"]/g, "\\$&")}"` : "";
-  const apl = `${ds(cfg)} | where service_id in (${ids})${where} | sort by _time desc | limit ${n} | project _time, message, stream, task, service_id`;
-  const rows = await tailQuery(cfg, apl);
-  const lines: ProjectLine[] = rows
-    .map((r) => ({
-      time: Date.parse(str(r._time)) || 0,
-      text: str(r.message),
-      stream: r.stream === "stderr" ? ("stderr" as const) : ("stdout" as const),
-      task: str(r.task),
-      serviceId: str(r.service_id),
-    }))
-    .reverse();
-  return { source: "axiom", lines };
+  return { source: "axiom", lines: await axiomLines(cfg, serviceIds, { n, search, from }) };
 }
 
 // ── Sign in with Axiom ──────────────────────────────────────────────────────────────────────

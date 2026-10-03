@@ -1,13 +1,12 @@
 import { type AxiomConfig, query } from "../logProviders/axiom";
+import { RANGES, type TimeRange } from "../timeRange";
 import type {
   Attribute,
   Span,
   SpanEvent,
   SpanStatus,
-  Trace,
   TraceBucket,
   TraceOverview,
-  TraceRange,
   TraceSummary,
 } from "./types";
 
@@ -23,16 +22,7 @@ import type {
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
-
-/** Range → its length and the bucket the charts use (~30 buckets each). */
-export const RANGES: Record<TraceRange, { ms: number; bin: string; binMs: number }> = {
-  "15m": { ms: 15 * MIN, bin: "30s", binMs: 30_000 },
-  "1h": { ms: HOUR, bin: "2m", binMs: 2 * MIN },
-  "24h": { ms: 24 * HOUR, bin: "1h", binMs: HOUR },
-  "7d": { ms: 7 * 24 * HOUR, bin: "6h", binMs: 6 * HOUR },
-};
-
-const LIST = 50;
+const LIST = 100;
 const MAX_SPANS = 2000;
 /** How far back a trace is looked for when the caller does not say when it started. */
 const TRACE_WINDOW_MS = 7 * 24 * HOUR;
@@ -47,9 +37,14 @@ const STATS = `requests = count(), errors = countif(failed), p50 = percentile(du
 type Row = Record<string, unknown>;
 
 /** Like logProviders/axiom tailQuery: a dataset no span reached yet has no fields; that is "empty". */
-async function spans(cfg: AxiomConfig, apl: string, sinceMs: number): Promise<Row[]> {
+async function spans(
+  cfg: AxiomConfig,
+  apl: string,
+  sinceMs: number,
+  untilMs?: number,
+): Promise<Row[]> {
   try {
-    return await query(cfg, apl, sinceMs);
+    return await query(cfg, apl, sinceMs, untilMs);
   } catch (err) {
     if (err instanceof Error && /Axiom 400.*invalid field/.test(err.message)) return [];
     throw err;
@@ -59,59 +54,46 @@ async function spans(cfg: AxiomConfig, apl: string, sinceMs: number): Promise<Ro
 /** APL string literal. */
 const lit = (s: string) => `"${s.replace(/[\\"]/g, "\\$&")}"`;
 
-/** Requests, errors and latency over the range, per bucket, and the latest requests. */
-export async function axiomTraceOverview(
-  cfg: AxiomConfig,
-  range: TraceRange,
-  search: string,
-): Promise<TraceOverview> {
-  const { ms, bin, binMs } = RANGES[range];
-  const now = Date.now();
-  const count = Math.round(ms / binMs);
-  // Buckets are aligned like APL's bin(): the last one holds now, the first starts `ms` earlier.
-  const from = Math.floor(now / binMs) * binMs - (count - 1) * binMs;
-  const ds = `['${cfg.dataset}']`;
+/** Root spans, optionally only those whose name or service contains `search`. */
+function roots(cfg: AxiomConfig, search: string) {
   const term = search.trim();
   const match = term
     ? ` | where name contains ${lit(term)} or ensure_field("service.name", typeof(string)) contains ${lit(term)}`
     : "";
-  const roots = `${ds} | ${ROOT}${match}`;
+  return `['${cfg.dataset}'] | ${ROOT}${match}`;
+}
 
-  const [totals, series, latest] = await Promise.all([
-    spans(cfg, `${roots} | extend failed = ${FAILED} | summarize ${STATS}`, from),
-    spans(
-      cfg,
-      `${roots} | extend failed = ${FAILED} | summarize ${STATS} by bin(_time, ${bin})`,
-      from,
-    ),
-    spans(cfg, `${roots} | sort by _time desc | limit ${LIST}`, from),
-  ]);
-
-  // Span and error counts of the listed traces, over all of their spans.
+/**
+ * The latest `limit` requests in [from, to), newest first, each with the span and error counts
+ * of its whole trace.
+ */
+async function requests(
+  cfg: AxiomConfig,
+  search: string,
+  from: number,
+  to: number | undefined,
+  limit: number,
+): Promise<TraceSummary[]> {
+  const latest = await spans(
+    cfg,
+    `${roots(cfg, search)} | sort by _time desc | limit ${limit}`,
+    from,
+    to,
+  );
   const ids = [...new Set(latest.map((r) => str(r.trace_id)).filter((id) => TRACE_ID_RE.test(id)))];
   const perTrace = new Map<string, { spans: number; errors: number }>();
   if (ids.length > 0) {
+    // A trace's other spans start after its root, so `from` holds them; `to` might not.
     const rows = await spans(
       cfg,
-      `${ds} | where trace_id in (${ids.map(lit).join(", ")}) | extend failed = ${FAILED} | summarize spans = count(), errors = countif(failed) by trace_id`,
+      `['${cfg.dataset}'] | where trace_id in (${ids.map(lit).join(", ")}) | extend failed = ${FAILED} | summarize spans = count(), errors = countif(failed) by trace_id`,
       from,
     );
     for (const r of rows) {
       perTrace.set(str(r.trace_id), { spans: num(r.spans), errors: num(r.errors) });
     }
   }
-
-  const byBucket = new Map<number, TraceBucket>();
-  for (const r of series) {
-    const time = Math.floor(timeOf(r._time ?? Object.values(r)[0]) / binMs) * binMs;
-    byBucket.set(time, { time, ...statsOf(r) });
-  }
-  const buckets: TraceBucket[] = Array.from({ length: count }, (_, i) => {
-    const time = from + i * binMs;
-    return byBucket.get(time) ?? { time, requests: 0, errors: 0, p50: null, p95: null, p99: null };
-  });
-
-  const traces: TraceSummary[] = latest.map((r) => {
+  return latest.map((r) => {
     const traceId = str(r.trace_id);
     const counts = perTrace.get(traceId);
     const error = statusOf(r) === "error";
@@ -129,6 +111,40 @@ export async function axiomTraceOverview(
       error,
     };
   });
+}
+
+/** Requests, errors and latency over the range, per bucket, and the latest requests. */
+export async function axiomTraceOverview(
+  cfg: AxiomConfig,
+  range: TimeRange,
+  search: string,
+): Promise<TraceOverview> {
+  const { ms, bin, binMs } = RANGES[range];
+  const now = Date.now();
+  const count = Math.round(ms / binMs);
+  // Buckets are aligned like APL's bin(): the last one holds now, the first starts `ms` earlier.
+  const from = Math.floor(now / binMs) * binMs - (count - 1) * binMs;
+  const matching = roots(cfg, search);
+
+  const [totals, series, traces] = await Promise.all([
+    spans(cfg, `${matching} | extend failed = ${FAILED} | summarize ${STATS}`, from),
+    spans(
+      cfg,
+      `${matching} | extend failed = ${FAILED} | summarize ${STATS} by bin(_time, ${bin})`,
+      from,
+    ),
+    requests(cfg, search, from, undefined, LIST),
+  ]);
+
+  const byBucket = new Map<number, TraceBucket>();
+  for (const r of series) {
+    const time = Math.floor(timeOf(r._time ?? Object.values(r)[0]) / binMs) * binMs;
+    byBucket.set(time, { time, ...statsOf(r) });
+  }
+  const buckets: TraceBucket[] = Array.from({ length: count }, (_, i) => {
+    const time = from + i * binMs;
+    return byBucket.get(time) ?? { time, requests: 0, errors: 0, p50: null, p95: null, p99: null };
+  });
 
   const total = totals[0];
   return {
@@ -142,18 +158,27 @@ export async function axiomTraceOverview(
   };
 }
 
+/** Requests that started in [from, to), newest first: what was going on around a log line. */
+export async function axiomRequestsBetween(cfg: AxiomConfig, from: number, to: number) {
+  return requests(cfg, "", from, to, LIST);
+}
+
 /**
- * Every span of one trace, oldest first. `at` (the root's start, from the list) narrows the
+ * Every span of one trace, oldest first. `at` (when the trace started, if known) narrows the
  * query window; without it the last week is searched.
  */
-export async function axiomTrace(cfg: AxiomConfig, traceId: string, at?: number): Promise<Trace> {
+export async function axiomTraceSpans(
+  cfg: AxiomConfig,
+  traceId: string,
+  at?: number,
+): Promise<Span[]> {
   const since = at ? at - MIN : Date.now() - TRACE_WINDOW_MS;
   const rows = await spans(
     cfg,
     `['${cfg.dataset}'] | where trace_id == ${lit(traceId)} | sort by _time asc | limit ${MAX_SPANS}`,
     since,
   );
-  return { source: "axiom", traceId, spans: rows.map(spanOf) };
+  return rows.map(spanOf);
 }
 
 // ── Parsing ─────────────────────────────────────────────────────────────────────────────────

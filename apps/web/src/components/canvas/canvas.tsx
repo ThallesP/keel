@@ -137,7 +137,7 @@ const route = getRouteApi("/_auth/p/$projectId");
 
 /**
  * Full-bleed project canvas: topbar / rail + flow + bottom panel / status bar. Rail views other
- * than the canvas (`?view=traces|logs`) cover the flow and panel; the flow stays mounted
+ * than the canvas (`?view=observability`) cover the flow and panel; the flow stays mounted
  * underneath so coming back keeps the viewport.
  */
 export function Canvas({ scope }: { scope: EnvironmentScope }) {

@@ -12,10 +12,7 @@ type Search = { code?: string; state?: string; error?: string; error_description
 
 const str = (x: unknown) => (typeof x === "string" ? x : undefined);
 
-/**
- * Axiom's OAuth redirect lands here; the code goes to the control plane, then back to the
- * Observability tab the sign-in started from.
- */
+/** Axiom's OAuth redirect lands here; the code goes to the control plane, then back to Observability. */
 export const Route = createFileRoute("/_auth/axiom/callback")({
   component: AxiomCallback,
   validateSearch: (s: Record<string, unknown>): Search => ({
@@ -41,7 +38,7 @@ function AxiomCallback() {
         ? navigate({
             to: "/p/$projectId",
             params: { projectId: from.slug },
-            search: { view: from.view },
+            search: { view: "observability" },
             replace: true,
           })
         : navigate({ to: "/", replace: true });

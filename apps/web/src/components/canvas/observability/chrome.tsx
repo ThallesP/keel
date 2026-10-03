@@ -1,73 +1,37 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import { cn } from "@my-better-t-app/ui/lib/utils";
 import { getRouteApi } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { useEnvironment } from "../environment";
 import { attempt } from "../errors";
 
-// Pieces every Observability tab shares: the 44px header with the tab switch, the search field,
-// Disconnect.
+// Pieces the Observability page's views share: the 44px header, the search field, Disconnect,
+// service names.
 
 export const route = getRouteApi("/_auth/p/$projectId");
-
-export type Tab = "traces" | "logs";
 
 /** What logSinks.get returns for an Axiom sink; never the token. */
 export type Sink = { domain: string; dataset: string; traces: string | null; org: string | null };
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "traces", label: "Traces" },
-  { id: "logs", label: "Logs" },
-];
+/** "via Axiom · org · keel-x + keel-x-traces" */
+export const viaAxiom = (sink: Sink) =>
+  `via Axiom · ${sink.org ? `${sink.org} · ` : ""}${sink.dataset}${sink.traces ? ` + ${sink.traces}` : ""}`;
 
-/** Tabs left with a mono meta line, the tab's controls right. Same tab style as the bottom panel. */
-export function PageHeader({
-  tab,
-  meta,
-  children,
-}: {
-  tab: Tab;
-  meta?: ReactNode;
-  children?: ReactNode;
-}) {
-  const navigate = route.useNavigate();
+/** Title and mono meta left, the view's controls right. */
+export function PageHeader({ meta, children }: { meta?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-line px-5">
-      <span className="flex min-w-0 items-center gap-[22px]">
-        <nav className="flex h-11 items-center gap-[18px]" aria-label="Observability">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              aria-current={t.id === tab ? "page" : undefined}
-              onClick={() =>
-                void navigate({ search: (prev) => ({ ...prev, view: t.id, trace: undefined }) })
-              }
-              className={cn(
-                "flex h-11 items-center border-b-2 text-sm",
-                t.id === tab
-                  ? "border-ink font-medium text-ink"
-                  : "border-transparent text-muted-foreground hover:text-ink",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span className="text-sm font-medium text-ink">Observability</span>
         {meta && <span className="truncate font-mono text-2xs text-faint">{meta}</span>}
       </span>
       {children && <span className="flex shrink-0 items-center gap-3.5 text-2xs">{children}</span>}
     </div>
   );
 }
-
-/** "via Axiom · org · dataset" */
-export const viaAxiom = (sink: Sink, dataset: string) =>
-  `via Axiom · ${sink.org ? `${sink.org} · ` : ""}${dataset}`;
 
 export function SearchField({
   value,
@@ -108,4 +72,43 @@ export function DisconnectButton() {
       Disconnect
     </button>
   );
+}
+
+/** One muted hue per service so interleaved lines read apart. Never the accent. */
+const SERVICE_TONES = [
+  "text-[#5c5f9a]",
+  "text-[#4f7a5c]",
+  "text-[#8a5f3c]",
+  "text-[#8a4f6e]",
+  "text-[#3c7a8a]",
+  "text-[#8a7a3c]",
+] as const;
+
+export type ServiceLabel = { text: string; tone: string };
+
+/**
+ * Names and tones of the environment's services. Log lines name a service by node id; spans by
+ * their OTel `service.name`, which matches a node when the app sets it to the node's name, and
+ * then wears that node's tone.
+ */
+export function useServices() {
+  const { environmentId } = useEnvironment();
+  const nodes = useQuery(api.nodes.list, { environmentId });
+  return useMemo(() => {
+    const byId = new Map<string, ServiceLabel>();
+    const byName = new Map<string, ServiceLabel>();
+    (nodes ?? []).forEach((n, i) => {
+      const label = { text: n.name, tone: SERVICE_TONES[i % SERVICE_TONES.length] ?? "text-faint" };
+      byId.set(n.id, label);
+      byName.set(n.name, label);
+    });
+    return {
+      /** A log line's service, by node id. */
+      ofLine: (id: string): ServiceLabel =>
+        byId.get(id) ?? { text: id.slice(0, 8), tone: "text-faint" },
+      /** A span's service, by OTel service.name. */
+      ofSpan: (name: string): ServiceLabel =>
+        byName.get(name) ?? { text: name, tone: "text-faint" },
+    };
+  }, [nodes]);
 }

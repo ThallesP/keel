@@ -29,6 +29,7 @@ import type * as projects from "../projects.js";
 import type * as reconcile from "../reconcile.js";
 import type * as status from "../status.js";
 import type * as swarm from "../swarm.js";
+import type * as timeRange from "../timeRange.js";
 import type * as traceProviders_axiom from "../traceProviders/axiom.js";
 import type * as traceProviders_types from "../traceProviders/types.js";
 import type * as traces from "../traces.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   reconcile: typeof reconcile;
   status: typeof status;
   swarm: typeof swarm;
+  timeRange: typeof timeRange;
   "traceProviders/axiom": typeof traceProviders_axiom;
   "traceProviders/types": typeof traceProviders_types;
   traces: typeof traces;

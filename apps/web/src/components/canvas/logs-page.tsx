@@ -79,6 +79,22 @@ function Backdrop() {
   );
 }
 
+/**
+ * Axiom's logo mark (axiom.co). The sign-in button wears Axiom's brand orange (`#de5820`, its
+ * light-theme value) with this mark in white, like any third-party sign-in button; it is the one
+ * place the accent is not Keel's blue.
+ */
+function AxiomMark({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={Math.round(size * (11 / 13))} viewBox="0 0 13 11" aria-hidden>
+      <path
+        d="m12.12 7.27-2.48-4.3a.8.8 0 0 0-.62-.37H7.48c-.36 0-.5-.25-.33-.56L8 .57A.38.38 0 0 0 7.67 0H5.52a.8.8 0 0 0-.62.36L.7 7.6a.8.8 0 0 0 0 .72l1.08 1.86c.18.31.47.32.65 0l.84-1.44c.18-.31.48-.31.66 0l.76 1.32c.11.2.4.36.62.36h4.98a.8.8 0 0 0 .62-.36l1.2-2.07a.8.8 0 0 0 0-.72m-3.34-.2c.18.3.03.56-.33.56H4.58c-.36 0-.5-.26-.33-.57L6.2 3.71c.18-.31.47-.31.65 0z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function AxiomGate() {
   const { projectId } = useEnvironment();
   const { projectId: slug } = route.useParams();
@@ -139,19 +155,17 @@ function AxiomGate() {
           </>
         ) : (
           <>
-            <h2 className="text-md font-semibold text-ink">Hey, to access this, set up Axiom</h2>
+            <h2 className="text-md font-semibold text-ink">Set up Axiom</h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Logs from every service in one place, searchable, kept after containers are gone. Keel
-              creates a <span className="font-mono text-xs text-ink">keel-{slug}</span> dataset and
-              a token that can only write to and read it.
+              Logs from every service in one searchable stream, kept after containers are gone.
             </p>
             <button
               type="button"
               disabled={busy !== null}
               onClick={() => void signIn()}
-              className="mt-5 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary text-sm font-medium text-on-primary hover:bg-primary-strong disabled:opacity-60"
+              className="mt-5 flex h-9 w-full items-center justify-center gap-2 rounded-md bg-[#de5820] text-sm font-medium text-white hover:bg-[#c94d19] disabled:opacity-60"
             >
-              {busy === "signin" && <Spinner className="text-on-primary" />}
+              {busy === "signin" ? <Spinner className="text-white" /> : <AxiomMark />}
               Sign in with Axiom
             </button>
           </>

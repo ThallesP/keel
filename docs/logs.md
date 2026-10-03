@@ -8,10 +8,10 @@ Logs are a per-project **sink** with a matching **provider**. The sink is the wr
 
 Two providers exist:
 
-| Kind | Write side | Read side | When |
-|---|---|---|---|
-| `docker` (default, no row) | nothing shipped | `docker service logs` from the manager socket (`logProviders/docker.ts`) | zero setup, single user poking at a service |
-| `axiom` | worker POSTs NDJSON to `/v1/datasets/<dataset>/ingest` (`apps/worker/src/sinks/axiom.ts`; `/v1/ingest/<dataset>` only on `*.edge.axiom.co`, it is 404 on `api.axiom.co`) | APL over `/v1/datasets/_apl?format=tabular` (`logProviders/axiom.ts`) | retention, search, dashboards, alerts, metrics later |
+| Kind                       | Write side                                                                                                                                                               | Read side                                                                | When                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `docker` (default, no row) | nothing shipped                                                                                                                                                          | `docker service logs` from the manager socket (`logProviders/docker.ts`) | zero setup, single user poking at a service          |
+| `axiom`                    | worker POSTs NDJSON to `/v1/datasets/<dataset>/ingest` (`apps/worker/src/sinks/axiom.ts`; `/v1/ingest/<dataset>` only on `*.edge.axiom.co`, it is 404 on `api.axiom.co`) | APL over `/v1/datasets/_apl?format=tabular` (`logProviders/axiom.ts`)    | retention, search, dashboards, alerts, metrics later |
 
 Docker is not a real log store: it holds what the node's `json-file` driver kept, every tail is a round-trip to every node running a task, and it is gone with the container. Axiom (or, later, ClickHouse) is where logs live once anyone cares about them.
 
@@ -28,17 +28,17 @@ So the worker does `GET /containers/<id>/logs?follow=1` per `svc-*` container (`
 
 Field names are the contract between `apps/worker/src/sinks/types.ts` and every read provider. Change one, change both.
 
-| Field | Value |
-|---|---|
-| `_time` | RFC3339Nano from Docker's `timestamps=1` (Axiom indexes on `_time`) |
-| `message` | the line, timestamp stripped |
-| `stream` | `stdout` \| `stderr` |
+| Field        | Value                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------- |
+| `_time`      | RFC3339Nano from Docker's `timestamps=1` (Axiom indexes on `_time`)                     |
+| `message`    | the line, timestamp stripped                                                            |
+| `stream`     | `stdout` \| `stderr`                                                                    |
 | `service_id` | Convex node id (the `svc-<id>` service without the prefix); what `logs.tail` filters on |
-| `service` | Swarm service name, `svc-<id>` |
-| `task` | Swarm task id, one per replica run; the Logs tab tags lines with it |
-| `replica` | Swarm slot, from the task name `svc-<id>.<slot>.<task>` |
-| `node` | Swarm node id of the worker |
-| `container` | short container id |
+| `service`    | Swarm service name, `svc-<id>`                                                          |
+| `task`       | Swarm task id, one per replica run; the Logs tab tags lines with it                     |
+| `replica`    | Swarm slot, from the task name `svc-<id>.<slot>.<task>`                                 |
+| `node`       | Swarm node id of the worker                                                             |
+| `container`  | short container id                                                                      |
 
 ## Schema and functions
 
@@ -84,7 +84,7 @@ Mock for local testing: `KEEL_ALLOW_LOCAL_SINKS=1` plus `KEEL_AXIOM_AUTH_URL` an
 
 ## UI
 
-Rail → Logs (`?view=logs`, `apps/web/src/components/canvas/logs-page.tsx`), drawn over the canvas (which stays mounted, `inert`). Without an Axiom sink it is a gate: a blurred fake stream behind a card, "Hey, to access this, set up Axiom", Sign in with Axiom (or the org picker while one is pending). With one: every service's lines interleaved, service name per line, stderr in the warning tone, search box, following toggle, Disconnect (back to Docker; shipped data stays in Axiom). Polls `logs.recent` every 3s.
+Rail → Logs (`?view=logs`, `apps/web/src/components/canvas/logs-page.tsx`), drawn over the canvas (which stays mounted, `inert`). Without an Axiom sink it is a gate: a blurred fake stream behind a card, "Set up Axiom", one line of copy, and a Sign in with Axiom button in Axiom's brand orange with its logo mark (or the org picker while one is pending). With one: every service's lines interleaved, service name per line, stderr in the warning tone, search box, following toggle, Disconnect (back to Docker; shipped data stays in Axiom). Polls `logs.recent` every 3s.
 
 The per-service Logs tab in the bottom panel works either way and shows `· via Axiom` in its meta line when the provider is Axiom.
 

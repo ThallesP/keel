@@ -194,11 +194,11 @@ OAuth client scopes needed: auth keys (write), devices (write, for cleanup), DNS
 
 The dashboard is tailnet-only and needs HTTPS: secure-context APIs (`crypto.subtle`, clipboard) are off on plain-http origins like a tailnet IP. Host `tailscaled` does it with `tailscale serve` on the node's own MagicDNS name, no extra device:
 
-| URL | Target |
-|---|---|
-| `https://<node>.<tailnet>.ts.net` | web |
-| `https://<node>.<tailnet>.ts.net:8443` | Convex API + sync websocket (3210) |
-| `https://<node>.<tailnet>.ts.net:10000` | Convex HTTP actions, auth (3211) |
+| URL                                     | Target                             |
+| --------------------------------------- | ---------------------------------- |
+| `https://<node>.<tailnet>.ts.net`       | web                                |
+| `https://<node>.<tailnet>.ts.net:8443`  | Convex API + sync websocket (3210) |
+| `https://<node>.<tailnet>.ts.net:10000` | Convex HTTP actions, auth (3211)   |
 
 Convex must be https too or the browser blocks it as mixed content. The ports are exactly the three Funnel allows, so a public dashboard later is `tailscale funnel` on the same ports with the same URLs. Workers keep talking to the tailnet IP over plain http; the tailnet is already encrypted.
 

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,14 +8,6 @@ import (
 	"github.com/ThallesP/keel/apps/cli/internal/keel"
 	"github.com/ThallesP/keel/apps/cli/internal/output"
 )
-
-func code(err error) string {
-	var oe *output.Error
-	if errors.As(err, &oe) {
-		return oe.Code
-	}
-	return ""
-}
 
 func TestPickProject(t *testing.T) {
 	one := []keel.Project{{ID: "p1", Slug: "api"}}
@@ -35,7 +26,7 @@ func TestPickProject(t *testing.T) {
 		{"unknown", two, "nope", output.CodeProjectNotFound},
 	} {
 		p, err := pickProject(tc.projects, tc.slug, "https://keel.test")
-		got := code(err)
+		got := errCode(err)
 		if p != nil {
 			got = p.Slug
 		}
@@ -54,7 +45,7 @@ func TestFindService(t *testing.T) {
 		t.Errorf("by id: %v, %v", s, err)
 	}
 	_, err := findService(services, "apu")
-	if code(err) != output.CodeServiceNotFound || err.(*output.Error).Fix != "Services: api, postgres" {
+	if errCode(err) != output.CodeServiceNotFound || err.(*output.Error).Fix != "Services: api, postgres" {
 		t.Errorf("unknown: %v", err)
 	}
 }

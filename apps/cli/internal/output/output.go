@@ -19,25 +19,27 @@ import (
 
 // Error codes. Stable: agents branch on them.
 const (
-	CodeUsage              = "USAGE"
-	CodeNotAuthenticated   = "NOT_AUTHENTICATED"
-	CodeNoOrganization     = "NO_ORGANIZATION"
-	CodeNoProjects         = "NO_PROJECTS"
-	CodeProjectRequired    = "PROJECT_REQUIRED"
-	CodeProjectNotFound    = "PROJECT_NOT_FOUND"
-	CodeServiceNotFound    = "SERVICE_NOT_FOUND"
-	CodeVariableNotFound   = "VARIABLE_NOT_FOUND"
-	CodeDeploymentNotFound = "DEPLOYMENT_NOT_FOUND"
-	CodeDeploymentRunning  = "DEPLOYMENT_RUNNING"
-	CodeDeploymentFailed   = "DEPLOYMENT_FAILED"
-	CodeNothingToShip      = "NOTHING_TO_SHIP"
-	CodeInvalidInput       = "INVALID_INPUT"
-	CodeDiscoveryFailed    = "DISCOVERY_FAILED"
-	CodeNetwork            = "NETWORK_ERROR"
-	CodeServer             = "SERVER_ERROR"
-	CodeConfig             = "CONFIG_ERROR"
-	CodeTimeout            = "TIMEOUT"
-	CodeCancelled          = "CANCELLED"
+	CodeUsage            = "USAGE"
+	CodeNotAuthenticated = "NOT_AUTHENTICATED"
+	// keel login is waiting for someone to approve its link in the dashboard.
+	CodeAuthorizationPending = "AUTHORIZATION_PENDING"
+	CodeNoOrganization       = "NO_ORGANIZATION"
+	CodeNoProjects           = "NO_PROJECTS"
+	CodeProjectRequired      = "PROJECT_REQUIRED"
+	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
+	CodeServiceNotFound      = "SERVICE_NOT_FOUND"
+	CodeVariableNotFound     = "VARIABLE_NOT_FOUND"
+	CodeDeploymentNotFound   = "DEPLOYMENT_NOT_FOUND"
+	CodeDeploymentRunning    = "DEPLOYMENT_RUNNING"
+	CodeDeploymentFailed     = "DEPLOYMENT_FAILED"
+	CodeNothingToShip        = "NOTHING_TO_SHIP"
+	CodeInvalidInput         = "INVALID_INPUT"
+	CodeDiscoveryFailed      = "DISCOVERY_FAILED"
+	CodeNetwork              = "NETWORK_ERROR"
+	CodeServer               = "SERVER_ERROR"
+	CodeConfig               = "CONFIG_ERROR"
+	CodeTimeout              = "TIMEOUT"
+	CodeCancelled            = "CANCELLED"
 )
 
 // Exit codes: 0 ok, 1 error, 2 usage, 4 needs login (as gh), 130 interrupted.
@@ -63,7 +65,7 @@ func (e *Error) ExitCode() int {
 	switch e.Code {
 	case CodeUsage:
 		return ExitUsage
-	case CodeNotAuthenticated:
+	case CodeNotAuthenticated, CodeAuthorizationPending:
 		return ExitAuth
 	case CodeCancelled:
 		return ExitCancelled

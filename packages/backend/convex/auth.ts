@@ -2,6 +2,7 @@ import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { APIError } from "better-auth/api";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
+import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { organization } from "better-auth/plugins/organization";
 
 import { components } from "./_generated/api";
@@ -146,6 +147,14 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) =>
         cancelPendingInvitationsOnReInvite: true,
         // Nothing is mailed: the inviter copies the link out of the dialog.
         sendInvitationEmail: async () => {},
+      }),
+      // `keel login` (apps/cli): the CLI gets a link to the dashboard's /device page, a signed-in
+      // member approves it there, and the CLI's next poll gets a session token (RFC 8628).
+      deviceAuthorization({
+        verificationUri: `${siteUrl}/device`,
+        validateClient: (clientId) => clientId === "keel-cli",
+        // better-auth 1.6.17's option parser rejects a missing `schema` (z.custom isn't optional).
+        schema: {},
       }),
       crossDomain({ siteUrl }),
       convex({

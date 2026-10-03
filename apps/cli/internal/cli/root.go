@@ -28,7 +28,8 @@ stdout is exactly one JSON object: {"ok":true,...} on success, or
 {"ok":false,"code":"SERVICE_NOT_FOUND","error":"...","fix":"..."} on failure. logs --follow
 prints one JSON object per line instead.
 
-Exit codes: 0 ok, 1 error, 2 bad usage, 4 not logged in, 130 interrupted.
+Exit codes: 0 ok, 1 error, 2 bad usage, 4 not logged in (or the login awaits approval),
+130 interrupted.
 
 Nothing prompts unless stdin is a terminal; missing input fails with a USAGE error naming
 the flag to pass.

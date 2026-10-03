@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Config struct {
@@ -30,7 +31,24 @@ type Instance struct {
 	Email         string `json:"email,omitempty"`
 	// Better-auth session token. Exchanged for a short-lived Convex JWT on every run.
 	Token string `json:"token,omitempty"`
+	// A keel login waiting for someone to approve it in the dashboard. The first run that finds
+	// it approved swaps it for Token.
+	Pending *PendingLogin `json:"pending,omitempty"`
 }
+
+// PendingLogin is a device authorization (RFC 8628) that keel login started.
+type PendingLogin struct {
+	// Secret: whoever holds it gets the session once the login is approved.
+	DeviceCode string `json:"deviceCode"`
+	UserCode   string `json:"userCode"`
+	// The dashboard page that approves it, with the user code filled in.
+	URL       string    `json:"url"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Seconds to wait between polls.
+	Interval int `json:"interval"`
+}
+
+func (p *PendingLogin) Expired() bool { return !time.Now().Before(p.ExpiresAt) }
 
 type Link struct {
 	Instance string `json:"instance"`

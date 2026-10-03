@@ -1,9 +1,10 @@
 name: ci
 
+# Pull requests run this directly. Pushes to main and v* tags run it as the first job of
+# images.yml, which publishes images only when every job here passed.
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
 
 permissions:
   contents: read

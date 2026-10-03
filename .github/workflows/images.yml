@@ -1,8 +1,10 @@
 # Publishes the images install.sh runs: ghcr.io/thallesp/keel-{web,functions,worker}.
 #   main  -> :latest and :sha-<short>
 #   v1.2.3 tag -> :1.2.3 and :sha-<short>
-# Each platform builds natively (arm64 on GitHub's arm runners, no QEMU), pushes by digest,
-# then a merge job stitches the multi-arch manifest and applies the tags.
+# ci.yml (typecheck, install.sh end to end) runs first and gates everything below: nothing is
+# pushed to the registry when it fails. Each platform then builds natively (arm64 on GitHub's
+# arm runners, no QEMU) and pushes by digest, and a merge job stitches the multi-arch manifest
+# and applies the tags.
 name: images
 
 on:
@@ -19,7 +21,11 @@ env:
   REGISTRY: ghcr.io/thallesp
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: ci
     strategy:
       fail-fast: false
       matrix:

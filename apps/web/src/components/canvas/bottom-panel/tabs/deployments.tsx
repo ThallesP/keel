@@ -1,7 +1,8 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useQuery } from "convex/react";
-import { useMemo } from "react";
+import { Check, Copy, ExternalLink } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { formatElapsed, timeAgo } from "../../format";
 import { asNodeId, toDeployment } from "../../mapping";
@@ -58,6 +59,46 @@ function StatusPill({ pill, className }: { pill: Pill; className?: string }) {
   );
 }
 
+/** Public URL: open in a new tab, copy. Quick Tunnel URLs are temporary; the title says so. */
+function PublicUrl({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const host = url.replace(/^https?:\/\//, "");
+  const copy = () => {
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <span
+      className="flex items-center gap-1"
+      title="Temporary Quick Tunnel URL: it changes when the tunnel restarts"
+    >
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-1 text-primary hover:underline"
+      >
+        {host}
+        <ExternalLink size={10} strokeWidth={1.6} aria-hidden />
+      </a>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label="Copy URL"
+        className="flex size-4 items-center justify-center rounded-sm text-faint hover:bg-surface-2 hover:text-ink"
+      >
+        {copied ? (
+          <Check size={10} strokeWidth={2} aria-hidden />
+        ) : (
+          <Copy size={10} strokeWidth={1.6} aria-hidden />
+        )}
+      </button>
+    </span>
+  );
+}
+
 /** One line of facts that used to be the Overview tab: image · port · replicas · status. */
 function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
   const facts: React.ReactNode[] = [];
@@ -71,13 +112,21 @@ function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
       </span>,
     );
     if (d.port) facts.push(`port ${d.port}`);
+    if (d.publicUrl) facts.push(<PublicUrl key="url" url={d.publicUrl} />);
+    else if (d.ingress?.state === "starting") facts.push("exposing…");
     if (d.status === "done") {
       facts.push(d.finishedAt ? `completed ${timeAgo(d.finishedAt, now)}` : "completed");
     } else {
       facts.push(`${d.running}/${d.replicas} ${d.replicas === 1 ? "replica" : "replicas"}`);
     }
   }
-  const error = node.type !== "volume" ? node.data.error : undefined;
+  const error =
+    node.type !== "volume"
+      ? (node.data.error ??
+        (node.data.ingress?.state === "failed"
+          ? `expose failed: ${node.data.ingress.error ?? "unknown error"}`
+          : undefined))
+      : undefined;
   return (
     <div className="flex h-8 shrink-0 items-center justify-between gap-4 border-b border-line px-5 font-mono text-2xs text-faint">
       <span className="flex min-w-0 items-center gap-2 truncate">

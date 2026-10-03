@@ -9,7 +9,8 @@ import { scheduleObserveFor } from "./nodesInternal";
 // mutation maps each event to a Convex node and schedules a debounced, single-service observe.
 // No Docker access.
 
-const SERVICE_PREFIX = "svc-";
+// `svc-<id>` runs the node, `ingress-<id>` is its public tunnel; both map to the same node.
+const PREFIXES = ["svc-", "ingress-"];
 
 /** What the HTTP route keeps from a raw Docker event; enough to name the node it concerns. */
 export const dockerEvent = v.object({
@@ -22,11 +23,11 @@ export const dockerEvent = v.object({
 
 type DockerEvent = Infer<typeof dockerEvent>;
 
-/** `svc-<convexNodeId>` → the raw id part, else null (user's own container, other service). */
+/** `svc-<convexNodeId>` / `ingress-<convexNodeId>` → the raw id, else null (not ours). */
 function nodeIdFromEvent(e: DockerEvent): string | null {
   const name = e.type === "container" ? e.serviceName : e.name;
-  if (!name?.startsWith(SERVICE_PREFIX)) return null;
-  return name.slice(SERVICE_PREFIX.length);
+  const prefix = name && PREFIXES.find((p) => name.startsWith(p));
+  return prefix ? name!.slice(prefix.length) : null;
 }
 
 async function ingestOne(ctx: MutationCtx, e: DockerEvent, seen: Set<string>) {

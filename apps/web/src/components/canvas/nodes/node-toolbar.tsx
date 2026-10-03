@@ -10,6 +10,7 @@ import { NodeToolbar as FlowNodeToolbar, Position, useReactFlow } from "@xyflow/
 import {
   AlignLeft,
   Ellipsis,
+  Globe,
   type LucideIcon,
   Play,
   RefreshCw,
@@ -85,6 +86,8 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
       ? node.data
       : null;
   const status = runtime?.status;
+  // Exposing a never-deployed service would only tunnel to nothing.
+  const service = node?.type === "service" && node.data.status !== "pending" ? node.data : null;
 
   return (
     <FlowNodeToolbar isVisible={visible} position={Position.Top} offset={10} className="nopan">
@@ -117,6 +120,12 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
             Logs
           </button>
         )}
+        {service && !service.public && (
+          <button type="button" className={itemClass} onClick={() => void actions.expose(nodeId)}>
+            <Globe size={11} strokeWidth={1.6} aria-hidden />
+            Expose
+          </button>
+        )}
         {runtime && <span className="mx-0.5 h-4 w-px bg-line" />}
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -136,6 +145,12 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
                 ))}
                 <DropdownMenuSeparator />
               </>
+            )}
+            {service?.public && (
+              <DropdownMenuItem onClick={() => void actions.unexpose(nodeId)}>
+                <Globe size={12} strokeWidth={1.6} aria-hidden />
+                Make private
+              </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => setRenamingId(nodeId)}>Rename</DropdownMenuItem>
             <DropdownMenuItem onClick={() => void actions.duplicate(nodeId)}>

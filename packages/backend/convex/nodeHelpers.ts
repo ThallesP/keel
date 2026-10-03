@@ -106,6 +106,9 @@ export function view(n: Doc<"nodes">) {
     running: n.observed?.running ?? 0,
     revision: n.desired?.revision ?? 0,
     deployedRevision: n.deployedRevision,
+    public: n.public !== undefined,
+    publicUrl: n.ingress?.url,
+    ingress: n.ingress ? { state: n.ingress.state, error: n.ingress.error } : undefined,
     error: n.applyError ?? (status === "error" ? n.observed?.error : undefined),
     deploy: step && n.shippedAt ? { step, startedAt: n.shippedAt } : undefined,
     // `stopping`: when Stop was clicked. `stopped`: when the stop shipped.

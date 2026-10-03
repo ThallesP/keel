@@ -31,6 +31,8 @@ SERVICE=keel-worker
 : "${KEEL_REGISTRY:=}"
 if [ -z "${KEEL_WORKER_TOKEN:-}" ]; then
   KEEL_WORKER_TOKEN=$(openssl rand -hex 32)
+  # infra/ is gitignored, so a fresh checkout has no directory to write into yet.
+  mkdir -p "$(dirname "$ENV_FILE")"
   (umask 077 && printf 'KEEL_URL=%s\nKEEL_WORKER_TOKEN=%s\n' "$KEEL_URL" "$KEEL_WORKER_TOKEN" > "$ENV_FILE")
   # Piped via stdin so the token never appears in argv or shell history.
   (cd "$ROOT/packages/backend" && printf %s "$KEEL_WORKER_TOKEN" | bunx convex env set KEEL_WORKER_TOKEN)

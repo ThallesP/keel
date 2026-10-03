@@ -264,6 +264,11 @@ export const remove = mutation({
     // Row goes first, in the same transaction as the schedule: an in-flight swarm.apply that
     // re-reads applyInput after this commit sees null and backs out of creating the service.
     await ctx.db.delete(id);
-    if (node.desired) await ctx.scheduler.runAfter(0, internal.swarm.remove, { id });
+    if (node.desired) {
+      await ctx.scheduler.runAfter(0, internal.swarm.remove, { id });
+      // A running deployment with a step for this node would otherwise wait for an observe
+      // that never comes (events for a deleted node map to nothing) until the timeout.
+      await ctx.scheduler.runAfter(0, internal.reconcile.run, {});
+    }
   },
 });

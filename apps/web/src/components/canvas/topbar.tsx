@@ -1,6 +1,8 @@
+import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { useQuery } from "convex/react";
 import { ChevronDown } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { AccountMenu } from "./account-menu";
 import { useCanvasActions } from "./actions";
@@ -31,22 +33,31 @@ function Logo() {
 }
 
 function ShipButton() {
+  const { environmentId } = useEnvironment();
   const summary = useSummary();
   const deployment = useLatestDeployment();
+  // Shared with the canvas subscription; no extra round-trip.
+  const nodes = useQuery(api.nodes.list, { environmentId });
   const actions = useCanvasActions();
   const now = useNow();
 
   const pendingChanges = summary?.pendingChanges ?? 0;
   const running = deployment?.status === "running";
-  const failed = deployment?.status === "failed";
+  // Retry re-ships the nodes whose step failed. A node deleted since has nothing to retry, and
+  // asking for it would fail with "Nothing to ship" every time; once none is left the button
+  // is a plain Ship again, which takes every node with pending changes.
+  const retry = useMemo(() => {
+    if (deployment?.status !== "failed" || !nodes) return [];
+    const alive = new Set<string>(nodes.map((n) => n.id));
+    return deployment.steps
+      .filter((s) => s.status === "failed" && alive.has(s.nodeId))
+      .map((s) => s.nodeId);
+  }, [deployment, nodes]);
+  const failed = retry.length > 0;
   const ship = useCallback(() => {
     if (running) return;
-    // Retry re-ships what failed; a plain Ship takes every node with pending changes.
-    const failedIds = failed
-      ? deployment.steps.filter((s) => s.status === "failed" && s.nodeId).map((s) => s.nodeId)
-      : [];
-    void actions.ship(failedIds.length > 0 ? failedIds : undefined);
-  }, [running, failed, deployment, actions]);
+    void actions.ship(failed ? retry : undefined);
+  }, [running, failed, retry, actions]);
   useHotkey({ key: "Enter", mod: true }, ship);
 
   if (running) {

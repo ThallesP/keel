@@ -44,11 +44,18 @@ export const run = internalMutation({
       const log = [...d.log];
       const steps: DeployStep[] = [];
       for (const step of d.steps) {
-        if (!step.nodeId || step.status !== "running") {
+        if (!step.nodeId || step.status === "done" || step.status === "failed") {
           steps.push(step);
           continue;
         }
-        const [next, text] = settle(step, await ctx.db.get(step.nodeId), now);
+        const node = await ctx.db.get(step.nodeId);
+        // A pending step waits for swarm.apply, which backs out silently when the node is gone;
+        // only a deleted node can settle it here. Running steps settle against observed state.
+        if (step.status === "pending" && node) {
+          steps.push(step);
+          continue;
+        }
+        const [next, text] = settle(step, node, now);
         steps.push(next);
         if (text) log.push({ at: now, nodeId: step.nodeId, text });
       }

@@ -84,7 +84,9 @@ export function BottomPanel() {
         panelCollapsed && <span className="font-mono text-2xs text-faint">{metaFor(node)}</span>
       }
     >
-      <TabContent node={node} tab={panelTab} />
+      {/* Keyed by node: a switch remounts the tab, so a half-typed variable, an open row editor
+          or the previous node's log lines never carry over to the next node. */}
+      <TabContent key={node.id} node={node} tab={panelTab} />
     </PanelFrame>
   );
 }

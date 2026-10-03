@@ -21,6 +21,9 @@ func TestCall(t *testing.T) {
 		case "/api/mutation":
 			w.WriteHeader(400)
 			w.Write([]byte(`{"status":"error","errorMessage":"[Request ID: abc] Server Error\nUncaught ConvexError: Nothing to ship\n    at handler (x.ts:1)","errorData":"Nothing to ship"}`))
+		case "/api/action":
+			w.WriteHeader(401)
+			w.Write([]byte(`{"code":"Unauthenticated","message":"Token expired"}`))
 		}
 	}))
 	defer srv.Close()
@@ -43,5 +46,9 @@ func TestCall(t *testing.T) {
 	}
 	if fe.DataString() != "Nothing to ship" || fe.Message != "ConvexError: Nothing to ship" {
 		t.Errorf("FunctionError = %q / %q", fe.DataString(), fe.Message)
+	}
+
+	if err := c.Action(context.Background(), "logs:tail", nil, nil); !errors.Is(err, ErrUnauthenticated) {
+		t.Errorf("401 without an envelope = %v, want ErrUnauthenticated", err)
 	}
 }

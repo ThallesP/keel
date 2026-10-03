@@ -6,7 +6,8 @@ import (
 	"context"
 	"errors"
 	"os"
-	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -75,7 +76,7 @@ func Execute(ctx context.Context, version string) int {
 		return 0
 	}
 	if a.out == nil { // failed before PersistentPreRun: bad flag or unknown command
-		a.out = output.New(a.jsonMode() || slices.Contains(os.Args[1:], "--json"))
+		a.out = output.New(a.jsonMode() || jsonArg(os.Args[1:]))
 	}
 	var oe *output.Error
 	switch {
@@ -91,6 +92,23 @@ func Execute(ctx context.Context, version string) int {
 func (a *app) jsonMode() bool {
 	v := os.Getenv("KEEL_JSON")
 	return a.json || v == "1" || v == "true"
+}
+
+// jsonArg finds --json in arguments cobra could not parse, in every form pflag accepts
+// (--json, --json=true, --json=1, ...); the last one wins, as in pflag.
+func jsonArg(args []string) bool {
+	on := false
+	for _, s := range args {
+		if s == "--" {
+			break
+		}
+		if s == "--json" {
+			on = true
+		} else if v, ok := strings.CutPrefix(s, "--json="); ok {
+			on, _ = strconv.ParseBool(v)
+		}
+	}
+	return on
 }
 
 func usage(cmd *cobra.Command, format string, args ...any) *output.Error {

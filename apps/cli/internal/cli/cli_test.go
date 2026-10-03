@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,5 +93,23 @@ func TestLineSetSkipsWhatWasPrinted(t *testing.T) {
 	}
 	if got := len(printed); got != 4 || printed[2] != "c" || printed[3] != "d" {
 		t.Errorf("printed %v, want [a b c d]", printed)
+	}
+}
+
+func TestJSONArg(t *testing.T) {
+	for args, want := range map[string]bool{
+		"nope --json":               true,
+		"nope --json=true":          true,
+		"nope --json=1":             true,
+		"nope --json=false":         false,
+		"nope --json --json=0":      false,
+		"nope --json=maybe":         false,
+		"var set -- --json":         false,
+		"nope":                      false,
+		"nope --jsonx --json=t --x": true,
+	} {
+		if got := jsonArg(strings.Fields(args)); got != want {
+			t.Errorf("jsonArg(%q) = %v, want %v", args, got, want)
+		}
 	}
 }

@@ -129,12 +129,14 @@ func (a *API) CurrentUser(ctx context.Context) (*User, error) {
 // Organization is nil when the user isn't in one yet.
 func (a *API) Organization(ctx context.Context) (*Organization, error) {
 	var o *Organization
-	return o, a.query(ctx, "organizations:current", nil, &o)
+	err := a.query(ctx, "organizations:current", nil, &o) // before reading o: Go leaves operand order open
+	return o, err
 }
 
 func (a *API) Projects(ctx context.Context) ([]Project, error) {
 	var ps []Project
-	return ps, a.query(ctx, "projects:list", nil, &ps)
+	err := a.query(ctx, "projects:list", nil, &ps) // before reading ps: Go leaves operand order open
+	return ps, err
 }
 
 func (a *API) Summary(ctx context.Context, environmentID string) (*Summary, error) {
@@ -214,7 +216,8 @@ func (a *API) StartDeployment(ctx context.Context, environmentID string, only []
 		in["only"] = only
 	}
 	var id string
-	return id, a.mutation(ctx, "deployments:start", in, &id)
+	err := a.mutation(ctx, "deployments:start", in, &id) // before reading id: Go leaves operand order open
+	return id, err
 }
 
 // Deployment is nil when the id is unknown.
@@ -332,6 +335,9 @@ func translate(err error, webURL string) error {
 			return output.Errorf(output.CodeInvalidInput, "", "%s", msg)
 		}
 		return output.Errorf(output.CodeServer, "", "%s", fe.Message)
+	}
+	if errors.Is(err, convex.ErrUnauthenticated) {
+		return notAuthenticated(webURL, "Session expired or signed out")
 	}
 	if errors.Is(err, context.Canceled) {
 		return output.Errorf(output.CodeCancelled, "", "Cancelled")

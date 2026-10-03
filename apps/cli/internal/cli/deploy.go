@@ -281,7 +281,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 				}
 				return output.Errorf(output.CodeDeploymentNotFound, "keel deployment list <service>", "%s", what)
 			}
-			if wait && d.Status == "running" {
+			if wait && d.Status != "success" { // await also turns a failed one into a non-zero exit
 				if _, env, err := a.project(ctx, s); err == nil {
 					services, _ = s.api.Services(ctx, env.ID)
 				}
@@ -309,7 +309,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&wait, "wait", false, "if it is running, wait until it settles (exits non-zero if it fails)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "wait until it settles; exits non-zero if it failed")
 	cmd.Flags().DurationVar(&timeout, "timeout", defaultWait, "with --wait, how long to wait")
 	return cmd
 }

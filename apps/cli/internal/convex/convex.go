@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,6 +29,9 @@ type FunctionError struct {
 }
 
 func (e *FunctionError) Error() string { return e.Message }
+
+// ErrUnauthenticated is a request Convex refused (HTTP 401) for its token, before any function ran.
+var ErrUnauthenticated = errors.New("unauthenticated")
 
 // DataString is Data when it is a JSON string (every ConvexError Keel throws), else "".
 func (e *FunctionError) DataString() string {
@@ -86,6 +90,9 @@ func (c *Client) call(ctx context.Context, kind, path string, args, out any) err
 		ErrorData    json.RawMessage `json:"errorData"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil || r.Status == "" {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("%s %s: %w: %s", kind, path, ErrUnauthenticated, snippet(raw))
+		}
 		return fmt.Errorf("%s %s: HTTP %d: %s", kind, path, resp.StatusCode, snippet(raw))
 	}
 	if r.Status != "success" {

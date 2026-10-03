@@ -39,8 +39,9 @@ export const NO_ORGANIZATION =
 
 export async function requireMembership(ctx: Ctx) {
   const membership = await currentMembership(ctx);
-  if (!membership) throw new ConvexError(NO_ORGANIZATION);
-  return membership;
+  if (membership) return membership;
+  await requireUser(ctx); // signed out: "Not authenticated", not the invite hint
+  throw new ConvexError(NO_ORGANIZATION);
 }
 
 /** Project of the signed-in user's organization, or null (missing, foreign, or signed out). */

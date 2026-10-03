@@ -163,8 +163,9 @@ function Segmented<T extends string>({
 type StreamData = { key: string; lines: ProjectLine[]; overview: TraceOverview | null };
 
 /**
- * Lines and request numbers for the range and filter, polled while visible. Either half failing
- * keeps the other. A new range or filter keeps the previous data up, dimmed, until its own
+ * Lines and request numbers for the range and filter, polled while visible: the next poll is
+ * scheduled once both halves settle, so a slow answer never lands after a newer one. Either half
+ * failing keeps the other. A new range or filter keeps the previous data up, dimmed, until its own
  * arrives: no skeleton, no layout jump.
  */
 function useStream(
@@ -182,6 +183,7 @@ function useStream(
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       const [lines, numbers] = await Promise.allSettled([
         recent({ environmentId, range, search, tail: LINES }),
@@ -198,12 +200,12 @@ function useStream(
       });
       const failed = [lines, numbers].find((r) => r.status === "rejected");
       setError(failed?.status === "rejected" ? errorMessage(failed.reason) : null);
+      timer = setTimeout(() => void load(), POLL_MS);
     };
     void load();
-    const id = setInterval(() => void load(), POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearTimeout(timer);
     };
   }, [environmentId, range, search, withTraces, key, active, recent, overview]);
   return { data, stale: data !== null && data.key !== key, error };

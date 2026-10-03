@@ -124,14 +124,18 @@ export async function axiomTraceOverview(
   const count = Math.round(ms / binMs);
   // Buckets are aligned like APL's bin(): the last one holds now, the first starts `ms` earlier.
   const from = Math.floor(now / binMs) * binMs - (count - 1) * binMs;
+  // Totals and series stop where the last bucket does, so the totals are the buckets' sum (a span
+  // stamped ahead of this clock would otherwise count in the totals but in no bucket).
+  const to = from + count * binMs;
   const matching = roots(cfg, search);
 
   const [totals, series, traces] = await Promise.all([
-    spans(cfg, `${matching} | extend failed = ${FAILED} | summarize ${STATS}`, from),
+    spans(cfg, `${matching} | extend failed = ${FAILED} | summarize ${STATS}`, from, to),
     spans(
       cfg,
       `${matching} | extend failed = ${FAILED} | summarize ${STATS} by bin(_time, ${bin})`,
       from,
+      to,
     ),
     requests(cfg, search, from, undefined, LIST),
   ]);
@@ -150,7 +154,7 @@ export async function axiomTraceOverview(
   return {
     source: "axiom",
     from,
-    to: from + count * binMs,
+    to,
     bucketMs: binMs,
     stats: total ? statsOf(total) : { requests: 0, errors: 0, p50: null, p95: null, p99: null },
     buckets,

@@ -20,6 +20,22 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check-types
 
+  # The keel CLI: its own Go module, outside bun and turbo.
+  cli:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/cli
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: apps/cli/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
   # Runs install.sh end to end on a fresh runner against images built from this commit, twice:
   # the second run must be a no-op upgrade that keeps every secret.
   install:
@@ -54,6 +70,19 @@ jobs:
           post sign-in/email "{$creds}" | jq -e .token
           # Once an account exists, sign-up is by invitation only.
           ! post sign-up/email '{"email":"second@example.com","password":"correct-horse-battery","name":"Second"}'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: apps/cli/go.sum
+      - name: keel CLI finds the install from the dashboard URL and signs in
+        working-directory: apps/cli
+        run: |
+          go build -o "$RUNNER_TEMP/keel" ./cmd/keel
+          export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
+          printf %s correct-horse-battery |
+            "$RUNNER_TEMP/keel" login "http://$KEEL_ADDR" --email ci@example.com --password-stdin |
+            jq -e '.ok and .user.email == "ci@example.com"'
+          "$RUNNER_TEMP/keel" whoami | jq -e '.ok and .url == "http://" + env.KEEL_ADDR'
       - name: Re-run is idempotent
         run: |
           secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }

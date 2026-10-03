@@ -37,6 +37,12 @@ export async function currentMembership(ctx: Ctx): Promise<Membership | null> {
 export const NO_ORGANIZATION =
   "You're not in an organization yet. Ask a member for an invite link.";
 
+export async function requireMembership(ctx: Ctx) {
+  const membership = await currentMembership(ctx);
+  if (!membership) throw new ConvexError(NO_ORGANIZATION);
+  return membership;
+}
+
 /** Project of the signed-in user's organization, or null (missing, foreign, or signed out). */
 export async function ownedProject(ctx: Ctx, id: Id<"projects">) {
   const membership = await currentMembership(ctx);

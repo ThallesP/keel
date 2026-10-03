@@ -99,13 +99,17 @@ export const logLine = v.object({
 // is the default: the Logs tab reads `docker service logs` from the manager and nothing is
 // shipped. A sink row means the per-node worker streams every container line of the project
 // there and the Logs tab queries the sink instead. Token is a secret: never leaves the server
-// except to the worker (bearer-protected /worker/config).
+// except to the worker (bearer-protected /worker/config). The same sink holds the project's
+// OpenTelemetry traces (docs/logs.md "Traces").
 export const logSink = v.union(
   v.object({
     kind: v.literal("axiom"),
     // Ingest/query host, `api.axiom.co` or `api.eu.axiom.co` (a full origin is accepted for tests).
     domain: v.string(),
     dataset: v.string(),
+    // Traces dataset: Axiom wants a dedicated dataset per OTel signal. Same token as `dataset`.
+    // Unset on sinks connected before traces existed; the Traces tab asks to reconnect.
+    traces: v.optional(v.string()),
     token: v.string(),
     // Axiom org name, when connected through Sign in with Axiom. Display only.
     org: v.optional(v.string()),

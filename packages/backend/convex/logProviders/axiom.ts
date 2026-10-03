@@ -6,6 +6,9 @@ import type { LogLine, ProjectLine, ProjectTail, Replica, Tail } from "./types";
 
 export type AxiomConfig = { domain: string; dataset: string; token: string };
 
+/** The traces dataset Keel creates next to `dataset` (Axiom wants one dataset per OTel signal). */
+export const tracesDataset = (dataset: string) => `${dataset}-traces`;
+
 /** Axiom dataset names: letters, digits, `-` `_` `.`; must not start with a dot or dash. */
 export const DATASET_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 export const DOMAINS = ["api.axiom.co", "api.eu.axiom.co"] as const;
@@ -35,8 +38,11 @@ type Tabular = {
   tables?: { fields: { name: string }[]; columns: unknown[][] }[];
 };
 
-/** POST /v1/datasets/_apl?format=tabular → rows as objects keyed by field name. */
-async function query(cfg: AxiomConfig, apl: string, sinceMs: number) {
+/**
+ * POST /v1/datasets/_apl?format=tabular → rows as objects keyed by field name. Shared with the
+ * traces provider (traceProviders/axiom.ts).
+ */
+export async function query(cfg: AxiomConfig, apl: string, sinceMs: number) {
   const res = await call(cfg, "/v1/datasets/_apl?format=tabular", {
     method: "POST",
     body: JSON.stringify({
@@ -311,32 +317,40 @@ export async function axiomOrgs(token: string): Promise<AxiomOrg[]> {
 }
 
 /**
- * With the personal token: create the dataset (if missing) and mint an API token that can only
- * ingest into and query it. Returns the sink config to store.
+ * With the personal token: create the logs dataset and its traces dataset (if missing) and mint
+ * one API token that can only ingest into and query those two. Returns the sink config to store.
  */
 export async function axiomProvision(
   token: string,
   org: AxiomOrg,
   dataset: string,
   label: string,
-): Promise<AxiomConfig> {
-  if (!DATASET_RE.test(dataset)) throw new Error("Dataset name: letters, digits, - _ . only");
-  await personal(org.domain, token, org.id, "/v2/datasets", {
-    method: "POST",
-    body: JSON.stringify({ name: dataset, description: "Keel container logs" }),
-  }).catch((err: Error) => {
-    if (!/exists|409/i.test(err.message)) throw err;
-  });
+): Promise<AxiomConfig & { traces: string }> {
+  const traces = tracesDataset(dataset);
+  if (!DATASET_RE.test(traces)) throw new Error("Dataset name: letters, digits, - _ . only");
+  const datasets = [
+    [dataset, "Keel container logs"],
+    [traces, "Keel OpenTelemetry traces"],
+  ] as const;
+  for (const [name, description] of datasets) {
+    await personal(org.domain, token, org.id, "/v2/datasets", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    }).catch((err: Error) => {
+      if (!/exists|409/i.test(err.message)) throw err;
+    });
+  }
+  const scope = { ingest: ["create"], query: ["read"] };
   const res = await personal(org.domain, token, org.id, "/v2/tokens", {
     method: "POST",
     body: JSON.stringify({
       name: label,
-      description: "Keel: workers ingest container logs, the control plane reads them back",
-      datasetCapabilities: { [dataset]: { ingest: ["create"], query: ["read"] } },
+      description: "Keel: logs and traces go in, the control plane reads them back",
+      datasetCapabilities: { [dataset]: scope, [traces]: scope },
       orgCapabilities: {},
     }),
   });
   const minted = (await res.json()) as { token?: string };
   if (!minted.token) throw new Error("Axiom did not return a token");
-  return { domain: org.domain, dataset, token: minted.token };
+  return { domain: org.domain, dataset, traces, token: minted.token };
 }

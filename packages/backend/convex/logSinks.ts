@@ -46,6 +46,7 @@ export const get = query({
       kind: sink.kind,
       domain: sink.domain,
       dataset: sink.dataset,
+      traces: sink.traces ?? null,
       org: sink.org ?? null,
       tokenHint: `…${sink.token.slice(-4)}`,
     };
@@ -112,15 +113,19 @@ export const save = internalMutation({
   },
 });
 
-/** Verifies the token against Axiom (creates the dataset if needed), then stores the sink. */
+/**
+ * Verifies the token against Axiom (creates the datasets if needed), then stores the sink.
+ * `traces` is the traces dataset; the token needs ingest + query on it too.
+ */
 export const connectAxiom = action({
   args: {
     projectId: v.id("projects"),
     domain: v.string(),
     dataset: v.string(),
+    traces: v.optional(v.string()),
     token: v.string(),
   },
-  handler: async (ctx, { projectId, domain, dataset, token }) => {
+  handler: async (ctx, { projectId, domain, dataset, traces, token }) => {
     if (!(await ctx.runQuery(internal.logSinks.owns, { projectId }))) {
       throw new ConvexError("Project not found");
     }
@@ -131,17 +136,20 @@ export const connectAxiom = action({
     ) {
       throw new ConvexError("Region must be US or EU");
     }
-    if (!DATASET_RE.test(dataset)) throw new ConvexError("Dataset: letters, digits, - _ . only");
+    for (const name of traces === undefined ? [dataset] : [dataset, traces]) {
+      if (!DATASET_RE.test(name)) throw new ConvexError("Dataset: letters, digits, - _ . only");
+    }
     const trimmed = token.trim();
     if (trimmed.length < 8) throw new ConvexError("That does not look like an Axiom API token");
-    const sink = { kind: "axiom" as const, domain, dataset, token: trimmed };
+    const sink = { kind: "axiom" as const, domain, dataset, traces, token: trimmed };
     try {
       await axiomVerify(sink);
+      if (traces) await axiomVerify({ ...sink, dataset: traces });
     } catch (err) {
       throw new ConvexError(err instanceof Error ? err.message : String(err));
     }
     await ctx.runMutation(internal.logSinks.save, { projectId, sink });
-    return { dataset };
+    return { dataset, traces: traces ?? null };
   },
 });
 
@@ -165,9 +173,11 @@ export const disconnect = mutation({
 // authorize URL. Axiom redirects to /axiom/callback, which hands `state` + `code` to
 // signInAxiom: exchange for a personal token, list orgs, and with a single org provision right
 // away. With several, the token waits in `axiomPending` until the Logs page calls chooseAxiomOrg.
-// Provisioning (logProviders/axiom.ts axiomProvision) creates `keel-<project slug>` and a token
-// scoped to ingest + query on it; the personal token is never stored in logSinks. Both pending
-// tables are per project, single use, and expire after 10 minutes.
+// Provisioning (logProviders/axiom.ts axiomProvision) creates `keel-<project slug>` and
+// `keel-<project slug>-traces` and a token scoped to ingest + query on those two; the personal
+// token is never stored in logSinks. Signing in again on a connected project replaces the sink
+// (that is how sinks from before traces get their traces dataset). Both pending tables are per
+// project, single use, and expire after 10 minutes.
 
 const PENDING_MS = 10 * 60_000;
 
@@ -332,6 +342,7 @@ async function provision(ctx: ActionCtx, projectId: Id<"projects">, token: strin
   try {
     const cfg = await axiomProvision(token, org, name, name);
     await axiomCanQuery(cfg);
+    await axiomCanQuery({ ...cfg, dataset: cfg.traces });
     await ctx.runMutation(internal.logSinks.save, {
       projectId,
       sink: { kind: "axiom", ...cfg, org: org.name },

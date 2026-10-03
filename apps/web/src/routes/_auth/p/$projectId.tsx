@@ -7,13 +7,17 @@ import Loader from "@/components/loader";
 
 /**
  * `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable.
- * `?view=logs` is the rail's Logs page instead of the canvas.
+ * `?view=traces|logs` is the rail's Observability page instead of the canvas, and
+ * `&trace=<id>` opens one trace there.
  */
+type Search = { deployment?: string; view?: "traces" | "logs"; trace?: string };
+
 export const Route = createFileRoute("/_auth/p/$projectId")({
   component: ProjectPage,
-  validateSearch: (search: Record<string, unknown>): { deployment?: string; view?: "logs" } => ({
+  validateSearch: (search: Record<string, unknown>): Search => ({
     deployment: typeof search.deployment === "string" ? search.deployment : undefined,
-    view: search.view === "logs" ? "logs" : undefined,
+    view: search.view === "traces" || search.view === "logs" ? search.view : undefined,
+    trace: typeof search.trace === "string" ? search.trace : undefined,
   }),
 });
 

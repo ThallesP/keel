@@ -30,7 +30,7 @@ keel redeploy api                               # pull the image again and roll 
 | `whoami` | Account, organization, install |
 | `token` | Print the session token, for `KEEL_TOKEN` |
 | `project list` | Projects of the organization |
-| `project create <name> [--link]` | New project with a production environment; the slug comes from the name (`Acme API` → `acme-api`). `--link` links this directory to it |
+| `project create <name> [--link]` | New project with a production environment; the slug comes from the name (`Acme API` → `acme-api`). `--link` links this directory to it. Prints its canvas URL (`url`): the dashboard has no project switcher yet |
 | `link [project]` / `unlink` | Pin a directory (and its subdirectories) to a project |
 | `status` | Services, staged changes, last deployment |
 | `service list` | Services, databases, caches, volumes |

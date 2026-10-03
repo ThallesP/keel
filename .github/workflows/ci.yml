@@ -103,7 +103,7 @@ jobs:
           # This account never opened the dashboard, so there is no organization yet: no projects,
           # and the first project create founds it.
           keel project list | jq -e '.ok and .projects == []'
-          keel project create "CI App" --link | jq -e '.ok and .project.slug == "ci-app" and .project.environments[0].name == "production"'
+          keel project create "CI App" --link | jq -e '.ok and .project.slug == "ci-app" and .project.environments[0].name == "production" and .url == "http://" + env.KEEL_ADDR + "/p/ci-app"'
           ! keel project create ci-app > taken.json
           jq -e '.code == "NAME_TAKEN"' taken.json
           keel service create api --image nginx:alpine --port 8080 --replicas 2 \

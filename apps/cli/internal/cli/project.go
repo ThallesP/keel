@@ -103,12 +103,16 @@ also links this directory to it, as keel link does.`,
 					return oe
 				}
 			}
+			// The dashboard has no project switcher yet: this is the way in for a person.
+			canvas := s.inst.URL + "/p/" + p.Slug
 			a.out.Result(struct {
 				Project keel.Project `json:"project"`
+				// Its canvas in the dashboard.
+				URL string `json:"url"`
 				// The directory now linked to it, with --link.
 				Linked string `json:"linked,omitempty"`
-			}{*p, dir}, func(w io.Writer) {
-				fmt.Fprintf(w, "Created project %s\n", p.Slug)
+			}{*p, canvas, dir}, func(w io.Writer) {
+				fmt.Fprintf(w, "Created project %s: %s\n", p.Slug, canvas)
 				if dir != "" {
 					fmt.Fprintf(w, "Linked %s to it. Next: keel service create <name> --image <ref>\n", dir)
 				} else {

@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import { components } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
-import { currentMembership, NO_ORGANIZATION, requireUser } from "./access";
+import { currentMembership, NO_ORGANIZATION, requireMembership, requireUser } from "./access";
 import { uniqueName } from "./nodeHelpers";
 
 const DEFAULT = { name: "acme-support", slug: "acme-support" };
@@ -99,5 +99,40 @@ export const getBySlug = query({
       slug: project.slug,
       environment: { id: environment._id, name: environment.name },
     };
+  },
+});
+
+/**
+ * Every project of the signed-in user's organization with its environments, production first.
+ * Throws instead of returning [] without a membership: the CLI tells "no projects" from "not in
+ * an organization".
+ */
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    const { organizationId } = await requireMembership(ctx);
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+      .collect();
+    return await Promise.all(
+      projects.map(async (p) => {
+        const environments = await ctx.db
+          .query("environments")
+          .withIndex("by_project", (q) => q.eq("projectId", p._id))
+          .collect();
+        environments.sort((a, b) => Number(b.isProduction) - Number(a.isProduction));
+        return {
+          id: p._id,
+          name: p.name,
+          slug: p.slug,
+          environments: environments.map((e) => ({
+            id: e._id,
+            name: e.name,
+            isProduction: e.isProduction,
+          })),
+        };
+      }),
+    );
   },
 });

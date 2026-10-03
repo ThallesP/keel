@@ -19,6 +19,12 @@ Differentiator: UI/UX and deploy DX.
 - Control plane = `deploy/compose.yml` (self-hosted Convex + web). Images `ghcr.io/thallesp/keel-{web,functions,worker}` come from `.github/workflows/images.yml`. `ci.yml` runs `install.sh` end to end; anything that changes install behaviour must keep it green.
 - Web gets its Convex URLs at runtime (`/config.js`, `apps/web/src/lib/config.ts`). Never bake deployment URLs into the web build.
 
+## CLI
+
+- `apps/cli` is `keel`, a Go CLI for agents first (Railway CLI is the benchmark). Thin client over the public Convex functions over Convex's HTTP API; it finds an install through the dashboard's `/config.js`, so keep that file's shape.
+- Its output contract (JSON envelope like `install.sh`, error codes, exit codes) is in `apps/cli/README.md`. Fields and codes are only ever added.
+- It maps Convex errors to codes by their `ConvexError` message (`translate` in `internal/keel/api.go`); rewording one of those messages means updating it there.
+
 ## Design docs
 
 - `docs/canvas.md` — v1 canvas UI spec (layout, nodes, edges, bottom panel, ship flow, tokens, React Flow mapping, where to start). Read before any UI work.

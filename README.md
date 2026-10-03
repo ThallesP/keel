@@ -39,7 +39,7 @@ Every port binds to the tailnet IP only:
 | 3210 | Convex API |
 | 3211 | Convex HTTP actions |
 
-Swarm's ports (2377, 7946, 4789) are on the tailnet as well. Anyone who can reach the dashboard on your tailnet can create an account.
+Swarm's ports (2377, 7946, 4789) are on the tailnet as well. The first account created owns the install; after that, sign-up is by invitation only (account menu → Invite people).
 
 ### Upgrade
 
@@ -124,6 +124,8 @@ scripts/bootstrap-swarm.sh        # one-time: Swarm on the tailnet IP, `keel` ne
 The web app reads `VITE_CONVEX_URL` / `VITE_CONVEX_SITE_URL` from `apps/web/.env` in dev. An installed Keel serves them at runtime from `/config.js` instead (`apps/web/src/lib/config.ts`), so one image works on every server.
 
 Checks: `bun run check-types`, `bun run check` (Oxlint + Oxfmt).
+
+Auth is Better Auth on a locally installed Convex component (`packages/backend/convex/betterAuth`). After changing its plugins in `convex/auth.ts`, regenerate the component schema: `bun scripts/generate-auth-schema.ts` in `packages/backend`.
 
 ### Layout
 

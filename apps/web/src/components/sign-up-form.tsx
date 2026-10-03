@@ -7,29 +7,42 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
+/** An invite link (`/invite/$invitationId`): the account it creates joins that organization. */
+export type Invitation = { id: string; email: string; organization: string };
+
+export default function SignUpForm({
+  onSwitchToSignIn,
+  invitation,
+  onSuccess,
+}: {
+  onSwitchToSignIn?: () => void;
+  invitation?: Invitation;
+  onSuccess?: () => void;
+}) {
   const form = useForm({
     defaultValues: {
-      email: "",
+      email: invitation?.email ?? "",
       password: "",
       name: "",
     },
     onSubmit: async ({ value }) => {
-      await authClient.signUp.email(
-        {
-          email: value.email,
-          password: value.password,
-          name: value.name,
+      // `invitationId` is not a user field; the server's sign-up hook reads it from the body
+      // (convex/auth.ts) to admit the account and add it to the organization.
+      const body = {
+        email: value.email,
+        password: value.password,
+        name: value.name,
+        ...(invitation && { invitationId: invitation.id }),
+      };
+      await authClient.signUp.email(body, {
+        onSuccess: () => {
+          toast.success("Sign up successful");
+          onSuccess?.();
         },
-        {
-          onSuccess: () => {
-            toast.success("Sign up successful");
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
-          },
+        onError: (error) => {
+          toast.error(error.error.message || error.error.statusText);
         },
-      );
+      });
     },
     validators: {
       onSubmit: z.object({
@@ -42,7 +55,14 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
   return (
     <div className="w-full max-w-sm rounded-lg border border-line bg-bg p-8 shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]">
-      <h1 className="mb-6 text-lg font-semibold tracking-tight text-ink">Create Account</h1>
+      <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">
+        {invitation ? `Join ${invitation.organization}` : "Create Account"}
+      </h1>
+      <p className="mb-6 text-xs text-muted-foreground">
+        {invitation
+          ? "You were invited. Pick a name and a password to create your account."
+          : "The first account owns this Keel; everyone else joins by invitation."}
+      </p>
 
       <form
         onSubmit={(e) => {
@@ -60,6 +80,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
                 <Input
                   id={field.name}
                   name={field.name}
+                  autoFocus
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -86,6 +107,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
+                  disabled={invitation !== undefined}
                 />
                 {field.state.meta.errors.map((error, index) => (
                   <p key={`${field.name}-error-${index}`} className="text-red-500">
@@ -125,21 +147,23 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         >
           {({ canSubmit, isSubmitting }) => (
             <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign Up"}
+              {isSubmitting ? "Submitting..." : invitation ? "Join" : "Sign Up"}
             </Button>
           )}
         </form.Subscribe>
       </form>
 
-      <div className="mt-4 text-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignIn}
-          className="text-indigo-600 hover:text-indigo-800"
-        >
-          Already have an account? Sign In
-        </Button>
-      </div>
+      {onSwitchToSignIn && (
+        <div className="mt-4 text-center">
+          <Button
+            variant="link"
+            onClick={onSwitchToSignIn}
+            className="text-indigo-600 hover:text-indigo-800"
+          >
+            Already have an account? Sign In
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

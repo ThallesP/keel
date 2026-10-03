@@ -51,6 +51,8 @@ jobs:
           post() { curl -fsS -X POST -H 'Content-Type: application/json' -H "Origin: http://$KEEL_ADDR" "$site/api/auth/$1" -d "$2"; }
           post sign-up/email "{$creds,\"name\":\"CI\"}" | jq -e .user.id
           post sign-in/email "{$creds}" | jq -e .token
+          # Once an account exists, sign-up is by invitation only.
+          ! post sign-up/email '{"email":"second@example.com","password":"correct-horse-battery","name":"Second"}'
       - name: Re-run is idempotent
         run: |
           secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }

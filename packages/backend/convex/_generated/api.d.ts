@@ -23,6 +23,7 @@ import type * as logs from "../logs.js";
 import type * as nodeHelpers from "../nodeHelpers.js";
 import type * as nodes from "../nodes.js";
 import type * as nodesInternal from "../nodesInternal.js";
+import type * as organizations from "../organizations.js";
 import type * as privateData from "../privateData.js";
 import type * as projects from "../projects.js";
 import type * as reconcile from "../reconcile.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   nodeHelpers: typeof nodeHelpers;
   nodes: typeof nodes;
   nodesInternal: typeof nodesInternal;
+  organizations: typeof organizations;
   privateData: typeof privateData;
   projects: typeof projects;
   reconcile: typeof reconcile;
@@ -89,5 +91,5 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+  betterAuth: import("../betterAuth/_generated/component.js").ComponentApi<"betterAuth">;
 };

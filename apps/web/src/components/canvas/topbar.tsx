@@ -10,6 +10,7 @@ import { useEnvironment } from "./environment";
 import { formatElapsed } from "./format";
 import { notWired } from "./not-wired";
 import { Kbd, Spinner } from "./primitives";
+import { ProjectSwitcher } from "./project-switcher";
 import { useLatestDeployment, useSummary } from "./use-data";
 import { useHotkey } from "./use-hotkey";
 import { useNow } from "./use-now";
@@ -103,13 +104,13 @@ function ShipButton() {
 }
 
 export function Topbar() {
-  const { projectName, environmentName } = useEnvironment();
+  const { environmentName } = useEnvironment();
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-line bg-bg px-4">
       <div className="flex items-center gap-3.5">
         <Logo />
         <span className="text-md text-line">/</span>
-        <span className="text-sm font-medium text-ink">{projectName}</span>
+        <ProjectSwitcher />
         <span className="text-md text-line">/</span>
         <button
           type="button"

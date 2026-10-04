@@ -16,7 +16,7 @@ export const route = getRouteApi("/_auth/p/$projectId");
 /** What logSinks.get returns for an Axiom sink; never the token. */
 export type Sink = { domain: string; dataset: string; traces: string | null; org: string | null };
 
-/** "via Axiom · org · keel-x + keel-x-traces" */
+/** "via Axiom · org · keel-logs + keel-traces" */
 export const viaAxiom = (sink: Sink) =>
   `via Axiom · ${sink.org ? `${sink.org} · ` : ""}${sink.dataset}${sink.traces ? ` + ${sink.traces}` : ""}`;
 
@@ -57,15 +57,15 @@ export function SearchField({
   );
 }
 
-/** Back to Docker logs and no traces. Shipped data stays in Axiom. */
+/** Back to Docker logs and no traces, for every project. Shipped data stays in Axiom. */
 export function DisconnectButton() {
-  const { projectId } = useEnvironment();
   const disconnect = useMutation(api.logSinks.disconnect);
   return (
     <button
       type="button"
+      title="Every project goes back to Docker logs"
       onClick={() =>
-        void attempt(disconnect({ projectId })).then(() => toast("Axiom disconnected"))
+        void attempt(disconnect({})).then(() => toast("Axiom disconnected for every project"))
       }
       className="text-muted-foreground hover:text-danger"
     >

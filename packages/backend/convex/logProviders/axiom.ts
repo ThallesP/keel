@@ -6,8 +6,13 @@ import type { LogLine, ProjectLine, ProjectTail, Replica, Tail } from "./types";
 
 export type AxiomConfig = { domain: string; dataset: string; token: string };
 
-/** The traces dataset Keel creates next to `dataset` (Axiom wants one dataset per OTel signal). */
-export const tracesDataset = (dataset: string) => `${dataset}-traces`;
+/**
+ * The datasets Sign in with Axiom provisions. A Keel organization's sink holds every one of its
+ * projects, and the names are fixed rather than per Keel organization: Axiom's free plan stops at
+ * 3 datasets per org. Lines carry `service_id` and every log query filters on it; traces are not
+ * scoped yet (docs/logs.md). Two because Axiom wants one dataset per OTel signal.
+ */
+export const SHARED_DATASETS = { logs: "keel-logs", traces: "keel-traces" } as const;
 
 /** Axiom dataset names: letters, digits, `-` `_` `.`; must not start with a dot or dash. */
 export const DATASET_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
@@ -318,17 +323,31 @@ export async function axiomExchange(
   return data.access_token;
 }
 
-/** `aud` of a JWT, for error messages. Never the token. */
-function audience(token: string) {
+/** A JWT's claims, unverified (the token came straight from Axiom's token endpoint). */
+function claims(token: string): Record<string, unknown> | null {
   try {
-    const claims = JSON.parse(atob(token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")));
-    return JSON.stringify(claims.aud ?? null);
+    return JSON.parse(atob(token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")));
   } catch {
-    return "(not a JWT)";
+    return null;
   }
 }
 
-export type AxiomOrg = { id: string; name: string; domain: string };
+/** `aud` of a JWT, for error messages. Never the token. */
+function audience(token: string) {
+  const c = claims(token);
+  return c ? JSON.stringify(c.aud ?? null) : "(not a JWT)";
+}
+
+/**
+ * The org picked on Axiom's consent page: the sign-in token's `axiomDefaultOrg` claim (an org id
+ * like `ramp-vcrw`; seen 2026-10-03, undocumented). Null if absent.
+ */
+export function axiomChosenOrg(token: string) {
+  const org = claims(token)?.axiomDefaultOrg;
+  return typeof org === "string" ? org : null;
+}
+
+export type AxiomOrg = { id: string; name: string; domain: string; maxDatasets?: number };
 
 /** Orgs the personal token can see, each with the API host its data lives on. */
 export async function axiomOrgs(token: string): Promise<AxiomOrg[]> {
@@ -345,10 +364,12 @@ export async function axiomOrgs(token: string): Promise<AxiomOrg[]> {
     name: string;
     defaultEdgeDeployment?: string;
     region?: string;
+    license?: { maxDatasets?: number };
   }[];
   return orgs.map((o) => ({
     id: o.id,
     name: o.name,
+    maxDatasets: o.license?.maxDatasets,
     // `cloud.eu-central-1.aws` (or the deprecated `region`) → the EU host.
     domain:
       api ?? (/eu-/.test(o.defaultEdgeDeployment ?? o.region ?? "") ? DOMAINS[1] : DOMAINS[0]),
@@ -356,27 +377,49 @@ export async function axiomOrgs(token: string): Promise<AxiomOrg[]> {
 }
 
 /**
- * With the personal token: create the logs dataset and its traces dataset (if missing) and mint
- * one API token that can only ingest into and query those two. Returns the sink config to store.
+ * With the personal token: create the shared logs and traces datasets (if missing) and mint one
+ * API token, named `label`, that can only ingest into and query those two. Returns the sink
+ * config to store.
  */
 export async function axiomProvision(
   token: string,
   org: AxiomOrg,
-  dataset: string,
   label: string,
 ): Promise<AxiomConfig & { traces: string }> {
-  const traces = tracesDataset(dataset);
-  if (!DATASET_RE.test(traces)) throw new Error("Dataset name: letters, digits, - _ . only");
+  const { logs: dataset, traces } = SHARED_DATASETS;
   const datasets = [
     [dataset, "Keel container logs"],
     [traces, "Keel OpenTelemetry traces"],
   ] as const;
-  for (const [name, description] of datasets) {
+  // Signing in again, or from another Keel install, finds both already there. Past its plan's
+  // dataset cap Axiom answers a create with a bare `400 Bad Request` (3 on the free plan, seen
+  // 2026-10-03), so the cap is checked first to say what to delete.
+  const existing = await personal(org.domain, token, org.id, "/v2/datasets")
+    .then((res) => res.json() as Promise<{ name: string }[]>)
+    .catch((err: Error) => {
+      throw new Error(`Listing datasets: ${err.message}`);
+    });
+  const have = new Set(existing.map((d) => d.name));
+  const missing = datasets.filter(([name]) => !have.has(name));
+  // Only when something has to be created: an org already past its cap (a plan downgrade) that
+  // has both datasets signs in fine.
+  if (
+    missing.length > 0 &&
+    org.maxDatasets !== undefined &&
+    have.size + missing.length > org.maxDatasets
+  ) {
+    throw new Error(
+      `${org.name} is at its Axiom plan's limit of ${org.maxDatasets} datasets ` +
+        `(${[...have].join(", ")}). Keel needs ${missing.map(([name]) => name).join(" and ")}: ` +
+        `delete ${have.size + missing.length - org.maxDatasets} in Axiom or pick another org.`,
+    );
+  }
+  for (const [name, description] of missing) {
     await personal(org.domain, token, org.id, "/v2/datasets", {
       method: "POST",
       body: JSON.stringify({ name, description }),
     }).catch((err: Error) => {
-      if (!/exists|409/i.test(err.message)) throw err;
+      throw new Error(`Creating ${name}: ${err.message}`);
     });
   }
   const scope = { ingest: ["create"], query: ["read"] };
@@ -388,6 +431,8 @@ export async function axiomProvision(
       datasetCapabilities: { [dataset]: scope, [traces]: scope },
       orgCapabilities: {},
     }),
+  }).catch((err: Error) => {
+    throw new Error(`Minting the ingest token: ${err.message}`);
   });
   const minted = (await res.json()) as { token?: string };
   if (!minted.token) throw new Error("Axiom did not return a token");

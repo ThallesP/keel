@@ -50,7 +50,11 @@ function AxiomCallback() {
     }
     signIn({ state: search.state, code: search.code })
       .then((r) => {
-        if (!r.choose) toast.success(`Logs and traces now go to Axiom · ${r.org} · ${r.dataset}`);
+        if (!r.choose) {
+          toast.success(
+            `Every project's logs and traces now go to Axiom · ${r.org} · ${r.dataset}`,
+          );
+        }
       })
       .catch((err) => toast.error(errorMessage(err)))
       .finally(() => void back());

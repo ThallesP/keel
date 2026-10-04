@@ -5,17 +5,16 @@ import { toast } from "sonner";
 
 import { axiomRedirectUri, goToAxiom } from "@/lib/axiom-sign-in";
 
-import { useEnvironment } from "../environment";
 import { attempt } from "../errors";
 import { formatDuration, formatLogTime } from "../format";
 import { Spinner } from "../primitives";
 import { route } from "./chrome";
 
 /**
- * Sign in with Axiom: one sign-in sets up both the logs and the traces dataset (docs/logs.md).
- * Without a sink the Observability page is a gate, the card drawn over a blurred fake stream. A
- * project connected before traces existed has no traces dataset; its page carries a banner that
- * runs the same sign-in again.
+ * Sign in with Axiom: one sign-in sets up both the logs and the traces dataset, for every project
+ * of the organization (docs/logs.md). Without a sink the Observability page is a gate, the card
+ * drawn over a blurred fake stream. A sink connected before traces existed has no traces dataset;
+ * the page carries a banner that runs the same sign-in again.
  */
 
 export function AxiomGate() {
@@ -26,7 +25,7 @@ export function AxiomGate() {
       <div className="relative w-[380px] rounded-lg border border-line bg-bg p-6 shadow-[0_12px_40px_rgba(11,18,32,0.10)]">
         <AxiomSignIn
           title="Set up Axiom"
-          copy="Requests and logs from every service in one stream, searchable, each line one click from its trace."
+          copy="Requests and logs from every service in one stream, searchable, each line one click from its trace. One sign-in covers every project."
         />
       </div>
     </div>
@@ -35,8 +34,7 @@ export function AxiomGate() {
 
 /** Connected, but before traces existed: signing in again adds the traces dataset. */
 export function TracesBanner() {
-  const { projectId } = useEnvironment();
-  const orgs = useQuery(api.logSinks.pendingOrgs, { projectId });
+  const orgs = useQuery(api.logSinks.pendingOrgs, {});
   if (orgs) {
     return (
       <div className="w-[380px] rounded-lg border border-line p-6">
@@ -136,13 +134,12 @@ function AxiomMark({ size = 14 }: { size?: number }) {
 
 /** Starts the sign-in: Axiom's authorize page, then /axiom/callback back to this project. */
 function useSignIn() {
-  const { projectId } = useEnvironment();
   const { projectId: slug } = route.useParams();
   const begin = useAction(api.logSinks.beginAxiomSignIn);
   const [busy, setBusy] = useState(false);
   const signIn = async () => {
     setBusy(true);
-    const r = await attempt(begin({ projectId, redirectUri: axiomRedirectUri() }));
+    const r = await attempt(begin({ redirectUri: axiomRedirectUri() }));
     if (r) goToAxiom(r.url, { slug });
     else setBusy(false);
   };
@@ -171,18 +168,17 @@ function SignInButton({ compact = false }: { compact?: boolean }) {
 
 /** The card: Sign in with Axiom, or the org picker while a sign-in with several orgs is pending. */
 function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
-  const { projectId } = useEnvironment();
-  const { projectId: slug } = route.useParams();
-  const orgs = useQuery(api.logSinks.pendingOrgs, { projectId });
+  const orgs = useQuery(api.logSinks.pendingOrgs, {});
   const chooseOrg = useAction(api.logSinks.chooseAxiomOrg);
   const cancel = useMutation(api.logSinks.cancelAxiomSignIn);
   const [busy, setBusy] = useState<string | null>(null);
 
   const pick = async (orgId: string) => {
     setBusy(orgId);
-    const r = await attempt(chooseOrg({ projectId, orgId }));
+    const r = await attempt(chooseOrg({ orgId }));
     setBusy(null);
-    if (r) toast.success(`Logs and traces now go to Axiom · ${r.org} · ${r.dataset}`);
+    if (r)
+      toast.success(`Every project's logs and traces now go to Axiom · ${r.org} · ${r.dataset}`);
   };
 
   if (orgs) {
@@ -190,8 +186,10 @@ function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
       <>
         <h2 className="text-md font-semibold text-ink">Pick an Axiom organization</h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Keel creates the <span className="font-mono text-xs text-ink">keel-{slug}</span> and{" "}
-          <span className="font-mono text-xs text-ink">keel-{slug}-traces</span> datasets there.
+          Logs and traces of every project go to the{" "}
+          <span className="font-mono text-xs whitespace-nowrap text-ink">keel-logs</span> and{" "}
+          <span className="font-mono text-xs whitespace-nowrap text-ink">keel-traces</span> datasets
+          there.
         </p>
         <div className="mt-4 flex flex-col gap-1.5">
           {orgs.map((o) => (
@@ -210,7 +208,7 @@ function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
         <button
           type="button"
           disabled={busy !== null}
-          onClick={() => void attempt(cancel({ projectId }))}
+          onClick={() => void attempt(cancel({}))}
           className="mt-3 text-xs text-muted-foreground hover:text-ink"
         >
           Cancel

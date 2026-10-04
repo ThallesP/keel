@@ -11,7 +11,7 @@ We do **not** ship a per-node reconciler agent. Joining a server is a script tha
 One thing does run on every node: `keel-worker`, a Swarm **global service** built from `apps/worker` (Bun, no dependencies, ~600 lines) and deployed by `scripts/deploy-worker.sh`. It is not a reconciler: the socket is mounted read-only, every Docker call it makes is a GET, nothing listens, and it only talks outbound to the Convex HTTP router under one bearer token (`KEEL_WORKER_TOKEN`). Swarm schedules it onto new nodes by itself, so the join flow is still plain `docker swarm join`. Two jobs today:
 
 - **Events** (`src/events.ts`): streams that node's `docker events` to `POST /worker/events`. `scope=local` events (container start/die) are only visible on the daemon that runs the container, and observation must be event-driven, not polled.
-- **Logs** (`src/logs.ts`): follows every `svc-*` container's stdout/stderr and ships it to the project's log sink, when one is configured. Config comes from `GET /worker/config`, polled every 30s. See [`logs.md`](./logs.md).
+- **Logs** (`src/logs.ts`): follows every `svc-*` container's stdout/stderr and ships it to its organization's log sink, when one is configured. Config comes from `GET /worker/config`, polled every 30s. See [`logs.md`](./logs.md).
 
 Anything that needs to run on the node itself (metrics, exec into a container, volume rsync in [`volumes.md`](./volumes.md)) goes into this worker rather than a new service. It replaced the 60-line `docker:cli` shell forwarder (`infra/events-sidecar`, removed 2026-09-20) because a shell script could not follow logs, batch, or resume per container.
 

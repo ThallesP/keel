@@ -24,6 +24,7 @@ import type * as nodeHelpers from "../nodeHelpers.js";
 import type * as nodes from "../nodes.js";
 import type * as nodesInternal from "../nodesInternal.js";
 import type * as organizations from "../organizations.js";
+import type * as otlp from "../otlp.js";
 import type * as privateData from "../privateData.js";
 import type * as projects from "../projects.js";
 import type * as reconcile from "../reconcile.js";
@@ -33,6 +34,8 @@ import type * as timeRange from "../timeRange.js";
 import type * as traceProviders_axiom from "../traceProviders/axiom.js";
 import type * as traceProviders_types from "../traceProviders/types.js";
 import type * as traces from "../traces.js";
+import type * as tracing from "../tracing.js";
+import type * as tracingPrompt from "../tracingPrompt.js";
 import type * as variables from "../variables.js";
 import type * as worker from "../worker.js";
 
@@ -59,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   nodes: typeof nodes;
   nodesInternal: typeof nodesInternal;
   organizations: typeof organizations;
+  otlp: typeof otlp;
   privateData: typeof privateData;
   projects: typeof projects;
   reconcile: typeof reconcile;
@@ -68,6 +72,8 @@ declare const fullApi: ApiFromModules<{
   "traceProviders/axiom": typeof traceProviders_axiom;
   "traceProviders/types": typeof traceProviders_types;
   traces: typeof traces;
+  tracing: typeof tracing;
+  tracingPrompt: typeof tracingPrompt;
   variables: typeof variables;
   worker: typeof worker;
 }>;

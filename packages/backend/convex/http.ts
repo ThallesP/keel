@@ -3,6 +3,7 @@ import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { traces } from "./otlp";
 
 const http = httpRouter();
 
@@ -94,5 +95,9 @@ http.route({
     });
   }),
 });
+
+// OTLP/HTTP spans from services with tracing on and from `keel run`, bearer = the environment's
+// ingest key (otlp.ts). Relayed unchanged to the organization's traces dataset.
+http.route({ path: "/otlp/v1/traces", method: "POST", handler: traces });
 
 export default http;

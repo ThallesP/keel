@@ -89,6 +89,52 @@ type LogLine struct {
 	Text   string `json:"text"`
 }
 
+// TraceSummary is one request: a trace's root span, with counts over the whole trace.
+type TraceSummary struct {
+	TraceID    string  `json:"traceId"`
+	Name       string  `json:"name"`
+	Service    string  `json:"service"`
+	Start      Time    `json:"start"`
+	DurationMs float64 `json:"durationMs"`
+	HTTPStatus *Int    `json:"httpStatus"`
+	Spans      Int     `json:"spans"`
+	Errors     Int     `json:"errors"`
+	Error      bool    `json:"error"`
+	// From a `keel run` on someone's machine, not a deploy.
+	Local bool `json:"local"`
+}
+
+// TraceStats counts requests (root spans) over a range; percentiles are null with none.
+type TraceStats struct {
+	Requests Int      `json:"requests"`
+	Errors   Int      `json:"errors"`
+	P50Ms    *float64 `json:"p50Ms"`
+	P95Ms    *float64 `json:"p95Ms"`
+	P99Ms    *float64 `json:"p99Ms"`
+}
+
+type Traces struct {
+	Stats TraceStats `json:"stats"`
+	// Newest first, at most 100.
+	Traces []TraceSummary `json:"traces"`
+}
+
+// Tracing is a service's tracing switch and the OTEL_* variables it gives the service.
+type Tracing struct {
+	Enabled bool `json:"enabled"`
+	// off: no Axiom sink; old: a sink from before traces; on: spans have somewhere to go.
+	Store string       `json:"store"`
+	Env   []TracingVar `json:"env"`
+}
+
+type TracingVar struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Secret bool   `json:"secret"`
+	// The service sets this key itself, and its own value wins.
+	Overridden bool `json:"overridden"`
+}
+
 type Deployment struct {
 	ID         string     `json:"id"`
 	Status     string     `json:"status"` // running | success | failed
@@ -251,6 +297,91 @@ func (a *API) Tail(ctx context.Context, serviceID string, lines int) (*Tail, err
 	return &t, nil
 }
 
+// Traces is the requests of the environment, or of one service, over the last `since`
+// (15m, 1h, 24h or 7d), optionally only those whose name or service contains search.
+func (a *API) Traces(ctx context.Context, environmentID, serviceID, since, search string) (*Traces, error) {
+	in := args{"environmentId": environmentID, "range": since}
+	if serviceID != "" {
+		in["nodeId"] = serviceID
+	}
+	if search != "" {
+		in["search"] = search
+	}
+	var o struct {
+		Stats struct {
+			Requests Int      `json:"requests"`
+			Errors   Int      `json:"errors"`
+			P50      *float64 `json:"p50"`
+			P95      *float64 `json:"p95"`
+			P99      *float64 `json:"p99"`
+		} `json:"stats"`
+		Traces []struct {
+			TraceSummary
+			Duration float64 `json:"duration"`
+		} `json:"traces"`
+	}
+	if err := a.action(ctx, "traces:overview", in, &o); err != nil {
+		return nil, err
+	}
+	out := &Traces{
+		Stats:  TraceStats{Requests: o.Stats.Requests, Errors: o.Stats.Errors, P50Ms: o.Stats.P50, P95Ms: o.Stats.P95, P99Ms: o.Stats.P99},
+		Traces: make([]TraceSummary, len(o.Traces)),
+	}
+	for i, t := range o.Traces {
+		out.Traces[i] = t.TraceSummary
+		out.Traces[i].DurationMs = t.Duration
+	}
+	return out, nil
+}
+
+// Tracing is nil for anything but a service.
+func (a *API) Tracing(ctx context.Context, serviceID string) (*Tracing, error) {
+	var t *struct {
+		Enabled bool         `json:"enabled"`
+		Traces  string       `json:"traces"`
+		Env     []TracingVar `json:"env"`
+	}
+	if err := a.query(ctx, "tracing:forNode", args{"nodeId": serviceID}, &t); err != nil || t == nil {
+		return nil, err
+	}
+	return &Tracing{Enabled: t.Enabled, Store: t.Traces, Env: t.Env}, nil
+}
+
+// SetTracing turns a service's tracing on or off. Staged, like a variable: keel ship applies it.
+func (a *API) SetTracing(ctx context.Context, serviceID string, on bool) error {
+	return a.action(ctx, "tracing:enable", args{"nodeId": serviceID, "on": on}, nil)
+}
+
+// LocalTracingEnv is the tracing variables of a local run of a service, without the endpoint.
+// Nil with the reason when the organization has nowhere to store traces.
+func (a *API) LocalTracingEnv(ctx context.Context, serviceID string) (map[string]string, string, error) {
+	var r struct {
+		Env    map[string]string `json:"env"`
+		Reason *string           `json:"reason"`
+	}
+	if err := a.action(ctx, "tracing:localEnv", args{"nodeId": serviceID}, &r); err != nil {
+		return nil, "", err
+	}
+	if r.Reason != nil {
+		return nil, *r.Reason, nil
+	}
+	return r.Env, "", nil
+}
+
+// TracingPrompt is the agent prompt, naming the service or the environment's project when given.
+func (a *API) TracingPrompt(ctx context.Context, serviceID, environmentID string) (string, error) {
+	in := args{}
+	if serviceID != "" {
+		in["nodeId"] = serviceID
+	}
+	if environmentID != "" {
+		in["environmentId"] = environmentID
+	}
+	var prompt string
+	err := a.query(ctx, "tracing:prompt", in, &prompt) // before reading prompt: Go leaves operand order open
+	return prompt, err
+}
+
 // StartDeployment ships the staged changes of an environment, or only these services when given.
 // refresh re-pulls images (Redeploy); otherwise the nodes' image cache is used.
 func (a *API) StartDeployment(ctx context.Context, environmentID string, only []string, refresh bool) (string, error) {
@@ -372,6 +503,10 @@ func translate(err error, webURL string) error {
 				"Nothing to ship: no service has staged changes")
 		case msg == "Node not found":
 			return output.Errorf(output.CodeServiceNotFound, "keel service list", "Service not found")
+		case msg == "Connect Axiom to see traces" || msg == "Sign in with Axiom again to turn on traces":
+			return output.Errorf(output.CodeTracesOff,
+				"Open Observability in the dashboard ("+webURL+") and Sign in with Axiom",
+				"%s", msg)
 		case msg == "Environment not found":
 			return output.Errorf(output.CodeProjectNotFound, "keel project list", "Environment not found")
 		case strings.HasPrefix(msg, `Project "`) && strings.HasSuffix(msg, `" already exists`):

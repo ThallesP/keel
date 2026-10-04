@@ -6,6 +6,7 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useAction } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { CopyPrompt } from "../copy-prompt";
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
 import { formatTimestamp } from "../format";
@@ -270,7 +271,7 @@ function Overview({
             </>
           )}
           {sink.traces && numbers && numbers.stats.requests === 0 && !filter && (
-            <NoRequests sink={sink} dataset={sink.traces} long={long} />
+            <NoRequests environmentId={environmentId} long={long} />
           )}
         </div>
         <section className="flex flex-col gap-2">
@@ -312,32 +313,22 @@ function counts(events: StreamEvent[]) {
   return `${part(requests, "request", "requests")} · ${part(lines, "line", "lines")}`;
 }
 
-/** No request in range: how to get spans into the dataset until Keel forwards OTLP itself. */
-function NoRequests({ sink, dataset, long }: { sink: Sink; dataset: string; long: string }) {
-  const endpoint = sink.domain.includes("://") ? sink.domain : `https://${sink.domain}`;
-  const env = [
-    `OTEL_EXPORTER_OTLP_ENDPOINT=${endpoint}`,
-    "OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
-    `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20<axiom token>,X-Axiom-Dataset=${dataset}`,
-    "OTEL_SERVICE_NAME=<service>",
-  ].join("\n");
+/**
+ * No request in range: how to get some. A coding agent instruments the service with the prompt
+ * and checks its own work with `keel run` + `keel traces`; then the service's Tracing switch and
+ * a Ship send its deployed requests here too (docs/logs.md "Traces").
+ */
+function NoRequests({ environmentId, long }: { environmentId: Id<"environments">; long: string }) {
   return (
-    <details className="rounded-lg border border-line px-4 py-3 text-xs text-muted-foreground">
-      <summary className="cursor-pointer">
-        <span className="font-medium text-ink">No requests in the last {long}.</span> Services that
-        export OpenTelemetry traces to{" "}
-        <span className="font-mono text-2xs text-ink">{dataset}</span> show up here, and their log
-        lines open their traces. How to send them
-      </summary>
-      <p className="mt-2">
-        Set these variables on a service that uses an OpenTelemetry SDK, with an Axiom API token
-        that can ingest into the dataset, then Ship. Name the service like its node so its requests
-        and lines share a colour; log through the SDK&apos;s logger instrumentation so lines carry
-        the trace id.
+    <div className="flex items-center gap-4 rounded-lg border border-line px-4 py-3 text-xs text-muted-foreground">
+      <p className="min-w-0 flex-1">
+        <span className="font-medium text-ink">No requests in the last {long}.</span> Paste the
+        prompt into your coding agent in a service&apos;s repo: it adds OpenTelemetry, runs the app
+        with <code className="font-mono text-2xs text-ink">keel run</code> and checks that its
+        requests show up here, marked <span className="font-mono text-2xs">local</span>. Then turn
+        on Tracing in the service&apos;s Variables tab and Ship.
       </p>
-      <pre className="mt-3 overflow-x-auto rounded-md bg-surface-2 px-3 py-2.5 font-mono text-2xs leading-[19px] text-ink select-all">
-        {env}
-      </pre>
-    </details>
+      <CopyPrompt environmentId={environmentId} />
+    </div>
   );
 }

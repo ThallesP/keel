@@ -225,7 +225,7 @@ function axiomOAuth() {
   };
 }
 
-const base64url = (bytes: Uint8Array) =>
+export const base64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")

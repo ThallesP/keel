@@ -48,6 +48,8 @@ export type TraceSummary = {
   spans: number;
   errors: number;
   error: boolean;
+  /** From a `keel run` on someone's machine (`deployment.environment.name=local`), not a deploy. */
+  local: boolean;
 };
 
 /** Root spans ("requests") in one time bucket. Percentiles are null in an empty bucket. */

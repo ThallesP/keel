@@ -21,6 +21,10 @@ keel logs api -n 200
 keel var set api LOG_LEVEL=debug                # staged, like the dashboard
 keel ship                                       # deploy staged changes, wait for the result
 keel redeploy api                               # pull the image again and roll out
+keel tracing prompt api | pbcopy                # instructions for a coding agent: add OpenTelemetry
+keel run api -- bun dev                         # local run with api's variables + tracing to Keel
+keel traces api --since 15m                     # the requests that arrived, local ones marked
+keel tracing enable api && keel redeploy api    # deployed api gets the OTEL_* variables
 ```
 
 | Command | What it does |
@@ -37,6 +41,11 @@ keel redeploy api                               # pull the image again and roll 
 | `service create <name> --image <ref> [--port N] [--replicas N]` | Stage a service, as dropping one on the canvas does; `keel ship <name>` deploys it. Port defaults to 80, replicas to 1 |
 | `service delete <service> [-y]` | Delete now, **not staged**: containers and variables go, services referencing it get staged changes. Asks with a terminal, needs `--yes` without one |
 | `logs <service> [-n N] [-f]` | Last N lines (default 100); `-f` polls until interrupted |
+| `traces [service] [--since 15m\|1h\|24h\|7d] [--search s]` | Latest requests (root spans), newest first, with counts and latency; `local: true` on those from `keel run`. `TRACES_OFF` when the organization has no Axiom traces dataset |
+| `run <service> -- <command...>` | Run a command here with the service's variables and tracing variables (`deployment.environment.name=local`, spans to Keel). The shell's own variables win; variables pointing at `svc-…` cluster hosts are left out with a warning. stdout is the command's; keel exits with its code. Signals keel gets reach the command; without a terminal, its whole process group (`npm run dev` and the node under it) |
+| `tracing prompt [service]` | Print the prompt that has a coding agent add OpenTelemetry to a repo and check it with `run` and `traces` (the dashboard's Copy agent prompt) |
+| `tracing enable\|disable <service>` | Stage the service's tracing switch: on, it gets the `OTEL_*` variables on the next ship |
+| `tracing status <service>` | The switch and the variables it sets |
 | `var list <service> [--show-secrets]` | Variables; secret values are `null` unless asked |
 | `var set <service> KEY=VALUE... [--secret]` | Stage variables |
 | `var delete <service> KEY...` | Stage deletions; fails without deleting anything if a key is missing |
@@ -51,10 +60,10 @@ keel redeploy api                               # pull the image again and roll 
 
 What agents rely on. Fields and codes are only ever added.
 
-- **stdout is results only.** Text or a table, or with `--json` / `KEEL_JSON=1` exactly one JSON object: `{"ok":true,...}`. `logs --follow --json` prints one object per line instead. Progress and warnings go to stderr.
+- **stdout is results only.** Text or a table, or with `--json` / `KEEL_JSON=1` exactly one JSON object: `{"ok":true,...}`. `logs --follow --json` prints one object per line instead, and `run` leaves stdout to the command it runs. Progress and warnings go to stderr.
 - **Errors** are `{"ok":false,"code":"…","error":"…","fix":"…"}` on stdout in JSON mode, and `error:` / `fix:` lines on stderr always, the same shape as `install.sh`. `fix` is the next command to run. A failed deployment adds `"deployment"`.
-- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `NAME_TAKEN` (project slug or service name in use), `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`.
-- **Exit codes:** 0 ok, 1 error, 2 usage, 4 not logged in (or the login awaits approval), 130 interrupted (`logs -f` exits 0 on Ctrl-C).
+- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `NAME_TAKEN` (project slug or service name in use), `TRACES_OFF` (no Axiom sink, or one from before traces), `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`.
+- **Exit codes:** 0 ok, 1 error, 2 usage, 4 not logged in (or the login awaits approval), 130 interrupted (`logs -f` exits 0 on Ctrl-C). `run` exits with its command's code (128 + signal when it was killed).
 - **No prompts without a terminal.** Missing input is a `USAGE` error naming the flag.
 - **Times** are RFC 3339 in UTC.
 
@@ -92,7 +101,7 @@ A new command: add the Convex call to `internal/keel/api.go` (its types are the 
 
 - Scoped API tokens for CI (better-auth `apiKey`), instead of a full session in `KEEL_TOKEN`.
 - `stop` / `start`, `expose` (returns the Quick Tunnel URL); `database create` / `cache create` with `--engine`.
-- `run -- <cmd>` with the service's resolved variables; `var set --stdin` so secrets stay out of argv.
+- `var set --stdin` so secrets stay out of argv.
 - `node list`, `--environment` once there is more than production.
 - `keel mcp` and an `llms.txt` generated from the command tree.
 - `up` once Keel builds from source.

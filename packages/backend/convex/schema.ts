@@ -17,6 +17,9 @@ export const desired = v.object({
   revision: v.number(),
   replicas: v.number(),
   port: v.optional(v.number()),
+  // service only: Keel sets the OTEL_* variables on it at apply time, pointing at the OTLP relay
+  // (tracing.ts, docs/logs.md "Traces"). Staged like any other change.
+  tracing: v.optional(v.boolean()),
 });
 
 // What Swarm reports. Only swarm.observeNode / swarm.observe write this.
@@ -243,4 +246,13 @@ export default defineSchema({
     token: v.string(),
     orgs: v.array(axiomOrg),
   }).index("by_organization", ["organizationId"]),
+
+  // The OTLP relay's ingest key of an environment (otlp.ts): what services and `keel run` send
+  // spans with, instead of the sink's token. At most one per environment, made on first use.
+  otlpKeys: defineTable({
+    environmentId: v.id("environments"),
+    key: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_environment", ["environmentId"]),
 });

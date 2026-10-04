@@ -401,7 +401,13 @@ export async function axiomProvision(
     });
   const have = new Set(existing.map((d) => d.name));
   const missing = datasets.filter(([name]) => !have.has(name));
-  if (org.maxDatasets !== undefined && have.size + missing.length > org.maxDatasets) {
+  // Only when something has to be created: an org already past its cap (a plan downgrade) that
+  // has both datasets signs in fine.
+  if (
+    missing.length > 0 &&
+    org.maxDatasets !== undefined &&
+    have.size + missing.length > org.maxDatasets
+  ) {
     throw new Error(
       `${org.name} is at its Axiom plan's limit of ${org.maxDatasets} datasets ` +
         `(${[...have].join(", ")}). Keel needs ${missing.map(([name]) => name).join(" and ")}: ` +

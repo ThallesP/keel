@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +104,17 @@ func TestRunEnv(t *testing.T) {
 	}
 	if env, _ := runEnv(shell, nil, nil, "x"); len(env) != len(shell) {
 		t.Errorf("no tracing: %v", env)
+	}
+	// An endpoint of the app's own: the ingest key does not go there.
+	tracing["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer%20keel_otlp_x"
+	for _, own := range []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"} {
+		env, _ := runEnv(append(slices.Clone(shell), own+"=https://collector.test"), nil, tracing, "x")
+		if slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "OTEL_EXPORTER_OTLP_HEADERS=") }) {
+			t.Errorf("own %s: Keel's headers were added: %v", own, env)
+		}
+	}
+	if env, _ := runEnv(shell, nil, tracing, "x"); !slices.Contains(env, "OTEL_EXPORTER_OTLP_HEADERS="+tracing["OTEL_EXPORTER_OTLP_HEADERS"]) {
+		t.Errorf("Keel's endpoint: headers missing: %v", env)
 	}
 }
 

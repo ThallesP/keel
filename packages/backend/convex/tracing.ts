@@ -57,6 +57,17 @@ export function tracingEnv(
 
 const keyOfEnv = (env: string) => env.slice(0, env.indexOf("="));
 
+const ENDPOINTS = ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"];
+
+/**
+ * Whether the service's own variables replace Keel's `k`: key by key, except that the ingest key
+ * only goes to Keel's endpoint, so a service that names its own endpoint gets no Keel headers.
+ * `keel run` applies the same rule (`runEnv` in apps/cli).
+ */
+function overridden(own: Set<string>, k: string) {
+  return own.has(k) || (k === HEADERS && ENDPOINTS.some((e) => own.has(e)));
+}
+
 /** A node's Swarm env (`KEY=value`) plus its tracing variables when it has tracing on. */
 export async function withTracing(ctx: QueryCtx, node: Doc<"nodes">, env: string[]) {
   if (!node.desired?.tracing) return env;
@@ -68,7 +79,7 @@ export async function withTracing(ctx: QueryCtx, node: Doc<"nodes">, env: string
   if (!environment || !key) return env;
   const own = new Set(env.map(keyOfEnv));
   const added = tracingEnv(node, environment, key, { local: false })
-    .filter(([k]) => !own.has(k))
+    .filter(([k]) => !overridden(own, k))
     .map(([k, value]) => `${k}=${value}`);
   return [...env, ...added];
 }
@@ -153,8 +164,8 @@ export const forNode = query({
         key: k,
         value,
         secret: k === HEADERS,
-        // The service sets this one itself, and its value wins.
-        overridden: own.has(k),
+        // The service sets this one itself (or its own endpoint), and its value wins.
+        overridden: overridden(own, k),
       })),
     };
   },

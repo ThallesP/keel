@@ -89,8 +89,9 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 
 // runEnv layers the environment of a local run: this shell, then the service's variables, then
 // its tracing variables, each only where the layer before left the key unset (a service's own
-// variables win over the tracing ones when it is deployed, too). Variables that only resolve in
-// the cluster are skipped and returned by key.
+// variables win over the tracing ones when it is deployed, too). The ingest key only goes to
+// Keel's endpoint: with an endpoint of its own set, the run gets no Keel headers (as tracing.ts
+// does when deployed). Variables that only resolve in the cluster are skipped and returned by key.
 func runEnv(shell []string, vars []keel.Variable, tracing map[string]string, endpoint string) ([]string, []string) {
 	out := slices.Clone(shell)
 	set := map[string]bool{}
@@ -115,6 +116,7 @@ func runEnv(shell []string, vars []keel.Variable, tracing map[string]string, end
 		add(v.Key, v.Resolved)
 	}
 	if tracing != nil {
+		ownEndpoint := set["OTEL_EXPORTER_OTLP_ENDPOINT"] || set["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]
 		add("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
 		keys := make([]string, 0, len(tracing))
 		for k := range tracing {
@@ -122,6 +124,9 @@ func runEnv(shell []string, vars []keel.Variable, tracing map[string]string, end
 		}
 		slices.Sort(keys)
 		for _, k := range keys {
+			if k == "OTEL_EXPORTER_OTLP_HEADERS" && ownEndpoint {
+				continue
+			}
 			add(k, tracing[k])
 		}
 	}

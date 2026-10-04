@@ -95,12 +95,12 @@ export const logLine = v.object({
   text: v.string(),
 });
 
-// Where a project's container logs go and where the Logs tab reads them from. `docker` (no row)
-// is the default: the Logs tab reads `docker service logs` from the manager and nothing is
-// shipped. A sink row means the per-node worker streams every container line of the project
-// there and the Logs tab queries the sink instead. Token is a secret: never leaves the server
-// except to the worker (bearer-protected /worker/config). The same sink holds the project's
-// OpenTelemetry traces (docs/logs.md "Traces").
+// Where an organization's container logs go and where the Logs tab reads them from. `docker` (no
+// row) is the default: the Logs tab reads `docker service logs` from the manager and nothing is
+// shipped. A sink row means the per-node worker streams every container line of every project in
+// the organization there and the Logs tab queries the sink instead. Token is a secret: never
+// leaves the server except to the worker (bearer-protected /worker/config). The same sink holds
+// the projects' OpenTelemetry traces (docs/logs.md "Traces").
 export const logSink = v.union(
   v.object({
     kind: v.literal("axiom"),
@@ -115,6 +115,16 @@ export const logSink = v.union(
     org: v.optional(v.string()),
   }),
 );
+
+/** An Axiom org as Sign in with Axiom lists it (logProviders/axiom.ts axiomOrgs). */
+export const axiomOrg = v.object({
+  id: v.string(),
+  name: v.string(),
+  // API host its data lives on.
+  domain: v.string(),
+  // Its plan's dataset cap (`license.maxDatasets`; 3 on the free Personal plan).
+  maxDatasets: v.optional(v.number()),
+});
 
 export type NodeType = Infer<typeof nodeType>;
 export type LogSink = Infer<typeof logSink>;
@@ -196,11 +206,16 @@ export default defineSchema({
   // Single row: ready Swarm nodes. Written by swarm.observe and, on `node` events, observeServers.
   cluster: defineTable({ servers: v.number(), at: v.number() }),
 
-  // At most one per project. See logSinks.ts and docs/logs.md.
+  // At most one per organization; every project of it ships there. See logSinks.ts and
+  // docs/logs.md.
   logSinks: defineTable({
-    projectId: v.id("projects"),
+    // A Better Auth organization id, like projects.organizationId. Unset only on rows from before
+    // sinks were per organization, which name their `projectId` instead: until a sign-in or
+    // Disconnect replaces them, the newest of an organization's stands in for its sink (sinkOf).
+    organizationId: v.optional(v.string()),
+    projectId: v.optional(v.id("projects")),
     sink: logSink,
-  }).index("by_project", ["projectId"]),
+  }).index("by_organization", ["organizationId"]),
 
   // Sign in with Axiom: the OAuth client this install registered with Axiom (DCR), one per
   // callback URL. Public client ids, not secrets. See logProviders/axiom.ts.
@@ -212,20 +227,20 @@ export default defineSchema({
   // Sign in with Axiom, between beginAxiomSignIn and Axiom's redirect back: the PKCE verifier
   // for `state`. Single use, 10 minutes. See logSinks.ts.
   axiomSignIns: defineTable({
-    projectId: v.id("projects"),
+    organizationId: v.string(),
     clientId: v.string(),
     state: v.string(),
     verifier: v.string(),
     redirectUri: v.string(),
   })
     .index("by_state", ["state"])
-    .index("by_project", ["projectId"]),
+    .index("by_organization", ["organizationId"]),
 
   // Sign in with Axiom, between the code exchange and the user picking one of several orgs.
   // Holds the personal token for at most 10 minutes; deleted on pick. See logSinks.ts.
   axiomPending: defineTable({
-    projectId: v.id("projects"),
+    organizationId: v.string(),
     token: v.string(),
-    orgs: v.array(v.object({ id: v.string(), name: v.string(), domain: v.string() })),
-  }).index("by_project", ["projectId"]),
+    orgs: v.array(axiomOrg),
+  }).index("by_organization", ["organizationId"]),
 });

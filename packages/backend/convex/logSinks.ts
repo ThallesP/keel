@@ -1,18 +1,26 @@
 import { ConvexError, v } from "convex/values";
 
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import { api, internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import {
   action,
   type ActionCtx,
   internalMutation,
   internalQuery,
   mutation,
+  type MutationCtx,
   query,
 } from "./_generated/server";
-import { ownedEnvironment, ownedNode, ownedProject } from "./access";
+import {
+  type Ctx,
+  currentMembership,
+  NO_ORGANIZATION,
+  ownedEnvironment,
+  ownedNode,
+} from "./access";
 import {
   axiomCanQuery,
+  axiomChosenOrg,
   axiomExchange,
   axiomAuthorizeUrl,
   axiomRegisterClient,
@@ -23,23 +31,70 @@ import {
   DOMAINS,
   type AxiomOrg,
 } from "./logProviders/axiom";
-import { logSink } from "./schema";
+import { axiomOrg, logSink } from "./schema";
 
-// One log sink per project. Absent = Docker default (read from the manager, ship nothing).
-// The worker on every node polls /worker/config for the full sink list and streams container
-// lines there; logs.tail reads them back. Adding a provider: extend `logSink` in schema.ts,
-// add logProviders/<kind>.ts (read side), apps/worker/src/sinks/<kind>.ts (write side), and a
-// branch in logs.tail and the worker's sink factory. Nothing else knows the kind.
+// One log sink per organization, shared by every project in it: set up once, and a new project
+// ships there from its first deploy. Absent = Docker default (read from the manager, ship
+// nothing). The worker on every node polls /worker/config for the sink and the services of
+// every project, and streams container lines there; logs.tail reads them back. Adding a
+// provider: extend `logSink` in schema.ts, add logProviders/<kind>.ts (read side),
+// apps/worker/src/sinks/<kind>.ts (write side), and a branch in logs.tail and the worker's sink
+// factory. Nothing else knows the kind.
 
-/** What the UI may see: kind + where, never the token. */
+/** The org's rows from before sinks were per organization (one per project), newest first. */
+async function legacyRows(ctx: Ctx, organizationId: string) {
+  const rows = await ctx.db
+    .query("logSinks")
+    .withIndex("by_organization", (q) => q.eq("organizationId", undefined))
+    .order("desc")
+    .collect();
+  const ours: Doc<"logSinks">[] = [];
+  for (const row of rows) {
+    const project = row.projectId && (await ctx.db.get(row.projectId));
+    if (project && project.organizationId === organizationId) ours.push(row);
+  }
+  return ours;
+}
+
+/**
+ * The organization's sink row, or null. Until a sign-in or Disconnect replaces them, rows from
+ * before sinks were per organization stand in: the newest of its projects' becomes the org's.
+ */
+export async function sinkOf(ctx: Ctx, organizationId: string) {
+  const row = await ctx.db
+    .query("logSinks")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  return row ?? (await legacyRows(ctx, organizationId))[0] ?? null;
+}
+
+/** The sink of a project the caller owns (ownedProject only hands out the caller's org's). */
+const projectSink = (ctx: Ctx, project: Doc<"projects">) =>
+  project.organizationId ? sinkOf(ctx, project.organizationId) : null;
+
+/** Deletes the organization's sink and its rows from before sinks were per organization. */
+async function clear(ctx: MutationCtx, organizationId: string) {
+  const row = await ctx.db
+    .query("logSinks")
+    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  if (row) await ctx.db.delete(row._id);
+  for (const legacy of await legacyRows(ctx, organizationId)) await ctx.db.delete(legacy._id);
+}
+
+async function requireOrganization(ctx: Ctx) {
+  const membership = await currentMembership(ctx);
+  if (!membership) throw new ConvexError(NO_ORGANIZATION);
+  return membership.organizationId;
+}
+
+/** The caller's organization's sink as the UI may see it: kind + where, never the token. */
 export const get = query({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    if (!(await ownedProject(ctx, projectId))) return null;
-    const row = await ctx.db
-      .query("logSinks")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .unique();
+  args: {},
+  handler: async (ctx) => {
+    const membership = await currentMembership(ctx);
+    if (!membership) return null;
+    const row = await sinkOf(ctx, membership.organizationId);
     if (!row) return null;
     const { sink } = row;
     return {
@@ -59,10 +114,7 @@ export const forNode = internalQuery({
   handler: async (ctx, { nodeId }) => {
     const scope = await ownedNode(ctx, nodeId);
     if (!scope) return null;
-    const row = await ctx.db
-      .query("logSinks")
-      .withIndex("by_project", (q) => q.eq("projectId", scope.project._id))
-      .unique();
+    const row = await projectSink(ctx, scope.project);
     return { sink: row?.sink ?? null };
   },
 });
@@ -73,10 +125,7 @@ export const forEnvironment = internalQuery({
   handler: async (ctx, { environmentId }) => {
     const scope = await ownedEnvironment(ctx, environmentId);
     if (!scope) return null;
-    const row = await ctx.db
-      .query("logSinks")
-      .withIndex("by_project", (q) => q.eq("projectId", scope.project._id))
-      .unique();
+    const row = await projectSink(ctx, scope.project);
     const nodes = await ctx.db
       .query("nodes")
       .withIndex("by_environment", (q) => q.eq("environmentId", environmentId))
@@ -88,46 +137,32 @@ export const forEnvironment = internalQuery({
   },
 });
 
-export const owns = internalQuery({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => (await ownedProject(ctx, projectId)) !== null,
-});
-
-export const projectSlug = internalQuery({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => (await ownedProject(ctx, projectId))?.slug ?? null,
-});
-
+/** The caller's organization's sink becomes `sink`, replacing whatever it had. */
 export const save = internalMutation({
-  args: { projectId: v.id("projects"), sink: logSink },
-  handler: async (ctx, { projectId, sink }) => {
-    if (!(await ownedProject(ctx, projectId))) throw new ConvexError("Project not found");
-    const row = await ctx.db
-      .query("logSinks")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .unique();
+  args: { sink: logSink },
+  handler: async (ctx, { sink }) => {
+    const organizationId = await requireOrganization(ctx);
     // A fresh row rather than a patch: its _creationTime is the connect time the worker starts
     // reading containers from (worker.config `since`).
-    if (row) await ctx.db.delete(row._id);
-    await ctx.db.insert("logSinks", { projectId, sink });
+    await clear(ctx, organizationId);
+    await ctx.db.insert("logSinks", { organizationId, sink });
   },
 });
 
 /**
- * Verifies the token against Axiom (creates the datasets if needed), then stores the sink.
- * `traces` is the traces dataset; the token needs ingest + query on it too.
+ * Verifies the token against Axiom (creates the datasets if needed), then makes it the
+ * organization's sink. `traces` is the traces dataset; the token needs ingest + query on it too.
  */
 export const connectAxiom = action({
   args: {
-    projectId: v.id("projects"),
     domain: v.string(),
     dataset: v.string(),
     traces: v.optional(v.string()),
     token: v.string(),
   },
-  handler: async (ctx, { projectId, domain, dataset, traces, token }) => {
-    if (!(await ctx.runQuery(internal.logSinks.owns, { projectId }))) {
-      throw new ConvexError("Project not found");
+  handler: async (ctx, { domain, dataset, traces, token }) => {
+    if (!(await ctx.runQuery(api.organizations.current, {}))) {
+      throw new ConvexError(NO_ORGANIZATION);
     }
     const allowLocal = process.env.KEEL_ALLOW_LOCAL_SINKS === "1";
     if (
@@ -148,21 +183,16 @@ export const connectAxiom = action({
     } catch (err) {
       throw new ConvexError(err instanceof Error ? err.message : String(err));
     }
-    await ctx.runMutation(internal.logSinks.save, { projectId, sink });
+    await ctx.runMutation(internal.logSinks.save, { sink });
     return { dataset, traces: traces ?? null };
   },
 });
 
-/** Back to the Docker default. The worker stops shipping on its next config poll. */
+/** Back to the Docker default, for every project. The worker stops shipping on its next poll. */
 export const disconnect = mutation({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    if (!(await ownedProject(ctx, projectId))) throw new ConvexError("Project not found");
-    const row = await ctx.db
-      .query("logSinks")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
-      .unique();
-    if (row) await ctx.db.delete(row._id);
+  args: {},
+  handler: async (ctx) => {
+    await clear(ctx, await requireOrganization(ctx));
   },
 });
 
@@ -171,19 +201,20 @@ export const disconnect = mutation({
 // beginAxiomSignIn makes the PKCE verifier + state here (the browser may be on plain http, where
 // WebCrypto is unavailable, and the verifier never needs to leave the server) and returns the
 // authorize URL. Axiom redirects to /axiom/callback, which hands `state` + `code` to
-// signInAxiom: exchange for a personal token, list orgs, and with a single org provision right
-// away. With several, the token waits in `axiomPending` until the Logs page calls chooseAxiomOrg.
-// Provisioning (logProviders/axiom.ts axiomProvision) creates `keel-<project slug>` and
-// `keel-<project slug>-traces` and a token scoped to ingest + query on those two; the personal
-// token is never stored in logSinks. Signing in again on a connected project replaces the sink
-// (that is how sinks from before traces get their traces dataset). Both pending tables are per
-// project, single use, and expire after 10 minutes.
+// signInAxiom: exchange for a personal token, list orgs, and provision right away in the org
+// picked on Axiom's consent page (named by the token) or the only one. Failing both, the token
+// waits in `axiomPending` until the Observability page calls chooseAxiomOrg.
+// Provisioning (logProviders/axiom.ts axiomProvision) creates `keel-logs` and `keel-traces` if
+// missing and a token scoped to ingest + query on those two, named after the Keel organization;
+// the personal token is never stored in logSinks. Signing in again replaces the sink (that is how
+// sinks from before traces get their traces dataset). Both pending tables are per organization,
+// single use, and expire after 10 minutes.
 
 const PENDING_MS = 10 * 60_000;
 
 export const beginAxiomSignIn = action({
-  args: { projectId: v.id("projects"), redirectUri: v.string() },
-  handler: async (ctx, { projectId, redirectUri }): Promise<{ url: string }> => {
+  args: { redirectUri: v.string() },
+  handler: async (ctx, { redirectUri }): Promise<{ url: string }> => {
     let uri: URL;
     try {
       uri = new URL(redirectUri);
@@ -204,7 +235,6 @@ export const beginAxiomSignIn = action({
     }
     const { state, verifier, url } = await axiomAuthorizeUrl(clientId, redirectUri);
     await ctx.runMutation(internal.logSinks.startSignIn, {
-      projectId,
       clientId,
       state,
       verifier,
@@ -238,25 +268,24 @@ export const saveClient = internalMutation({
 
 export const startSignIn = internalMutation({
   args: {
-    projectId: v.id("projects"),
     clientId: v.string(),
     state: v.string(),
     verifier: v.string(),
     redirectUri: v.string(),
   },
   handler: async (ctx, args) => {
-    if (!(await ownedProject(ctx, args.projectId))) throw new ConvexError("Project not found");
+    const organizationId = await requireOrganization(ctx);
     const old = await ctx.db
       .query("axiomSignIns")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
       .unique();
     if (old) await ctx.db.delete(old._id);
-    const id = await ctx.db.insert("axiomSignIns", args);
+    const id = await ctx.db.insert("axiomSignIns", { organizationId, ...args });
     await ctx.scheduler.runAfter(PENDING_MS, internal.logSinks.dropSignIn, { id });
   },
 });
 
-/** The started sign-in for `state`, deleted on read. Null if unknown, used, or someone else's. */
+/** The started sign-in for `state`, deleted on read. Null if unknown, used, or another org's. */
 export const takeSignIn = internalMutation({
   args: { state: v.string() },
   handler: async (ctx, { state }) => {
@@ -264,14 +293,10 @@ export const takeSignIn = internalMutation({
       .query("axiomSignIns")
       .withIndex("by_state", (q) => q.eq("state", state))
       .unique();
-    if (!row || !(await ownedProject(ctx, row.projectId))) return null;
+    const membership = await currentMembership(ctx);
+    if (!row || row.organizationId !== membership?.organizationId) return null;
     await ctx.db.delete(row._id);
-    return {
-      projectId: row.projectId,
-      clientId: row.clientId,
-      verifier: row.verifier,
-      redirectUri: row.redirectUri,
-    };
+    return { clientId: row.clientId, verifier: row.verifier, redirectUri: row.redirectUri };
   },
 });
 
@@ -284,43 +309,41 @@ export const dropSignIn = internalMutation({
 
 /** Orgs to choose from while a sign-in with several orgs is pending, else null. Names only. */
 export const pendingOrgs = query({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    if (!(await ownedProject(ctx, projectId))) return null;
+  args: {},
+  handler: async (ctx) => {
+    const membership = await currentMembership(ctx);
+    if (!membership) return null;
     const row = await ctx.db
       .query("axiomPending")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", membership.organizationId))
       .unique();
     return row ? row.orgs.map(({ id, name }) => ({ id, name })) : null;
   },
 });
 
 export const stashPending = internalMutation({
-  args: {
-    projectId: v.id("projects"),
-    token: v.string(),
-    orgs: v.array(v.object({ id: v.string(), name: v.string(), domain: v.string() })),
-  },
+  args: { token: v.string(), orgs: v.array(axiomOrg) },
   handler: async (ctx, args) => {
-    if (!(await ownedProject(ctx, args.projectId))) throw new ConvexError("Project not found");
+    const organizationId = await requireOrganization(ctx);
     const old = await ctx.db
       .query("axiomPending")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
       .unique();
     if (old) await ctx.db.delete(old._id);
-    const id = await ctx.db.insert("axiomPending", args);
+    const id = await ctx.db.insert("axiomPending", { organizationId, ...args });
     await ctx.scheduler.runAfter(PENDING_MS, internal.logSinks.dropPending, { id });
   },
 });
 
 /** Hands the pending org pick to the caller and deletes it: one pick per sign-in. */
 export const takePending = internalMutation({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    if (!(await ownedProject(ctx, projectId))) return null;
+  args: {},
+  handler: async (ctx) => {
+    const membership = await currentMembership(ctx);
+    if (!membership) return null;
     const row = await ctx.db
       .query("axiomPending")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", membership.organizationId))
       .unique();
     if (!row) return null;
     await ctx.db.delete(row._id);
@@ -335,16 +358,17 @@ export const dropPending = internalMutation({
   },
 });
 
-async function provision(ctx: ActionCtx, projectId: Id<"projects">, token: string, org: AxiomOrg) {
-  const slug = await ctx.runQuery(internal.logSinks.projectSlug, { projectId });
-  if (!slug) throw new ConvexError("Project not found");
-  const name = `keel-${slug}`;
+async function provision(ctx: ActionCtx, token: string, org: AxiomOrg) {
+  const keel = await ctx.runQuery(api.organizations.current, {});
+  if (!keel) throw new ConvexError(NO_ORGANIZATION);
   try {
-    const cfg = await axiomProvision(token, org, name, name);
-    await axiomCanQuery(cfg);
-    await axiomCanQuery({ ...cfg, dataset: cfg.traces });
+    const cfg = await axiomProvision(token, org, `keel-${keel.slug}`);
+    for (const dataset of [cfg.dataset, cfg.traces]) {
+      await axiomCanQuery({ ...cfg, dataset }).catch((err: Error) => {
+        throw new Error(`Querying ${dataset}: ${err.message}`);
+      });
+    }
     await ctx.runMutation(internal.logSinks.save, {
-      projectId,
       sink: { kind: "axiom", ...cfg, org: org.name },
     });
     return { dataset: cfg.dataset, org: org.name };
@@ -363,7 +387,7 @@ export const signInAxiom = action({
   ): Promise<{ choose: true } | { choose: false; dataset: string; org: string }> => {
     const started = await ctx.runMutation(internal.logSinks.takeSignIn, { state });
     if (!started) throw new ConvexError("Axiom sign-in expired, try again");
-    const { projectId, clientId, verifier, redirectUri } = started;
+    const { clientId, verifier, redirectUri } = started;
     let token: string;
     let orgs: AxiomOrg[];
     try {
@@ -372,34 +396,35 @@ export const signInAxiom = action({
     } catch (err) {
       throw new ConvexError(err instanceof Error ? err.message : String(err));
     }
-    const [only] = orgs;
-    if (!only) throw new ConvexError("This Axiom account has no organization");
-    if (orgs.length === 1)
-      return { choose: false, ...(await provision(ctx, projectId, token, only)) };
-    await ctx.runMutation(internal.logSinks.stashPending, { projectId, token, orgs });
+    if (orgs.length === 0) throw new ConvexError("This Axiom account has no organization");
+    const chosen = axiomChosenOrg(token);
+    const org = orgs.length === 1 ? orgs[0] : orgs.find((o) => o.id === chosen);
+    if (org) return { choose: false, ...(await provision(ctx, token, org)) };
+    await ctx.runMutation(internal.logSinks.stashPending, { token, orgs });
     return { choose: true };
   },
 });
 
 export const chooseAxiomOrg = action({
-  args: { projectId: v.id("projects"), orgId: v.string() },
-  handler: async (ctx, { projectId, orgId }): Promise<{ dataset: string; org: string }> => {
-    const pending = await ctx.runMutation(internal.logSinks.takePending, { projectId });
+  args: { orgId: v.string() },
+  handler: async (ctx, { orgId }): Promise<{ dataset: string; org: string }> => {
+    const pending = await ctx.runMutation(internal.logSinks.takePending, {});
     if (!pending) throw new ConvexError("Sign-in expired, sign in with Axiom again");
     const org = pending.orgs.find((o) => o.id === orgId);
     if (!org) throw new ConvexError("Organization not found");
-    return provision(ctx, projectId, pending.token, org);
+    return provision(ctx, pending.token, org);
   },
 });
 
 /** Drops a pending org pick (the user backed out). */
 export const cancelAxiomSignIn = mutation({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, { projectId }) => {
-    if (!(await ownedProject(ctx, projectId))) return;
+  args: {},
+  handler: async (ctx) => {
+    const membership = await currentMembership(ctx);
+    if (!membership) return;
     const row = await ctx.db
       .query("axiomPending")
-      .withIndex("by_project", (q) => q.eq("projectId", projectId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", membership.organizationId))
       .unique();
     if (row) await ctx.db.delete(row._id);
   },

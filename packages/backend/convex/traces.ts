@@ -27,11 +27,12 @@ export type {
 } from "./traceProviders/types";
 export type { TimeRange } from "./timeRange";
 
-// OpenTelemetry traces of a project, read from its sink's traces dataset, joined with the log
-// lines that name them (docs/logs.md "Traces"). Read side only: spans get there from whatever
-// exports them; Keel does not forward OTLP yet. Traces need a store, so unlike logs there is no
-// Docker fallback. Spans are not scoped to the environment yet (they carry no Keel ids until Keel
-// sets the OTel resource of its services); their logs are, like every log query.
+// OpenTelemetry traces of a project, read from the traces dataset of its organization's sink,
+// joined with the log lines that name them (docs/logs.md "Traces"). Read side only: spans get
+// there from whatever exports them; Keel does not forward OTLP yet. Traces need a store, so unlike
+// logs there is no Docker fallback. Spans are not scoped to the project or environment yet (they
+// carry no Keel ids until Keel sets the OTel resource of its services); their logs are, like
+// every log query.
 
 type Scope = { sink: LogSink | null; serviceIds: string[] } | null;
 

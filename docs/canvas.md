@@ -43,7 +43,9 @@ Desktop, 1440 × 900 reference. Everything is `display: flex`.
 
 ### Topbar (48px)
 
-Left: logo glyph + wordmark, `/`, project name, `/`, environment pill (status dot + name + chevron). Right: **Ship** button (primary, `⌘↵` hint), avatar.
+Left: logo glyph + wordmark, `/`, project name + chevron, `/`, environment pill (status dot + name + chevron). Right: **Ship** button (primary, `⌘↵` hint), avatar.
+
+The project name (or `P` anywhere) opens the project switcher, a `Palette` (`components/palette.tsx`, like `+ Add`): every project of the organization, type to filter, ↵ switches; the page you are on (canvas or Observability) is kept, an open deployment or trace is dropped. Its last row, New project, takes a name (type → ↵) and creates the project with a production environment (`projects.create`), then opens its canvas.
 
 Ship button states:
 

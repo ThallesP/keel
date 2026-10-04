@@ -20,8 +20,9 @@ export type {
 } from "./logProviders/types";
 
 /**
- * Last `tail` lines of a node's service, from whatever provider the project uses: the project's
- * log sink when one is connected (logSinks.ts), else `docker service logs` on the manager.
+ * Last `tail` lines of a node's service, from whatever provider the project uses: its
+ * organization's log sink when one is connected (logSinks.ts), else `docker service logs` on the
+ * manager.
  * Polled by the Logs tab; no table involved.
  */
 export const tail = action({

@@ -82,7 +82,7 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
             </span>
             <span className="min-w-0 flex-1 truncate pl-2 text-faint">{v.value}</span>
             <span className="shrink-0 font-sans text-2xs text-faint">
-              {v.overridden ? "your value wins" : "set by Keel"}
+              {v.overridden ? "replaced by yours" : "set by Keel"}
             </span>
           </div>
         ))}

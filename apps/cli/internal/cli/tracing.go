@@ -107,7 +107,7 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 				for _, v := range tracing.Env {
 					note := ""
 					if v.Overridden {
-						note = "(the service's own value wins)"
+						note = "(replaced by the service's own variables)"
 					}
 					fmt.Fprintf(t, "%s\t%s\t%s\n", v.Key, v.Value, note)
 				}

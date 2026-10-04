@@ -131,7 +131,7 @@ type TracingVar struct {
 	Key    string `json:"key"`
 	Value  string `json:"value"`
 	Secret bool   `json:"secret"`
-	// The service sets this key itself, and its own value wins.
+	// Not set by Keel: the service sets this key itself, or (for the headers) its own endpoint.
 	Overridden bool `json:"overridden"`
 }
 

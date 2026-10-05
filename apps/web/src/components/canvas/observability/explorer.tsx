@@ -6,6 +6,8 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useAction } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 
+import Loader from "@/components/loader";
+
 import { CopyPrompt } from "../copy-prompt";
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
@@ -15,7 +17,7 @@ import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
 import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
 import { route, SearchField, type Sink } from "./chrome";
-import { StreamError, StreamLoading } from "./lamp";
+import { StreamEmpty, StreamError } from "./lamp";
 import { LogContext } from "./log-context";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
 import { TraceDetail } from "./trace";
@@ -245,12 +247,35 @@ function Overview({
     return mergeEvents(lines, requests);
   }, [data, numbers, kind]);
 
-  // The first load gets the page to itself, and so does a failure with nothing to show; later
-  // loads keep the previous data up, dimmed, and a partial failure is a line above the data.
+  // The first load is the app's spinner. Nothing to show, empty or failed, gets the page to
+  // itself (lamp.tsx); a partial failure is a line above the data, and later loads keep the
+  // previous data up, dimmed.
   const what = `the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`;
-  if (data === null) return <StreamLoading what={what} className={cn(hidden && "hidden")} />;
+  if (data === null) {
+    return (
+      <div className={cn("flex min-h-0 flex-1 flex-col", hidden && "hidden")}>
+        <Loader />
+      </div>
+    );
+  }
   if (error && data.lines.length === 0 && !numbers) {
     return <StreamError what={what} error={error} className={cn(hidden && "hidden")} />;
+  }
+  if (
+    sink.traces &&
+    !error &&
+    !filter &&
+    data.lines.length === 0 &&
+    numbers?.stats.requests === 0
+  ) {
+    return (
+      <StreamEmpty
+        long={long}
+        environmentId={environmentId}
+        stale={stale}
+        className={cn(hidden && "hidden")}
+      />
+    );
   }
 
   return (

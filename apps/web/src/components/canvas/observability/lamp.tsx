@@ -1,12 +1,15 @@
+import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 
+import { CopyPrompt } from "../copy-prompt";
+
 /**
- * The Observability page's first load and its failure, drawn as a hanging lamp and a moth.
- * Loading: the lamp is lit, now and then flickering like a bad bulb, and the moth flutters around
- * it, always facing the light. Failed with nothing to show: the lamp is out, the moth rests on
- * the shade, and the error says why. The moth is the one the Harvard Mark II's operators pulled
- * out of Relay #70 on 9 September 1947 and taped into the log book, next to "First actual case of
- * bug being found"; the loading caption quotes it. Motion lives in canvas.css (`keel-*`).
+ * The Observability page with nothing to show, drawn as a hanging lamp and a moth. Empty range:
+ * the lamp is lit, now and then flickering like a bad bulb, and the moth flutters around it,
+ * always facing the light; nothing else came. Failed: the lamp is out, the moth rests on the
+ * shade, and the error says why. The moth is the one the Harvard Mark II's operators pulled out
+ * of Relay #70 on 9 September 1947 and taped into the log book, next to "First actual case of bug
+ * being found"; the empty state's caption quotes it. Motion lives in canvas.css (`keel-*`).
  */
 
 /** The lamp's viewBox is 80 × 70, drawn at SCALE; the bulb is at (40, 54) in it. */
@@ -20,9 +23,27 @@ const onLamp = (x: number, y: number) => ({ x: BULB_X + (x - 40) * SCALE, y: y *
 /** Where the resting moth sits: on the shade's right slope, head up the slope, a little out. */
 const PERCH = onLamp(55, 41);
 
-export function StreamLoading({ what, className }: { what: string; className?: string }) {
+export function StreamEmpty({
+  long,
+  environmentId,
+  stale,
+  className,
+}: {
+  /** The range, e.g. "hour". */
+  long: string;
+  environmentId: Id<"environments">;
+  /** A new range is loading: dimmed, as the stream would be. */
+  stale: boolean;
+  className?: string;
+}) {
   return (
-    <Stage className={cn("animate-in fade-in-0 duration-500 [animation-delay:200ms]", className)}>
+    <Stage
+      className={cn(
+        "animate-in fade-in-0 duration-300 transition-opacity",
+        stale && "opacity-60",
+        className,
+      )}
+    >
       <div className="relative" style={{ width: BOX_W, height: 250 }} aria-hidden>
         <div
           className="keel-flicker absolute rounded-full"
@@ -47,10 +68,17 @@ export function StreamLoading({ what, className }: { what: string; className?: s
           </div>
         </div>
       </div>
-      <p className="text-base text-ink" role="status">
-        Reading {what}…
-      </p>
-      <p className="font-mono text-xs text-faint" aria-hidden>
+      <div className="flex max-w-[440px] flex-col items-center gap-2 text-center">
+        <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
+        <p className="text-xs leading-relaxed text-balance text-muted-foreground">
+          No requests or log lines yet. Paste the prompt into your coding agent in a service&apos;s
+          repo: it adds OpenTelemetry and checks with{" "}
+          <code className="font-mono text-2xs text-ink">keel run</code> that requests show up here.
+          Then turn on Tracing in the service&apos;s Settings tab and Ship.
+        </p>
+        <CopyPrompt environmentId={environmentId} className="mt-2" />
+      </div>
+      <p className="mt-4 font-mono text-2xs text-faint" aria-hidden>
         “First actual case of bug being found.” · Harvard Mark II log book, 9/9/1947
       </p>
     </Stage>

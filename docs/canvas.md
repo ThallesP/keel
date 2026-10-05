@@ -270,6 +270,12 @@ Order matters: shell → edges → panel → data → deploy.
 - Blueprint dark theme
 - Mobile / tablet layouts
 
+## Auth pages (sign-in, first account, invites, CLI approval)
+
+`components/auth/shell.tsx`, used by `routes/index.tsx`, `_auth/route.tsx`, `invite.$invitationId.tsx` and `_auth/device.tsx`. Two columns from `lg` up, the form alone below that. Left, on the canvas ground: the definition of *keel* and a lines plan of a hull (`lines-plan.tsx`, cut from the parametric hull in `hull.ts`) with the keel as the only coloured line, and a drawing title block in mono whose time reads as ship's bells (`bells.ts`). Focusing a password field raises the water over the hull ("below the waterline"); the shell listens for that on `document`, so forms need no wiring. The first-account sign-up is headed "Lay the keel"; sign-in stays "Welcome back", invites "Join {org}". Keep the words sparing: one nautical turn per page, not a theme.
+
+Each quiet surface gets its own reference, never a repeat: the auth pages have the lines plan, the Observability loading state has the Harvard Mark II logbook (the first "bug"). Pick a new one for the next.
+
 ## Reference
 
 Paper file **"*Ship*"**, artboards:

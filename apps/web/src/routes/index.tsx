@@ -4,6 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 
+import { AuthShell } from "@/components/auth/shell";
 import { AuthForms } from "@/components/auth-forms";
 import { errorMessage } from "@/components/canvas/errors";
 import Loader from "@/components/loader";
@@ -43,9 +44,9 @@ function Index() {
         <Bootstrap />
       </Authenticated>
       <Unauthenticated>
-        <div className="flex h-full items-center justify-center">
+        <AuthShell>
           <AuthForms />
-        </div>
+        </AuthShell>
       </Unauthenticated>
       <AuthLoading>
         <Loader />

@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
 import { authClient } from "@/lib/auth-client";
 
@@ -21,9 +22,6 @@ export const Route = createFileRoute("/_auth/device")({
     user_code: typeof s.user_code === "string" ? s.user_code : undefined,
   }),
 });
-
-const card =
-  "w-full max-w-sm rounded-lg border border-line bg-bg p-8 shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]";
 
 type Status = "pending" | "approved" | "denied";
 
@@ -42,7 +40,6 @@ function EnterCode() {
   const clean = code.replace(/[\s-]/g, "").toUpperCase();
   return (
     <form
-      className={card}
       onSubmit={(e) => {
         e.preventDefault();
         if (clean) void navigate({ to: "/device", search: { user_code: clean } });
@@ -97,7 +94,7 @@ function Approve({ userCode }: { userCode: string }) {
   if (status === undefined || user === undefined) return <Loader />;
   if (status === "invalid") {
     return (
-      <div className={card}>
+      <div>
         <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">Link no longer valid</h1>
         <p className="text-xs text-muted-foreground">
           It was already used, has expired, or the code is wrong. Run{" "}
@@ -108,7 +105,7 @@ function Approve({ userCode }: { userCode: string }) {
   }
   if (status !== "pending") {
     return (
-      <div className={card}>
+      <div>
         <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">
           {status === "approved" ? "CLI signed in" : "Sign-in denied"}
         </h1>
@@ -121,7 +118,7 @@ function Approve({ userCode }: { userCode: string }) {
     );
   }
   return (
-    <div className={card}>
+    <div>
       <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">Sign in the keel CLI</h1>
       <p className="mb-6 text-xs text-muted-foreground">
         A keel CLI, yours or an agent's, asks to sign in as {user?.email}. It gets the same access
@@ -158,8 +155,8 @@ function DevicePage() {
   const { user_code } = Route.useSearch();
   const userCode = user_code?.replace(/[\s-]/g, "").toUpperCase();
   return (
-    <div className="flex h-svh items-center justify-center bg-canvas">
+    <AuthShell>
       {userCode ? <Approve key={userCode} userCode={userCode} /> : <EnterCode />}
-    </div>
+    </AuthShell>
   );
 }

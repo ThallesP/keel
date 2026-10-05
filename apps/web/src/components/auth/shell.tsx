@@ -24,7 +24,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 function Plate() {
   return (
     <aside
-      className="hidden w-1/2 max-w-3xl flex-col justify-center gap-20 border-r border-line bg-canvas p-10 lg:flex"
+      className="hidden w-1/2 max-w-3xl flex-col border-r border-line bg-canvas p-10 lg:flex"
       style={{
         backgroundImage: "radial-gradient(var(--color-dot) 1px, transparent 1px)",
         backgroundSize: "20px 20px",
@@ -39,7 +39,10 @@ function Plate() {
         </dd>
       </dl>
 
-      <RealArtistsShip />
+      {/* The definition stays at the top; the plate takes the centre of what is left. */}
+      <div className="flex flex-1 flex-col justify-center py-10">
+        <RealArtistsShip />
+      </div>
     </aside>
   );
 }

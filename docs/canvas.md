@@ -49,12 +49,12 @@ The project name (or `P` anywhere) opens the project switcher, a `Palette` (`com
 
 Ship button states:
 
-| State | Label | Style |
-|---|---|---|
-| idle, nothing changed | `Ship` | primary, enabled |
-| idle, uncommitted graph changes | `Ship · 3 changes` | primary |
-| deploying | `Shipping… 2/3` | primary-strong, spinner, not clickable |
-| failed | `Retry` | danger |
+| State                           | Label              | Style                                  |
+| ------------------------------- | ------------------ | -------------------------------------- |
+| idle, nothing changed           | `Ship`             | primary, enabled                       |
+| idle, uncommitted graph changes | `Ship · 3 changes` | primary                                |
+| deploying                       | `Shipping… 2/3`    | primary-strong, spinner, not clickable |
+| failed                          | `Retry`            | danger                                 |
 
 ### Rail (52px)
 
@@ -98,26 +98,26 @@ Railway-style: the icon says what the node is, so there is no `Service · Docker
 
 ### Types (v1)
 
-| type | icon | subtitle | body lines | handles |
-|---|---|---|---|---|
-| `service` | `< >` | domain if public, else the image in mono (`ghcr.io/acme/api:1.2`) | status line. Port and replica counts live in the panel, not on the card. | target left, source right |
-| `database` | cylinder | `Postgres 16` | status line | target left |
-| `cache` | stacked rects | `Redis 7` | status line | target left |
-| `volume` | disk | `10 GB` | `○ Not mounted` | target left |
+| type       | icon          | subtitle                                                          | body lines                                                               | handles                   |
+| ---------- | ------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------- |
+| `service`  | `< >`         | domain if public, else the image in mono (`ghcr.io/acme/api:1.2`) | status line. Port and replica counts live in the panel, not on the card. | target left, source right |
+| `database` | cylinder      | `Postgres 16`                                                     | status line                                                              | target left               |
+| `cache`    | stacked rects | `Redis 7`                                                         | status line                                                              | target left               |
+| `volume`   | disk          | `10 GB`                                                           | `○ Not mounted`                                                          | target left               |
 
 Add more later (queue, cron, static site). Every type is the same shell with a different icon and body. Do not invent a new shell per type.
 
 ### Node states
 
-| state | status line | border |
-|---|---|---|
-| healthy | `●●● Online` (success) | default |
-| done | `✓ Completed 4s ago` (success; one-shot image, nothing running) | default |
-| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses) | default |
-| error | `●○○ Crashed` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
-| stopping | `● Stopping…` (faint, dot pulses) | default |
-| stopped | `● Stopped 2h ago` (faint) | default |
-| pending | `○ Not deployed` (faint) | dashed |
+| state     | status line                                                                                               | border           |
+| --------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| healthy   | `●●● Online` (success)                                                                                    | default          |
+| done      | `✓ Completed 4s ago` (success; one-shot image, nothing running)                                           | default          |
+| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses)                                                    | default          |
+| error     | `●○○ Crashed` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
+| stopping  | `● Stopping…` (faint, dot pulses)                                                                         | default          |
+| stopped   | `● Stopped 2h ago` (faint)                                                                                | default          |
+| pending   | `○ Not deployed` (faint)                                                                                  | dashed           |
 
 ## Variable references (replaces edges)
 
@@ -148,11 +148,11 @@ Opens when a node is selected. `Esc` or clicking the canvas background collapses
 
 Tabs are 13px, active = ink + 2px underline. Right side of the header shows small mono meta (`2 replicas · us-east-1`) only while collapsed, plus a collapse chevron. Deployments is the default tab: it answers "what is running, is it healthy, what happened last". There is no Overview tab; the facts it would hold live in a one-line meta strip at the top of Deployments, and editable config belongs to a future Settings tab.
 
-| tab | left column | main |
-|---|---|---|
-| Deployments | 380px. Meta strip above both columns: mono `image · port n · 1/1 replica … status`. Then the current deployment as a card (status pill `ACTIVE / DEPLOYING / FAILED / STOPPED`, message, `21h ago · 9s`, `View logs` → Logs tab), then `HISTORY` rows (`REMOVED` pill, message, age). Railway-style. | selected deployment: step list (see Ship flow) + build log |
-| Variables | — | Composer row pinned on top (`KEY` · value with inline **Reference** button · secret toggle · `Add ↵`; paste `KEY=value` splits). Reference opens a `Palette`: node → key, inserts `${{ node.KEY }}` at the caret and prefills the key. Services get a `Connect` strip of one-click chips (`+ postgres.DATABASE_URL`) for nodes they do not reference yet. Rows: key, value with reference chips (click → jump to that node) and `→ resolved` (masked when anything secret is involved), hover reveals edit / delete; double-click edits in place. Services end with a **Tracing** section: a switch (staged like a variable; off and disabled until the organization has an Axiom traces dataset), the `OTEL_*` variables Keel sets while it is on (read-only, the key masked, struck through where the service sets the key itself), and **Copy agent prompt** (see [`logs.md`](./logs.md) "Getting spans in"). |
-| Logs | — | one full-width stream, every replica merged and sorted by time, each line tagged `r<slot>` in a per-replica muted hue (from Docker `details=true` task ids). Mono 11px / 19px line-height, timestamps left, "following" indicator top-right, Raw toggle (ISO stamp + task id + stream). No replica selector: dropped 2026-09-20. |
+| tab         | left column                                                                                                                                                                                                                                                                                          | main                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deployments | 380px. Meta strip above both columns: mono `image · port n · 1/1 replica … status`. Then the current deployment as a card (status pill `ACTIVE / DEPLOYING / FAILED / STOPPED`, message, `21h ago · 9s`, `View logs` → Logs tab), then `HISTORY` rows (`REMOVED` pill, message, age). Railway-style. | selected deployment: step list (see Ship flow) + build log                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Variables   | —                                                                                                                                                                                                                                                                                                    | Composer row pinned on top (`KEY` · value with inline **Reference** button · secret toggle · `Add ↵`; paste `KEY=value` splits). Reference opens a `Palette`: node → key, inserts `${{ node.KEY }}` at the caret and prefills the key. Services get a `Connect` strip of one-click chips (`+ postgres.DATABASE_URL`) for nodes they do not reference yet. Rows: key, value with reference chips (click → jump to that node) and `→ resolved` (masked when anything secret is involved), hover reveals edit / delete; double-click edits in place. Services end with a **Tracing** section: a switch (staged like a variable; off and disabled until the organization has an Axiom traces dataset), the `OTEL_*` variables Keel sets while it is on (read-only, the key masked, struck through where the service sets the key itself), and **Copy agent prompt** (see [`logs.md`](./logs.md) "Getting spans in"). |
+| Logs        | —                                                                                                                                                                                                                                                                                                    | one full-width stream, every replica merged and sorted by time, each line tagged `r<slot>` in a per-replica muted hue (from Docker `details=true` task ids). Mono 11px / 19px line-height, timestamps left, "following" indicator top-right, Raw toggle (ISO stamp + task id + stream). No replica selector: dropped 2026-09-20.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Logs must use `white-space: pre` and a monospace font. Never wrap log lines; scroll horizontally.
 
@@ -175,29 +175,40 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
 
 ```css
 :root {
-  --color-bg: #FFFFFF;
-  --color-canvas: #F5F6F8;
-  --color-surface-2: #F0F2F5;
-  --color-ink: #0B1220;
-  --color-muted: #5B6472;
-  --color-faint: #8A93A1;
-  --color-line: #E3E6EB;
-  --color-dot: #D5D9E0;
-  --color-primary: #1F4BFF;
-  --color-primary-strong: #1539CC;
-  --color-primary-soft: #E9EEFF;
-  --color-on-primary: #FFFFFF;
-  --color-success: #12A150;  --color-success-soft: #E4F6EA;
-  --color-warning: #D99A00;  --color-warning-soft: #FFF4D6;
-  --color-danger: #E23D3D;   --color-danger-soft: #FDE8E8;
-  --color-ink-dark: #0A1A4A;  /* blueprint theme ground */
-  --color-blueprint: #0F2A7A; /* blueprint theme canvas */
+  --color-bg: #ffffff;
+  --color-canvas: #f5f6f8;
+  --color-surface-2: #f0f2f5;
+  --color-ink: #0b1220;
+  --color-muted: #5b6472;
+  --color-faint: #8a93a1;
+  --color-line: #e3e6eb;
+  --color-dot: #d5d9e0;
+  --color-primary: #1f4bff;
+  --color-primary-strong: #1539cc;
+  --color-primary-soft: #e9eeff;
+  --color-on-primary: #ffffff;
+  --color-success: #12a150;
+  --color-success-soft: #e4f6ea;
+  --color-warning: #d99a00;
+  --color-warning-soft: #fff4d6;
+  --color-danger: #e23d3d;
+  --color-danger-soft: #fde8e8;
+  --color-ink-dark: #0a1a4a; /* blueprint theme ground */
+  --color-blueprint: #0f2a7a; /* blueprint theme canvas */
 
   --font-sans: "Inter Variable", Inter, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --text-2xs: 11px; --text-xs: 12px; --text-sm: 13px; --text-base: 14px;
-  --text-md: 16px; --text-lg: 20px; --text-xl: 28px;
-  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-full: 999px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
 }
 ```
 
@@ -213,14 +224,14 @@ Same layout, ground `--color-ink-dark`, canvas `--color-blueprint` with a 24px l
 
 Package: `@xyflow/react` (v12). Not installed yet.
 
-| Concept | React Flow |
-|---|---|
-| node shell + types | `nodeTypes = { service, database, cache, volume, group }`, each a component receiving `NodeProps<Node<Data>>` |
-| groups | node `type: "group"`; children have `parentId` and `extent: "parent"` |
-| dot grid | `<Background variant="dots" gap={20} size={1} color="var(--color-dot)" />` |
-| controls | custom component using `useReactFlow()` (`zoomIn`, `zoomOut`, `fitView`); do not use the default `<Controls />` styling |
-| floating toolbar | `<NodeToolbar isVisible={selected} position={Position.Top} offset={10}>` inside the node component |
-| selection → panel | `onSelectionChange` → store selected node id → bottom panel reads it |
+| Concept            | React Flow                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| node shell + types | `nodeTypes = { service, database, cache, volume, group }`, each a component receiving `NodeProps<Node<Data>>`           |
+| groups             | node `type: "group"`; children have `parentId` and `extent: "parent"`                                                   |
+| dot grid           | `<Background variant="dots" gap={20} size={1} color="var(--color-dot)" />`                                              |
+| controls           | custom component using `useReactFlow()` (`zoomIn`, `zoomOut`, `fitView`); do not use the default `<Controls />` styling |
+| floating toolbar   | `<NodeToolbar isVisible={selected} position={Position.Top} offset={10}>` inside the node component                      |
+| selection → panel  | `onSelectionChange` → store selected node id → bottom panel reads it                                                    |
 
 No edges, no handles: `nodesConnectable={false}`. Set `fitView` on first load with `padding: 0.2`.
 
@@ -270,9 +281,16 @@ Order matters: shell → edges → panel → data → deploy.
 - Blueprint dark theme
 - Mobile / tablet layouts
 
+## Auth pages (sign-in, first account, invites, CLI approval)
+
+`components/auth/shell.tsx`, used by `routes/index.tsx`, `_auth/route.tsx`, `invite.$invitationId.tsx` and `_auth/device.tsx`. Two columns from `lg` up, the form alone below that. Left, on the canvas ground: the definition of _keel_ (the first timber laid when a ship is built), then the plate from `plate.tsx`: Steve Jobs's "Real artists ship." and three dated beats of the year after it (the Carmel retreat, the final build, the signatures inside the case), sourced from folklore.org (credited in the component comment, not on the page). "No one who bought one would ever see them" is a hidden link to `/humans.txt` (`apps/web/public/humans.txt`, served as a file by Vite and nginx alike): the inside of this case, signed by whoever laid the keel. Plain Inter for the words; mono only for the IPA. No drawing, no animation. The first-account sign-up is headed "Lay the keel"; sign-in stays "Welcome back", invites "Join {org}". One nautical turn per page, not a theme.
+
+Each quiet surface gets its own reference, never a repeat: the auth pages have "Real artists ship."; the Observability loading state (branch `observability-ux`, in flight) has the Harvard Mark II logbook (the first "bug"). Reserved for the next one (owner's pick, 2026-10-05): the Dropbox launch thread on Hacker News, already built as `DropboxThread` in `plate.tsx`. Pick a new one after that; things from the indie-hacker / solo-founder world land best.
+
 ## Reference
 
-Paper file **"*Ship*"**, artboards:
+Paper file **"_Ship_"**, artboards:
+
 - `Keel — Canvas (light)` — original with right sidebar (superseded)
 - `Keel — Canvas, no sidebar (bottom panel = inspector + logs)` — **the target layout**
 - `Keel — Ship in progress (deploy drawer)` — deploy flow

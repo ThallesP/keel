@@ -54,14 +54,14 @@ export default function SignUpForm({
   });
 
   return (
-    <div className="w-full max-w-sm rounded-lg border border-line bg-bg p-8 shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]">
+    <div>
       <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">
-        {invitation ? `Join ${invitation.organization}` : "Create Account"}
+        {invitation ? `Join ${invitation.organization}` : "Lay the keel"}
       </h1>
       <p className="mb-6 text-xs text-muted-foreground">
         {invitation
-          ? "You were invited. Pick a name and a password to create your account."
-          : "The first account owns this Keel; everyone else joins by invitation."}
+          ? "You were invited aboard. Pick a name and a password to create your account."
+          : "This install has no account yet. The first one owns it; everyone after joins by invitation."}
       </p>
 
       <form
@@ -86,7 +86,7 @@ export default function SignUpForm({
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
                 {field.state.meta.errors.map((error, index) => (
-                  <p key={`${field.name}-error-${index}`} className="text-red-500">
+                  <p key={`${field.name}-error-${index}`} className="text-xs text-danger">
                     {error?.message}
                   </p>
                 ))}
@@ -104,13 +104,14 @@ export default function SignUpForm({
                   id={field.name}
                   name={field.name}
                   type="email"
+                  autoComplete="email"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   disabled={invitation !== undefined}
                 />
                 {field.state.meta.errors.map((error, index) => (
-                  <p key={`${field.name}-error-${index}`} className="text-red-500">
+                  <p key={`${field.name}-error-${index}`} className="text-xs text-danger">
                     {error?.message}
                   </p>
                 ))}
@@ -128,12 +129,13 @@ export default function SignUpForm({
                   id={field.name}
                   name={field.name}
                   type="password"
+                  autoComplete="new-password"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
                 {field.state.meta.errors.map((error, index) => (
-                  <p key={`${field.name}-error-${index}`} className="text-red-500">
+                  <p key={`${field.name}-error-${index}`} className="text-xs text-danger">
                     {error?.message}
                   </p>
                 ))}
@@ -147,7 +149,7 @@ export default function SignUpForm({
         >
           {({ canSubmit, isSubmitting }) => (
             <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : invitation ? "Join" : "Sign Up"}
+              {isSubmitting ? "Creating account…" : invitation ? "Join" : "Create account"}
             </Button>
           )}
         </form.Subscribe>
@@ -155,12 +157,8 @@ export default function SignUpForm({
 
       {onSwitchToSignIn && (
         <div className="mt-4 text-center">
-          <Button
-            variant="link"
-            onClick={onSwitchToSignIn}
-            className="text-indigo-600 hover:text-indigo-800"
-          >
-            Already have an account? Sign In
+          <Button variant="link" onClick={onSwitchToSignIn} className="text-primary">
+            Already have an account? Sign in
           </Button>
         </div>
       )}

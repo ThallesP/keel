@@ -5,6 +5,7 @@ import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/re
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
 import SignUpForm from "@/components/sign-up-form";
 import { authClient } from "@/lib/auth-client";
@@ -15,9 +16,6 @@ import { authClient } from "@/lib/auth-client";
  * account exists (convex/auth.ts), so this is how everyone else gets in.
  */
 export const Route = createFileRoute("/invite/$invitationId")({ component: InvitePage });
-
-const card =
-  "w-full max-w-sm rounded-lg border border-line bg-bg p-8 shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]";
 
 function Accept({
   invitationId,
@@ -40,7 +38,7 @@ function Accept({
     else onDone();
   };
   return (
-    <div className={card}>
+    <div>
       <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">
         Join {invitation.organization}
       </h1>
@@ -78,7 +76,7 @@ function InvitePage() {
   if (invitation === undefined) body = <Loader />;
   else if (invitation === null) {
     body = (
-      <div className={card}>
+      <div>
         <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">Invite not found</h1>
         <p className="mb-6 text-xs text-muted-foreground">
           This invite link is unknown, already used or expired. Ask a member for a new one.
@@ -103,5 +101,5 @@ function InvitePage() {
       </>
     );
   }
-  return <div className="flex h-svh items-center justify-center bg-canvas">{body}</div>;
+  return <AuthShell>{body}</AuthShell>;
 }

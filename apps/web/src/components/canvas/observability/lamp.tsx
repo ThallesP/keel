@@ -1,5 +1,6 @@
 import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 import { CopyPrompt } from "../copy-prompt";
 
@@ -68,14 +69,24 @@ export function StreamEmpty({
           </div>
         </div>
       </div>
-      <div className="flex flex-col items-center gap-1.5 text-center">
-        <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
-        <p className="text-xs text-muted-foreground">
-          Hand the prompt to your coding agent, then turn on Tracing in the service&apos;s Settings
-          and Ship.
-        </p>
-      </div>
-      <CopyPrompt environmentId={environmentId} className="mt-1" />
+      <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
+      {/* The prompt does the rest: instruments, checks with keel run, turns tracing on, redeploys. */}
+      <ol className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-xs text-muted-foreground">
+        <li className="flex items-center gap-1.5">
+          <Step n={1} />
+          <CopyPrompt environmentId={environmentId} />
+        </li>
+        <li className="flex items-center gap-1.5">
+          <ChevronRight size={12} className="text-faint" aria-hidden />
+          <Step n={2} />
+          Paste it into your coding agent
+        </li>
+        <li className="flex items-center gap-1.5">
+          <ChevronRight size={12} className="text-faint" aria-hidden />
+          <Step n={3} />
+          Requests show up here
+        </li>
+      </ol>
       <p className="mt-3 font-mono text-2xs text-faint">
         “First actual case of bug being found.” · Harvard Mark II log book, 9/9/1947
       </p>
@@ -109,6 +120,14 @@ export function StreamError({
         <p className="text-xs text-muted-foreground">Trying again every 10 seconds.</p>
       </div>
     </Stage>
+  );
+}
+
+function Step({ n }: { n: number }) {
+  return (
+    <span className="flex size-4 items-center justify-center rounded-full border border-line font-mono text-[10px] text-faint">
+      {n}
+    </span>
   );
 }
 

@@ -254,7 +254,13 @@ function Overview({
   }
 
   return (
-    <div className={cn("min-h-0 flex-1 overflow-auto", hidden && "hidden")}>
+    // Fades in when it takes over from the lamp (and when the stream comes back from a row).
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-auto animate-in fade-in-0 duration-300 motion-reduce:animate-none",
+        hidden && "hidden",
+      )}
+    >
       <div className={cn("flex flex-col gap-4 py-4 transition-opacity", stale && "opacity-60")}>
         <div className="flex flex-col gap-4 px-5 empty:hidden">
           {error && <p className="text-xs text-danger">{error}</p>}

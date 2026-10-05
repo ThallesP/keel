@@ -30,7 +30,7 @@ export function RealArtistsShip() {
           {/* The inside of this case: a plain <a>, not <Link>, so the browser fetches the file. */}
           <a
             href="/humans.txt"
-            className="rounded-xs decoration-dot underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+            className="rounded-xs decoration-dot underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             No one who bought one would ever see them.
           </a>{" "}

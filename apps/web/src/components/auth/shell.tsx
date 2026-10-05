@@ -9,7 +9,7 @@ import { RealArtistsShip } from "./plate";
  */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-svh bg-bg">
+    <div className="flex min-h-svh bg-bg">
       <Plate />
       <main className="flex min-w-0 flex-1 flex-col items-center justify-center px-6 py-10">
         <div className="w-full max-w-sm">

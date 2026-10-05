@@ -2,7 +2,8 @@
  * What the auth page shows beside the form. One reference per surface, never a repeat
  * (docs/canvas.md, "Auth pages"): here, Steve Jobs's line to the Macintosh team and the year that
  * followed it, from Andy Hertzfeld's folklore.org ("Pirate Flag", "Real Artists Ship",
- * "Signing Party").
+ * "Signing Party"). The last sentence is a link to /humans.txt (apps/web/public), the inside of
+ * this case.
  */
 export function RealArtistsShip() {
   return (
@@ -25,7 +26,14 @@ export function RealArtistsShip() {
         <dt className="text-faint tabular-nums">Jan 24, 1984</dt>
         <dd className="text-muted-foreground">
           The Macintosh ships. Moulded inside the case are the signatures of the forty-seven people
-          who built it. No one who bought one would ever see them.{" "}
+          who built it.{" "}
+          {/* The inside of this case: a plain <a>, not <Link>, so the browser fetches the file. */}
+          <a
+            href="/humans.txt"
+            className="rounded-xs decoration-dot underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+          >
+            No one who bought one would ever see them.
+          </a>{" "}
           <span className="text-ink">They signed anyway.</span>
         </dd>
       </dl>

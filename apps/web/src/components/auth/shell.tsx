@@ -24,7 +24,6 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 function Plate() {
   return (
     <aside
-      aria-hidden
       className="hidden w-1/2 max-w-3xl flex-col justify-center gap-20 border-r border-line bg-canvas p-10 lg:flex"
       style={{
         backgroundImage: "radial-gradient(var(--color-dot) 1px, transparent 1px)",

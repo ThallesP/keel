@@ -9,7 +9,7 @@ import { CopyPrompt } from "../copy-prompt";
  * always facing the light; nothing else came. Failed: the lamp is out, the moth rests on the
  * shade, and the error says why. The moth is the one the Harvard Mark II's operators pulled out
  * of Relay #70 on 9 September 1947 and taped into the log book, next to "First actual case of bug
- * being found"; hovering the lit lamp quotes it. Motion lives in canvas.css (`keel-*`).
+ * being found"; the empty state's caption quotes it. Motion lives in canvas.css (`keel-*`).
  */
 
 /** The lamp's viewBox is 80 × 70, drawn at SCALE; the bulb is at (40, 54) in it. */
@@ -44,12 +44,7 @@ export function StreamEmpty({
         className,
       )}
     >
-      <div
-        className="relative"
-        style={{ width: BOX_W, height: 220 }}
-        title="“First actual case of bug being found.” Harvard Mark II log book, 9 September 1947"
-        aria-hidden
-      >
+      <div className="relative" style={{ width: BOX_W, height: 220 }} aria-hidden>
         <div
           className="keel-flicker absolute rounded-full"
           style={{
@@ -81,6 +76,9 @@ export function StreamEmpty({
         </p>
       </div>
       <CopyPrompt environmentId={environmentId} className="mt-1" />
+      <p className="mt-3 font-mono text-2xs text-faint">
+        “First actual case of bug being found.” · Harvard Mark II log book, 9/9/1947
+      </p>
     </Stage>
   );
 }

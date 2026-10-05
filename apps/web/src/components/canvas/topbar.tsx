@@ -4,6 +4,8 @@ import { useQuery } from "convex/react";
 import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
+import { Logo } from "@/components/logo";
+
 import { AccountMenu } from "./account-menu";
 import { useCanvasActions } from "./actions";
 import { useEnvironment } from "./environment";
@@ -14,24 +16,6 @@ import { ProjectSwitcher } from "./project-switcher";
 import { useLatestDeployment, useSummary } from "./use-data";
 import { useHotkey } from "./use-hotkey";
 import { useNow } from "./use-now";
-
-function Logo() {
-  return (
-    <span className="flex items-center gap-2">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
-        <path d="M3 6.5h16l-2.2 6.5H6.5L3 6.5Z" fill="var(--color-primary)" />
-        <path
-          d="M6.5 13v3.5h9V13"
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-[15px] leading-[18px] font-semibold tracking-tight text-ink">keel</span>
-    </span>
-  );
-}
 
 function ShipButton() {
   const { environmentId } = useEnvironment();

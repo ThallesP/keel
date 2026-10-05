@@ -1,6 +1,7 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 
+import { AuthShell } from "@/components/auth/shell";
 import { AuthForms } from "@/components/auth-forms";
 import Loader from "@/components/loader";
 
@@ -15,9 +16,9 @@ function AuthLayout() {
         <Outlet />
       </Authenticated>
       <Unauthenticated>
-        <div className="flex h-svh items-center justify-center bg-canvas">
+        <AuthShell>
           <AuthForms />
-        </div>
+        </AuthShell>
       </Unauthenticated>
       <AuthLoading>
         <div className="h-svh bg-canvas">

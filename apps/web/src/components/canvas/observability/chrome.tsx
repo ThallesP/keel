@@ -1,37 +1,17 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { getRouteApi } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { Search } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
-import { toast } from "sonner";
+import { useMemo } from "react";
 
 import { useEnvironment } from "../environment";
-import { attempt } from "../errors";
 
-// Pieces the Observability page's views share: the 44px header, the search field, Disconnect,
-// service names.
+// Pieces the Observability page's views share: the search field, service names.
 
 export const route = getRouteApi("/_auth/p/$projectId");
 
 /** What logSinks.get returns for an Axiom sink; never the token. */
 export type Sink = { domain: string; dataset: string; traces: string | null; org: string | null };
-
-/** "via Axiom · org · keel-logs + keel-traces" */
-export const viaAxiom = (sink: Sink) =>
-  `via Axiom · ${sink.org ? `${sink.org} · ` : ""}${sink.dataset}${sink.traces ? ` + ${sink.traces}` : ""}`;
-
-/** Title and mono meta left, the view's controls right. */
-export function PageHeader({ meta, children }: { meta?: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-line px-5">
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span className="text-sm font-medium text-ink">Observability</span>
-        {meta && <span className="truncate font-mono text-2xs text-faint">{meta}</span>}
-      </span>
-      {children && <span className="flex shrink-0 items-center gap-3.5 text-2xs">{children}</span>}
-    </div>
-  );
-}
 
 export function SearchField({
   value,
@@ -54,23 +34,6 @@ export function SearchField({
         className="min-w-0 flex-1 bg-transparent font-mono text-2xs text-ink outline-none placeholder:font-sans placeholder:text-faint"
       />
     </label>
-  );
-}
-
-/** Back to Docker logs and no traces, for every project. Shipped data stays in Axiom. */
-export function DisconnectButton() {
-  const disconnect = useMutation(api.logSinks.disconnect);
-  return (
-    <button
-      type="button"
-      title="Every project goes back to Docker logs"
-      onClick={() =>
-        void attempt(disconnect({})).then(() => toast("Axiom disconnected for every project"))
-      }
-      className="text-muted-foreground hover:text-danger"
-    >
-      Disconnect
-    </button>
   );
 }
 

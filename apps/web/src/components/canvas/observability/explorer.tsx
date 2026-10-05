@@ -10,12 +10,13 @@ import { CopyPrompt } from "../copy-prompt";
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
 import { formatTimestamp } from "../format";
-import { SectionLabel } from "../primitives";
+import { PageHeader, SectionLabel } from "../primitives";
 import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
 import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
-import { DisconnectButton, PageHeader, route, SearchField, type Sink, viaAxiom } from "./chrome";
+import { route, SearchField, type Sink } from "./chrome";
 import { LogContext } from "./log-context";
+import { Logbook } from "./logbook";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
 import { TraceDetail } from "./trace";
 
@@ -77,7 +78,7 @@ export function Explorer({ sink }: { sink: Sink }) {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <PageHeader meta={viaAxiom(sink)}>
+      <PageHeader title="Observability">
         {!detail && (
           <>
             <Segmented options={KINDS} value={kind} onChange={setKind} label="Show" />
@@ -95,7 +96,6 @@ export function Explorer({ sink }: { sink: Sink }) {
             />
           </>
         )}
-        <DisconnectButton />
       </PageHeader>
       {trace !== undefined && (
         <TraceDetail
@@ -245,6 +245,16 @@ function Overview({
     return mergeEvents(lines, requests);
   }, [data, numbers, kind]);
 
+  // The first load gets the page to itself; later ones keep the previous data up, dimmed.
+  if (data === null && !error) {
+    return (
+      <Logbook
+        what={`the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`}
+        className={cn(hidden && "hidden")}
+      />
+    );
+  }
+
   return (
     <div className={cn("min-h-0 flex-1 overflow-auto", hidden && "hidden")}>
       <div className={cn("flex flex-col gap-4 py-4 transition-opacity", stale && "opacity-60")}>
@@ -283,9 +293,7 @@ function Overview({
               </span>
             )}
           </div>
-          {data === null ? (
-            !error && <p className="px-5 text-xs text-faint">Loading…</p>
-          ) : events.length === 0 ? (
+          {data === null ? null : events.length === 0 ? (
             <p className="px-5 text-xs text-faint">
               {filter
                 ? `Nothing matches “${filter}” in the last ${long}.`
@@ -326,7 +334,7 @@ function NoRequests({ environmentId, long }: { environmentId: Id<"environments">
         prompt into your coding agent in a service&apos;s repo: it adds OpenTelemetry, runs the app
         with <code className="font-mono text-2xs text-ink">keel run</code> and checks that its
         requests show up here, marked <span className="font-mono text-2xs">local</span>. Then turn
-        on Tracing in the service&apos;s Variables tab and Ship.
+        on Tracing in the service&apos;s Settings tab and Ship.
       </p>
       <CopyPrompt environmentId={environmentId} />
     </div>

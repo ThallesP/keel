@@ -10,16 +10,26 @@ import Loader from "@/components/loader";
  * `?view=observability` is the rail's Observability page instead of the canvas (the older
  * `?view=logs` lands there too). On it, `&trace=<id>` opens one trace full screen, and
  * `&around=<epoch ms>` the log lines around a moment (a line that names no trace).
+ * `?view=settings` is the rail's Settings page.
  */
-type Search = { deployment?: string; view?: "observability"; trace?: string; around?: number };
+type Search = {
+  deployment?: string;
+  view?: "observability" | "settings";
+  trace?: string;
+  around?: number;
+};
 
-const VIEWS = new Set(["observability", "logs", "traces"]);
+const OBSERVABILITY = new Set(["observability", "logs", "traces"]);
 
 export const Route = createFileRoute("/_auth/p/$projectId")({
   component: ProjectPage,
   validateSearch: (search: Record<string, unknown>): Search => ({
     deployment: typeof search.deployment === "string" ? search.deployment : undefined,
-    view: VIEWS.has(String(search.view)) ? "observability" : undefined,
+    view: OBSERVABILITY.has(String(search.view))
+      ? "observability"
+      : search.view === "settings"
+        ? "settings"
+        : undefined,
     trace: typeof search.trace === "string" ? search.trace : undefined,
     // The router parses `around=1790…` to a number.
     around:

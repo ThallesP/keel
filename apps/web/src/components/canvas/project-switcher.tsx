@@ -16,8 +16,9 @@ const ICON = { size: 14, strokeWidth: 1.5, "aria-hidden": true } as const;
 
 /**
  * The topbar's project name, `P` anywhere: a palette of every project in the organization (type
- * to filter) and New project (type a name → ↵). Switching keeps the page you are on (canvas or
- * Observability); an open deployment or trace belongs to the old project and is dropped.
+ * to filter) and New project (type a name → ↵). Switching keeps the page you are on (canvas,
+ * Observability or Settings); an open deployment or trace belongs to the old project and is
+ * dropped.
  */
 export function ProjectSwitcher() {
   const { projectId, projectName } = useEnvironment();
@@ -33,7 +34,7 @@ export function ProjectSwitcher() {
 
   // Memoized: the palette starts over whenever `root` changes.
   const root = useMemo<PalettePage>(() => {
-    const go = (slug: string, search: { view?: "observability" } = {}) =>
+    const go = (slug: string, search: { view?: "observability" | "settings" } = {}) =>
       void navigate({ to: "/p/$projectId", params: { projectId: slug }, search });
     const newProject: PalettePage = {
       title: "New project",

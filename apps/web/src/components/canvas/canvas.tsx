@@ -20,6 +20,7 @@ import { EnvironmentProvider, type EnvironmentScope } from "./environment";
 import { ObservabilityPage } from "./observability/page";
 import { nodeTypes } from "./nodes";
 import { Rail } from "./rail";
+import { SettingsPage } from "./settings";
 import { StatusBar } from "./status-bar";
 import { CanvasUiProvider, useCanvasDispatch, useCanvasUi, useRenaming } from "./store";
 import { Toolbar } from "./toolbar";
@@ -137,8 +138,8 @@ const route = getRouteApi("/_auth/p/$projectId");
 
 /**
  * Full-bleed project canvas: topbar / rail + flow + bottom panel / status bar. Rail views other
- * than the canvas (`?view=observability`) cover the flow and panel; the flow stays mounted
- * underneath so coming back keeps the viewport.
+ * than the canvas (`?view=observability`, `?view=settings`) cover the flow and panel; the flow
+ * stays mounted underneath so coming back keeps the viewport.
  */
 export function Canvas({ scope }: { scope: EnvironmentScope }) {
   const { view } = route.useSearch();
@@ -160,7 +161,7 @@ export function Canvas({ scope }: { scope: EnvironmentScope }) {
                   </div>
                   {view !== undefined && (
                     <div className="absolute inset-0 z-20">
-                      <ObservabilityPage />
+                      {view === "settings" ? <SettingsPage /> : <ObservabilityPage />}
                     </div>
                   )}
                 </main>

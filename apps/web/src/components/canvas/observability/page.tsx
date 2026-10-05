@@ -1,9 +1,8 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { useQuery } from "convex/react";
 
-import { Spinner } from "../primitives";
+import { PageHeader } from "../primitives";
 import { AxiomGate } from "./axiom-gate";
-import { PageHeader } from "./chrome";
 import { Explorer } from "./explorer";
 
 /**
@@ -14,17 +13,18 @@ import { Explorer } from "./explorer";
  */
 export function ObservabilityPage() {
   const sink = useQuery(api.logSinks.get, {});
+  // Usually a blink: the stream's log book takes over once the sink is known.
   if (sink === undefined) {
     return (
-      <div className="flex h-full items-center justify-center bg-bg">
-        <Spinner />
+      <div className="flex h-full flex-col bg-bg">
+        <PageHeader title="Observability" />
       </div>
     );
   }
   if (sink?.kind !== "axiom") {
     return (
       <div className="flex h-full flex-col bg-bg">
-        <PageHeader />
+        <PageHeader title="Observability" />
         <AxiomGate />
       </div>
     );

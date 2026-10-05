@@ -73,8 +73,14 @@ export function StreamEmpty({
           </div>
         </div>
       </div>
-      <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
-      <CopyPrompt environmentId={environmentId} />
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
+        <p className="text-xs text-muted-foreground">
+          Hand the prompt to your coding agent, then turn on Tracing in the service&apos;s Settings
+          and Ship.
+        </p>
+      </div>
+      <CopyPrompt environmentId={environmentId} className="mt-1" />
     </Stage>
   );
 }

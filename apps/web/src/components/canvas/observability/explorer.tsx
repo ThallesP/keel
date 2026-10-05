@@ -15,8 +15,8 @@ import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
 import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
 import { route, SearchField, type Sink } from "./chrome";
+import { StreamLoading } from "./loading";
 import { LogContext } from "./log-context";
-import { Logbook } from "./logbook";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
 import { TraceDetail } from "./trace";
 
@@ -248,7 +248,7 @@ function Overview({
   // The first load gets the page to itself; later ones keep the previous data up, dimmed.
   if (data === null && !error) {
     return (
-      <Logbook
+      <StreamLoading
         what={`the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`}
         className={cn(hidden && "hidden")}
       />

@@ -31,3 +31,28 @@
   font-size: 9px;
   color: var(--color-faint);
 }
+
+/* Observability's loading moth (observability/loading.tsx): circles the light, wings beating. */
+@keyframes keel-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes keel-flap {
+  to {
+    transform: scaleX(0.45);
+  }
+}
+.keel-orbit {
+  animation: keel-orbit 2.4s linear infinite;
+}
+.keel-flap {
+  transform-origin: 24px 16px;
+  animation: keel-flap 0.16s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .keel-orbit,
+  .keel-flap {
+    animation: none;
+  }
+}

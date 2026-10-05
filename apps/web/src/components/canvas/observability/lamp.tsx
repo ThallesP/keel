@@ -1,6 +1,5 @@
 import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { ChevronRight } from "lucide-react";
 
 import { CopyPrompt } from "../copy-prompt";
 
@@ -10,7 +9,7 @@ import { CopyPrompt } from "../copy-prompt";
  * always facing the light; nothing else came. Failed: the lamp is out, the moth rests on the
  * shade, and the error says why. The moth is the one the Harvard Mark II's operators pulled out
  * of Relay #70 on 9 September 1947 and taped into the log book, next to "First actual case of bug
- * being found"; the empty state's caption quotes it. Motion lives in canvas.css (`keel-*`).
+ * being found"; hovering the lit lamp quotes it. Motion lives in canvas.css (`keel-*`).
  */
 
 /** The lamp's viewBox is 80 × 70, drawn at SCALE; the bulb is at (40, 54) in it. */
@@ -45,7 +44,12 @@ export function StreamEmpty({
         className,
       )}
     >
-      <div className="relative" style={{ width: BOX_W, height: 220 }} aria-hidden>
+      <div
+        className="relative"
+        style={{ width: BOX_W, height: 220 }}
+        title="“First actual case of bug being found.” Harvard Mark II log book, 9 September 1947"
+        aria-hidden
+      >
         <div
           className="keel-flicker absolute rounded-full"
           style={{
@@ -69,32 +73,8 @@ export function StreamEmpty({
           </div>
         </div>
       </div>
-      <div className="flex flex-col items-center gap-1.5 text-center">
-        <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
-        <p className="text-xs text-muted-foreground">
-          No requests or log lines yet. To trace a service:
-        </p>
-      </div>
-      {/* The prompt's button says what it does on hover; the steps stay one line. */}
-      <ol className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-xs text-muted-foreground">
-        <li className="flex items-center gap-1.5">
-          <Step n={1} />
-          <CopyPrompt environmentId={environmentId} />
-        </li>
-        <li className="flex items-center gap-1.5">
-          <ChevronRight size={12} className="text-faint" aria-hidden />
-          <Step n={2} />
-          Turn on Tracing in the service&apos;s Settings
-        </li>
-        <li className="flex items-center gap-1.5">
-          <ChevronRight size={12} className="text-faint" aria-hidden />
-          <Step n={3} />
-          Ship
-        </li>
-      </ol>
-      <p className="mt-2 font-mono text-2xs text-faint" aria-hidden>
-        “First actual case of bug being found.” · Harvard Mark II log book, 9/9/1947
-      </p>
+      <p className="text-base text-ink">Nothing in the last {long} but a moth.</p>
+      <CopyPrompt environmentId={environmentId} />
     </Stage>
   );
 }
@@ -125,14 +105,6 @@ export function StreamError({
         <p className="text-xs text-muted-foreground">Trying again every 10 seconds.</p>
       </div>
     </Stage>
-  );
-}
-
-function Step({ n }: { n: number }) {
-  return (
-    <span className="flex size-4 items-center justify-center rounded-full border border-line font-mono text-[10px] text-faint">
-      {n}
-    </span>
   );
 }
 

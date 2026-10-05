@@ -28,7 +28,7 @@ const rootLong = `Keel from the terminal, built to be driven by agents as much a
 Output: results go to stdout, progress and warnings to stderr. With --json (or KEEL_JSON=1)
 stdout is exactly one JSON object: {"ok":true,...} on success, or
 {"ok":false,"code":"SERVICE_NOT_FOUND","error":"...","fix":"..."} on failure. logs --follow
-prints one JSON object per line instead.
+prints one JSON object per line instead, and keel run leaves stdout to the command it runs.
 
 Exit codes: 0 ok, 1 error, 2 bad usage, 4 not logged in (or the login awaits approval),
 130 interrupted.
@@ -50,6 +50,10 @@ func Execute(ctx context.Context, version string) int {
 	cmd, err := a.root(version).ExecuteContextC(ctx)
 	if err == nil {
 		return 0
+	}
+	var exit *childExit // keel run: the command's own exit code, it already said why
+	if errors.As(err, &exit) {
+		return exit.code
 	}
 	if a.out == nil { // failed before PersistentPreRun: bad flag or unknown command
 		a.out = output.New(a.jsonMode() || jsonArg(os.Args[1:]))
@@ -89,7 +93,8 @@ func (a *app) root(version string) *cobra.Command {
 	root.AddCommand(
 		a.loginCmd(), a.logoutCmd(), a.whoamiCmd(), a.tokenCmd(),
 		a.statusCmd(), a.projectCmd(), a.linkCmd(), a.unlinkCmd(),
-		a.serviceCmd(), a.logsCmd(), a.varCmd(),
+		a.serviceCmd(), a.logsCmd(), a.varCmd(), a.runCmd(),
+		a.tracesCmd(), a.tracingCmd(),
 		a.shipCmd(), a.redeployCmd(), a.deploymentCmd(),
 	)
 	return root

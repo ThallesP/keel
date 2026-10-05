@@ -5,6 +5,7 @@ import { internalMutation, internalQuery, type MutationCtx } from "./_generated/
 import { ownedNode } from "./access";
 import { ingress, observed } from "./schema";
 import { converged } from "./status";
+import { withTracing } from "./tracing";
 import { computeEnv } from "./variables";
 
 // Internal, used by swarm.ts and logs.ts.
@@ -25,7 +26,7 @@ export const listDeployable = internalQuery({
   },
 });
 
-/** Everything apply needs: desired + the full env (references expanded). */
+/** Everything apply needs: desired + the full env (references expanded, tracing variables added). */
 export const applyInput = internalQuery({
   args: { id: v.id("nodes") },
   handler: async (ctx, { id }) => {
@@ -34,7 +35,7 @@ export const applyInput = internalQuery({
     return {
       name: node.name,
       desired: node.desired,
-      env: await computeEnv(ctx, node),
+      env: await withTracing(ctx, node, await computeEnv(ctx, node)),
       oneShot: node.oneShot ?? false,
       public: node.public !== undefined,
     };

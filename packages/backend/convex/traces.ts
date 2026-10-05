@@ -13,6 +13,7 @@ import {
   TRACE_ID_RE,
 } from "./traceProviders/axiom";
 import type { Trace, TraceOverview, TraceSummary } from "./traceProviders/types";
+import { NO_SINK, NO_TRACES } from "./tracing";
 
 export type {
   Attribute,
@@ -27,12 +28,12 @@ export type {
 } from "./traceProviders/types";
 export type { TimeRange } from "./timeRange";
 
-// OpenTelemetry traces of a project, read from the traces dataset of its organization's sink,
-// joined with the log lines that name them (docs/logs.md "Traces"). Read side only: spans get
-// there from whatever exports them; Keel does not forward OTLP yet. Traces need a store, so unlike
-// logs there is no Docker fallback. Spans are not scoped to the project or environment yet (they
-// carry no Keel ids until Keel sets the OTel resource of its services); their logs are, like
-// every log query.
+// OpenTelemetry traces of an environment, read from the traces dataset of its organization's
+// sink, joined with the log lines that name them (docs/logs.md "Traces"). Spans get there through
+// the OTLP relay (otlp.ts) from services with tracing on and from `keel run`, both tagged with
+// the Keel service id (tracing.ts), which is what scopes requests to the environment here. A
+// trace opened by id is not scoped: the id is the key. Traces need a store, so unlike logs there
+// is no Docker fallback.
 
 type Scope = { sink: LogSink | null; serviceIds: string[] } | null;
 
@@ -40,7 +41,7 @@ type Scope = { sink: LogSink | null; serviceIds: string[] } | null;
 async function axiomScope(ctx: ActionCtx, environmentId: Id<"environments">) {
   const scope: Scope = await ctx.runQuery(internal.logSinks.forEnvironment, { environmentId });
   if (!scope) throw new ConvexError("Environment not found");
-  if (scope.sink?.kind !== "axiom") throw new ConvexError("Connect Axiom to see traces");
+  if (scope.sink?.kind !== "axiom") throw new ConvexError(NO_SINK);
   const { traces, ...logs } = scope.sink;
   return {
     logs,
@@ -54,17 +55,23 @@ const fail = (err: unknown): never => {
   throw new ConvexError(err instanceof Error ? err.message : String(err));
 };
 
-/** Request rate, errors and latency over `range`, and the latest requests. */
+/**
+ * Request rate, errors and latency over `range`, and the latest requests, of the environment's
+ * services or of one of them (`nodeId`, for `keel traces <service>`).
+ */
 export const overview = action({
   args: {
     environmentId: v.id("environments"),
     range: timeRange,
     search: v.optional(v.string()),
+    nodeId: v.optional(v.id("nodes")),
   },
-  handler: async (ctx, { environmentId, range, search = "" }): Promise<TraceOverview> => {
-    const { traces } = await axiomScope(ctx, environmentId);
-    if (!traces) throw new ConvexError("Sign in with Axiom again to turn on traces");
-    return axiomTraceOverview(traces, range, search.slice(0, 200)).catch(fail);
+  handler: async (ctx, { environmentId, range, search = "", nodeId }): Promise<TraceOverview> => {
+    const { traces, serviceIds } = await axiomScope(ctx, environmentId);
+    if (!traces) throw new ConvexError(NO_TRACES);
+    if (nodeId && !serviceIds.includes(nodeId)) throw new ConvexError("Node not found");
+    const ids = nodeId ? [nodeId] : serviceIds;
+    return axiomTraceOverview(traces, ids, range, search.slice(0, 200)).catch(fail);
   },
 });
 
@@ -123,8 +130,8 @@ const AROUND_MS = 30_000;
 export const around = action({
   args: { environmentId: v.id("environments"), at: v.number() },
   handler: async (ctx, { environmentId, at }): Promise<TraceSummary[]> => {
-    const { traces } = await axiomScope(ctx, environmentId);
+    const { traces, serviceIds } = await axiomScope(ctx, environmentId);
     if (!traces) return [];
-    return axiomRequestsBetween(traces, at - AROUND_MS, at + AROUND_MS).catch(fail);
+    return axiomRequestsBetween(traces, serviceIds, at - AROUND_MS, at + AROUND_MS).catch(fail);
   },
 });

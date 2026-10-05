@@ -18,6 +18,8 @@ func TestTranslate(t *testing.T) {
 		{"Not authenticated", output.CodeNotAuthenticated, "keel login https://keel.test"},
 		{"Image must look like repo/name:tag", output.CodeInvalidInput, ""},
 		{"Replicas must be 0–20", output.CodeInvalidInput, ""},
+		{"Connect Axiom to see traces", output.CodeTracesOff, "Open Observability in the dashboard (https://keel.test) and Sign in with Axiom"},
+		{"Sign in with Axiom again to turn on traces", output.CodeTracesOff, "Open Observability in the dashboard (https://keel.test) and Sign in with Axiom"},
 	} {
 		data, _ := json.Marshal(tc.msg)
 		err := translate(&convex.FunctionError{Message: "Uncaught ConvexError", Data: data}, "https://keel.test")

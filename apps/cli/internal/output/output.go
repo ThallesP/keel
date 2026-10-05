@@ -35,6 +35,7 @@ const (
 	CodeDeploymentFailed     = "DEPLOYMENT_FAILED"
 	CodeNothingToShip        = "NOTHING_TO_SHIP"
 	CodeNameTaken            = "NAME_TAKEN" // a project slug or service name already in use
+	CodeTracesOff            = "TRACES_OFF" // no Axiom sink, or one from before traces
 	CodeInvalidInput         = "INVALID_INPUT"
 	CodeDiscoveryFailed      = "DISCOVERY_FAILED"
 	CodeNetwork              = "NETWORK_ERROR"

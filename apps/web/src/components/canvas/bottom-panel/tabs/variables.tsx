@@ -12,6 +12,7 @@ import { Kbd } from "../../primitives";
 import { useCanvasDispatch } from "../../store";
 import type { CanvasNode, InfraNode } from "../../types";
 import { defaultKey, ReferencePalette, refText, type ReferenceSource } from "../reference-palette";
+import { TracingSection } from "./tracing";
 
 type Variable = FunctionReturnType<typeof api.variables.list>[number];
 type Part = Variable["parts"][number];
@@ -384,6 +385,7 @@ export function VariablesTab({ node }: { node: InfraNode }) {
           />
         ),
       )}
+      {node.type === "service" && <TracingSection nodeId={id} />}
     </div>
   );
 }

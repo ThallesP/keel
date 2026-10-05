@@ -135,6 +135,14 @@ function RequestText({ trace }: { trace: TraceSummary }) {
   return (
     <span>
       <span className="text-ink">{trace.name || "(unnamed)"}</span>
+      {trace.local && (
+        <span
+          className="ml-2 rounded-sm bg-surface-2 px-1 text-[10px] text-muted-foreground"
+          title="From keel run on someone's machine, not a deploy"
+        >
+          local
+        </span>
+      )}
       {status !== null && (
         <span className="pl-3">
           {failed && (

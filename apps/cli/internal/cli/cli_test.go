@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,14 @@ func TestUsageBeforeConnecting(t *testing.T) {
 		"service delete api --json":                                        output.CodeUsage, // no terminal to ask, no --yes
 		"service delete api --yes --json":                                  output.CodeNotAuthenticated,
 		"service rm api -y --json":                                         output.CodeNotAuthenticated,
+		"run api --json":                                                   output.CodeUsage, // no -- <command>
+		"run api npm start --json":                                         output.CodeUsage,
+		"run --json -- npm start":                                          output.CodeUsage, // no service
+		"run api --json -- npm start":                                      output.CodeNotAuthenticated,
+		"traces --since 2h --json":                                         output.CodeUsage,
+		"traces api --since 1h --json":                                     output.CodeNotAuthenticated,
+		"tracing enable --json":                                            output.CodeUsage,
+		"tracing prompt --json":                                            output.CodeNotAuthenticated,
 	} {
 		root := (&app{}).root("test")
 		root.SetArgs(strings.Fields(args))
@@ -61,6 +70,51 @@ func TestUsageBeforeConnecting(t *testing.T) {
 		if got := output.CodeOf(err); got != want {
 			t.Errorf("keel %s: %q (%v), want %s", args, got, err, want)
 		}
+	}
+}
+
+func TestRunEnv(t *testing.T) {
+	shell := []string{"HOME=/home/me", "LOG_LEVEL=warn"}
+	vars := []keel.Variable{
+		{Key: "LOG_LEVEL", Resolved: "debug"},
+		{Key: "STRIPE_KEY", Resolved: "sk_test"},
+		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7ped1zs8ededv:5432/app"},
+		{Key: "OTEL_SERVICE_NAME", Resolved: "api-custom"},
+	}
+	tracing := map[string]string{"OTEL_SERVICE_NAME": "api", "OTEL_TRACES_EXPORTER": "otlp"}
+	env, skipped := runEnv(shell, vars, tracing, "https://keel.test:3211/otlp")
+	got := map[string]string{}
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		got[k] = v
+	}
+	for k, want := range map[string]string{
+		"LOG_LEVEL":                   "warn",       // the shell wins
+		"STRIPE_KEY":                  "sk_test",    // the service's variable
+		"OTEL_SERVICE_NAME":           "api-custom", // the service's own wins over tracing, as deployed
+		"OTEL_TRACES_EXPORTER":        "otlp",
+		"OTEL_EXPORTER_OTLP_ENDPOINT": "https://keel.test:3211/otlp",
+	} {
+		if got[k] != want {
+			t.Errorf("%s = %q, want %q", k, got[k], want)
+		}
+	}
+	if _, ok := got["DATABASE_URL"]; ok || len(skipped) != 1 || skipped[0] != "DATABASE_URL" {
+		t.Errorf("cluster-only DATABASE_URL: env has it %v, skipped %v", ok, skipped)
+	}
+	if env, _ := runEnv(shell, nil, nil, "x"); len(env) != len(shell) {
+		t.Errorf("no tracing: %v", env)
+	}
+	// An endpoint of the app's own: the ingest key does not go there.
+	tracing["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer%20keel_otlp_x"
+	for _, own := range []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"} {
+		env, _ := runEnv(append(slices.Clone(shell), own+"=https://collector.test"), nil, tracing, "x")
+		if slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "OTEL_EXPORTER_OTLP_HEADERS=") }) {
+			t.Errorf("own %s: Keel's headers were added: %v", own, env)
+		}
+	}
+	if env, _ := runEnv(shell, nil, tracing, "x"); !slices.Contains(env, "OTEL_EXPORTER_OTLP_HEADERS="+tracing["OTEL_EXPORTER_OTLP_HEADERS"]) {
+		t.Errorf("Keel's endpoint: headers missing: %v", env)
 	}
 }
 

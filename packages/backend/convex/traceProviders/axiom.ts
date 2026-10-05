@@ -19,6 +19,10 @@ import type {
 //
 // A "request" is a root span (no parent): rate, errors and latency count those only, as in
 // Axiom's own trace dashboards. Aggregating every span would mix in each request's children.
+//
+// Requests are scoped to services by the `keel.service_id` resource attribute Keel sets
+// (tracing.ts). It is not a semantic convention, so Axiom files it in the `resource.custom` map;
+// `deployment.environment.name` is, and gets its own column (seen 2026-10-04).
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -32,6 +36,7 @@ export const TRACE_ID_RE = /^[0-9a-f]{16,32}$/i;
 const ROOT = `where isempty(ensure_field("parent_span_id", typeof(string)))`;
 // `error` is Axiom's flag; status.code is "ERROR" (or STATUS_CODE_ERROR) per OTel otherwise.
 const FAILED = `ensure_field("error", typeof(bool)) == true or ensure_field("status.code", typeof(string)) contains "error"`;
+const SERVICE_ID = `tostring(ensure_field("resource.custom", typeof(dynamic))["keel.service_id"])`;
 const STATS = `requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)`;
 
 type Row = Record<string, unknown>;
@@ -54,13 +59,16 @@ async function spans(
 /** APL string literal. */
 const lit = (s: string) => `"${s.replace(/[\\"]/g, "\\$&")}"`;
 
-/** Root spans, optionally only those whose name or service contains `search`. */
-function roots(cfg: AxiomConfig, search: string) {
+/**
+ * Root spans of these services (at least one id), optionally only those whose name or service
+ * contains `search`.
+ */
+function roots(cfg: AxiomConfig, serviceIds: string[], search: string) {
   const term = search.trim();
   const match = term
     ? ` | where name contains ${lit(term)} or ensure_field("service.name", typeof(string)) contains ${lit(term)}`
     : "";
-  return `['${cfg.dataset}'] | ${ROOT}${match}`;
+  return `['${cfg.dataset}'] | ${ROOT} | where ${SERVICE_ID} in (${serviceIds.map(lit).join(", ")})${match}`;
 }
 
 /**
@@ -69,14 +77,16 @@ function roots(cfg: AxiomConfig, search: string) {
  */
 async function requests(
   cfg: AxiomConfig,
+  serviceIds: string[],
   search: string,
   from: number,
   to: number | undefined,
   limit: number,
 ): Promise<TraceSummary[]> {
+  if (serviceIds.length === 0) return [];
   const latest = await spans(
     cfg,
-    `${roots(cfg, search)} | sort by _time desc | limit ${limit}`,
+    `${roots(cfg, serviceIds, search)} | sort by _time desc | limit ${limit}`,
     from,
     to,
   );
@@ -109,6 +119,7 @@ async function requests(
       spans: counts?.spans ?? 1,
       errors: counts?.errors ?? (error ? 1 : 0),
       error,
+      local: pick(r, "resource.deployment.environment.name") === "local",
     };
   });
 }
@@ -116,6 +127,7 @@ async function requests(
 /** Requests, errors and latency over the range, per bucket, and the latest requests. */
 export async function axiomTraceOverview(
   cfg: AxiomConfig,
+  serviceIds: string[],
   range: TimeRange,
   search: string,
 ): Promise<TraceOverview> {
@@ -123,18 +135,22 @@ export async function axiomTraceOverview(
   // Totals and series stop where the last bucket does, so the totals are the buckets' sum (a span
   // stamped ahead of this clock would otherwise count in the totals but in no bucket).
   const { from, to, count } = rangeWindow(range);
-  const matching = roots(cfg, search);
+  const matching = roots(cfg, serviceIds, search);
 
-  const [totals, series, traces] = await Promise.all([
-    spans(cfg, `${matching} | extend failed = ${FAILED} | summarize ${STATS}`, from, to),
-    spans(
-      cfg,
-      `${matching} | extend failed = ${FAILED} | summarize ${STATS} by bin(_time, ${bin})`,
-      from,
-      to,
-    ),
-    requests(cfg, search, from, undefined, LIST),
-  ]);
+  // An environment with no services has no requests; `in ()` is not valid APL.
+  const [totals, series, traces] =
+    serviceIds.length === 0
+      ? [[], [], []]
+      : await Promise.all([
+          spans(cfg, `${matching} | extend failed = ${FAILED} | summarize ${STATS}`, from, to),
+          spans(
+            cfg,
+            `${matching} | extend failed = ${FAILED} | summarize ${STATS} by bin(_time, ${bin})`,
+            from,
+            to,
+          ),
+          requests(cfg, serviceIds, search, from, undefined, LIST),
+        ]);
 
   const byBucket = new Map<number, TraceBucket>();
   for (const r of series) {
@@ -159,8 +175,13 @@ export async function axiomTraceOverview(
 }
 
 /** Requests that started in [from, to), newest first: what was going on around a log line. */
-export async function axiomRequestsBetween(cfg: AxiomConfig, from: number, to: number) {
-  return requests(cfg, "", from, to, LIST);
+export async function axiomRequestsBetween(
+  cfg: AxiomConfig,
+  serviceIds: string[],
+  from: number,
+  to: number,
+) {
+  return requests(cfg, serviceIds, "", from, to, LIST);
 }
 
 /**

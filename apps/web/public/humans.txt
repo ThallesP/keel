@@ -4,20 +4,10 @@
   GitHub: ThallesP
 
 
-/* THANKS */
-
-  The forty-seven people who signed the inside of the Macintosh case,
-  where no one who bought one would ever see it. They signed anyway.
-
-  Andy Hertzfeld, for writing it down. folklore.org
-
-
 /* SITE */
 
-  Name: Keel, a self-hosted deploy platform
-  Source: github.com/ThallesP/keel
-  Built with: TypeScript, React, TanStack Router, Convex, Tailwind,
-              shadcn/ui, Go, Docker Swarm, Tailscale, Cloudflare Tunnel
+  Keel, a self-hosted deploy platform
+  github.com/ThallesP/keel
 
 
 /* SIGNED */

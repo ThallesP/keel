@@ -32,10 +32,30 @@
   color: var(--color-faint);
 }
 
-/* Observability's loading moth (observability/loading.tsx): circles the light, wings beating. */
-@keyframes keel-orbit {
+/* Observability's lamp and moth (observability/lamp.tsx). The three moth layers share one start,
+   so it banks toward the light at each end of its path. */
+@keyframes keel-moth-x {
+  from {
+    transform: translateX(-84px);
+  }
   to {
-    transform: rotate(360deg);
+    transform: translateX(84px);
+  }
+}
+@keyframes keel-moth-y {
+  from {
+    transform: translateY(-36px);
+  }
+  to {
+    transform: translateY(30px);
+  }
+}
+@keyframes keel-moth-face {
+  from {
+    rotate: 24deg;
+  }
+  to {
+    rotate: -24deg;
   }
 }
 @keyframes keel-flap {
@@ -43,16 +63,44 @@
     transform: scaleX(0.45);
   }
 }
-.keel-orbit {
-  animation: keel-orbit 2.4s linear infinite;
+/* A bad bulb: steady, then two quick dips. */
+@keyframes keel-flicker {
+  0%,
+  78%,
+  81%,
+  84%,
+  100% {
+    opacity: 1;
+  }
+  79.5% {
+    opacity: 0.3;
+  }
+  82.5% {
+    opacity: 0.55;
+  }
+}
+.keel-moth-x {
+  animation: keel-moth-x 2.3s ease-in-out infinite alternate;
+}
+.keel-moth-y {
+  animation: keel-moth-y 1.5s ease-in-out infinite alternate;
+}
+.keel-moth-face {
+  animation: keel-moth-face 2.3s ease-in-out infinite alternate;
 }
 .keel-flap {
   transform-origin: 24px 16px;
   animation: keel-flap 0.16s ease-in-out infinite alternate;
 }
+.keel-flicker {
+  animation: keel-flicker 4.6s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .keel-orbit,
-  .keel-flap {
+  .keel-moth-x,
+  .keel-moth-y,
+  .keel-moth-face,
+  .keel-flap,
+  .keel-flicker {
     animation: none;
   }
 }

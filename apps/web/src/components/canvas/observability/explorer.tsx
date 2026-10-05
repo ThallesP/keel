@@ -15,7 +15,7 @@ import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
 import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
 import { route, SearchField, type Sink } from "./chrome";
-import { StreamLoading } from "./loading";
+import { StreamError, StreamLoading } from "./lamp";
 import { LogContext } from "./log-context";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
 import { TraceDetail } from "./trace";
@@ -245,14 +245,12 @@ function Overview({
     return mergeEvents(lines, requests);
   }, [data, numbers, kind]);
 
-  // The first load gets the page to itself; later ones keep the previous data up, dimmed.
-  if (data === null && !error) {
-    return (
-      <StreamLoading
-        what={`the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`}
-        className={cn(hidden && "hidden")}
-      />
-    );
+  // The first load gets the page to itself, and so does a failure with nothing to show; later
+  // loads keep the previous data up, dimmed, and a partial failure is a line above the data.
+  const what = `the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`;
+  if (data === null) return <StreamLoading what={what} className={cn(hidden && "hidden")} />;
+  if (error && data.lines.length === 0 && !numbers) {
+    return <StreamError what={what} error={error} className={cn(hidden && "hidden")} />;
   }
 
   return (

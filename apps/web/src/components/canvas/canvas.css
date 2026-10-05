@@ -47,7 +47,7 @@
     transform: translateY(-36px);
   }
   to {
-    transform: translateY(30px);
+    transform: translateY(22px);
   }
 }
 @keyframes keel-moth-face {

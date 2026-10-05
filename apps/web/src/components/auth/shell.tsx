@@ -1,7 +1,5 @@
-import { useNow } from "@/components/canvas/use-now";
 import { Logo } from "@/components/logo";
 
-import { shipsBells } from "./bells";
 import { RealArtistsShip } from "./plate";
 
 /**
@@ -24,13 +22,10 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
 }
 
 function Plate() {
-  const now = useNow(30_000);
-  const time = new Date(now);
-  const clock = `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
   return (
     <aside
       aria-hidden
-      className="hidden w-1/2 max-w-3xl flex-col justify-between border-r border-line bg-canvas p-10 lg:flex"
+      className="hidden w-1/2 max-w-3xl flex-col justify-center gap-20 border-r border-line bg-canvas p-10 lg:flex"
       style={{
         backgroundImage: "radial-gradient(var(--color-dot) 1px, transparent 1px)",
         backgroundSize: "20px 20px",
@@ -46,17 +41,6 @@ function Plate() {
       </dl>
 
       <RealArtistsShip />
-
-      <dl className="grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-2xs text-faint">
-        <dt>Source</dt>
-        <dd className="text-muted-foreground">folklore.org, Andy Hertzfeld</dd>
-        <dt>Host</dt>
-        <dd className="truncate font-mono text-muted-foreground">{window.location.host}</dd>
-        <dt>Time</dt>
-        <dd className="text-muted-foreground">
-          {clock} · {shipsBells(time)}
-        </dd>
-      </dl>
     </aside>
   );
 }

@@ -163,7 +163,13 @@ function Segmented<T extends string>({
   );
 }
 
-type StreamData = { key: string; lines: ProjectLine[]; overview: TraceOverview | null };
+/** `search`: the filter this answer is for, which can lag the field while the next one loads. */
+type StreamData = {
+  key: string;
+  search: string;
+  lines: ProjectLine[];
+  overview: TraceOverview | null;
+};
 
 /**
  * Lines and request numbers for the range and filter, polled while visible: the next poll is
@@ -197,6 +203,7 @@ function useStream(
         const same = prev?.key === key;
         return {
           key,
+          search,
           lines: lines.status === "fulfilled" ? lines.value.lines : same ? prev.lines : [],
           overview: numbers.status === "fulfilled" ? numbers.value : same ? prev.overview : null,
         };
@@ -249,8 +256,9 @@ function Overview({
 
   // The first load is the app's spinner. Nothing to show, empty or failed, gets the page to
   // itself (lamp.tsx); a partial failure is a line above the data, and later loads keep the
-  // previous data up, dimmed.
-  const what = `the last ${long} of ${sink.traces ? "requests and logs" : "logs"}`;
+  // previous data up, dimmed. A sink from before traces keeps the plain layout either way: its
+  // TracesBanner is where a pending Axiom org picker shows.
+  const what = `the last ${long} of requests and logs`;
   if (data === null) {
     return (
       <div className={cn("flex min-h-0 flex-1 flex-col", hidden && "hidden")}>
@@ -258,13 +266,13 @@ function Overview({
       </div>
     );
   }
-  if (error && data.lines.length === 0 && !numbers) {
+  if (sink.traces && error && data.lines.length === 0 && !numbers) {
     return <StreamError what={what} error={error} className={cn(hidden && "hidden")} />;
   }
   if (
     sink.traces &&
     !error &&
-    !filter &&
+    data.search === "" &&
     data.lines.length === 0 &&
     numbers?.stats.requests === 0
   ) {

@@ -121,7 +121,7 @@ function DisconnectDialog({
   const [busy, setBusy] = useState(false);
   const confirm = async () => {
     setBusy(true);
-    const ok = (await attempt(disconnect({}))) !== undefined;
+    const ok = (await attempt(disconnect({}).then(() => true))) === true;
     setBusy(false);
     if (!ok) return;
     onOpenChange(false);

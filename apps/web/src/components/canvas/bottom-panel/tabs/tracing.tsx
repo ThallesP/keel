@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { CopyPrompt } from "../../copy-prompt";
 import { attempt } from "../../errors";
+import { Spinner } from "../../primitives";
 
 /**
  * The service's tracing switch, in its Settings tab (docs/logs.md "Traces"). On, Keel adds the
@@ -17,6 +18,13 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
   const tracing = useQuery(api.tracing.forNode, { nodeId });
   const enable = useAction(api.tracing.enable);
   const [busy, setBusy] = useState(false);
+  if (tracing === undefined) {
+    return (
+      <div className="flex h-16 items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
   if (!tracing) return null;
 
   const { enabled } = tracing;

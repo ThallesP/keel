@@ -47,7 +47,7 @@ export function StreamEmpty({
     >
       <div className="relative" style={{ width: BOX_W, height: 220 }} aria-hidden>
         <div
-          className="keel-flicker absolute rounded-full"
+          className="keel-flicker pointer-events-none absolute rounded-full"
           style={{
             width: 340,
             height: 340,
@@ -135,7 +135,7 @@ function Stage({ className, children }: { className?: string; children: React.Re
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 pb-16 [animation-fill-mode:both] motion-reduce:animate-none",
+        "flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 pb-16 motion-reduce:animate-none",
         className,
       )}
     >

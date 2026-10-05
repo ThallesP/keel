@@ -1,9 +1,10 @@
 import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { useQuery } from "convex/react";
 
-import { Spinner } from "../primitives";
+import Loader from "@/components/loader";
+
+import { PageHeader } from "../primitives";
 import { AxiomGate } from "./axiom-gate";
-import { PageHeader } from "./chrome";
 import { Explorer } from "./explorer";
 
 /**
@@ -16,15 +17,18 @@ export function ObservabilityPage() {
   const sink = useQuery(api.logSinks.get, {});
   if (sink === undefined) {
     return (
-      <div className="flex h-full items-center justify-center bg-bg">
-        <Spinner />
+      <div className="flex h-full flex-col bg-bg">
+        <PageHeader title="Observability" />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <Loader />
+        </div>
       </div>
     );
   }
   if (sink?.kind !== "axiom") {
     return (
       <div className="flex h-full flex-col bg-bg">
-        <PageHeader />
+        <PageHeader title="Observability" />
         <AxiomGate />
       </div>
     );

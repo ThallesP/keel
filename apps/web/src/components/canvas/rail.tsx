@@ -29,13 +29,13 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
 }
 
 /**
- * Canvas and Observability (requests and logs in one stream) are views of the same project
- * (`?view=`); the rest are still mockup.
+ * Canvas, Observability (requests and logs in one stream) and Settings are views of the same
+ * project (`?view=`); the rest are still mockup.
  */
 export function Rail() {
   const { view } = route.useSearch();
   const navigate = route.useNavigate();
-  const show = (next: "observability" | undefined) =>
+  const show = (next: "observability" | "settings" | undefined) =>
     void navigate({
       search: (prev) => ({ ...prev, view: next, trace: undefined, around: undefined }),
     });
@@ -44,7 +44,7 @@ export function Rail() {
     {
       label: "Observability",
       icon: Activity,
-      active: view !== undefined,
+      active: view === "observability",
       onClick: () => show("observability"),
     },
     { label: "Metrics", icon: ChartLine },
@@ -58,7 +58,12 @@ export function Rail() {
         ))}
       </div>
       <div className="flex flex-col gap-1.5">
-        <RailButton label="Settings" icon={Settings} />
+        <RailButton
+          label="Settings"
+          icon={Settings}
+          active={view === "settings"}
+          onClick={() => show("settings")}
+        />
       </div>
     </nav>
   );

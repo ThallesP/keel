@@ -139,7 +139,7 @@ export const enable = action({
   },
 });
 
-/** The service's tracing as its Variables tab shows it. The ingest key is masked. */
+/** The service's tracing as its Settings tab shows it. The ingest key is masked. */
 export const forNode = query({
   args: { nodeId: v.id("nodes") },
   handler: async (ctx, { nodeId }) => {

@@ -8,13 +8,19 @@ import type { CanvasNode, InfraNode, PanelTab } from "../types";
 import { PanelFrame } from "./panel-frame";
 import { DeploymentsTab } from "./tabs/deployments";
 import { LogsTab } from "./tabs/logs";
+import { SettingsTab } from "./tabs/settings";
 import { VariablesTab } from "./tabs/variables";
 
 const tabs: { id: PanelTab; label: string }[] = [
   { id: "deployments", label: "Deployments" },
   { id: "variables", label: "Variables" },
   { id: "logs", label: "Logs" },
+  { id: "settings", label: "Settings" },
 ];
+
+/** Settings only holds service settings so far (tracing). */
+const tabsFor = (node: InfraNode) =>
+  node.type === "service" ? tabs : tabs.filter((t) => t.id !== "settings");
 
 function metaFor(node: InfraNode): string {
   switch (node.type) {
@@ -37,6 +43,8 @@ function TabContent({ node, tab }: { node: InfraNode; tab: PanelTab }) {
       return <VariablesTab node={node} />;
     case "logs":
       return <LogsTab node={node} />;
+    case "settings":
+      return <SettingsTab node={node} />;
   }
 }
 
@@ -47,6 +55,8 @@ export function BottomPanel() {
   const nodes = useNodes<CanvasNode>();
   const node = nodes.find((n) => n.id === panelNodeId);
   if (!node || node.type === "group") return null;
+  const shown = tabsFor(node);
+  const tab = shown.some((t) => t.id === panelTab) ? panelTab : "deployments";
 
   return (
     <PanelFrame
@@ -60,15 +70,15 @@ export function BottomPanel() {
             <StatusDot status={node.data.status} size={6} />
           </span>
           <nav className="flex h-11 items-center gap-[18px]" aria-label="Panel tabs">
-            {tabs.map((t) => (
+            {shown.map((t) => (
               <button
                 key={t.id}
                 type="button"
-                aria-current={t.id === panelTab ? "page" : undefined}
+                aria-current={t.id === tab ? "page" : undefined}
                 onClick={() => dispatch({ type: "setTab", tab: t.id })}
                 className={cn(
                   "flex h-11 items-center border-b-2 text-sm",
-                  t.id === panelTab && !panelCollapsed
+                  t.id === tab && !panelCollapsed
                     ? "border-ink font-medium text-ink"
                     : "border-transparent text-muted-foreground hover:text-ink",
                 )}
@@ -86,7 +96,7 @@ export function BottomPanel() {
     >
       {/* Keyed by node: a switch remounts the tab, so a half-typed variable, an open row editor
           or the previous node's log lines never carry over to the next node. */}
-      <TabContent key={node.id} node={node} tab={panelTab} />
+      <TabContent key={node.id} node={node} tab={tab} />
     </PanelFrame>
   );
 }

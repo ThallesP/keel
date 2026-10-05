@@ -7,10 +7,10 @@ import { useState } from "react";
 
 import { CopyPrompt } from "../../copy-prompt";
 import { attempt } from "../../errors";
-import { SectionLabel } from "../../primitives";
+import { Spinner } from "../../primitives";
 
 /**
- * The service's tracing switch, under its variables (docs/logs.md "Traces"). On, Keel adds the
+ * The service's tracing switch, in its Settings tab (docs/logs.md "Traces"). On, Keel adds the
  * OTEL_* variables listed here on the next Ship; the service's own variables win over them.
  * The code side is the agent prompt's job.
  */
@@ -18,6 +18,13 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
   const tracing = useQuery(api.tracing.forNode, { nodeId });
   const enable = useAction(api.tracing.enable);
   const [busy, setBusy] = useState(false);
+  if (tracing === undefined) {
+    return (
+      <div className="flex h-16 items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
   if (!tracing) return null;
 
   const { enabled } = tracing;
@@ -38,11 +45,13 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
   };
 
   return (
-    <section className="shrink-0 border-t border-line">
-      <div className="flex h-10 items-center gap-3 px-5">
-        <SectionLabel className="pl-2">Tracing</SectionLabel>
-        <span className="min-w-0 truncate text-2xs text-faint">{note}</span>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+    <section className="shrink-0 border-b border-line">
+      <div className="flex items-center gap-6 px-5 py-3">
+        <div className="min-w-0 flex-1 pl-2">
+          <h3 className="text-sm font-medium text-ink">Tracing</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
           <CopyPrompt nodeId={nodeId} />
           <button
             type="button"

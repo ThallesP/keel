@@ -119,9 +119,9 @@ function Backdrop() {
 /**
  * Axiom's logo mark (axiom.co). The sign-in button wears Axiom's brand orange (`#de5820`, its
  * light-theme value) with this mark in white, like any third-party sign-in button; it is the one
- * place the accent is not Keel's blue.
+ * place the accent is not Keel's blue. Elsewhere (Settings) the mark is ink.
  */
-function AxiomMark({ size = 14 }: { size?: number }) {
+export function AxiomMark({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={Math.round(size * (11 / 13))} viewBox="0 0 13 11" aria-hidden>
       <path
@@ -147,7 +147,7 @@ function useSignIn() {
 }
 
 /** In Axiom's brand orange with its mark, like any third-party sign-in button. */
-function SignInButton({ compact = false }: { compact?: boolean }) {
+export function SignInButton({ compact = false }: { compact?: boolean }) {
   const { busy, signIn } = useSignIn();
   return (
     <button

@@ -6,28 +6,36 @@ import { NodeShell } from "./node-shell";
 import { RuntimeLine } from "./runtime-line";
 
 /**
- * Public domain while the tunnel is live (a link; `nodrag nopan` + stopPropagation so React Flow
- * neither drags nor swallows the click), its state while it is not, else the image.
+ * The public domain once it serves HTTPS (a link; `nodrag nopan` + stopPropagation so React Flow
+ * neither drags nor swallows the click), dimmed while its certificate is on the way, else the image.
  */
 function Subtitle({ data }: { data: ServiceData }) {
-  switch (data.ingress?.state) {
+  const { http } = data;
+  switch (http?.state) {
     case "live":
       return (
         <a
-          href={data.publicUrl}
+          href={http.address}
           target="_blank"
           rel="noreferrer"
-          title={`${data.publicUrl} · temporary URL, changes when the tunnel restarts`}
           className="nodrag nopan font-mono text-primary hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
-          {data.domain}
+          {http.domain}
         </a>
       );
     case "starting":
-      return <>Exposing…</>;
+      return (
+        <span className="font-mono text-faint" title="Getting a certificate…">
+          {http.domain}
+        </span>
+      );
     case "failed":
-      return <span className="text-danger">Expose failed</span>;
+      return (
+        <span className="text-danger" title={http.error}>
+          Expose failed
+        </span>
+      );
     default:
       return data.image ? <span className="font-mono">{data.image}</span> : null;
   }

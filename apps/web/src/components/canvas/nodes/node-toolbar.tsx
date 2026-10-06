@@ -86,8 +86,8 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
       ? node.data
       : null;
   const status = runtime?.status;
-  // Exposing a never-deployed service would only tunnel to nothing.
-  const service = node?.type === "service" && node.data.status !== "pending" ? node.data : null;
+  // Exposing a never-deployed node would only route to nothing.
+  const exposable = runtime && runtime.status !== "pending" ? runtime : null;
 
   return (
     <FlowNodeToolbar isVisible={visible} position={Position.Top} offset={10} className="nopan">
@@ -120,7 +120,7 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
             Logs
           </button>
         )}
-        {service && !service.public && (
+        {exposable && !exposable.public && (
           <button type="button" className={itemClass} onClick={() => void actions.expose(nodeId)}>
             <Globe size={11} strokeWidth={1.6} aria-hidden />
             Expose
@@ -146,7 +146,7 @@ export function NodeToolbar({ nodeId, visible }: { nodeId: string; visible: bool
                 <DropdownMenuSeparator />
               </>
             )}
-            {service?.public && (
+            {runtime?.public && (
               <DropdownMenuItem onClick={() => void actions.unexpose(nodeId)}>
                 <Globe size={12} strokeWidth={1.6} aria-hidden />
                 Make private

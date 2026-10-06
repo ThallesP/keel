@@ -28,16 +28,30 @@ export type RuntimeData = {
   stoppedAt?: number;
   /** Present while status === "done": when the last task exited 0. */
   finishedAt?: number;
-  /** Exposed to the internet (services only). */
+  /** Reachable from the internet through keel-proxy (at least one endpoint). */
   public: boolean;
-  /** https://… once the tunnel is live. Quick Tunnel: temporary, changes when the tunnel restarts. */
-  publicUrl?: string;
-  /** Present while `public`. */
-  ingress?: { state: "starting" | "live" | "failed"; error?: string };
+  endpoints: Endpoint[];
+};
+
+/** Mirrors `endpointView` in `packages/backend/convex/endpoints.ts`. */
+export type Endpoint = {
+  protocol: "http" | "tcp" | "udp";
+  /** Container port the proxy dials. */
+  port: number;
+  /** http only. */
+  domain?: string;
+  /** tcp / udp only: the port on the control plane. */
+  publicPort?: number;
+  /** `https://<domain>` or `<public IP>:<publicPort>`. */
+  address: string;
+  /** http `starting`: loaded, waiting for its certificate. */
+  state: "starting" | "live" | "failed";
+  error?: string;
 };
 
 export type ServiceData = RuntimeData & {
-  domain?: string;
+  /** The first https endpoint, shown as the card's subtitle. */
+  http?: Endpoint;
 };
 
 export type DatabaseData = RuntimeData & {

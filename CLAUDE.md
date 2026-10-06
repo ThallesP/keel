@@ -9,9 +9,9 @@ Differentiator: UI/UX and deploy DX.
 
 - **Canvas first.** Railway-inspired. Projects are a canvas by default.
 - **Multi-server by default.** Scaling past one machine must be effortless. Single-node clusters stay first-class.
-- **Zero networking for the user.** We handle it:
+- **Almost zero networking for the user.** We handle it, except opening ports on the control plane:
   - Tailscale for user containers and control-plane/worker comms.
-  - Public HTTP via Cloudflare Tunnel: a Quick Tunnel per exposed service today (temporary `trycloudflare.com` URL, zero setup), a named tunnel with the user's own domain next. Tailscale Funnel was rejected 2026-10-01. See `docs/networking.md`.
+  - Public traffic via `keel-proxy` (Caddy + caddy-l4, `apps/proxy`) on the control plane only, never a per-worker proxy: HTTPS on 80/443 with automatic certificates (sslip.io default domain or the user's own), raw TCP/UDP on any port, all configured by Convex through the admin API. The user opens 80/443 and the TCP/UDP ports they expose. Cloudflare Quick Tunnel was dropped 2026-10-06, Tailscale Funnel 2026-10-01. See `docs/networking.md`.
 
 ## Install and release
 
@@ -32,5 +32,5 @@ Differentiator: UI/UX and deploy DX.
 - `docs/workers.md` — worker layer: Docker Swarm as reconciler, Convex as control plane, node join flow, schema, apply/observe actions. Read before any Swarm or node-join code.
 - `docs/volumes.md` — persistent data: pin + backup, no distributed storage, two-pass rsync migration between nodes, backup by kind, schema. Read before anything that mounts a volume, schedules a backup, or moves a service between servers.
 - `docs/logs.md` — log sinks and providers: per-organization sink (Axiom today, Docker default), worker ships lines, `logs.tail` dispatches on provider, event shape contract, how to add ClickHouse; OpenTelemetry traces in the sink's second dataset (root span = request), joined to log lines by the trace id the line names; spans come in through Keel's OTLP relay from services with tracing on and from `keel run`, and apps get instrumented by pasting Keel's agent prompt, not by a Keel SDK. Read before touching `convex/logs*`, `convex/traces.ts`, `convex/otlp.ts`, `convex/tracing*.ts`, `convex/logProviders`, `convex/traceProviders`, `components/canvas/observability`, or `apps/worker/src/logs.ts`.
-- `docs/networking.md` — Tailscale mesh, public ingress via Cloudflare Tunnel (Quick Tunnel per service now, named tunnel next, why Funnel was dropped), zero-inbound-port invariant, why not NetBird/Caddy/Traefik. Read before any ingress, domain, or auth code.
+- `docs/networking.md` — Tailscale mesh, public ingress via keel-proxy (why Caddy + caddy-l4 over Traefik/HAProxy/Envoy, host-namespace listeners from an overlay container, endpoints, sync, certificate reports), why Cloudflare Tunnel and Funnel were dropped. Read before any ingress, domain, or auth code.
 - Mockups: Paper file "_Ship_".

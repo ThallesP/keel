@@ -10,6 +10,8 @@
 # Optional environment (all of it is non-interactive except a Tailscale login without a key):
 #   KEEL_TAILSCALE_AUTHKEY  tskey-auth-... to join the tailnet without a browser login
 #   KEEL_ADDR               Bind to this IP instead of the tailnet IP; skips Tailscale (LAN, CI)
+#   KEEL_PUBLIC_IP          This server's public IPv4 (default: detected). Names the default
+#                           https://<service>-<id>.<ip>.sslip.io domains of exposed services
 #   KEEL_VERSION            Image tag of keel-web / keel-worker / keel-functions (default latest)
 #   KEEL_WEB_PORT           Dashboard port on KEEL_ADDR (default 80)
 #   KEEL_JSON=1             Machine-readable result on stdout
@@ -45,7 +47,7 @@ compose() { docker compose -p keel --env-file "$ENV_FILE" -f "$KEEL_DIR/compose.
 functions() {
   docker run --rm --network host \
     -e CONVEX_SELF_HOSTED_URL="http://$KEEL_ADDR:3210" -e CONVEX_SELF_HOSTED_ADMIN_KEY \
-    -e SITE_URL -e BETTER_AUTH_SECRET -e KEEL_WORKER_TOKEN \
+    -e SITE_URL -e BETTER_AUTH_SECRET -e KEEL_WORKER_TOKEN -e KEEL_PUBLIC_IP \
     "$KEEL_IMAGE_PREFIX/keel-functions:$KEEL_VERSION" "$@"
 }
 
@@ -100,6 +102,26 @@ ensure_tailscale() {
   log "tailnet address $KEEL_ADDR"
 }
 
+# The address the internet reaches this server on: what exposed services' domains and ports
+# point at (docs/networking.md). Behind NAT it is the router's, which is the one to forward.
+# Not fatal: without it Keel still runs, only Expose asks for it.
+detect_public_ip() {
+  if [ -n "$KEEL_PUBLIC_IP" ]; then
+    log "public IP $KEEL_PUBLIC_IP"
+    return
+  fi
+  local url
+  for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
+    KEEL_PUBLIC_IP=$(curl -4fsS --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]' || true)
+    if [[ "$KEEL_PUBLIC_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+      log "public IP $KEEL_PUBLIC_IP (detected; set KEEL_PUBLIC_IP to override)"
+      return
+    fi
+  done
+  KEEL_PUBLIC_IP=""
+  warn "could not detect this server's public IPv4; set KEEL_PUBLIC_IP and re-run to expose services"
+}
+
 fetch() { # <repo path> <dest> <mode>
   if [ -n "${KEEL_SRC:-}" ]; then
     install -m "$3" "$KEEL_SRC/$1" "$2"
@@ -132,6 +154,7 @@ save_state() {
 # KEEL_ADDR is derived (tailnet IP) unless KEEL_ADDR_OVERRIDE is set.
 KEEL_ADDR='$KEEL_ADDR'
 KEEL_ADDR_OVERRIDE='$KEEL_ADDR_OVERRIDE'
+KEEL_PUBLIC_IP='$KEEL_PUBLIC_IP'
 KEEL_VERSION='$KEEL_VERSION'
 KEEL_WEB_PORT='$KEEL_WEB_PORT'
 KEEL_IMAGE_PREFIX='$KEEL_IMAGE_PREFIX'
@@ -144,6 +167,12 @@ EOF
   )
 }
 
+# keel-proxy joins the Swarm overlay, so Swarm and the network come before `compose up`.
+start_swarm() {
+  log "initialising Docker Swarm and the keel overlay network"
+  TAILSCALE_IP=$KEEL_ADDR bash "$KEEL_DIR/scripts/bootstrap-swarm.sh" --swarm-only >&2
+}
+
 start_control_plane() {
   if [ "$KEEL_PULL" = 1 ]; then
     log "pulling images ($KEEL_IMAGE_PREFIX, tag $KEEL_VERSION)"
@@ -151,7 +180,7 @@ start_control_plane() {
     docker pull -q "$KEEL_IMAGE_PREFIX/keel-functions:$KEEL_VERSION" >/dev/null
     docker pull -q "$KEEL_IMAGE_PREFIX/keel-worker:$KEEL_VERSION" >/dev/null
   fi
-  log "starting the control plane (Convex backend, web)"
+  log "starting the control plane (Convex backend, web, proxy)"
   compose up -d --wait --wait-timeout 180 --remove-orphans >&2 ||
     die "the control plane did not become healthy" "docker compose -p keel logs backend web"
 
@@ -163,12 +192,12 @@ start_control_plane() {
   functions check >&2 ||
     die "the Convex backend rejected the stored admin key" "delete CONVEX_SELF_HOSTED_ADMIN_KEY from $ENV_FILE and re-run"
 
-  log "pushing Keel functions and settings to Convex"
+  log "pushing Keel functions and settings to Convex, then migrating and syncing the proxy"
   functions deploy >&2 || die "pushing functions failed" "see the output above; the backend needs outbound access to registry.npmjs.org"
 }
 
 start_workers() {
-  log "bootstrapping Docker Swarm and the per-node worker"
+  log "starting the per-node worker"
   TAILSCALE_IP=$KEEL_ADDR KEEL_URL="http://$KEEL_ADDR:3211" \
     KEEL_WORKER_IMAGE="$KEEL_IMAGE_PREFIX/keel-worker:$KEEL_VERSION" \
     bash "$KEEL_DIR/scripts/bootstrap-swarm.sh" >&2
@@ -200,13 +229,16 @@ main() {
   KEEL_VERSION=${KEEL_VERSION:-$(saved KEEL_VERSION)}; KEEL_VERSION=${KEEL_VERSION:-latest}
   KEEL_WEB_PORT=${KEEL_WEB_PORT:-$(saved KEEL_WEB_PORT)}; KEEL_WEB_PORT=${KEEL_WEB_PORT:-80}
   KEEL_IMAGE_PREFIX=${KEEL_IMAGE_PREFIX:-$(saved KEEL_IMAGE_PREFIX)}; KEEL_IMAGE_PREFIX=${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}
+  KEEL_PUBLIC_IP=${KEEL_PUBLIC_IP:-$(saved KEEL_PUBLIC_IP)}
 
   preflight
   ensure_docker
   ensure_tailscale
+  detect_public_ip
   SITE_URL="http://$KEEL_ADDR"; [ "$KEEL_WEB_PORT" = 80 ] || SITE_URL="$SITE_URL:$KEEL_WEB_PORT"
   write_state
-  export CONVEX_SELF_HOSTED_ADMIN_KEY SITE_URL BETTER_AUTH_SECRET KEEL_WORKER_TOKEN
+  export CONVEX_SELF_HOSTED_ADMIN_KEY SITE_URL BETTER_AUTH_SECRET KEEL_WORKER_TOKEN KEEL_PUBLIC_IP
+  start_swarm
   start_control_plane
   start_workers
   check_health
@@ -214,10 +246,11 @@ main() {
   printf '\n\033[1mKeel is running.\033[0m\n\n  Dashboard  %s\n  Convex     http://%s:3210\n  State      %s (secrets, 0600)\n\n' \
     "$SITE_URL" "$KEEL_ADDR" "$ENV_FILE" >&2
   printf 'Open the dashboard from any device on your tailnet and sign up.\nUpgrade: re-run the install command.\n' >&2
+  printf '\nExposed services are served from %s: let ports 80 and 443 (TCP) through\nits firewall or router, plus each TCP/UDP port you expose.\n' "${KEEL_PUBLIC_IP:-this server}" >&2
   if [ "${KEEL_JSON:-}" = 1 ]; then
-    printf '{"ok":true,"url":%s,"convexUrl":%s,"convexSiteUrl":%s,"version":%s,"stateDir":%s}\n' \
+    printf '{"ok":true,"url":%s,"convexUrl":%s,"convexSiteUrl":%s,"version":%s,"stateDir":%s,"publicIp":%s}\n' \
       "$(json_str "$SITE_URL")" "$(json_str "http://$KEEL_ADDR:3210")" "$(json_str "http://$KEEL_ADDR:3211")" \
-      "$(json_str "$KEEL_VERSION")" "$(json_str "$KEEL_DIR")"
+      "$(json_str "$KEEL_VERSION")" "$(json_str "$KEEL_DIR")" "$(json_str "$KEEL_PUBLIC_IP")"
   fi
 }
 

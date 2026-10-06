@@ -242,7 +242,7 @@ Cross-node choreography (rolling a revision across pinned nodes one at a time, h
 
 ## Networking notes
 
-- Public HTTP is a per-service `cloudflared` Quick Tunnel (`ingress-<id>`, label `keel.ingress`) on the overlay, not a tunnel to the manager. Full design in [`networking.md`](./networking.md). Do not publish host ports via `EndpointSpec` for public services; the ingress container dials `svc-<id>:<port>` over the overlay.
+- Public traffic enters through `keel-proxy` on the control plane (a Compose container on the `keel` overlay whose listeners live in the host namespace) and reaches `svc-<id>:<port>` over the overlay. Full design in [`networking.md`](./networking.md). Never publish host ports via `EndpointSpec`; exposing is an endpoint on the node, not a Swarm change.
 - Service-to-service traffic uses the `keel` overlay. DNS name is the service name, `svc-<id>`.
 - User containers do not get Tailscale directly. Overlay is enough for v1.
 

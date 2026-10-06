@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
+import { endpointAddress, endpointView } from "./endpoints";
 import { deriveStatus } from "./status";
 
 export const DEFAULTS = {
@@ -91,6 +92,7 @@ export function view(n: Doc<"nodes">) {
         : n.observed.state === "updating"
           ? "rolling out"
           : "starting";
+  const http = n.endpoints?.find((e) => e.protocol === "http");
   return {
     id: n._id,
     type: n.type,
@@ -106,9 +108,10 @@ export function view(n: Doc<"nodes">) {
     running: n.observed?.running ?? 0,
     revision: n.desired?.revision ?? 0,
     deployedRevision: n.deployedRevision,
-    public: n.public !== undefined,
-    publicUrl: n.ingress?.url,
-    ingress: n.ingress ? { state: n.ingress.state, error: n.ingress.error } : undefined,
+    public: (n.endpoints?.length ?? 0) > 0,
+    // The first https endpoint; the CLI prints it.
+    publicUrl: http ? endpointAddress(http) : undefined,
+    endpoints: n.endpoints?.map(endpointView) ?? [],
     error: n.applyError ?? (status === "error" ? n.observed?.error : undefined),
     deploy: step && n.shippedAt ? { step, startedAt: n.shippedAt } : undefined,
     // `stopping`: when Stop was clicked. `stopped`: when the stop shipped.

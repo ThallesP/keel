@@ -5,7 +5,7 @@ import { createContext, useContext, useMemo, useRef, type ReactNode, type RefObj
 import { useEnvironment } from "./environment";
 import { attempt } from "./errors";
 import { asNodeId } from "./mapping";
-import type { InfraNodeType } from "./types";
+import type { Endpoint, InfraNodeType } from "./types";
 import { useDeploymentLink } from "./use-deployment-link";
 
 type Position = { x: number; y: number };
@@ -20,6 +20,15 @@ export type CreateOptions = {
   deploy?: boolean;
 };
 
+export type ExposeOptions = {
+  protocol?: "http" | "tcp" | "udp";
+  port?: number;
+  domain?: string;
+  publicPort?: number;
+};
+
+export type EndpointRef = Pick<Endpoint, "protocol" | "domain" | "publicPort">;
+
 export type CanvasActions = {
   create: (type: InfraNodeType, position: Position, options?: CreateOptions) => Promise<void>;
   /** Scale to 1 and ship; "Deploy" for never-shipped nodes. */
@@ -30,9 +39,13 @@ export type CanvasActions = {
   redeploy: (id: string, refresh: boolean) => Promise<void>;
   move: (id: string, position: Position) => void;
   rename: (id: string, name: string) => Promise<void>;
-  /** Public internet via a Cloudflare Quick Tunnel; immediate, not a ship. */
-  expose: (id: string) => Promise<void>;
-  unexpose: (id: string) => Promise<void>;
+  /**
+   * Reachable from the internet through keel-proxy; immediate, not a ship. No options: https on a
+   * generated domain for a service, tcp on its own port for a database or cache.
+   */
+  expose: (id: string, options?: ExposeOptions) => Promise<boolean>;
+  /** One endpoint, or all of them ("Make private"). */
+  unexpose: (id: string, endpoint?: EndpointRef) => Promise<void>;
   duplicate: (id: string) => Promise<void>;
   removeNodes: (ids: string[]) => void;
   /** Ship every dirty node, or `only` these (re-pulling their images). */
@@ -109,11 +122,19 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
       rename: async (id, name) => {
         await attempt(renameNode({ id: asNodeId(id), name }));
       },
-      expose: async (id) => {
-        await attempt(exposeNode({ id: asNodeId(id) }));
-      },
-      unexpose: async (id) => {
-        await attempt(unexposeNode({ id: asNodeId(id) }));
+      expose: async (id, options) =>
+        (await attempt(exposeNode({ id: asNodeId(id), ...options }))) !== undefined,
+      unexpose: async (id, endpoint) => {
+        await attempt(
+          unexposeNode({
+            id: asNodeId(id),
+            ...(endpoint && {
+              protocol: endpoint.protocol,
+              domain: endpoint.domain,
+              publicPort: endpoint.publicPort,
+            }),
+          }),
+        );
       },
       duplicate: async (id) => {
         const copy = await attempt(duplicateNode({ id: asNodeId(id) }));

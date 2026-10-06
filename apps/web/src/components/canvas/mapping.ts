@@ -3,7 +3,7 @@ import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 
 import { formatClock } from "./format";
-import type { CanvasNode, Deployment, RuntimeData } from "./types";
+import type { CanvasNode, Deployment, Endpoint, RuntimeData } from "./types";
 
 // Convex docs → the UI's own types (types.ts stays the source of truth for components).
 
@@ -42,19 +42,17 @@ function runtime(n: NodeDoc): RuntimeData {
     stoppedAt: n.stoppedAt,
     finishedAt: n.finishedAt,
     public: n.public,
-    publicUrl: n.publicUrl,
-    ingress: n.ingress,
+    endpoints: n.endpoints,
   };
 }
 
-/** `https://x.trycloudflare.com` → `x.trycloudflare.com` */
-function hostOf(url: string | undefined) {
-  if (!url) return undefined;
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
+const RANK = { live: 0, starting: 1, failed: 2 } as const;
+
+/** The https endpoint the card names: one that serves beats one on its way beats a failed one. */
+function bestHttp(endpoints: Endpoint[]) {
+  return endpoints
+    .filter((e) => e.protocol === "http")
+    .sort((a, b) => RANK[a.state] - RANK[b.state])[0];
 }
 
 export function toCanvasNode(n: NodeDoc): CanvasNode {
@@ -65,7 +63,11 @@ export function toCanvasNode(n: NodeDoc): CanvasNode {
   };
   switch (n.type) {
     case "service":
-      return { ...base, type: "service", data: { ...runtime(n), domain: hostOf(n.publicUrl) } };
+      return {
+        ...base,
+        type: "service",
+        data: { ...runtime(n), http: bestHttp(n.endpoints) },
+      };
     case "database":
       return {
         ...base,

@@ -134,7 +134,8 @@ export const axiomOrg = v.object({
   name: v.string(),
   // API host its data lives on.
   domain: v.string(),
-  // Its plan's dataset cap (`license.maxDatasets`; 3 on the free Personal plan).
+  // Its plan's dataset cap (`license.maxDatasets`; 3 on the free Personal plan). Only explains a
+  // refused create: Axiom doesn't enforce this number as listed.
   maxDatasets: v.optional(v.number()),
 });
 

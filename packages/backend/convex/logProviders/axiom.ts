@@ -392,35 +392,37 @@ export async function axiomProvision(
     [traces, "Keel OpenTelemetry traces"],
   ] as const;
   // Signing in again, or from another Keel install, finds both already there. Past its plan's
-  // dataset cap Axiom answers a create with a bare `400 Bad Request` (3 on the free plan, seen
-  // 2026-10-03), so the cap is checked first to say what to delete.
+  // dataset cap Axiom answers a create with a bare `400 Bad Request` (seen 2026-10-03), so a
+  // refused create is explained with the cap. Only a refused one: the list also holds datasets
+  // other orgs share in (`sharedByOrg`; Axiom's sample `otel-demo-*` and `sample-http-logs` come
+  // from its Playground org), which don't count, and an org listing 5 datasets against a cap of
+  // 3 still took new ones (2026-10-07), so a check up front blocked sign-ins Axiom would take.
   const existing = await personal(org.domain, token, org.id, "/v2/datasets")
-    .then((res) => res.json() as Promise<{ name: string }[]>)
+    .then((res) => res.json() as Promise<{ name: string; sharedByOrg?: string }[]>)
     .catch((err: Error) => {
       throw new Error(`Listing datasets: ${err.message}`);
     });
   const have = new Set(existing.map((d) => d.name));
+  const own = existing.filter((d) => !d.sharedByOrg).map((d) => d.name);
   const missing = datasets.filter(([name]) => !have.has(name));
-  // Only when something has to be created: an org already past its cap (a plan downgrade) that
-  // has both datasets signs in fine.
-  if (
-    missing.length > 0 &&
-    org.maxDatasets !== undefined &&
-    have.size + missing.length > org.maxDatasets
-  ) {
-    throw new Error(
-      `${org.name} is at its Axiom plan's limit of ${org.maxDatasets} datasets ` +
-        `(${[...have].join(", ")}). Keel needs ${missing.map(([name]) => name).join(" and ")}: ` +
-        `delete ${have.size + missing.length - org.maxDatasets} in Axiom or pick another org.`,
-    );
-  }
   for (const [name, description] of missing) {
     await personal(org.domain, token, org.id, "/v2/datasets", {
       method: "POST",
       body: JSON.stringify({ name, description }),
     }).catch((err: Error) => {
+      const left = missing.filter(([n]) => !have.has(n)).map(([n]) => n);
+      const over = own.length + left.length - (org.maxDatasets ?? Infinity);
+      if (/^Axiom 400\b/.test(err.message) && over > 0) {
+        throw new Error(
+          `${org.name} is at its Axiom plan's limit of ${org.maxDatasets} datasets ` +
+            `(${own.join(", ")}). Keel needs ${left.join(" and ")}: ` +
+            `delete ${over} in Axiom or pick another org.`,
+        );
+      }
       throw new Error(`Creating ${name}: ${err.message}`);
     });
+    have.add(name);
+    own.push(name);
   }
   const scope = { ingest: ["create"], query: ["read"] };
   const res = await personal(org.domain, token, org.id, "/v2/tokens", {

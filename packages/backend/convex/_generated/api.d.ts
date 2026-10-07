@@ -10,6 +10,7 @@
 
 import type * as access from "../access.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as deployments from "../deployments.js";
 import type * as endpoints from "../endpoints.js";
 import type * as environments from "../environments.js";
@@ -52,6 +53,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   access: typeof access;
   auth: typeof auth;
+  crons: typeof crons;
   deployments: typeof deployments;
   endpoints: typeof endpoints;
   environments: typeof environments;

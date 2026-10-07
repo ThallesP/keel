@@ -6,6 +6,8 @@ import { useAction } from "convex/react";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { AnsiText } from "@/lib/ansi";
+
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
 import { formatDuration, formatLogTime, formatTimestamp } from "../format";
@@ -311,7 +313,7 @@ function LineName({ line, service }: { line: ProjectLine; service: ServiceLabel 
           line.stream === "stderr" ? "text-warning" : "text-muted-foreground",
         )}
       >
-        {line.text}
+        <AnsiText text={line.text} />
       </span>
     </>
   );
@@ -438,7 +440,7 @@ export function LineDetail({ line, traceStart }: { line: ProjectLine; traceStart
           line.stream === "stderr" ? "text-warning" : "text-ink",
         )}
       >
-        {line.text}
+        <AnsiText text={line.text} />
       </p>
       <Pairs pairs={facts} />
       {fields.length > 0 && (

@@ -1,6 +1,8 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
+import { AnsiText } from "@/lib/ansi";
+
 export type StreamLine = {
   key: string;
   time?: string;
@@ -27,7 +29,7 @@ type Props = {
   className?: string;
 };
 
-/** Mono 11px / 19px, `white-space: pre`, never wraps. Scrolls both ways. */
+/** Mono 11px / 19px, `white-space: pre`, never wraps. Scrolls both ways. ANSI colors render. */
 export function LogStream({ lines, following = true, cursor = false, className }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const count = lines.length;
@@ -47,7 +49,7 @@ export function LogStream({ lines, following = true, cursor = false, className }
         <div key={l.key} className={toneClass[l.tone ?? "muted"]}>
           {l.time && <span className="pr-4 text-faint">{l.time}</span>}
           {l.tag}
-          {l.text}
+          <AnsiText text={l.text} />
           {cursor && i === last && <Cursor />}
         </div>
       ))}

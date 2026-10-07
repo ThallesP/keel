@@ -3,6 +3,8 @@ import type { TraceSummary } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
+import { AnsiText } from "@/lib/ansi";
+
 import { formatDuration, formatLogTime } from "../format";
 import { useServices } from "./chrome";
 import { type TraceRef, traceRef } from "./correlate";
@@ -160,7 +162,7 @@ function RequestText({ trace }: { trace: TraceSummary }) {
 function LineText({ line }: { line: ProjectLine }) {
   return (
     <span className={line.stream === "stderr" ? "text-warning" : "text-muted-foreground"}>
-      {line.text}
+      <AnsiText text={line.text} />
     </span>
   );
 }

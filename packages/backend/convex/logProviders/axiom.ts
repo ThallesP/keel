@@ -411,12 +411,14 @@ export async function axiomProvision(
       body: JSON.stringify({ name, description }),
     }).catch((err: Error) => {
       const left = missing.filter(([n]) => !have.has(n)).map(([n]) => n);
-      const over = own.length + left.length - (org.maxDatasets ?? Infinity);
-      if (/^Axiom 400\b/.test(err.message) && over > 0) {
+      const cap = org.maxDatasets ?? Infinity;
+      // Axiom's own text stays in, in case this 400 is about something else.
+      if (/^Axiom 400\b/.test(err.message) && own.length >= cap) {
         throw new Error(
-          `${org.name} is at its Axiom plan's limit of ${org.maxDatasets} datasets ` +
+          `${org.name} is at its Axiom plan's limit of ${cap} datasets ` +
             `(${own.join(", ")}). Keel needs ${left.join(" and ")}: ` +
-            `delete ${over} in Axiom or pick another org.`,
+            `delete ${own.length + left.length - cap} in Axiom or pick another org. ` +
+            `(${err.message})`,
         );
       }
       throw new Error(`Creating ${name}: ${err.message}`);

@@ -267,13 +267,18 @@ export const expose = mutation({
       throw new ConvexError("Only services, databases and caches can be exposed");
     }
     // A Redis runs with --requirepass only once its password ships (migrations.run backfills one
-    // on upgraded installs): until then it would go public without auth.
+    // on upgraded installs): until then it would go public without auth. `dirty` clears when a
+    // Ship starts; `deployedRevision` catches up only once it converged, so a failed Ship counts.
     if (engineOf(node.desired.image) === "redis") {
       const rows = await ctx.db
         .query("variables")
         .withIndex("by_node", (q) => q.eq("nodeId", id))
         .collect();
-      if (!rows.some((r) => r.key === "REDIS_PASSWORD") || node.dirty) {
+      if (
+        !rows.some((r) => r.key === "REDIS_PASSWORD") ||
+        node.dirty ||
+        node.deployedRevision !== node.desired.revision
+      ) {
         throw new ConvexError("Ship this Redis first: its password takes effect on the next Ship");
       }
     }

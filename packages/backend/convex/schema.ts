@@ -47,24 +47,33 @@ export const observed = v.object({
   at: v.number(),
 });
 
-// Public ingress, set by nodes.expose / nodes.unexpose and applied right away by
-// swarm.applyIngress (not by Ship: it is its own Swarm service and never touches the app's).
-// `quick-tunnel`: a Cloudflare Quick Tunnel, no account, temporary trycloudflare.com URL.
-// A named Cloudflare tunnel (stable custom hostnames) is the next provider. See docs/networking.md.
-export const publicIngress = v.object({
-  provider: v.literal("quick-tunnel"),
-  at: v.number(),
-});
+// One way in from the internet, served by keel-proxy on the control plane (docs/networking.md).
+// Set by nodes.expose / nodes.unexpose and applied right away by proxy.sync, not by Ship.
+//   http      https://<domain> on the control plane's 80/443 → svc-<id>:<port>
+//   tcp, udp  <public IP>:<publicPort> → svc-<id>:<port>
+// `status` is written only by proxy.ts (a sync's outcome, then certificate reports).
+export const endpointProtocol = v.union(v.literal("http"), v.literal("tcp"), v.literal("udp"));
 
-// What the ingress service reports. Written only by nodesInternal.setIngress (from swarm.*).
-export const ingress = v.object({
+export const endpointStatus = v.object({
+  // `starting`: not loaded yet, or (http) loaded and waiting for its certificate.
   state: v.union(v.literal("starting"), v.literal("live"), v.literal("failed")),
-  url: v.optional(v.string()), // https://<random>.trycloudflare.com
   error: v.optional(v.string()),
   at: v.number(),
 });
 
-export type Ingress = Infer<typeof ingress>;
+export const endpoint = v.object({
+  protocol: endpointProtocol,
+  port: v.number(), // the container port the proxy dials
+  // Expose was given a container port other than the node's. Otherwise `port` follows the node's
+  // port each time a change to it ships (nodesInternal.followPort, from swarm.apply).
+  pinnedPort: v.optional(v.boolean()),
+  domain: v.optional(v.string()), // http only; unique per install
+  publicPort: v.optional(v.number()), // tcp / udp only; unique per protocol per install
+  status: endpointStatus,
+});
+
+export type Endpoint = Infer<typeof endpoint>;
+export type EndpointStatus = Infer<typeof endpointStatus>;
 
 export const position = v.object({ x: v.number(), y: v.number() });
 
@@ -164,10 +173,13 @@ export default defineSchema({
     // service | database | cache only. volume and group never reach Swarm in v1.
     desired: v.optional(desired),
     observed: v.optional(observed),
-    // service only: exposed to the internet. Top-level on purpose: `desired` is revision-bumped
-    // by Ship and `observed` is replaced wholesale by every scan.
-    public: v.optional(publicIngress),
-    ingress: v.optional(ingress),
+    // Exposed to the internet through keel-proxy. Top-level on purpose: `desired` is revision-
+    // bumped by Ship and `observed` is replaced wholesale by every scan.
+    endpoints: v.optional(v.array(endpoint)),
+    // Cloudflare Quick Tunnel exposure (removed 2026-10-06). migrations.run turns it into an http
+    // endpoint and clears both; drop these two once every install has run it.
+    public: v.optional(v.any()),
+    ingress: v.optional(v.any()),
     // Last revision observe saw fully converged.
     deployedRevision: v.optional(v.number()),
     // Config/vars (or a variable it references) changed since the last ship. Drives "Ship · N changes".

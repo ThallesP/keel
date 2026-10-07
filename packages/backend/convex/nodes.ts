@@ -7,6 +7,7 @@ import {
   ownedEnvironment,
   ownedNode,
   requireEnvironment,
+  requireUser,
   requireNode,
   validImage,
   validName,
@@ -22,7 +23,18 @@ import {
   uniqueName,
   view,
 } from "./nodeHelpers";
-import { nodeType, position } from "./schema";
+import {
+  allocatePublicPort,
+  defaultDomain,
+  endpointKey,
+  endpointView,
+  HTTP_PORTS,
+  MAX_ENDPOINTS,
+  publicIp,
+  requirePublicIp,
+  validDomain,
+} from "./endpoints";
+import { type Endpoint, endpointProtocol, nodeType, position } from "./schema";
 import { beginDeployment } from "./deployments";
 import { DEPLOYABLE } from "./status";
 import { markReferrersDirty, renameReferences } from "./variables";
@@ -141,7 +153,7 @@ export const create = mutation({
       desired,
       dirty: deployable,
     });
-    if (type === "database") {
+    if (type === "database" || type === "cache") {
       const rows = seedVariables(engineOf(desired?.image));
       for (const row of rows) await ctx.db.insert("variables", { nodeId: id, ...row });
     }
@@ -229,34 +241,139 @@ export const start = mutation({
 });
 
 /**
- * Expose to the internet through a Cloudflare Quick Tunnel: one `cloudflared` Swarm service
- * dialling `svc-<id>:<port>` over the overlay. Immediate, not Ship-gated. The URL is temporary
- * (changes when that tunnel restarts); a named tunnel with a stable hostname is the next provider.
+ * Open a way in from the internet through keel-proxy on the control plane (docs/networking.md).
+ * Immediate, not Ship-gated: proxy.sync loads it right away. With no options: https on an
+ * sslip.io domain for a service, tcp on its own port for a database or cache. Exposing what is
+ * already exposed returns the existing endpoint; an http endpoint with the same domain, or a
+ * tcp/udp one with the same public port, gets the new container port.
  */
 export const expose = mutation({
-  args: { id: v.id("nodes") },
-  handler: async (ctx, { id }) => {
+  args: {
+    id: v.id("nodes"),
+    protocol: v.optional(endpointProtocol),
+    // Container port the proxy dials. Default: the node's port.
+    port: v.optional(v.number()),
+    // http: your own hostname, pointed at the control plane's public IP with an A record.
+    domain: v.optional(v.string()),
+    // tcp / udp: port on the control plane. Default: the container port when it is free.
+    publicPort: v.optional(v.number()),
+  },
+  handler: async (ctx, { id, ...args }) => {
     const { node } = await requireNode(ctx, id);
-    if (node.type !== "service" || !node.desired?.port) {
-      throw new ConvexError("Only services with a port can be exposed");
+    if (
+      !node.desired ||
+      (node.type !== "service" && node.type !== "database" && node.type !== "cache")
+    ) {
+      throw new ConvexError("Only services, databases and caches can be exposed");
     }
-    if (node.public) return;
-    const at = Date.now();
-    await ctx.db.patch(id, {
-      public: { provider: "quick-tunnel", at },
-      ingress: { state: "starting", at },
-    });
-    await ctx.scheduler.runAfter(0, internal.swarm.applyIngress, { id });
+    // A Redis runs with --requirepass only once its password ships (migrations.run backfills one
+    // on upgraded installs): until then it would go public without auth. `dirty` clears when a
+    // Ship starts; `deployedRevision` catches up only once it converged, so a failed Ship counts.
+    if (engineOf(node.desired.image) === "redis") {
+      const rows = await ctx.db
+        .query("variables")
+        .withIndex("by_node", (q) => q.eq("nodeId", id))
+        .collect();
+      if (
+        !rows.some((r) => r.key === "REDIS_PASSWORD") ||
+        node.dirty ||
+        node.deployedRevision !== node.desired.revision
+      ) {
+        throw new ConvexError("Ship this Redis first: its password takes effect on the next Ship");
+      }
+    }
+    const protocol = args.protocol ?? (node.type === "service" ? "http" : "tcp");
+    const port = validPort(args.port ?? node.desired.port);
+    if (!port) throw new ConvexError("Set the service's port first");
+    const ip = requirePublicIp();
+    const own = node.endpoints ?? [];
+    const others = (await ctx.db.query("nodes").collect())
+      .filter((n) => n._id !== id)
+      .flatMap((n) => (n.endpoints ?? []).map((e) => ({ ...e, owner: n.name })));
+
+    let wanted: Omit<Endpoint, "status">;
+    if (protocol === "http") {
+      if (args.publicPort !== undefined)
+        throw new ConvexError("HTTP is always served on 80 and 443");
+      const domain = args.domain === undefined ? defaultDomain(node, ip) : validDomain(args.domain);
+      const holder = others.find((e) => e.protocol === "http" && e.domain === domain);
+      if (holder) throw new ConvexError(`${domain} is already used by ${holder.owner}`);
+      wanted = { protocol, port, domain };
+    } else {
+      if (args.domain !== undefined) throw new ConvexError("Only HTTP endpoints have a domain");
+      const existing = own.find(
+        (e) => e.protocol === protocol && e.port === port && args.publicPort === undefined,
+      );
+      if (existing) return endpointView(existing);
+      const taken = new Set(
+        [...others, ...own].filter((e) => e.protocol === protocol).map((e) => e.publicPort!),
+      );
+      if (protocol === "tcp") for (const p of HTTP_PORTS) taken.add(p);
+      const publicPort =
+        args.publicPort === undefined
+          ? allocatePublicPort(port, taken)
+          : validPort(args.publicPort)!;
+      if (protocol === "tcp" && HTTP_PORTS.has(publicPort)) {
+        throw new ConvexError("80 and 443 serve HTTP; pick another public port");
+      }
+      const holder = others.find((e) => e.protocol === protocol && e.publicPort === publicPort);
+      if (holder)
+        throw new ConvexError(`Port ${publicPort}/${protocol} is already used by ${holder.owner}`);
+      wanted = { protocol, port, publicPort };
+    }
+
+    const key = endpointKey(wanted);
+    const same = own.find((e) => endpointKey(e) === key && e.port === wanted.port);
+    if (same) return endpointView(same);
+    const rest = own.filter((e) => endpointKey(e) !== key);
+    if (rest.length >= MAX_ENDPOINTS)
+      throw new ConvexError(`At most ${MAX_ENDPOINTS} endpoints per node`);
+    const endpoint: Endpoint = {
+      ...wanted,
+      ...(port !== node.desired.port && { pinnedPort: true }),
+      status: { state: "starting", at: Date.now() },
+    };
+    await ctx.db.patch(id, { endpoints: [...rest, endpoint] });
+    await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
+    return endpointView(endpoint);
   },
 });
 
+/** The control plane's public IP, for "point your domain here" and "open this port" hints. */
+export const publicAddress = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    return publicIp() ?? null;
+  },
+});
+
+/**
+ * Close one endpoint (its domain, or protocol + public port), or every one ("Make private").
+ * Like expose, immediate.
+ */
 export const unexpose = mutation({
-  args: { id: v.id("nodes") },
-  handler: async (ctx, { id }) => {
+  args: {
+    id: v.id("nodes"),
+    protocol: v.optional(endpointProtocol),
+    domain: v.optional(v.string()),
+    publicPort: v.optional(v.number()),
+  },
+  handler: async (ctx, { id, protocol, domain, publicPort }) => {
     const { node } = await requireNode(ctx, id);
-    if (!node.public) return;
-    await ctx.db.patch(id, { public: undefined, ingress: undefined });
-    await ctx.scheduler.runAfter(0, internal.swarm.removeIngress, { id });
+    // No selector closes every endpoint; a partial one must not fall through to that.
+    const all = protocol === undefined && domain === undefined && publicPort === undefined;
+    const named = protocol === "http" ? domain !== undefined : publicPort !== undefined;
+    if (!all && !(protocol && named)) {
+      throw new ConvexError("Name the endpoint: protocol and domain (http) or public port");
+    }
+    if (!node.endpoints?.length) return;
+    const key =
+      protocol && endpointKey({ protocol, domain: domain && validDomain(domain), publicPort });
+    const endpoints = key ? node.endpoints.filter((e) => endpointKey(e) !== key) : [];
+    if (endpoints.length === node.endpoints.length) return;
+    await ctx.db.patch(id, { endpoints: endpoints.length > 0 ? endpoints : undefined });
+    await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
   },
 });
 
@@ -272,6 +389,7 @@ export const duplicate = mutation({
       deployedRevision: _d,
       applyError: _e,
       observeScheduled: _s,
+      endpoints: _x,
       public: _p,
       ingress: _i,
       ...rest
@@ -324,6 +442,7 @@ export const remove = mutation({
     // Row goes first, in the same transaction as the schedule: an in-flight swarm.apply that
     // re-reads applyInput after this commit sees null and backs out of creating the service.
     await ctx.db.delete(id);
+    if (node.endpoints?.length) await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
     if (node.desired) {
       await ctx.scheduler.runAfter(0, internal.swarm.remove, { id });
       // A running deployment with a step for this node would otherwise wait for an observe

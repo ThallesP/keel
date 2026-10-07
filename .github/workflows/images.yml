@@ -1,4 +1,4 @@
-# Publishes the images install.sh runs: ghcr.io/thallesp/keel-{web,functions,worker}.
+# Publishes the images install.sh runs: ghcr.io/thallesp/keel-{web,functions,worker,proxy}.
 #   main  -> :latest and :sha-<short>
 #   v1.2.3 tag -> :1.2.3 and :sha-<short>
 # ci.yml (typecheck, install.sh end to end) runs first and gates everything below: nothing is
@@ -33,6 +33,7 @@ jobs:
           - { name: keel-web, context: ., file: apps/web/Dockerfile }
           - { name: keel-functions, context: ., file: deploy/functions.Dockerfile }
           - { name: keel-worker, context: apps/worker, file: apps/worker/Dockerfile }
+          - { name: keel-proxy, context: apps/proxy, file: apps/proxy/Dockerfile }
         platform:
           - { name: linux/amd64, runner: ubuntu-24.04, slug: amd64 }
           - { name: linux/arm64, runner: ubuntu-24.04-arm, slug: arm64 }
@@ -74,7 +75,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        image: [keel-web, keel-functions, keel-worker]
+        image: [keel-web, keel-functions, keel-worker, keel-proxy]
     steps:
       - uses: actions/download-artifact@v4
         with:

@@ -1,8 +1,10 @@
 #!/bin/sh
 # Entry point of the keel-functions image.
 #   check   exit 0 iff CONVEX_SELF_HOSTED_ADMIN_KEY is accepted by the backend
-#   deploy  set the deployment env (SITE_URL, BETTER_AUTH_SECRET, KEEL_WORKER_TOKEN), then push
-#           the functions. Idempotent; install.sh runs it on every install and upgrade.
+#   deploy  set the deployment env (SITE_URL, BETTER_AUTH_SECRET, KEEL_WORKER_TOKEN, and
+#           KEEL_PUBLIC_IP / KEEL_ACME_EMAIL when set), push the functions, then run migrations:run (data
+#           migrations + a keel-proxy sync). Idempotent; install.sh runs it on every install
+#           and upgrade.
 set -eu
 
 : "${CONVEX_SELF_HOSTED_URL:?CONVEX_SELF_HOSTED_URL is required}"
@@ -26,9 +28,19 @@ case "${1:-deploy}" in
     trap 'rm -f "$envfile"' EXIT
     printf 'SITE_URL=%s\nBETTER_AUTH_SECRET=%s\nKEEL_WORKER_TOKEN=%s\n' \
       "$SITE_URL" "$BETTER_AUTH_SECRET" "$KEEL_WORKER_TOKEN" > "$envfile"
+    # Optional ones: set when given, removed when not (`env set` never removes a key).
+    for name in KEEL_PUBLIC_IP KEEL_ACME_EMAIL; do
+      eval "value=\${$name:-}"
+      if [ -n "$value" ]; then
+        printf '%s=%s\n' "$name" "$value" >> "$envfile"
+      else
+        convex env remove "$name" >/dev/null 2>&1 || true
+      fi
+    done
     convex env set --from-file "$envfile" --force
     # _generated is committed; typechecking belongs to CI, not to every install.
     convex deploy --typecheck disable --codegen disable
+    convex run migrations:run
     ;;
   *)
     echo "usage: keel-functions [deploy|check]" >&2

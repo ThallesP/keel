@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
+import { endpointAddress, endpointView } from "./endpoints";
 import { deriveStatus } from "./status";
 
 export const DEFAULTS = {
@@ -39,7 +40,11 @@ export function engineOf(image: string | undefined): Engine | undefined {
   return repo in ENGINES ? (repo as Engine) : undefined;
 }
 
-/** Credentials the engine's official image reads on first boot. */
+/**
+ * Credentials the engine's official image reads on first boot. Every engine gets a password, even
+ * one that is never exposed. Redis reads none from its env: swarm.ts passes REDIS_PASSWORD to
+ * `redis-server --requirepass`.
+ */
 export function seedVariables(engine: Engine | undefined) {
   const rows = (pairs: [string, string, boolean][]) =>
     pairs.map(([key, value, secret]) => ({ key, value, secret }));
@@ -62,6 +67,8 @@ export function seedVariables(engine: Engine | undefined) {
         ["MONGO_INITDB_ROOT_USERNAME", "app", false],
         ["MONGO_INITDB_ROOT_PASSWORD", randomSecret(), true],
       ]);
+    case "redis":
+      return rows([["REDIS_PASSWORD", randomSecret(), true]]);
     default:
       return [];
   }
@@ -91,6 +98,7 @@ export function view(n: Doc<"nodes">) {
         : n.observed.state === "updating"
           ? "rolling out"
           : "starting";
+  const http = n.endpoints?.find((e) => e.protocol === "http");
   return {
     id: n._id,
     type: n.type,
@@ -106,9 +114,10 @@ export function view(n: Doc<"nodes">) {
     running: n.observed?.running ?? 0,
     revision: n.desired?.revision ?? 0,
     deployedRevision: n.deployedRevision,
-    public: n.public !== undefined,
-    publicUrl: n.ingress?.url,
-    ingress: n.ingress ? { state: n.ingress.state, error: n.ingress.error } : undefined,
+    public: (n.endpoints?.length ?? 0) > 0,
+    // The first https endpoint; the CLI prints it.
+    publicUrl: http ? endpointAddress(http) : undefined,
+    endpoints: n.endpoints?.map(endpointView) ?? [],
     error: n.applyError ?? (status === "error" ? n.observed?.error : undefined),
     deploy: step && n.shippedAt ? { step, startedAt: n.shippedAt } : undefined,
     // `stopping`: when Stop was clicked. `stopped`: when the stop shipped.

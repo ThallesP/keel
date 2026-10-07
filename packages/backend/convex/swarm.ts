@@ -6,8 +6,8 @@ import Docker from "dockerode";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, internalAction } from "./_generated/server";
-import { demux } from "./logProviders/docker";
-import type { Desired, Ingress, Observed } from "./schema";
+import { engineOf } from "./nodeHelpers";
+import type { Desired, Observed } from "./schema";
 
 // Root-equivalent access to the host. Everything in this file stays internal.
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
@@ -15,14 +15,9 @@ const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 const NETWORK = "keel";
 const SERVICE_LABEL = "keel.service";
 const REVISION_LABEL = "keel.revision";
-// Public ingress: one Cloudflare Quick Tunnel per exposed node (docs/networking.md). Its own
-// label, or observeNode would count tunnel tasks as app replicas. Image pinned; amd64 + arm64.
-const INGRESS_LABEL = "keel.ingress";
-const CLOUDFLARED_IMAGE = "cloudflare/cloudflared:2026.9.3";
-// The trycloudflare banner lands 2–5s after `container start`; look a few more times for it.
-const INGRESS_RETRY_MS = 3_000;
-const INGRESS_RETRY_MAX = 10;
-const QUICK_TUNNEL_URL = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/g;
+// Cloudflare Quick Tunnels (`ingress-<id>`, removed 2026-10-06) carry this label; only
+// removeLegacyTunnels still looks for it.
+const LEGACY_TUNNEL_LABEL = "keel.ingress";
 // Swarm reports a task as `starting` for ~100ms after the daemon emits `container start`.
 // When a scan lands in that window we look once or twice more, then stop; the next
 // Docker event (or the per-deployment timeout) takes it from there. This is not polling:
@@ -31,7 +26,6 @@ const SETTLE_MS = 2_000;
 const SETTLE_MAX = 2;
 
 const serviceName = (id: string) => `svc-${id}`;
-const ingressName = (id: string) => `ingress-${id}`;
 
 // No EndpointSpec: nothing is published on the host (networking.md, zero-inbound-port).
 // Service-to-service traffic uses the overlay DNS name `svc-<id>`.
@@ -45,7 +39,7 @@ function toSpec(id: string, d: Desired, env: string[], oneShot: boolean): Docker
     Name: serviceName(id),
     Labels,
     TaskTemplate: {
-      ContainerSpec: { Image: d.image, Env: env, Labels },
+      ContainerSpec: { Image: d.image, Env: env, Args: engineArgs(d.image, env), Labels },
       // Delay is nanoseconds. After MaxAttempts Swarm gives up and observe reports crashloop.
       RestartPolicy: { Condition: "on-failure", Delay: 5_000_000_000, MaxAttempts: 5 },
       Networks: [{ Target: NETWORK }],
@@ -60,27 +54,14 @@ function toSpec(id: string, d: Desired, env: string[], oneShot: boolean): Docker
   };
 }
 
-// `cloudflared tunnel --url` asks api.trycloudflare.com for a temporary hostname and prints it;
-// nothing is stored, no account. Entrypoint is `cloudflared --no-autoupdate`. The target is the
-// app's overlay VIP, so redeploys of the app never change the URL; a restart of this task does.
-function toIngressSpec(id: string, port: number): Docker.ServiceSpec {
-  const Labels = { [INGRESS_LABEL]: id };
-  return {
-    Name: ingressName(id),
-    Labels,
-    TaskTemplate: {
-      ContainerSpec: {
-        Image: CLOUDFLARED_IMAGE,
-        Args: ["tunnel", "--url", `http://${serviceName(id)}:${port}`],
-        Labels,
-      },
-      RestartPolicy: { Condition: "any", Delay: 5_000_000_000 },
-      Networks: [{ Target: NETWORK }],
-    },
-    Mode: { Replicated: { Replicas: 1 } },
-    // The URL changes on restart anyway; two tasks would only mean two URLs.
-    UpdateConfig: { Parallelism: 1, Order: "stop-first" },
-  };
+/**
+ * Redis's image reads no password from its env, so REDIS_PASSWORD (seeded, nodeHelpers.ts) becomes
+ * `--requirepass`. The image's entrypoint runs `redis-server` args as usual.
+ */
+function engineArgs(image: string, env: string[]) {
+  if (engineOf(image) !== "redis") return undefined;
+  const pass = env.find((e) => e.startsWith("REDIS_PASSWORD="))?.slice("REDIS_PASSWORD=".length);
+  return pass ? ["redis-server", "--requirepass", pass] : undefined;
 }
 
 function notFoundAsNull(err: { statusCode?: number }) {
@@ -178,8 +159,10 @@ export const apply = internalAction({
           : `service updated · revision ${desired.revision}`,
       );
       await ctx.runMutation(internal.nodesInternal.setApplyError, { id, error: undefined });
-      // A shipped port change must reach the tunnel's `--url` too.
-      if (input.public) await ctx.scheduler.runAfter(0, internal.swarm.applyIngress, { id });
+      // A shipped port change moves the endpoints that follow the node's port.
+      if (desired.port) {
+        await ctx.runMutation(internal.nodesInternal.followPort, { id, port: desired.port });
+      }
     } catch (err) {
       const text = errorText(err);
       await ctx.runMutation(internal.nodesInternal.setApplyError, { id, error: text });
@@ -196,60 +179,27 @@ export const apply = internalAction({
 export const remove = internalAction({
   args: { id: v.id("nodes") },
   handler: async (_ctx, { id }) => {
-    await Promise.all([
-      docker.getService(serviceName(id)).remove().catch(notFoundAsNull),
-      docker.getService(ingressName(id)).remove().catch(notFoundAsNull),
-    ]);
+    await docker.getService(serviceName(id)).remove().catch(notFoundAsNull);
   },
 });
 
 /**
- * Idempotent, like apply: reads `public` + port at run time, so expose → unexpose in quick
- * succession converges on "no tunnel" whichever action runs last. Failures land in
- * `ingress.error` (the node itself is unaffected); observeNode then picks the URL out of the
- * tunnel's logs.
+ * Remove the `cloudflared` Swarm services of the Quick Tunnel era. Run by migrations.run on every
+ * install; a no-op once they are gone.
  */
-export const applyIngress = internalAction({
-  args: { id: v.id("nodes") },
-  handler: async (ctx, { id }) => {
-    const wanted = () => ctx.runQuery(internal.nodesInternal.ingressInput, { id });
-    const input = await wanted();
-    if (!input?.public) {
-      await docker.getService(ingressName(id)).remove().catch(notFoundAsNull);
-      return;
-    }
-    try {
-      if (!input.port) throw new Error("the service has no port");
-      const cached = await docker.getImage(CLOUDFLARED_IMAGE).inspect().catch(notFoundAsNull);
-      if (!cached) await pull(CLOUDFLARED_IMAGE);
-      // The pull can take a while; the user may have unexposed or deleted the node meanwhile.
-      if (!(await wanted())?.public) return;
-      const created = await createOrUpdate(toIngressSpec(id, input.port));
-      if (created && !(await wanted())?.public) {
-        await docker.getService(ingressName(id)).remove().catch(notFoundAsNull);
-        return;
-      }
-    } catch (err) {
-      await ctx.runMutation(internal.nodesInternal.setIngress, {
-        id,
-        ingress: { state: "failed", error: errorText(err), at: Date.now() },
-      });
-      return;
-    }
-    await ctx.runMutation(internal.nodesInternal.scheduleObserve, { id });
-  },
-});
-
-export const removeIngress = internalAction({
-  args: { id: v.id("nodes") },
-  handler: async (_ctx, { id }) => {
-    await docker.getService(ingressName(id)).remove().catch(notFoundAsNull);
+export const removeLegacyTunnels = internalAction({
+  args: {},
+  handler: async () => {
+    const tunnels: { ID: string }[] = await docker.listServices({
+      filters: { label: [LEGACY_TUNNEL_LABEL] },
+    });
+    for (const t of tunnels) await docker.getService(t.ID).remove().catch(notFoundAsNull);
+    return tunnels.length;
   },
 });
 
 type Task = {
   NodeID?: string;
-  CreatedAt?: string;
   DesiredState: string;
   Status: { State: string; Err?: string; Timestamp?: string };
   Spec: { ContainerSpec?: { Labels?: Record<string, string> } };
@@ -320,54 +270,6 @@ function summarize(tasks: Task[], service: Service | null): Observed {
   };
 }
 
-/**
- * The tunnel's state from its newest task plus its logs: `cloudflared` prints the assigned
- * trycloudflare.com URL a few seconds after start, and a new one after every restart, so the
- * last match in the (timestamp-sorted) log is the current URL. `null`: no task yet.
- */
-function summarizeIngress(tasks: Task[], lines: { text: string }[]): Ingress | null {
-  const sorted = tasks
-    .slice()
-    .sort((a, b) => Date.parse(a.CreatedAt ?? "") - Date.parse(b.CreatedAt ?? ""));
-  const newest = sorted[sorted.length - 1];
-  if (!newest) return null;
-  const at = Date.now();
-  if (isFailed(newest)) return { state: "failed", error: newest.Status.Err, at };
-  if (newest.Status.State !== "running") return { state: "starting", at };
-  const urls = lines.flatMap((l) => l.text.match(QUICK_TUNNEL_URL) ?? []);
-  const url = urls[urls.length - 1];
-  return url ? { state: "live", url, at } : { state: "starting", at };
-}
-
-/** Last lines of the tunnel's service, every task merged, timestamp-sorted. */
-async function ingressLogs(id: string) {
-  const raw = await docker
-    .getService(ingressName(id))
-    .logs({ stdout: true, stderr: true, tail: 100, timestamps: true })
-    .catch(notFoundAsNull);
-  if (!raw) return [];
-  // dockerode resolves the non-follow body as a Buffer despite its stream typing.
-  return demux(Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw)));
-}
-
-/**
- * Report the tunnel's state if the node is still public, and keep looking while it is
- * `starting`: the banner lands after `container start`, which has already been observed.
- */
-async function observeIngress(ctx: ActionCtx, id: Id<"nodes">, tasks: Task[], tries: number) {
-  if (tasks.length === 0) return;
-  const ingress = summarizeIngress(tasks, await ingressLogs(id));
-  if (!ingress) return;
-  await ctx.runMutation(internal.nodesInternal.setIngress, { id, ingress });
-  if (ingress.state === "starting" && tries < INGRESS_RETRY_MAX) {
-    await ctx.runMutation(internal.nodesInternal.scheduleObserve, {
-      id,
-      delayMs: INGRESS_RETRY_MS,
-      ingressTries: tries + 1,
-    });
-  }
-}
-
 const settling = (tasks: Task[], revision: number) =>
   tasks.some(
     (t) =>
@@ -389,24 +291,21 @@ export const observeNode = internalAction({
   args: {
     id: v.id("nodes"),
     settle: v.optional(v.number()),
-    ingressTries: v.optional(v.number()),
   },
-  handler: async (ctx, { id, settle = 0, ingressTries = 0 }) => {
+  handler: async (ctx, { id, settle = 0 }) => {
     // Clear first: an event arriving from here on schedules a fresh scan instead of
     // being coalesced into this one, whose Docker read may predate the event's effect.
     await ctx.runMutation(internal.nodesInternal.clearObserveScheduled, { id });
-    const [service, tasks, ingressTasks]: [Service | null, Task[], Task[]] = await Promise.all([
+    const [service, tasks]: [Service | null, Task[]] = await Promise.all([
       docker.getService(serviceName(id)).inspect().catch(notFoundAsNull),
       docker.listTasks({ filters: { label: [`${SERVICE_LABEL}=${id}`] } }),
-      docker.listTasks({ filters: { label: [`${INGRESS_LABEL}=${id}`] } }),
     ]);
     const observed = summarize(tasks, service);
     console.log(
-      `observeNode ${id} tasks=${tasks.length} update=${service?.UpdateStatus?.State ?? "-"} revision=${observed.revision} state=${observed.state} running=${observed.running} settle=${settle} ingressTasks=${ingressTasks.length}`,
+      `observeNode ${id} tasks=${tasks.length} update=${service?.UpdateStatus?.State ?? "-"} revision=${observed.revision} state=${observed.state} running=${observed.running} settle=${settle}`,
     );
     await ctx.runMutation(internal.nodesInternal.setObserved, { id, observed });
     await ctx.runMutation(internal.reconcile.run, {});
-    await observeIngress(ctx, id, ingressTasks, ingressTries);
     if (settle < SETTLE_MAX && settling(tasks, observed.revision)) {
       await ctx.runMutation(internal.nodesInternal.scheduleObserve, {
         id,
@@ -432,10 +331,9 @@ export const observe = internalAction({
   handler: async (ctx) => {
     const nodes = await ctx.runQuery(internal.nodesInternal.listDeployable, {});
     if (nodes.length > 0) {
-      const [services, tasks, ingressTasks]: [Service[], Task[], Task[]] = await Promise.all([
+      const [services, tasks]: [Service[], Task[]] = await Promise.all([
         docker.listServices({ filters: { label: [SERVICE_LABEL] } }),
         docker.listTasks({ filters: { label: [SERVICE_LABEL] } }),
-        docker.listTasks({ filters: { label: [INGRESS_LABEL] } }),
       ]);
       const byName = new Map(services.map((s) => [s.Spec?.Name, s]));
       for (const node of nodes) {
@@ -445,11 +343,6 @@ export const observe = internalAction({
         await ctx.runMutation(internal.nodesInternal.setObserved, { id, observed });
       }
       await ctx.runMutation(internal.reconcile.run, {});
-      for (const node of nodes) {
-        const id: Id<"nodes"> = node.id;
-        const own = ingressTasks.filter((t) => label(t, INGRESS_LABEL) === id);
-        await observeIngress(ctx, id, own, INGRESS_RETRY_MAX);
-      }
     }
     console.log(`observe (full sweep) nodes=${nodes.length}`);
     await observeServers(ctx);

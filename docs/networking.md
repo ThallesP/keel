@@ -1,223 +1,113 @@
-# Networking — Tailscale mesh + per-service Funnel ingress
+# Networking — Tailscale mesh + keel-proxy on the control plane
 
-> How servers reach each other and how the public reaches a service. Mesh decided 2026-09-13 after evaluating Tailscale, tailcat, Cloudflare Mesh/Tunnel, NetBird, Pangolin, Headscale, Nebula, ZeroTier and OpenZiti. **Public ingress revised 2026-10-01: Cloudflare Tunnel, not Tailscale Funnel** (see "Public ingress"). Read this before touching node join, ingress, domains or auth. Worker scheduling lives in [`workers.md`](./workers.md). This file supersedes the "Networking notes" section there.
+> How servers reach each other and how the public reaches a service. Mesh decided 2026-09-13 (Tailscale). **Public ingress revised 2026-10-06: the user opens ports on the control plane and `keel-proxy` (Caddy + caddy-l4) serves every exposed service from there.** It replaces the Cloudflare Quick Tunnel per service (2026-10-01 → 2026-10-06), which replaced Tailscale Funnel; see "History". Read this before touching node join, ingress, domains or auth. Worker scheduling lives in [`workers.md`](./workers.md).
 
 ## Invariant
 
-**No user ever opens an inbound port. Not 443, not 22, not anything.** Every path is an outbound tunnel. Any design that needs "open port X on your server" is wrong for this product. Homelab behind CGNAT must work identically to a Hetzner VPS.
+- **Private by default, one door when exposed.** Convex, the dashboard and Swarm bind the tailnet address only. The only public listeners on any machine are the ones `keel-proxy` opens on the control plane for what someone exposed: 80/443 for HTTPS, plus each exposed TCP/UDP port. Workers never listen publicly; there is no per-worker proxy.
+- **The user's networking job is exactly this:** let 80, 443 and the exposed TCP/UDP ports reach the control plane (cloud firewall, `ufw`, or a router port-forward on a homelab). Keel says which ports, on which IP, in the install output and in each service's Settings → Public networking. Certificates, routing, proxying and the path to the service (overlay over the tailnet) are Keel's.
+
+This is a step back from "no user ever opens an inbound port". The tunnel products that keep that promise each failed a requirement (History); a better zero-port path may replace the front of this later without changing anything per service.
 
 ## Decision
 
-- **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) rides the tailnet, see `workers.md`. The per-node event forwarder (`keel-events`) makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing.
-- **Public HTTP:** Cloudflare Tunnel. Today a **Quick Tunnel** per exposed service (`cloudflared tunnel --url http://svc-<id>:<port>`, no account, temporary `https://<random>.trycloudflare.com`). Next: one **named tunnel** per cluster with stable hostnames on the user's own domain. The control plane is never in the request path. Details under "Public ingress".
-- **Proxy:** none of ours. `cloudflared` dials the app's Swarm VIP over the overlay.
+- **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) and the `keel` overlay ride the tailnet, see `workers.md`. The per-node event forwarder makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing.
+- **Public ingress:** `keel-proxy`, one container on the control plane (`deploy/compose.yml`). HTTPS by hostname on 80/443 with automatic certificates; raw TCP on any other port, raw UDP on any port (80 and 443 included: the HTTPS server holds only their TCP side). It dials `svc-<id>:<port>` over the overlay, so a service on any server, and every replica, is reachable.
+- **Proxy:** Caddy 2.11 + [caddy-l4](https://github.com/mholt/caddy-l4) + our plugin (`apps/proxy`). Convex owns its whole configuration and pushes it through the admin API.
+- **Default domain:** `https://<service>-<hash6>.<public-ip-dashed>.sslip.io` (sslip.io resolves to the IP inside the name; `hash6` = FNV of the node id, so two projects' `api` never collide and renames keep the URL). When the public IP changes, `migrations.run` moves default domains to the new one, keeping the name. Custom domains: any name with an A record to the control plane's public IP.
 - **Auth:** ours (better-auth). Tailscale identity is optional sign-in sugar later, never the account system.
-- **Custom domains:** the named-tunnel slice. Any zone on the user's Cloudflare account.
 
-## Why not the alternatives
+## Why Caddy + caddy-l4
 
-| Option                                | Why not                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **tailcat**                           | No control plane, no identity, address is a bearer secret ("treat it like a password"). Userspace pipe, containers can't route over it. README: no API/CLI/wire stability promises, public relays revocable any time. Maybe later for `keel connect` dev pipes.                                                                                                    |
-| **Cloudflare Mesh**                   | No peer-to-peer at all, every packet hairpins through a Cloudflare PoP. NetBird's benchmark: Hetzner→Hetzner 250 Mbps vs 1,300 on Tailscale. 50 nodes then Enterprise sales. Cloudflare decrypts at the edge.                                                                                                                                                      |
-| **Cloudflare Tunnel** (as the mesh)   | Adopted for public ingress on 2026-10-01, see below. Not the mesh: that stays Tailscale. Video/large-file ToS restriction on public hostnames.                                                                                                                                                                                                                     |
-| **Tailscale Funnel** (public ingress) | One hostname per Tailscale node, `ts.net` names only ([#11563](https://github.com/tailscale/tailscale/issues/11563) open since 2024), no Funnel for Tailscale Services ([#17849](https://github.com/tailscale/tailscale/issues/17849)), so every public service is its own userspace WireGuard node needing a key or a browser authorization. Rejected 2026-10-01. |
-| **NetBird self-hosted**               | Strongest runner-up: BSD-3 client + AGPL server, embed SDK, ingress proxy with custom domains, no node cap. Costs us four containers on the control plane and the control plane must open UDP 3478. User picked Tailscale's NAT traversal and simpler install.                                                                                                     |
-| **Pangolin**                          | Client-to-site only. No site-to-site mesh. AGPL and commercial license mixed per file.                                                                                                                                                                                                                                                                             |
-| **Headscale**                         | Single tailnet, two maintainers, no ingress. Kept as escape hatch via `ControlURL`.                                                                                                                                                                                                                                                                                |
-| **Nebula / ZeroTier / OpenZiti**      | No ingress (Nebula, $1/host past 100), BSL with SaaS-controller trigger (ZeroTier), you run a PKI + controller + router fleet (OpenZiti).                                                                                                                                                                                                                          |
+Requirements: everything through an API (adding a TCP or UDP port included, no config file, no restart), automatic HTTPS, raw TCP and UDP, small footprint (control planes are often the smallest box).
 
-Proxy choice:
+| Option                       | Verdict                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Caddy + caddy-l4** (chose) | One Go binary. Admin REST API for the whole config; a load is atomic and graceful (listeners are reused across reloads, open connections survive: a Postgres session through the proxy kept its backend pid across a reload that added a port). ACME built in (Let's Encrypt; ZeroSSL fallback once an email is set). caddy-l4 brings TCP and UDP servers configured by the same API. ~12–17 MB RSS measured. |
+| Traefik                      | TCP/UDP entrypoints are static config: a new port means a restart. That is Pangolin's limitation (Pangolin runs Traefik). HTTP provider is poll-only.                                                                                                                                                                                                                                                         |
+| HAProxy + Data Plane API     | The API rewrites the config file and reloads; UDP load balancing is Enterprise-only.                                                                                                                                                                                                                                                                                                                          |
+| Envoy                        | Fully dynamic listeners over xDS, but needs a gRPC control plane, heavy for one box. Railway left it over 45 s config rollouts.                                                                                                                                                                                                                                                                               |
+| nginx                        | No runtime API outside NGINX Plus.                                                                                                                                                                                                                                                                                                                                                                            |
+| Sōzu                         | Hot reconfiguration, but no ACME and no UDP.                                                                                                                                                                                                                                                                                                                                                                  |
+| Own proxy                    | `certmagic` + `ReverseProxy` + a UDP relay is buildable, and is what Caddy already is.                                                                                                                                                                                                                                                                                                                        |
 
-| Option        | Why not                                                                                                                                                                                                                                                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Caddy**     | Best REST admin API of the shelf (push, granular, ETag). But `caddy-tailscale` is "highly experimental" and has no Funnel ([#26](https://github.com/tailscale/caddy-tailscale/issues/26) open since Dec 2023). Would mean embedding Caddy as a library with our own listener. Revisit if we want its plugin ecosystem. |
-| **Traefik**   | v3 HTTP provider is poll-only (default 5s), no push endpoint. Docker-label discovery we don't need.                                                                                                                                                                                                                    |
-| **Envoy**     | xDS gRPC, heavy. Railway left it because rolling config diffs took 45s at scale. Wrong tool for one process per service.                                                                                                                                                                                               |
-| **Own proxy** | Certs, ingress, TLS and NAT are all Tailscale's problem. What's left is "forward HTTP to one target". Go's `ReverseProxy` does websockets and h2c. Config is a struct in memory.                                                                                                                                       |
+## How keel-proxy listens: overlay inside, host namespace outside
 
-## Public ingress (2026-10-01)
+A container's published ports are fixed at create time, so a proxy behind `ports:` needs a restart for every new TCP/UDP port. A proxy with `network_mode: host` can open any port but cannot reach the overlay (`svc-<id>` names and VIPs live in the overlay's namespace). keel-proxy does both:
 
-Verified before deciding: Funnel publishes exactly the node's own MagicDNS name on 443/8443/10000, cannot use custom domains, and does not support Tailscale Services. Per-service hostnames therefore mean per-service tsnet nodes (tens of MB each, a tailnet device each, an auth key or a browser authorization each). Hosting on the host `tailscaled` instead gives one hostname per _server_ with path or port routing, and `tailscale serve` only proxies to loopback. Thalles rejected both. Cloudflare Tunnel is "one connector, many hostnames", which is Railway's model.
+- The container is on the `keel` overlay (attachable, so a Compose container can join). It resolves and dials `svc-<id>:<port>` like any service.
+- Its public sockets are created in the **host's** network namespace. The plugin registers Caddy networks `host-tcp` and `host-udp` (`caddy.RegisterNetwork`, the same hook caddy-tailscale uses): the listener function locks an OS thread, `setns` into the host namespace (`/proc/1/ns/net` bind-mounted at `/run/hostns/net`), opens the socket through Caddy's own `tcp`/`udp` path (so SO_REUSEPORT and the listener pool still apply), and switches back. A socket keeps the namespace it was created in. Needs `CAP_SYS_ADMIN`. It is the one container that parses internet traffic, so it drops every other capability but `NET_BIND_SERVICE` (80/443 in the host namespace) and runs with `no-new-privileges`.
+- **Never a wildcard bind.** `tailscale serve` (the dashboard over HTTPS) holds 443 on the tailnet address, and `0.0.0.0:443` cannot bind next to it. The plugin's `GET /keel/host-addrs` lists the host's addresses minus loopback, link-local, Tailscale (100.64.0.0/10, fd7a:115c:a1e0::/48 and `tailscale*`) and Docker interfaces; Convex writes one listen address per entry. An address change (DHCP) takes effect on the next sync.
+- **The admin API is a unix socket** in a volume shared with the backend container only (`proxy-admin`, mode 0600). Nothing on the overlay can reach it.
+- Upstreams resolve at connection time through Docker's DNS, so redeploys, rescheduling and replica changes never touch the proxy. A stopped service answers 502 (HTTP) or closes the connection (TCP).
 
-### Quick Tunnel (shipped)
+`caddy run --resume`: after a restart the proxy serves the last config Convex pushed (autosaved in the `proxy-config` volume). Certificates and ACME accounts live in `proxy-data`.
 
-- **Expose** on a service is one click and immediate, not Ship-gated: `nodes.expose` sets `nodes.public = { provider: "quick-tunnel" }` and schedules `swarm.applyIngress`, which creates Swarm service `ingress-<id>` (label `keel.ingress=<id>`, image `cloudflare/cloudflared:<pinned>`, args `tunnel --url http://svc-<id>:<port>`, 1 replica, `stop-first`, on the `keel` overlay, no ports, no mounts). Nothing is pasted or stored. A shipped port change re-runs `applyIngress`.
-- **URL discovery.** `cloudflared` prints the assigned hostname 2–5 s after start. `swarm.observeNode` lists `keel.ingress=<id>` tasks next to the app's, reads `docker service logs ingress-<id>` on the manager (timestamp-sorted, last `*.trycloudflare.com` match wins, so a restart's new URL replaces the old one) and writes `nodes.ingress = { state: starting | live | failed, url?, error? }`. While `starting` it re-checks every 3 s, at most 10 times. The worker forwards `ingress-*` Docker events like `svc-*` ones, so a restart is observed without polling.
-- **Canvas.** Card subtitle is the domain while live (link), "Exposing…" / "Expose failed" otherwise; the Deployments meta strip has the link and a copy button. Both say the URL is temporary. ⋯ → Make private removes the tunnel; deleting the node removes both services.
-- **Limits, stated to users:** the URL changes whenever that `cloudflared` restarts (node reboot, reschedule, Make private then Expose). Redeploying the app does not change it (target is the Swarm VIP). 200 in-flight requests then 429. No Server-Sent Events. No uptime guarantee; Cloudflare: "testing and development". Anyone with the URL can reach the service, and `trycloudflare.com` hosts get indexed. Outbound only: UDP 7844 (QUIC) with HTTP/2 over TCP 7844 fallback. One `cloudflared` per exposed service, ~25 MB image, tens of MB RSS.
-- Stopping a service leaves its tunnel up (answers 502 until Start). Databases and raw TCP are never exposed.
+## Endpoints
 
-### Named tunnel (next)
+`nodes.endpoints` (`convex/schema.ts`), one entry per way in:
 
-Removes every limit above and needs no per-service process. One-time: the user pastes a Cloudflare API token (Account → Cloudflare Tunnel: Edit, Zone → DNS: Edit) and picks a zone; the domain must be on Cloudflare DNS (free plan is fine).
+| Field        | http                                       | tcp / udp                                      |
+| ------------ | ------------------------------------------ | ---------------------------------------------- |
+| `port`       | container port the proxy dials             | same                                           |
+| `domain`     | hostname, unique per install               | –                                              |
+| `publicPort` | – (always 80/443)                          | port on the control plane, unique per protocol |
+| `status`     | `starting` → `live` / `failed` (+ `error`) | same                                           |
 
-- `POST /accounts/{id}/cfd_tunnel` `{"name":"keel-<cluster>","config_src":"cloudflare"}` → tunnel id + run token. One Swarm service `keel-tunnel` on the overlay, `cloudflared tunnel run --token …`, 2 replicas for HA (connectors of one tunnel).
-- Expose = `PUT /accounts/{id}/cfd_tunnel/{tid}/configurations` with the full ingress list (`<service>.<zone> → http://svc-<id>:<port>` per public node, catch-all `http_status:404` last) plus `POST /zones/{zid}/dns_records` CNAME `<service>.<zone> → <tid>.cfargotunnel.com`, proxied. Remote config is picked up live; no restart.
-- Health: `GET …/cfd_tunnel/{tid}` → `status`, `connections`.
-- `nodes.public.provider = "cloudflare"` with the hostname; `nodes.ingress` keeps the same shape.
-- Caveats: TLS terminates at Cloudflare's edge, 100 MB request body on Free/Pro, video/large-file terms on non-Enterprise, Cloudflare's uptime becomes yours.
+- **Expose** (`nodes.expose`) is immediate, not Ship-gated, like the Quick Tunnel was. No options: https on the default domain for a service, tcp on its own port for a database or cache. `publicPort` defaults to the container port when it is free on that protocol, else the first free one from 20000. TCP cannot take 80/443. At most 10 endpoints per node.
+- **Unexpose** closes one endpoint (domain, or protocol + public port) or all ("Make private"). Deleting a node closes its endpoints.
+- **The canvas:** toolbar Expose / ⋯ Make private; Settings → Public networking lists endpoints (address with copy, target port, state, ✕) and adds https domains or tcp/udp ports; the card subtitle is the best https domain (live > starting > failed); the Deployments meta strip lists every address.
+- `KEEL_PUBLIC_IP` (Convex env, detected by `install.sh`) names default domains and tcp/udp addresses. Without it, Expose asks for it.
 
-Later, if a hosted Keel ever exists, `*.keel.sh`-style generated domains would be a named tunnel in Keel's own account; not possible for self-hosted installs.
+## Sync and status
 
----
+`proxy.sync` (`convex/proxy.ts`, internal, scheduled after every change and by `migrations.run` on every install) builds the whole `apps` config from every endpoint and `POST`s it to `/config/apps`:
 
-> **Everything from here to "Naming" is the per-service tsnet Funnel design rejected on 2026-10-01.** Kept for reference. Nothing in code implements it.
+- `http`: one server, `host-tcp/<addr>:443` per host address, a host-matched `reverse_proxy` route per domain. Automatic HTTPS adds the `:80` server on the same network and addresses (HTTP→HTTPS redirect, ACME HTTP-01). HTTP/1.1 and HTTP/2 only; HTTP/3 needs a UDP 443 host listener, not yet.
+- `layer4`: one server per tcp/udp endpoint, `host-<proto>/<addr>:<publicPort>` → `proxy` to `[udp/]svc-<id>:<port>`.
+- `tls`: only when `KEEL_ACME_CA` / `KEEL_ACME_EMAIL` are set. `KEEL_ACME_CA` (dev and CI: Let's Encrypt staging) is the only issuer; `KEEL_ACME_EMAIL` (`install.sh`) gives Let's Encrypt then ZeroSSL, the pair Caddy builds itself when it has an email. With neither, there is no `tls` app and Caddy uses Let's Encrypt alone. `*.localhost` names get Caddy's internal CA, which is how development tests HTTPS end to end.
+- `events`: the plugin's `keel` handler subscribed to `cert_obtained` / `cert_failed`.
 
-## Traffic path
+A load is all or nothing, so a port someone else holds would block every endpoint. Caddy names the listener that failed (`listen tcp 192.0.2.1:5432: bind: address already in use`); `sync` marks that endpoint `failed` ("Port 5432/tcp is already in use on the control plane"), drops it and loads again (80/443 failures belong to every https endpoint). An error no endpoint owns fails them all and the proxy keeps its previous config. Two overlapping syncs converge: each re-reads after loading and goes again if the endpoints moved.
 
-```
-browser ──HTTPS──▶ Tailscale Funnel ingress (Tailscale-run, anycast)
-                        │  raw TCP, relayed, still TLS-encrypted end to end
-                        ▼
-              ingress-<svc> container (tsnet node "<name>", any Swarm node)
-                        │  TLS terminated here with the Let's Encrypt cert tailscaled fetched
-                        │  httputil.ReverseProxy
-                        ▼
-              http://svc-<id>:<port>   (Swarm overlay VIP, load-balanced across tasks)
-```
+A cron (`proxyInternal.resync`, every 2 minutes while anything is exposed) syncs again, so what failed for a passing reason (the proxy restarting, a port freed) recovers by itself and a changed host address is picked up. Caddy answers an unchanged config without reloading, and a status that did not change is not written, so the cron costs nothing while all is well.
 
-Funnel traffic is always relayed through Tailscale's ingress servers; that's how Funnel works and why no port opens on our side. TLS terminates inside our container, Tailscale sees ciphertext. Funnel only listens on 443, 8443 and 10000. We use 443 only.
+An endpoint dials the node's port unless Expose was given another one (`pinnedPort`): when a port change ships, `swarm.apply` calls `nodesInternal.followPort` and the endpoint moves with it.
 
-Blue/green and rolling deploys never touch ingress: the target is the Swarm service VIP, Swarm swaps tasks underneath with `start-first`. Ingress changes only when the service is renamed, its port changes, or it is made private.
+Status after a load: tcp/udp `live`; https `live` when `GET /keel/certs` reports a valid certificate, `failed` when it reports the last obtain error, else `starting`. From then on **certificates report themselves**: the `keel` event handler POSTs `/proxy/events` (worker bearer token, dialled from the host namespace) and `proxyInternal.certReport` flips the endpoint. No polling. Errors are rewritten into the next step (`endpoints.certHint`): a `connection` problem says to open 80 and 443, a `dns` one says which IP the A record must point at. Caddy keeps retrying with backoff, so opening the port later turns the endpoint live by itself. An attempt cancelled by a config reload is not reported.
 
-## The ingress container
+## Upgrades from the Quick Tunnel
 
-One Go binary, distroless image, ~15 MB. Runs as an ordinary Swarm service `ingress-<id>` on the `keel` overlay. No host network, no `NET_ADMIN`, no socket mount. tsnet is userspace (gVisor netstack), so it needs nothing from the host.
+`migrations.run` (run by `deploy/functions-entrypoint.sh` after every deploy): a node with the old `public`/`ingress` fields gets an https endpoint on its default domain (services with a port, when `KEEL_PUBLIC_IP` is known) and both fields are cleared; `swarm.removeLegacyTunnels` removes every Swarm service labelled `keel.ingress`. Without `KEEL_PUBLIC_IP` such a service gets no endpoint and goes private, on purpose: a tunnel left running would be public with nothing in Keel to show or stop it. Expose it again once the IP is set. The two fields stay in the schema as `v.any()` until every install has run it.
 
-```go
-// cmd/ingress/main.go
-package main
+## Limits
 
-import (
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"os"
+- **The user opens ports.** Behind CGNAT with no port-forward, nothing public works. Homelabs need router forwards for 80, 443 and each TCP/UDP port.
+- **sslip.io and Let's Encrypt.** sslip.io is not on the Public Suffix List, so every sslip.io user shares one (raised) Let's Encrypt quota; it has run out before. With `KEEL_ACME_EMAIL` set, Caddy falls back to ZeroSSL; without it, default domains wait until the quota frees up. A custom domain gets its own quota and is the production answer.
+- One public IPv4 per install (`KEEL_PUBLIC_IP`); the proxy also binds global IPv6 addresses it finds, but default domains are IPv4.
+- The control plane carries all public traffic. Fine for a small cluster; a second proxy on a worker is the scaling path, not built.
+- Raw TCP/UDP endpoints are unauthenticated beyond what the service does. Every database and cache Keel creates gets a generated password (Redis included: `REDIS_PASSWORD`, run as `--requirepass`; `migrations.run` backfills older Redis nodes and marks them and their referrers dirty, so they ship together; until that Ship, Expose refuses the Redis).
 
-	"tailscale.com/tsnet"
-)
+## History
 
-func main() {
-	target, err := url.Parse(os.Getenv("OS_TARGET")) // http://svc-abc123:3000
-	if err != nil {
-		log.Fatal(err)
-	}
+### Tailscale Funnel (rejected 2026-10-01)
 
-	s := &tsnet.Server{
-		Hostname:      os.Getenv("OS_HOSTNAME"), // "myapp" -> myapp.<tailnet>.ts.net
-		Dir:           "/state",                 // named volume; without it every restart is a new device
-		AuthKey:       os.Getenv("TS_AUTHKEY"),  // ignored once /state has a node key
-		AdvertiseTags: []string{"tag:keel-ingress"},
-		Logf:          func(string, ...any) {},  // quiet; UserLogf still prints auth URLs
-	}
-	defer s.Close()
+Funnel publishes exactly the node's own MagicDNS name on 443/8443/10000, cannot use custom domains ([#11563](https://github.com/tailscale/tailscale/issues/11563)) and does not support Tailscale Services ([#17849](https://github.com/tailscale/tailscale/issues/17849)). Per-service hostnames meant a userspace tsnet node per service (tens of MB, a tailnet device and an auth key each); hosting on the host `tailscaled` meant one hostname per server, and `tailscale serve` only proxies to loopback. Bandwidth is capped and undisclosed.
 
-	// Errors if HTTPS certs are off in the tailnet or the tag lacks the funnel attr.
-	ln, err := s.ListenFunnel("tcp", ":443")
-	if err != nil {
-		log.Fatal(err)
-	}
+### Cloudflare Quick Tunnel (2026-10-01 → 2026-10-06)
 
-	rp := &httputil.ReverseProxy{
-		Rewrite: func(r *httputil.ProxyRequest) {
-			r.SetURL(target)
-			r.SetXForwarded() // X-Forwarded-For/Host/Proto; client IP is the Tailscale ingress
-			r.Out.Host = r.In.Host
-		},
-	}
-	log.Fatal(http.Serve(ln, rp))
-}
-```
+One `cloudflared tunnel --url http://svc-<id>:<port>` Swarm service per exposed service, URL read from its logs. Zero setup, but: the `trycloudflare.com` URL changed on every tunnel restart, 200 in-flight requests then 429, no SSE, no UDP, no uptime guarantee ("testing and development"), and Cloudflare's video/large-file terms. The planned named tunnel (API token, stable hostnames on the user's Cloudflare zone) fixed the URL but kept TLS at Cloudflare's edge, the 100 MB body cap and no raw TCP/UDP. Dropped for keel-proxy. A zero-inbound-port front (a named tunnel, or our own relay) can come back later as something that forwards to keel-proxy's 80/443, with no per-service provider: the `nodes.public.provider` switch it had is gone.
 
-Facts verified in `tailscale.com/tsnet` source (2026-09):
+### Mesh alternatives (2026-09-13)
 
-- `ListenFunnel` fetches the existing `ServeConfig` and merges one `AllowFunnel` key. Multiple Funnel ports on one node work; [#8800](https://github.com/tailscale/tailscale/issues/8800) is closed.
-- Hostname for the cert is `CertDomains()[0]`, i.e. the node's own MagicDNS name. You cannot listen for a different host. One public hostname == one tsnet node.
-- `AuthKey` is ignored when `Dir` already holds state. First `Up` in a process wipes persisted serve config, which is fine because `ListenFunnel` re-applies it.
-- `ListenFunnel` default serves both tailnet and public. Keep that; users can hit the private side too.
-- Do **not** set `Ephemeral: true`. Ephemeral minutes are pooled (1,000/month on Personal and Standard) and an ephemeral node present over 4 hours converts to a regular tagged node anyway. Persist state, count it as a tagged node.
-
-## Convex side
-
-Extends the schema in `workers.md`. `desired.public` is the switch; `observed.url` is what the canvas shows.
-
-```ts
-// services.desired gains:
-public: v.optional(v.object({
-  hostname: v.string(), // tailnet-unique slug, default = service name
-  port: v.number(),     // container port to forward to
-})),
-
-// services.observed gains:
-url: v.optional(v.string()), // https://<hostname>.<tailnet>.ts.net once the ingress task is running
-```
-
-`apply` in `convex/swarm.ts` grows one branch. Same idempotent create-or-update, second Swarm service:
-
-```ts
-function toIngressSpec(s: { id: string; hostname: string; port: number; authKey: string }) {
-  return {
-    Name: `ingress-${s.id}`,
-    Labels: { "keel.ingress": s.id },
-    TaskTemplate: {
-      ContainerSpec: {
-        Image: `${REGISTRY}/keel-ingress:${INGRESS_VERSION}`,
-        Env: [
-          `OS_HOSTNAME=${s.hostname}`,
-          `OS_TARGET=http://svc-${s.id}:${s.port}`,
-          `TS_AUTHKEY=${s.authKey}`,
-        ],
-        Mounts: [{ Type: "volume", Source: `ingress-${s.id}`, Target: "/state" }],
-      },
-      RestartPolicy: { Condition: "any", Delay: 5_000_000_000 },
-      Networks: [{ Target: "keel" }],
-    },
-    Mode: { Replicated: { Replicas: 1 } },
-  };
-}
-```
-
-- Setting `desired.public` schedules `apply` for both `svc-<id>` and `ingress-<id>`. Clearing it removes `ingress-<id>` and schedules device cleanup.
-- `observe` (existing cron) also lists tasks with label `keel.ingress`. Running task → `observed.url = https://<hostname>.<tailnet>.ts.net`. Failed task with an auth error in `Status.Err` → mint a new auth key, update the service env.
-- Ingress is unpinned. If Swarm reschedules it to another server the local volume is gone, the container registers as a **new** device with the same hostname, and the old device lingers. `observe` notices `nodeIds` changed for an ingress task and schedules `DELETE /api/v2/device/{id}` for any device with that hostname that is not the current one. Rare; reschedules happen on node death only.
-- Auth key: one reusable, pre-authorized, `tag:keel-ingress` key per tailnet, 90-day expiry, minted with the user's OAuth client and stored in Convex. Cron rotates it at 80 days. Keys never leave Convex except into ingress container env on the user's own machines.
-
-## Tailnet onboarding
-
-Done once when the user connects a tailnet. All via the Tailscale API with the OAuth client the user pastes in. Fail the onboarding loudly if any step fails; a missing step shows up later as an opaque `ListenFunnel` error.
-
-1. **MagicDNS on.** `POST /api/v2/tailnet/{tailnet}/dns/preferences` `{"magicDNS": true}`. Default-on for tailnets created after Oct 2022, still check.
-2. **HTTPS certs on.** Tailnet settings endpoint (`/api/v2/tailnet/{tailnet}/settings`, field `httpsEnabled`). Funnel refuses to start without it. Note to user: device hostnames land in Certificate Transparency logs.
-3. **Policy file.** Merge into the existing ACL, never overwrite:
-   ```json
-   {
-     "tagOwners": { "tag:keel-node": ["autogroup:admin"], "tag:keel-ingress": ["autogroup:admin"] },
-     "nodeAttrs": [{ "target": ["tag:keel-ingress"], "attr": ["funnel"] }]
-   }
-   ```
-   The OAuth client must be allowed to own those tags. Personal plan allows 3 ACL groups; tags are not groups, fine.
-4. **Mint keys.** Host `tailscaled` on servers gets a `tag:keel-node` key (join script, see `workers.md`). Ingress gets the `tag:keel-ingress` key above.
-
-OAuth client scopes needed: auth keys (write), devices (write, for cleanup), DNS (write), policy file (write), tailnet settings (write). Exact scope identifiers are on `https://tailscale.com/api`; verify there rather than from memory. Ask for the minimum; show the list on the onboarding screen.
-
-## Naming
-
-- MagicDNS names are unique per **tailnet**, not per project. Two projects with a service named `api` collide. Default `hostname` = service name; on collision default to `<service>-<project>`. Check against `GET /api/v2/tailnet/{tailnet}/devices` before creating.
-- Renaming a public service = new hostname = new device + new Let's Encrypt cert. LE limits duplicate certs per name; rename loops can trip a ~34h wait. Warn in the UI, don't block.
-- Hostname rules: lowercase, `[a-z0-9-]`, no leading/trailing dash, ≤63 chars.
-
-## Gotchas
-
-- **Tagged-node budget.** Every server (`tailscaled`) and every public service (ingress tsnet) is a tagged node. 50 included on every plan, then $1/month each. Show "N of 50 Tailscale nodes" in settings. A homelab with 3 servers and 10 public apps is 13.
-- **Funnel bandwidth** is capped and the number is undisclosed. Fine for dashboards, demos and small apps. Say so in the docs; do not promise "production".
-- **Funnel ports** are 443, 8443, 10000 only. We use 443. Never expose raw TCP (databases) via Funnel.
-- **Memory.** Each tsnet node is its own WireGuard + netstack, on the order of tens of MB RSS. Ten public services on a Raspberry Pi is noticeable. Measure and surface in the node card.
-- **Two Tailscale identities per server minimum** (host `tailscaled` + ingress containers). That's expected, not a bug.
-- **MTU.** Overlay is 1200 (see `workers.md`). The ingress container talks to the app over the overlay, so nothing new here. Funnel side is Tailscale's problem.
-- **Personal plan is non-commercial.** Indie hackers hosting side projects are fine. Tell people running a business to move to Standard ($8/seat, same 50 tagged nodes).
-- **ToS.** Tailscale ToS bans reselling the service. Self-hosted Keel with the user's own tailnet is fine. A hosted Keel that bundles Tailscale needs an OEM deal with Tailscale sales. Don't ship hosted on this design without that conversation.
+| Option                       | Why not                                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tailcat                      | No control plane or identity, address is a bearer secret, userspace pipe containers can't route over, no stability promises. Maybe later for `keel connect` dev pipes.       |
+| Cloudflare Mesh              | No peer-to-peer, every packet through a Cloudflare PoP (NetBird's benchmark: 250 vs 1,300 Mbps Hetzner→Hetzner), 50 nodes then Enterprise, decrypts at the edge.             |
+| NetBird self-hosted          | Strongest runner-up (BSD-3 client, AGPL server, ingress proxy, no node cap). Four more containers on the control plane and it opens UDP 3478. Tailscale's NAT traversal won. |
+| Pangolin                     | Client-to-site only, no site-to-site mesh; Traefik underneath (static TCP/UDP entrypoints); AGPL and commercial license mixed per file.                                      |
+| Headscale                    | Single tailnet, two maintainers, no ingress. Kept as an escape hatch via `ControlURL`.                                                                                       |
+| Nebula / ZeroTier / OpenZiti | No ingress (Nebula), BSL with a SaaS-controller trigger (ZeroTier), a PKI + controller + router fleet to run (OpenZiti).                                                     |
 
 ## Dashboard over HTTPS
 
@@ -229,38 +119,26 @@ The dashboard is tailnet-only and needs HTTPS: secure-context APIs (`crypto.subt
 | `https://<node>.<tailnet>.ts.net:8443`  | Convex API + sync websocket (3210) |
 | `https://<node>.<tailnet>.ts.net:10000` | Convex HTTP actions, auth (3211)   |
 
-Convex must be https too or the browser blocks it as mixed content. The ports are exactly the three Funnel allows, so a public dashboard later is `tailscale funnel` on the same ports with the same URLs. Workers keep talking to the tailnet IP over plain http; the tailnet is already encrypted.
+Convex must be https too or the browser blocks it as mixed content. These listeners sit on the tailnet address, which keel-proxy never binds, so both coexist on 443. Workers keep talking to the tailnet IP over plain http; the tailnet is already encrypted.
 
-Dev does this with `scripts/dev-https.sh`. `install.sh` still serves `http://<tailnet IP>`; moving it over means `KEEL_CONVEX_URL`, `KEEL_CONVEX_SITE_URL` and `SITE_URL` follow the MagicDNS name.
+Dev does this with `scripts/dev-https.sh`. `install.sh` still serves `http://<tailnet IP>`; moving it over means `KEEL_CONVEX_URL`, `KEEL_CONVEX_SITE_URL` and `SITE_URL` follow the MagicDNS name. keel-proxy could serve the dashboard instead (Caddy gets `*.ts.net` certificates from `tailscaled`), not done.
 
 ## "Sign in with Tailscale" (later, optional)
 
 Not an identity provider. Tailscale OAuth apps are alpha and same-tailnet only; useless for outside users. What works: serve the dashboard on a tsnet listener too, call `LocalClient().WhoIs(remoteAddr)` on the request, get the user's login, mint a better-auth session, redirect to the public dashboard URL. Only reachable from inside the tailnet, which is the point. `tsidp` does the same via OIDC if we want a standard flow.
 
-## Custom domains (superseded by "Named tunnel" above)
+## Not doing yet
 
-When someone needs `app.example.com`, the zero-inbound-port path is Cloudflare Tunnel:
-
-- Domain on Cloudflare DNS. User pastes an API token (Cloudflare Tunnel Edit + DNS Edit).
-- `POST /accounts/{id}/cfd_tunnel` `{"config_src":"cloudflare"}` → tunnel id + token.
-- `PUT /accounts/{id}/cfd_tunnel/{tid}/configurations` with an ingress rule `app.example.com → http://svc-<id>:<port>`.
-- `POST /zones/{zid}/dns_records` CNAME `app.example.com → <tid>.cfargotunnel.com`.
-- Run `cloudflared` as a Swarm service on the overlay, same pattern as the ingress container, `--token`.
-
-Caveats: TLS terminates at Cloudflare's edge; video/large-file hosting on public hostnames is restricted by Cloudflare's CDN terms on non-Enterprise plans; Cloudflare's uptime becomes yours. Alternative for a server with a public IP: run Caddy on that box with ACME. That one opens 80/443, so it's opt-in per server and labeled as such.
-
-## Not doing in v1
-
-- Custom domains (next slice: named Cloudflare tunnel).
-- Raw TCP/UDP public exposure.
-- Per-node agent. The ingress container is a Swarm service like everything else (`workers.md`: no agent).
-- Cloudflare as a mesh backend. The tailnet stays the mesh.
+- HTTP/3 (needs a `host-udp` 443 listener for QUIC).
+- Port ranges, and per-endpoint access rules (IP allowlists, basic auth). caddy-l4 and Caddy have the matchers; nothing exposes them.
+- A public dashboard.
 - Sign in with Tailscale.
 
 ## Sources
 
-- tsnet: [package docs](https://pkg.go.dev/tailscale.com/tsnet), [`tsnet.go` source](https://github.com/tailscale/tailscale/blob/main/tsnet/tsnet.go), [#8800 multiple Funnel listeners](https://github.com/tailscale/tailscale/issues/8800)
-- Funnel: [docs](https://tailscale.com/docs/features/tailscale-funnel), [custom domain FR #11563](https://github.com/tailscale/tailscale/issues/11563), [enabling HTTPS](https://tailscale.com/docs/how-to/set-up-https-certificates)
-- Tailscale API and plans: [pricing](https://tailscale.com/pricing), [terms](https://tailscale.com/terms), [OAuth clients](https://tailscale.com/docs/features/oauth-clients), [OAuth apps (alpha)](https://tailscale.com/docs/features/oauth-apps), [Tailnets API (alpha)](https://tailscale.com/docs/features/tailnets-api), [tsidp](https://tailscale.com/blog/building-tsidp)
-- Rejected: [tailcat blog](https://tailscale.com/blog/tailcat), [tailcat repo](https://github.com/tailscale/tailcat), [Cloudflare Mesh](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-mesh/), [NetBird benchmark](https://netbird.io/knowledge-hub/cloudflare-mesh-vs-netbird-vs-tailscale), [NetBird self-host](https://docs.netbird.io/selfhosted/selfhosted-quickstart), [NetBird reverse proxy](https://docs.netbird.io/manage/reverse-proxy), [Pangolin architecture](https://docs.pangolin.net/development/system-architecture), [caddy-tailscale](https://github.com/tailscale/caddy-tailscale), [caddy-tailscale Funnel #26](https://github.com/tailscale/caddy-tailscale/issues/26), [Traefik HTTP provider](https://doc.traefik.io/traefik/reference/install-configuration/providers/others/http/), [Railway edge proxy changelog](https://railway.com/changelog/2024-05-17-new-edge-proxy-beta)
-- Cloudflare Tunnel (later): [create tunnel via API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/), [video delivery terms](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/delivering-videos-with-cloudflare/)
+- Caddy: [admin API](https://caddyserver.com/docs/api), [`RegisterNetwork`](https://github.com/caddyserver/caddy/blob/master/listeners.go), [automatic HTTPS](https://caddyserver.com/docs/automatic-https), [events](https://caddyserver.com/docs/json/apps/events/); [caddy-l4](https://github.com/mholt/caddy-l4); [caddy-tailscale](https://github.com/tailscale/caddy-tailscale) (the custom-network precedent)
+- sslip.io: [site](https://sslip.io), [Let's Encrypt quota exhausted #108](https://github.com/cunnie/sslip.io/issues/108); [Let's Encrypt rate limits](https://letsencrypt.org/docs/rate-limits/)
+- Rejected proxies: [Traefik HTTP provider](https://doc.traefik.io/traefik/reference/install-configuration/providers/others/http/), [Pangolin architecture](https://docs.pangolin.net/development/system-architecture), [Railway edge proxy changelog](https://railway.com/changelog/2024-05-17-new-edge-proxy-beta)
+- Tailscale: [Funnel](https://tailscale.com/docs/features/tailscale-funnel), [tsnet](https://pkg.go.dev/tailscale.com/tsnet), [pricing](https://tailscale.com/pricing)
+- Cloudflare: [Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/), [remote tunnel API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/), [video delivery terms](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/delivering-videos-with-cloudflare/)
+- Mesh: [tailcat](https://tailscale.com/blog/tailcat), [Cloudflare Mesh](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-mesh/), [NetBird benchmark](https://netbird.io/knowledge-hub/cloudflare-mesh-vs-netbird-vs-tailscale), [NetBird self-host](https://docs.netbird.io/selfhosted/selfhosted-quickstart)

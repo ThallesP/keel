@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # One-time Swarm bootstrap for the control-plane box.
 # See docs/workers.md, "Cluster bootstrap". Idempotent: safe to re-run.
+#   --swarm-only  init Swarm and the `keel` overlay, skip the worker. install.sh runs this before
+#                 the control plane starts, because keel-proxy (deploy/compose.yml) joins that
+#                 overlay; the worker comes after, once Convex has its functions.
 set -euo pipefail
 
 TAILSCALE_IP="${TAILSCALE_IP:-$(tailscale ip -4)}"
@@ -23,6 +26,7 @@ if ! docker network inspect keel >/dev/null 2>&1; then
 fi
 
 echo "swarm ready, manager advertised on $TAILSCALE_IP"
+[ "${1:-}" = --swarm-only ] && exit 0
 
 # Per-node worker: streams `docker events` to Convex (event-driven observation) and container
 # logs to the project's log sink. Global service, so nodes that join later get it too.

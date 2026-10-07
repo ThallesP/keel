@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { ownedNode } from "./access";
-import { ingress, observed } from "./schema";
+import { type Endpoint, observed } from "./schema";
 import { converged } from "./status";
 import { withTracing } from "./tracing";
 import { computeEnv } from "./variables";
@@ -37,28 +37,7 @@ export const applyInput = internalQuery({
       desired: node.desired,
       env: await withTracing(ctx, node, await computeEnv(ctx, node)),
       oneShot: node.oneShot ?? false,
-      public: node.public !== undefined,
     };
-  },
-});
-
-/** Everything applyIngress needs. `public: false` means "remove the tunnel if there is one". */
-export const ingressInput = internalQuery({
-  args: { id: v.id("nodes") },
-  handler: async (ctx, { id }) => {
-    const node = await ctx.db.get(id);
-    if (!node?.desired) return null;
-    return { port: node.desired.port, public: node.public !== undefined };
-  },
-});
-
-export const setIngress = internalMutation({
-  args: { id: v.id("nodes"), ingress: v.optional(ingress) },
-  handler: async (ctx, { id, ingress }) => {
-    const node = await ctx.db.get(id);
-    // Unexposed (or deleted) while the scan ran: nothing to report any more.
-    if (!node || (ingress && !node.public)) return;
-    await ctx.db.patch(id, { ingress });
   },
 });
 
@@ -89,11 +68,7 @@ const OBSERVE_DEBOUNCE_MS = 500;
 export async function scheduleObserveFor(
   ctx: MutationCtx,
   rawId: string,
-  {
-    delayMs = OBSERVE_DEBOUNCE_MS,
-    settle,
-    ingressTries,
-  }: { delayMs?: number; settle?: number; ingressTries?: number } = {},
+  { delayMs = OBSERVE_DEBOUNCE_MS, settle }: { delayMs?: number; settle?: number } = {},
 ) {
   const id = ctx.db.normalizeId("nodes", rawId);
   const node = id && (await ctx.db.get(id));
@@ -106,7 +81,6 @@ export async function scheduleObserveFor(
   const scheduled = await ctx.scheduler.runAfter(delayMs, internal.swarm.observeNode, {
     id,
     settle,
-    ingressTries,
   });
   await ctx.db.patch(id, { observeScheduled: scheduled });
   return true;
@@ -117,10 +91,8 @@ export const scheduleObserve = internalMutation({
     id: v.id("nodes"),
     delayMs: v.optional(v.number()),
     settle: v.optional(v.number()),
-    ingressTries: v.optional(v.number()),
   },
-  handler: (ctx, { id, delayMs, settle, ingressTries }) =>
-    scheduleObserveFor(ctx, id, { delayMs, settle, ingressTries }),
+  handler: (ctx, { id, delayMs, settle }) => scheduleObserveFor(ctx, id, { delayMs, settle }),
 });
 
 export const clearObserveScheduled = internalMutation({
@@ -134,5 +106,25 @@ export const setApplyError = internalMutation({
   args: { id: v.id("nodes"), error: v.optional(v.string()) },
   handler: async (ctx, { id, error }) => {
     if (await ctx.db.get(id)) await ctx.db.patch(id, { applyError: error });
+  },
+});
+
+/**
+ * swarm.apply shipped `port`: endpoints that follow the node's port (not `pinnedPort`) dial it
+ * from now on, and keel-proxy reloads. A no-op when nothing moved.
+ */
+export const followPort = internalMutation({
+  args: { id: v.id("nodes"), port: v.number() },
+  handler: async (ctx, { id, port }) => {
+    const node = await ctx.db.get(id);
+    const moves = (e: Endpoint) => !e.pinnedPort && e.port !== port;
+    if (!node?.endpoints?.some(moves)) return;
+    const at = Date.now();
+    await ctx.db.patch(id, {
+      endpoints: node.endpoints.map((e) =>
+        moves(e) ? { ...e, port, status: { state: "starting" as const, at } } : e,
+      ),
+    });
+    await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
   },
 });

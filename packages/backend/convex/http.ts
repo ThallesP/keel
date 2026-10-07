@@ -96,6 +96,34 @@ http.route({
   }),
 });
 
+// keel-proxy's `keel` event handler (apps/proxy): a certificate was obtained or failed. Same
+// bearer as the worker; Convex wrote it into the proxy's config.
+http.route({
+  path: "/proxy/events",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    if (!authorized(req)) return new Response("unauthorized", { status: 401 });
+    const text = await req.text();
+    if (text.length > MAX_BODY) return new Response("too large", { status: 413 });
+    let report: { event?: unknown; name?: unknown; error?: unknown };
+    try {
+      report = JSON.parse(text);
+    } catch {
+      return new Response("bad json", { status: 400 });
+    }
+    const { event, name, error } = report;
+    if ((event !== "cert_obtained" && event !== "cert_failed") || typeof name !== "string") {
+      return new Response("bad report", { status: 400 });
+    }
+    await ctx.runMutation(internal.proxyInternal.certReport, {
+      event,
+      name,
+      error: typeof error === "string" ? error : undefined,
+    });
+    return new Response("ok", { status: 200 });
+  }),
+});
+
 // OTLP/HTTP spans from services with tracing on and from `keel run`, bearer = the environment's
 // ingest key (otlp.ts). Relayed unchanged to the organization's traces dataset.
 http.route({ path: "/otlp/v1/traces", method: "POST", handler: traces });

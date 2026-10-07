@@ -11,8 +11,8 @@ import { markReferrersDirty } from "./variables";
  *
  * - Quick Tunnel → keel-proxy (2026-10-06): a service exposed through a Cloudflare Quick Tunnel
  *   becomes an https endpoint on its default domain; the `cloudflared` services are removed.
- *   Without KEEL_PUBLIC_IP there is no domain to give it, so the whole step waits (tunnels keep
- *   serving) for a run that knows the IP.
+ *   Without KEEL_PUBLIC_IP it goes private instead: Keel no longer manages tunnels, so one left
+ *   running could not be shown or stopped.
  * - Redis password (2026-10-07): a Redis without REDIS_PASSWORD gets one and is marked dirty with
  *   everything that references it, so the next Ship restarts it with `--requirepass` and hands
  *   its consumers the new REDIS_URL together.
@@ -26,17 +26,11 @@ export const run = internalMutation({
     const ip = publicIp();
     const at = Date.now();
     let converted = 0;
-    let tunnelsWaiting = 0;
     for (const node of await ctx.db.query("nodes").collect()) {
       if (node.public === undefined && node.ingress === undefined) continue;
       const port = node.desired?.port;
-      const convertible = node.public && node.type === "service" && port && !node.endpoints?.length;
-      if (convertible && !ip) {
-        tunnelsWaiting++;
-        continue;
-      }
       const http: Endpoint | undefined =
-        convertible && ip
+        node.public && node.type === "service" && port && ip && !node.endpoints?.length
           ? {
               protocol: "http",
               port,
@@ -84,10 +78,8 @@ export const run = internalMutation({
         if (moved) await ctx.db.patch(node._id, { endpoints });
       }
     }
-    if (tunnelsWaiting === 0) {
-      await ctx.scheduler.runAfter(0, internal.swarm.removeLegacyTunnels, {});
-    }
+    await ctx.scheduler.runAfter(0, internal.swarm.removeLegacyTunnels, {});
     await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
-    return { quickTunnelsConverted: converted, tunnelsWaiting, redisPasswords, domainsMoved };
+    return { quickTunnelsConverted: converted, redisPasswords, domainsMoved };
   },
 });

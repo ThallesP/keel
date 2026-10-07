@@ -78,7 +78,7 @@ Status after a load: tcp/udp `live`; https `live` when `GET /keel/certs` reports
 
 ## Upgrades from the Quick Tunnel
 
-`migrations.run` (run by `deploy/functions-entrypoint.sh` after every deploy): a node with the old `public`/`ingress` fields gets an https endpoint on its default domain (services with a port, when `KEEL_PUBLIC_IP` is known) and both fields are cleared; `swarm.removeLegacyTunnels` removes every Swarm service labelled `keel.ingress`. Without `KEEL_PUBLIC_IP` the step waits instead, tunnels and fields untouched, so no service loses its public URL before a run that can give it a domain. The two fields stay in the schema as `v.any()` until every install has run it.
+`migrations.run` (run by `deploy/functions-entrypoint.sh` after every deploy): a node with the old `public`/`ingress` fields gets an https endpoint on its default domain (services with a port, when `KEEL_PUBLIC_IP` is known) and both fields are cleared; `swarm.removeLegacyTunnels` removes every Swarm service labelled `keel.ingress`. Without `KEEL_PUBLIC_IP` such a service gets no endpoint and goes private, on purpose: a tunnel left running would be public with nothing in Keel to show or stop it. Expose it again once the IP is set. The two fields stay in the schema as `v.any()` until every install has run it.
 
 ## Limits
 

@@ -76,6 +76,21 @@ const hostPort = (addr: string, port: number) =>
 const upstream = (r: Route) => `svc-${r.nodeId}:${r.port}`;
 const internalName = (d: string) => d === "localhost" || d.endsWith(".localhost");
 
+const ZEROSSL_CA = "https://acme.zerossl.com/v2/DV90";
+
+/**
+ * With no `tls` app Caddy uses Let's Encrypt alone: its ZeroSSL fallback needs an email (Caddy
+ * gets ZeroSSL's external account binding with it). KEEL_ACME_EMAIL gives the pair Caddy would build,
+ * Let's Encrypt then ZeroSSL; KEEL_ACME_CA (a staging CA) replaces both.
+ */
+function issuers({ ca, email }: Acme) {
+  if (ca) return [{ module: "acme", ca, ...(email && { email }) }];
+  return [
+    { module: "acme", email },
+    { module: "acme", ca: ZEROSSL_CA, email },
+  ];
+}
+
 /**
  * The `apps` half of Caddy's config for every endpoint. Listeners use the plugin's `host-tcp` /
  * `host-udp` networks (sockets in the host namespace) on each address from /keel/host-addrs:
@@ -105,20 +120,7 @@ function caddyApps(routes: Route[], addrs: string[], reporter: Reporter, acme: A
     const managed = web.map((r) => r.domain!).filter((d) => !internalName(d));
     if ((acme.ca || acme.email) && managed.length > 0) {
       apps.tls = {
-        automation: {
-          policies: [
-            {
-              subjects: managed,
-              issuers: [
-                {
-                  module: "acme",
-                  ...(acme.ca && { ca: acme.ca }),
-                  ...(acme.email && { email: acme.email }),
-                },
-              ],
-            },
-          ],
-        },
+        automation: { policies: [{ subjects: managed, issuers: issuers(acme) }] },
       };
     }
     apps.events = {

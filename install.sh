@@ -12,6 +12,7 @@
 #   KEEL_ADDR               Bind to this IP instead of the tailnet IP; skips Tailscale (LAN, CI)
 #   KEEL_PUBLIC_IP          This server's public IPv4 (default: detected). Names the default
 #                           https://<service>-<id>.<ip>.sslip.io domains of exposed services
+#   KEEL_ACME_EMAIL         Email for certificates; adds ZeroSSL after Let's Encrypt
 #   KEEL_VERSION            Image tag of keel-web / keel-worker / keel-functions (default latest)
 #   KEEL_WEB_PORT           Dashboard port on KEEL_ADDR (default 80)
 #   KEEL_JSON=1             Machine-readable result on stdout
@@ -47,7 +48,7 @@ compose() { docker compose -p keel --env-file "$ENV_FILE" -f "$KEEL_DIR/compose.
 functions() {
   docker run --rm --network host \
     -e CONVEX_SELF_HOSTED_URL="http://$KEEL_ADDR:3210" -e CONVEX_SELF_HOSTED_ADMIN_KEY \
-    -e SITE_URL -e BETTER_AUTH_SECRET -e KEEL_WORKER_TOKEN -e KEEL_PUBLIC_IP \
+    -e SITE_URL -e BETTER_AUTH_SECRET -e KEEL_WORKER_TOKEN -e KEEL_PUBLIC_IP -e KEEL_ACME_EMAIL \
     "$KEEL_IMAGE_PREFIX/keel-functions:$KEEL_VERSION" "$@"
 }
 
@@ -104,13 +105,15 @@ ensure_tailscale() {
 
 # The address the internet reaches this server on: what exposed services' domains and ports
 # point at (docs/networking.md). Behind NAT it is the router's, which is the one to forward.
-# Not fatal: without it Keel still runs, only Expose asks for it.
+# Not fatal: without it Keel still runs, only Expose asks for it. Detected again on every run (a
+# homelab's IP changes, a VPS gets rebuilt) unless KEEL_PUBLIC_IP_OVERRIDE is set.
 detect_public_ip() {
-  if [ -n "$KEEL_PUBLIC_IP" ]; then
+  if [ -n "$KEEL_PUBLIC_IP_OVERRIDE" ]; then
+    KEEL_PUBLIC_IP=$KEEL_PUBLIC_IP_OVERRIDE
     log "public IP $KEEL_PUBLIC_IP"
     return
   fi
-  local url
+  local url last=$KEEL_PUBLIC_IP
   for url in https://api.ipify.org https://ifconfig.me/ip https://icanhazip.com; do
     KEEL_PUBLIC_IP=$(curl -4fsS --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]' || true)
     if [[ "$KEEL_PUBLIC_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
@@ -118,8 +121,12 @@ detect_public_ip() {
       return
     fi
   done
-  KEEL_PUBLIC_IP=""
-  warn "could not detect this server's public IPv4; set KEEL_PUBLIC_IP and re-run to expose services"
+  KEEL_PUBLIC_IP=$last
+  if [ -n "$last" ]; then
+    warn "could not detect this server's public IPv4; keeping $last from the last run"
+  else
+    warn "could not detect this server's public IPv4; set KEEL_PUBLIC_IP and re-run to expose services"
+  fi
 }
 
 fetch() { # <repo path> <dest> <mode>
@@ -151,10 +158,13 @@ save_state() {
     umask 077
     cat >"$ENV_FILE.tmp" <<EOF
 # Keel install state, written by install.sh. Secrets: keep this file private (0600).
-# KEEL_ADDR is derived (tailnet IP) unless KEEL_ADDR_OVERRIDE is set.
+# KEEL_ADDR is derived (tailnet IP) unless KEEL_ADDR_OVERRIDE is set; KEEL_PUBLIC_IP likewise
+# (detected) unless KEEL_PUBLIC_IP_OVERRIDE is.
 KEEL_ADDR='$KEEL_ADDR'
 KEEL_ADDR_OVERRIDE='$KEEL_ADDR_OVERRIDE'
 KEEL_PUBLIC_IP='$KEEL_PUBLIC_IP'
+KEEL_PUBLIC_IP_OVERRIDE='$KEEL_PUBLIC_IP_OVERRIDE'
+KEEL_ACME_EMAIL='$KEEL_ACME_EMAIL'
 KEEL_VERSION='$KEEL_VERSION'
 KEEL_WEB_PORT='$KEEL_WEB_PORT'
 KEEL_IMAGE_PREFIX='$KEEL_IMAGE_PREFIX'
@@ -182,7 +192,7 @@ start_control_plane() {
   fi
   log "starting the control plane (Convex backend, web, proxy)"
   compose up -d --wait --wait-timeout 180 --remove-orphans >&2 ||
-    die "the control plane did not become healthy" "docker compose -p keel logs backend web"
+    die "the control plane did not become healthy" "docker compose -p keel logs backend web proxy"
 
   if [ -z "$CONVEX_SELF_HOSTED_ADMIN_KEY" ]; then
     CONVEX_SELF_HOSTED_ADMIN_KEY=$(compose exec -T backend ./generate_admin_key.sh | grep '|' | tail -1 || true)
@@ -229,7 +239,10 @@ main() {
   KEEL_VERSION=${KEEL_VERSION:-$(saved KEEL_VERSION)}; KEEL_VERSION=${KEEL_VERSION:-latest}
   KEEL_WEB_PORT=${KEEL_WEB_PORT:-$(saved KEEL_WEB_PORT)}; KEEL_WEB_PORT=${KEEL_WEB_PORT:-80}
   KEEL_IMAGE_PREFIX=${KEEL_IMAGE_PREFIX:-$(saved KEEL_IMAGE_PREFIX)}; KEEL_IMAGE_PREFIX=${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}
-  KEEL_PUBLIC_IP=${KEEL_PUBLIC_IP:-$(saved KEEL_PUBLIC_IP)}
+  # Same for KEEL_PUBLIC_IP: an explicit one sticks, a detected one is detected again.
+  KEEL_PUBLIC_IP_OVERRIDE=${KEEL_PUBLIC_IP:-$(saved KEEL_PUBLIC_IP_OVERRIDE)}
+  KEEL_PUBLIC_IP=$(saved KEEL_PUBLIC_IP)
+  KEEL_ACME_EMAIL=${KEEL_ACME_EMAIL:-$(saved KEEL_ACME_EMAIL)}
 
   preflight
   ensure_docker
@@ -237,7 +250,7 @@ main() {
   detect_public_ip
   SITE_URL="http://$KEEL_ADDR"; [ "$KEEL_WEB_PORT" = 80 ] || SITE_URL="$SITE_URL:$KEEL_WEB_PORT"
   write_state
-  export CONVEX_SELF_HOSTED_ADMIN_KEY SITE_URL BETTER_AUTH_SECRET KEEL_WORKER_TOKEN KEEL_PUBLIC_IP
+  export CONVEX_SELF_HOSTED_ADMIN_KEY SITE_URL BETTER_AUTH_SECRET KEEL_WORKER_TOKEN KEEL_PUBLIC_IP KEEL_ACME_EMAIL
   start_swarm
   start_control_plane
   start_workers

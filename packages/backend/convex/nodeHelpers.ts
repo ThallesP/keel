@@ -40,7 +40,11 @@ export function engineOf(image: string | undefined): Engine | undefined {
   return repo in ENGINES ? (repo as Engine) : undefined;
 }
 
-/** Credentials the engine's official image reads on first boot. */
+/**
+ * Credentials the engine's official image reads on first boot. Every engine gets a password, even
+ * one that is never exposed. Redis reads none from its env: swarm.ts passes REDIS_PASSWORD to
+ * `redis-server --requirepass`.
+ */
 export function seedVariables(engine: Engine | undefined) {
   const rows = (pairs: [string, string, boolean][]) =>
     pairs.map(([key, value, secret]) => ({ key, value, secret }));
@@ -63,6 +67,8 @@ export function seedVariables(engine: Engine | undefined) {
         ["MONGO_INITDB_ROOT_USERNAME", "app", false],
         ["MONGO_INITDB_ROOT_PASSWORD", randomSecret(), true],
       ]);
+    case "redis":
+      return rows([["REDIS_PASSWORD", randomSecret(), true]]);
     default:
       return [];
   }

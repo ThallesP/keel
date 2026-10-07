@@ -153,7 +153,7 @@ export const create = mutation({
       desired,
       dirty: deployable,
     });
-    if (type === "database") {
+    if (type === "database" || type === "cache") {
       const rows = seedVariables(engineOf(desired?.image));
       for (const row of rows) await ctx.db.insert("variables", { nodeId: id, ...row });
     }
@@ -312,7 +312,11 @@ export const expose = mutation({
     const rest = own.filter((e) => endpointKey(e) !== key);
     if (rest.length >= MAX_ENDPOINTS)
       throw new ConvexError(`At most ${MAX_ENDPOINTS} endpoints per node`);
-    const endpoint: Endpoint = { ...wanted, status: { state: "starting", at: Date.now() } };
+    const endpoint: Endpoint = {
+      ...wanted,
+      ...(port !== node.desired.port && { pinnedPort: true }),
+      status: { state: "starting", at: Date.now() },
+    };
     await ctx.db.patch(id, { endpoints: [...rest, endpoint] });
     await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
     return endpointView(endpoint);
@@ -341,8 +345,15 @@ export const unexpose = mutation({
   },
   handler: async (ctx, { id, protocol, domain, publicPort }) => {
     const { node } = await requireNode(ctx, id);
+    // No selector closes every endpoint; a partial one must not fall through to that.
+    const all = protocol === undefined && domain === undefined && publicPort === undefined;
+    const named = protocol === "http" ? domain !== undefined : publicPort !== undefined;
+    if (!all && !(protocol && named)) {
+      throw new ConvexError("Name the endpoint: protocol and domain (http) or public port");
+    }
     if (!node.endpoints?.length) return;
-    const key = protocol && endpointKey({ protocol, domain, publicPort });
+    const key =
+      protocol && endpointKey({ protocol, domain: domain && validDomain(domain), publicPort });
     const endpoints = key ? node.endpoints.filter((e) => endpointKey(e) !== key) : [];
     if (endpoints.length === node.endpoints.length) return;
     await ctx.db.patch(id, { endpoints: endpoints.length > 0 ? endpoints : undefined });

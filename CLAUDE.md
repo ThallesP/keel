@@ -11,7 +11,7 @@ Differentiator: UI/UX and deploy DX.
 - **Multi-server by default.** Scaling past one machine must be effortless. Single-node clusters stay first-class.
 - **Almost zero networking for the user.** We handle it, except opening ports on the control plane:
   - Tailscale for user containers and control-plane/worker comms.
-  - Public traffic via `keel-proxy` (Caddy + caddy-l4, `apps/proxy`) on the control plane only, never a per-worker proxy: HTTPS on 80/443 with automatic certificates (sslip.io default domain or the user's own), raw TCP/UDP on any port, all configured by Convex through the admin API. The user opens 80/443 and the TCP/UDP ports they expose. Cloudflare Quick Tunnel was dropped 2026-10-06, Tailscale Funnel 2026-10-01. See `docs/networking.md`.
+  - Public traffic via `keel-proxy` (Caddy + caddy-l4, `apps/proxy`) on the control plane only, never a per-worker proxy: HTTPS on 80/443 with automatic certificates (sslip.io default domain or the user's own), raw TCP on any port but 80/443 and UDP on any port, all configured by Convex through the admin API. The user opens 80/443 and the TCP/UDP ports they expose. Cloudflare Quick Tunnel was dropped 2026-10-06, Tailscale Funnel 2026-10-01. See `docs/networking.md`.
 
 ## Install and release
 

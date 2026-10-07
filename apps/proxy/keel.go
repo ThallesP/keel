@@ -154,6 +154,10 @@ func (r *Reporter) Handle(_ context.Context, e caddy.Event) error {
 		if strings.Contains(report.Error, "context canceled") {
 			return nil
 		}
+		// A failed renewal: the current certificate keeps serving while Caddy retries.
+		if certOf(name).State == "ok" {
+			return nil
+		}
 		failuresMu.Lock()
 		failures[name] = report.Error
 		failuresMu.Unlock()

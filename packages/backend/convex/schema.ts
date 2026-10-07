@@ -64,6 +64,9 @@ export const endpointStatus = v.object({
 export const endpoint = v.object({
   protocol: endpointProtocol,
   port: v.number(), // the container port the proxy dials
+  // Expose was given a container port other than the node's. Otherwise `port` follows the node's
+  // port each time a change to it ships (nodesInternal.followPort, from swarm.apply).
+  pinnedPort: v.optional(v.boolean()),
   domain: v.optional(v.string()), // http only; unique per install
   publicPort: v.optional(v.number()), // tcp / udp only; unique per protocol per install
   status: endpointStatus,

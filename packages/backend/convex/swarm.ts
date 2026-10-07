@@ -6,6 +6,7 @@ import Docker from "dockerode";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, internalAction } from "./_generated/server";
+import { engineOf } from "./nodeHelpers";
 import type { Desired, Observed } from "./schema";
 
 // Root-equivalent access to the host. Everything in this file stays internal.
@@ -38,7 +39,7 @@ function toSpec(id: string, d: Desired, env: string[], oneShot: boolean): Docker
     Name: serviceName(id),
     Labels,
     TaskTemplate: {
-      ContainerSpec: { Image: d.image, Env: env, Labels },
+      ContainerSpec: { Image: d.image, Env: env, Args: engineArgs(d.image, env), Labels },
       // Delay is nanoseconds. After MaxAttempts Swarm gives up and observe reports crashloop.
       RestartPolicy: { Condition: "on-failure", Delay: 5_000_000_000, MaxAttempts: 5 },
       Networks: [{ Target: NETWORK }],
@@ -51,6 +52,16 @@ function toSpec(id: string, d: Desired, env: string[], oneShot: boolean): Docker
       FailureAction: oneShot ? "continue" : "rollback",
     },
   };
+}
+
+/**
+ * Redis's image reads no password from its env, so REDIS_PASSWORD (seeded, nodeHelpers.ts) becomes
+ * `--requirepass`. The image's entrypoint runs `redis-server` args as usual.
+ */
+function engineArgs(image: string, env: string[]) {
+  if (engineOf(image) !== "redis") return undefined;
+  const pass = env.find((e) => e.startsWith("REDIS_PASSWORD="))?.slice("REDIS_PASSWORD=".length);
+  return pass ? ["redis-server", "--requirepass", pass] : undefined;
 }
 
 function notFoundAsNull(err: { statusCode?: number }) {
@@ -148,6 +159,10 @@ export const apply = internalAction({
           : `service updated · revision ${desired.revision}`,
       );
       await ctx.runMutation(internal.nodesInternal.setApplyError, { id, error: undefined });
+      // A shipped port change moves the endpoints that follow the node's port.
+      if (desired.port) {
+        await ctx.runMutation(internal.nodesInternal.followPort, { id, port: desired.port });
+      }
     } catch (err) {
       const text = errorText(err);
       await ctx.runMutation(internal.nodesInternal.setApplyError, { id, error: text });

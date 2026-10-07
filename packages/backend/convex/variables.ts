@@ -100,9 +100,12 @@ async function provided(node: Doc<"nodes">, get: Getter): Promise<Map<string, Re
         }
       }
       break;
-    case "cache":
-      out.set("REDIS_URL", { value: `redis://${host}:${port ?? 6379}`, secret: false });
+    case "cache": {
+      const pass = await get("REDIS_PASSWORD", "");
+      const auth = pass ? `default:${enc(pass)}@` : "";
+      out.set("REDIS_URL", { value: `redis://${auth}${host}:${port ?? 6379}`, secret: !!pass });
       break;
+    }
     case "service":
       if (port) out.set("URL", { value: `http://${host}:${port}`, secret: false });
       break;

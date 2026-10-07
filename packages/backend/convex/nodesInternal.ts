@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { ownedNode } from "./access";
-import { observed } from "./schema";
+import { type Endpoint, observed } from "./schema";
 import { converged } from "./status";
 import { withTracing } from "./tracing";
 import { computeEnv } from "./variables";
@@ -106,5 +106,25 @@ export const setApplyError = internalMutation({
   args: { id: v.id("nodes"), error: v.optional(v.string()) },
   handler: async (ctx, { id, error }) => {
     if (await ctx.db.get(id)) await ctx.db.patch(id, { applyError: error });
+  },
+});
+
+/**
+ * swarm.apply shipped `port`: endpoints that follow the node's port (not `pinnedPort`) dial it
+ * from now on, and keel-proxy reloads. A no-op when nothing moved.
+ */
+export const followPort = internalMutation({
+  args: { id: v.id("nodes"), port: v.number() },
+  handler: async (ctx, { id, port }) => {
+    const node = await ctx.db.get(id);
+    const moves = (e: Endpoint) => !e.pinnedPort && e.port !== port;
+    if (!node?.endpoints?.some(moves)) return;
+    const at = Date.now();
+    await ctx.db.patch(id, {
+      endpoints: node.endpoints.map((e) =>
+        moves(e) ? { ...e, port, status: { state: "starting" as const, at } } : e,
+      ),
+    });
+    await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
   },
 });

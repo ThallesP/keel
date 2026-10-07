@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { certHint, endpointKey } from "./endpoints";
-import { endpointStatus } from "./schema";
+import { type EndpointStatus, endpointStatus } from "./schema";
 
 // Internal, used by proxy.ts (the sync action) and http.ts (certificate reports).
 
@@ -26,8 +27,8 @@ export const syncInput = internalQuery({
     return {
       routes,
       reporter: { url: site, token: process.env.KEEL_WORKER_TOKEN ?? "" },
-      // Development and CI point ACME at a staging CA; production leaves both unset (Caddy's
-      // defaults: Let's Encrypt, then ZeroSSL).
+      // Development and CI point ACME at a staging CA. KEEL_ACME_EMAIL (install.sh) adds ZeroSSL
+      // after Let's Encrypt; with neither set, Caddy uses Let's Encrypt alone (proxy.ts issuers).
       acme: {
         ca: process.env.KEEL_ACME_CA || undefined,
         email: process.env.KEEL_ACME_EMAIL || undefined,
@@ -36,7 +37,10 @@ export const syncInput = internalQuery({
   },
 });
 
-/** A sync's outcome. Endpoints changed or removed since the sync read them are left alone. */
+/**
+ * A sync's outcome. Endpoints changed or removed since the sync read them are left alone, and so
+ * is a status that did not change (the cron re-syncs every few minutes).
+ */
 export const setStatuses = internalMutation({
   args: {
     statuses: v.array(v.object({ nodeId: v.id("nodes"), key: v.string(), status: endpointStatus })),
@@ -48,12 +52,34 @@ export const setStatuses = internalMutation({
       const next = new Map(
         statuses.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.status]),
       );
-      await ctx.db.patch(nodeId, {
-        endpoints: node.endpoints.map((e) => ({
-          ...e,
-          status: next.get(endpointKey(e)) ?? e.status,
-        })),
+      const same = (a: EndpointStatus, b: EndpointStatus) =>
+        a.state === b.state && a.error === b.error;
+      const changed = node.endpoints.some((e) => {
+        const s = next.get(endpointKey(e));
+        return s && !same(s, e.status);
       });
+      if (!changed) continue;
+      await ctx.db.patch(nodeId, {
+        endpoints: node.endpoints.map((e) => {
+          const s = next.get(endpointKey(e));
+          return { ...e, status: s && !same(s, e.status) ? s : e.status };
+        }),
+      });
+    }
+  },
+});
+
+/**
+ * Cron (crons.ts): sync again while anything is exposed. Retries what failed for a reason that
+ * goes away on its own (the proxy restarting, a port freed) and picks up a changed host address.
+ * An unchanged config is a no-op in Caddy, so a live endpoint's certificate work is not disturbed.
+ */
+export const resync = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const nodes = await ctx.db.query("nodes").collect();
+    if (nodes.some((n) => n.endpoints?.length)) {
+      await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
     }
   },
 });

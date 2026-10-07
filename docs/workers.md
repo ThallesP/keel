@@ -170,9 +170,8 @@ function toSpec(s: Desired & { id: string; pinSwarmNodeId?: string }) {
     // start-first is for stateless only. Services with volumes must use stop-first,
     // otherwise two tasks share one volume during rollout. See volumes.md rules 5 and 6.
     UpdateConfig: { Parallelism: 1, Order: "start-first", FailureAction: "rollback" },
-    EndpointSpec: s.port
-      ? { Ports: [{ Protocol: "tcp", TargetPort: s.port, PublishedPort: s.port }] }
-      : undefined,
+    // No EndpointSpec: nothing is published on the host. Public traffic comes in through
+    // keel-proxy (networking.md); service-to-service traffic uses `svc-<id>` on the overlay.
   };
 }
 

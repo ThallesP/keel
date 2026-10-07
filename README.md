@@ -55,19 +55,20 @@ Pin a version with `KEEL_VERSION` (an image tag such as `1.2.3` or `sha-abc1234`
 
 All optional. Values you pass are saved in `/opt/keel/.env` and reused by later runs.
 
-| Variable                 | Default            |                                                                                                                        |
-| ------------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `KEEL_TAILSCALE_AUTHKEY` | –                  | `tskey-auth-…` [auth key](https://login.tailscale.com/admin/settings/keys) to join the tailnet without a browser login |
-| `KEEL_VERSION`           | `latest`           | Image tag for `keel-web`, `keel-functions`, `keel-worker`, `keel-proxy`                                                |
-| `KEEL_PUBLIC_IP`         | detected           | The server's public IPv4: what exposed services' domains and ports point at (behind NAT, the router's)                 |
-| `KEEL_WEB_PORT`          | `80`               | Dashboard port                                                                                                         |
-| `KEEL_JSON`              | –                  | `1`: print one JSON result object on stdout (progress stays on stderr)                                                 |
-| `KEEL_ADDR`              | tailnet IP         | Bind to this IP instead and skip Tailscale (LAN or CI only; not what you want in production)                           |
-| `KEEL_DIR`               | `/opt/keel`        | State directory                                                                                                        |
-| `KEEL_REF`               | `main`             | Git ref that `compose.yml` and the scripts are fetched from                                                            |
-| `KEEL_SRC`               | –                  | Use a local checkout instead of fetching (development)                                                                 |
-| `KEEL_IMAGE_PREFIX`      | `ghcr.io/thallesp` | Image registry and namespace                                                                                           |
-| `KEEL_PULL`              | `1`                | `0`: use images already present locally                                                                                |
+| Variable                 | Default            |                                                                                                                                                                                                               |
+| ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KEEL_TAILSCALE_AUTHKEY` | –                  | `tskey-auth-…` [auth key](https://login.tailscale.com/admin/settings/keys) to join the tailnet without a browser login                                                                                        |
+| `KEEL_VERSION`           | `latest`           | Image tag for `keel-web`, `keel-functions`, `keel-worker`, `keel-proxy`                                                                                                                                       |
+| `KEEL_PUBLIC_IP`         | detected           | The server's public IPv4: what exposed services' domains and ports point at (behind NAT, the router's). Detected again on every run unless you set it                                                         |
+| `KEEL_ACME_EMAIL`        | –                  | Email for HTTPS certificates. Adds ZeroSSL after Let's Encrypt, so the shared sslip.io quota running out does not stop new domains                                                                            |
+| `KEEL_WEB_PORT`          | `80`               | Dashboard port                                                                                                                                                                                                |
+| `KEEL_JSON`              | –                  | `1`: print one JSON result object on stdout (progress stays on stderr)                                                                                                                                        |
+| `KEEL_ADDR`              | tailnet IP         | Bind to this IP instead and skip Tailscale (LAN or CI only; not what you want in production). The dashboard then holds port 80 on that address, so HTTPS endpoints fail there unless `KEEL_WEB_PORT` moves it |
+| `KEEL_DIR`               | `/opt/keel`        | State directory                                                                                                                                                                                               |
+| `KEEL_REF`               | `main`             | Git ref that `compose.yml` and the scripts are fetched from                                                                                                                                                   |
+| `KEEL_SRC`               | –                  | Use a local checkout instead of fetching (development)                                                                                                                                                        |
+| `KEEL_IMAGE_PREFIX`      | `ghcr.io/thallesp` | Image registry and namespace                                                                                                                                                                                  |
+| `KEEL_PULL`              | `1`                | `0`: use images already present locally                                                                                                                                                                       |
 
 Pass them to the root side of the pipe: `curl -fsSL … | sudo KEEL_VERSION=1.2.3 bash`.
 

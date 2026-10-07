@@ -5,6 +5,8 @@ import { useAction } from "convex/react";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { stripAnsi } from "@/lib/ansi";
+
 import { useEnvironment } from "../environment";
 import { errorMessage } from "../errors";
 import { formatDuration, formatLogTime, formatTimestamp } from "../format";
@@ -68,7 +70,7 @@ export function LogContext({
           All events
         </button>
         <h2 className="mt-2 truncate font-mono text-sm font-medium text-ink">
-          {line?.text ?? `Logs around ${formatTimestamp(at)}`}
+          {line ? stripAnsi(line.text) : `Logs around ${formatTimestamp(at)}`}
         </h2>
         <p className="mt-0.5 font-mono text-2xs text-faint">
           {[

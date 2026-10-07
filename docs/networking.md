@@ -14,7 +14,7 @@ This is a step back from "no user ever opens an inbound port". The tunnel produc
 - **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) and the `keel` overlay ride the tailnet, see `workers.md`. The per-node event forwarder makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing.
 - **Public ingress:** `keel-proxy`, one container on the control plane (`deploy/compose.yml`). HTTPS by hostname on 80/443 with automatic certificates; raw TCP on any other port, raw UDP on any port (80 and 443 included: the HTTPS server holds only their TCP side). It dials `svc-<id>:<port>` over the overlay, so a service on any server, and every replica, is reachable.
 - **Proxy:** Caddy 2.11 + [caddy-l4](https://github.com/mholt/caddy-l4) + our plugin (`apps/proxy`). Convex owns its whole configuration and pushes it through the admin API.
-- **Default domain:** `https://<service>-<hash6>.<public-ip-dashed>.sslip.io` (sslip.io resolves to the IP inside the name; `hash6` = FNV of the node id, so two projects' `api` never collide and renames keep the URL). Custom domains: any name with an A record to the control plane's public IP.
+- **Default domain:** `https://<service>-<hash6>.<public-ip-dashed>.sslip.io` (sslip.io resolves to the IP inside the name; `hash6` = FNV of the node id, so two projects' `api` never collide and renames keep the URL). When the public IP changes, `migrations.run` moves default domains to the new one, keeping the name. Custom domains: any name with an A record to the control plane's public IP.
 - **Auth:** ours (better-auth). Tailscale identity is optional sign-in sugar later, never the account system.
 
 ## Why Caddy + caddy-l4
@@ -86,7 +86,7 @@ Status after a load: tcp/udp `live`; https `live` when `GET /keel/certs` reports
 - **sslip.io and Let's Encrypt.** sslip.io is not on the Public Suffix List, so every sslip.io user shares one (raised) Let's Encrypt quota; it has run out before. With `KEEL_ACME_EMAIL` set, Caddy falls back to ZeroSSL; without it, default domains wait until the quota frees up. A custom domain gets its own quota and is the production answer.
 - One public IPv4 per install (`KEEL_PUBLIC_IP`); the proxy also binds global IPv6 addresses it finds, but default domains are IPv4.
 - The control plane carries all public traffic. Fine for a small cluster; a second proxy on a worker is the scaling path, not built.
-- Raw TCP/UDP endpoints are unauthenticated beyond what the service does. Every database and cache Keel creates gets a generated password (Redis included: `REDIS_PASSWORD`, run as `--requirepass`; `migrations.run` backfills older Redis nodes and marks them and their referrers dirty, so they ship together).
+- Raw TCP/UDP endpoints are unauthenticated beyond what the service does. Every database and cache Keel creates gets a generated password (Redis included: `REDIS_PASSWORD`, run as `--requirepass`; `migrations.run` backfills older Redis nodes and marks them and their referrers dirty, so they ship together; until that Ship, Expose refuses the Redis).
 
 ## History
 

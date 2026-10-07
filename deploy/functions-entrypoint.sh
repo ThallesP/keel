@@ -28,8 +28,15 @@ case "${1:-deploy}" in
     trap 'rm -f "$envfile"' EXIT
     printf 'SITE_URL=%s\nBETTER_AUTH_SECRET=%s\nKEEL_WORKER_TOKEN=%s\n' \
       "$SITE_URL" "$BETTER_AUTH_SECRET" "$KEEL_WORKER_TOKEN" > "$envfile"
-    [ -z "${KEEL_PUBLIC_IP:-}" ] || printf 'KEEL_PUBLIC_IP=%s\n' "$KEEL_PUBLIC_IP" >> "$envfile"
-    [ -z "${KEEL_ACME_EMAIL:-}" ] || printf 'KEEL_ACME_EMAIL=%s\n' "$KEEL_ACME_EMAIL" >> "$envfile"
+    # Optional ones: set when given, removed when not (`env set` never removes a key).
+    for name in KEEL_PUBLIC_IP KEEL_ACME_EMAIL; do
+      eval "value=\${$name:-}"
+      if [ -n "$value" ]; then
+        printf '%s=%s\n' "$name" "$value" >> "$envfile"
+      else
+        convex env remove "$name" >/dev/null 2>&1 || true
+      fi
+    done
     convex env set --from-file "$envfile" --force
     # _generated is committed; typechecking belongs to CI, not to every install.
     convex deploy --typecheck disable --codegen disable

@@ -42,6 +42,17 @@ export function defaultDomain(node: Pick<Doc<"nodes">, "_id" | "name">, ip: stri
   return `${node.name}-${shortHash(node._id)}.${ip.replaceAll(".", "-")}.sslip.io`;
 }
 
+/**
+ * `domain` on the default sslip.io pattern of this node but another IP: the same name on `ip`.
+ * Otherwise undefined (a custom domain, or already current).
+ */
+export function movedDefaultDomain(node: Pick<Doc<"nodes">, "_id">, domain: string, ip: string) {
+  const m = /^(.+-([0-9a-z]{6}))\.(\d+-\d+-\d+-\d+)\.sslip\.io$/.exec(domain);
+  const dashed = ip.replaceAll(".", "-");
+  if (!m || m[2] !== shortHash(node._id) || m[3] === dashed) return undefined;
+  return `${m[1]}.${dashed}.sslip.io`;
+}
+
 /** 6 base-36 characters of FNV-1a. Stable, not secret. */
 function shortHash(s: string) {
   let h = 0x811c9dc5;

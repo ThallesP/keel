@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { defaultDomain, publicIp } from "./endpoints";
+import { defaultDomain, movedDefaultDomain, publicIp } from "./endpoints";
 import { engineOf, randomSecret } from "./nodeHelpers";
 import type { Endpoint } from "./schema";
 import { markReferrersDirty } from "./variables";
@@ -14,6 +14,8 @@ import { markReferrersDirty } from "./variables";
  * - Redis password (2026-10-07): a Redis without REDIS_PASSWORD gets one and is marked dirty with
  *   everything that references it, so the next Ship restarts it with `--requirepass` and hands
  *   its consumers the new REDIS_URL together.
+ * - Public IP changed (install.sh detects it on every run): default sslip.io domains name the IP,
+ *   so the old one points nowhere. They move to the current IP, keeping their name.
  * - Every run then syncs keel-proxy, so a fresh or recreated proxy serves what Convex holds.
  */
 export const run = internalMutation({
@@ -59,8 +61,23 @@ export const run = internalMutation({
       await markReferrersDirty(ctx, node);
       redisPasswords++;
     }
+    let domainsMoved = 0;
+    if (ip) {
+      for (const node of await ctx.db.query("nodes").collect()) {
+        if (!node.endpoints?.length) continue;
+        let moved = false;
+        const endpoints = node.endpoints.map((e) => {
+          const domain = e.protocol === "http" && movedDefaultDomain(node, e.domain!, ip);
+          if (!domain) return e;
+          moved = true;
+          domainsMoved++;
+          return { ...e, domain, status: { state: "starting" as const, at } };
+        });
+        if (moved) await ctx.db.patch(node._id, { endpoints });
+      }
+    }
     await ctx.scheduler.runAfter(0, internal.swarm.removeLegacyTunnels, {});
     await ctx.scheduler.runAfter(0, internal.proxy.sync, {});
-    return { quickTunnelsConverted: converted, redisPasswords };
+    return { quickTunnelsConverted: converted, redisPasswords, domainsMoved };
   },
 });

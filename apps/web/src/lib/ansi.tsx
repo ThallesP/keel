@@ -63,7 +63,7 @@ function getWorker() {
 }
 
 function request(text: string) {
-  if (cache.has(text) || pending.has(text)) return;
+  if (worker === null || cache.has(text) || pending.has(text)) return;
   pending.add(text);
   if (queued.push(text) > 1) return;
   queueMicrotask(() => {

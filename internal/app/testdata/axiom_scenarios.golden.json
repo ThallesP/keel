@@ -1,0 +1,1907 @@
+{
+  "scenarios": [
+    {
+      "name": "overview-1h",
+      "result": {
+        "source": "axiom",
+        "from": 1791457320000,
+        "to": 1791460920000,
+        "bucketMs": 120000,
+        "stats": {
+          "requests": 42,
+          "errors": 3,
+          "p50": 1.5,
+          "p95": 12,
+          "p99": null
+        },
+        "buckets": [
+          {
+            "time": 1791457320000,
+            "requests": 1,
+            "errors": 0,
+            "p50": 1,
+            "p95": 1,
+            "p99": 1
+          },
+          {
+            "time": 1791457440000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791457560000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791457680000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791457800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791457920000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458040000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458160000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458280000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458520000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458640000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458760000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791458880000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459120000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459240000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459360000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459480000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459720000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459840000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791459960000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460080000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460320000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460440000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460560000,
+            "requests": 2,
+            "errors": 2,
+            "p50": 3,
+            "p95": 4,
+            "p99": 5
+          },
+          {
+            "time": 1791460680000,
+            "requests": 4,
+            "errors": 0,
+            "p50": null,
+            "p95": 1250,
+            "p99": 99
+          },
+          {
+            "time": 1791460800000,
+            "requests": 10,
+            "errors": 1,
+            "p50": 2.5,
+            "p95": 2.5,
+            "p99": null
+          }
+        ],
+        "traces": [
+          {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "name": "GET /users/:id",
+            "service": "api",
+            "kind": "server",
+            "start": 1791460810123.456,
+            "duration": 1.234567,
+            "httpStatus": 200,
+            "spans": 7,
+            "errors": 1,
+            "error": false,
+            "local": true
+          },
+          {
+            "traceId": "00f067aa0ba902b7",
+            "name": "POST /orders",
+            "service": "worker",
+            "kind": "server",
+            "start": 1791460740000,
+            "duration": 5,
+            "httpStatus": 503,
+            "spans": 3,
+            "errors": 2,
+            "error": true,
+            "local": false
+          },
+          {
+            "traceId": "xyz",
+            "name": "bad",
+            "service": "",
+            "kind": "",
+            "start": 1791460680000,
+            "duration": 0,
+            "httpStatus": null,
+            "spans": 1,
+            "errors": 0,
+            "error": false,
+            "local": false
+          },
+          {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "name": "GET /again",
+            "service": "api",
+            "kind": "server",
+            "start": 1791460620000,
+            "duration": 0,
+            "httpStatus": null,
+            "spans": 7,
+            "errors": 1,
+            "error": false,
+            "local": false
+          }
+        ]
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"GET /users\" or ensure_field(\"service.name\", typeof(string)) contains \"GET /users\" | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)",
+            "startTime": "2026-10-08T11:02:00.000Z",
+            "endTime": "2026-10-08T12:02:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"GET /users\" or ensure_field(\"service.name\", typeof(string)) contains \"GET /users\" | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99) by bin(_time, 2m)",
+            "startTime": "2026-10-08T11:02:00.000Z",
+            "endTime": "2026-10-08T12:02:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"GET /users\" or ensure_field(\"service.name\", typeof(string)) contains \"GET /users\" | sort by _time desc | limit 100",
+            "startTime": "2026-10-08T11:02:00.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where trace_id in (\"4bf92f3577b34da6a3ce929d0e0e4736\", \"00f067aa0ba902b7\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize spans = count(), errors = countif(failed) by trace_id",
+            "startTime": "2026-10-08T11:02:00.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "overview-24h-no-time-field",
+      "result": {
+        "source": "axiom",
+        "from": 1791378000000,
+        "to": 1791464400000,
+        "bucketMs": 3600000,
+        "stats": {
+          "requests": 0,
+          "errors": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "buckets": [
+          {
+            "time": 1791378000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791381600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791385200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791388800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791392400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791396000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791399600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791403200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791406800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791410400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791414000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791417600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791421200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791424800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791428400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791432000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791435600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791439200000,
+            "requests": 5,
+            "errors": 0,
+            "p50": 1,
+            "p95": 2,
+            "p99": 3
+          },
+          {
+            "time": 1791442800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791446400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791450000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791453600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791457200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        ],
+        "traces": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)",
+            "startTime": "2026-10-07T13:00:00.000Z",
+            "endTime": "2026-10-08T13:00:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99) by bin(_time, 1h)",
+            "startTime": "2026-10-07T13:00:00.000Z",
+            "endTime": "2026-10-08T13:00:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | sort by _time desc | limit 100",
+            "startTime": "2026-10-07T13:00:00.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "overview-7d-empty-dataset",
+      "result": {
+        "source": "axiom",
+        "from": 1790877600000,
+        "to": 1791482400000,
+        "bucketMs": 21600000,
+        "stats": {
+          "requests": 0,
+          "errors": 0,
+          "p50": null,
+          "p95": null,
+          "p99": null
+        },
+        "buckets": [
+          {
+            "time": 1790877600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1790899200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1790920800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1790942400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1790964000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1790985600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791007200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791028800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791050400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791072000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791093600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791115200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791136800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791158400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791180000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791201600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791223200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791244800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791266400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791288000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791309600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791331200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791352800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791374400000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791396000000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791417600000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791439200000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          {
+            "time": 1791460800000,
+            "requests": 0,
+            "errors": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          }
+        ],
+        "traces": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"x\" or ensure_field(\"service.name\", typeof(string)) contains \"x\" | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)",
+            "startTime": "2026-10-01T18:00:00.000Z",
+            "endTime": "2026-10-08T18:00:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"x\" or ensure_field(\"service.name\", typeof(string)) contains \"x\" | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99) by bin(_time, 6h)",
+            "startTime": "2026-10-01T18:00:00.000Z",
+            "endTime": "2026-10-08T18:00:00.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where name contains \"x\" or ensure_field(\"service.name\", typeof(string)) contains \"x\" | sort by _time desc | limit 100",
+            "startTime": "2026-10-01T18:00:00.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "overview-15m-forbidden",
+      "result": null,
+      "error": "Axiom 403: {\"message\": \"forbidden\"}",
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)",
+            "startTime": "2026-10-08T11:45:30.000Z",
+            "endTime": "2026-10-08T12:00:30.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99) by bin(_time, 30s)",
+            "startTime": "2026-10-08T11:45:30.000Z",
+            "endTime": "2026-10-08T12:00:30.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | sort by _time desc | limit 100",
+            "startTime": "2026-10-08T11:45:30.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tail",
+      "result": {
+        "source": "axiom",
+        "lines": [
+          {
+            "time": 1791460800000,
+            "text": "y",
+            "stream": "stdout",
+            "task": "T0"
+          },
+          {
+            "time": 1791460801000,
+            "text": "x",
+            "stream": "stdout",
+            "task": "t0"
+          },
+          {
+            "time": 0,
+            "text": "12.5",
+            "stream": "stdout",
+            "task": "t1"
+          },
+          {
+            "time": 0,
+            "text": "",
+            "stream": "stdout",
+            "task": ""
+          },
+          {
+            "time": 1791460804000,
+            "text": "[object Object]",
+            "stream": "stdout",
+            "task": "t1"
+          },
+          {
+            "time": 1791460805987,
+            "text": "\u001b[31mred\u001b[0m",
+            "stream": "stderr",
+            "task": "t2"
+          }
+        ],
+        "replicas": [
+          {
+            "task": "t0",
+            "slot": 0,
+            "state": ""
+          },
+          {
+            "task": "T0",
+            "slot": 0,
+            "state": ""
+          },
+          {
+            "task": "t1",
+            "slot": 1,
+            "state": ""
+          },
+          {
+            "task": "t2",
+            "slot": 2,
+            "state": ""
+          }
+        ]
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id == \"nodeapiaaaaaaaaaaaaa\" | sort by _time desc | limit 200 | project _time, message, stream, task, replica",
+            "startTime": "2026-09-08T12:00:12.345Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tail-empty-dataset",
+      "result": {
+        "source": "axiom",
+        "lines": [],
+        "replicas": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id == \"nodeapiaaaaaaaaaaaaa\" | sort by _time desc | limit 1000 | project _time, message, stream, task, replica",
+            "startTime": "2026-09-08T12:00:12.345Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recent",
+      "result": {
+        "source": "axiom",
+        "lines": [
+          {
+            "time": 1791460804123,
+            "text": "5",
+            "stream": "stdout",
+            "task": "3",
+            "serviceId": ""
+          },
+          {
+            "time": 1791460804100,
+            "text": "a\"b\\c older",
+            "stream": "stdout",
+            "task": "",
+            "serviceId": "nodeapiaaaaaaaaaaaaa"
+          },
+          {
+            "time": 1791460805987.6543,
+            "text": "a\"b\\c newest",
+            "stream": "stderr",
+            "task": "t2",
+            "serviceId": "nodeworkerbbbbbbbbbb"
+          }
+        ]
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where message contains \"a\\\"b\\\\c\" | sort by _time desc | limit 300 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:02:00.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recent-no-range",
+      "result": {
+        "source": "axiom",
+        "lines": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | sort by _time desc | limit 1 | project _time, message, stream, task, service_id",
+            "startTime": "2026-09-08T12:00:12.345Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "around",
+      "result": [
+        {
+          "time": 1791460780000,
+          "text": "first",
+          "stream": "stdout",
+          "task": "t1",
+          "serviceId": "nodeapiaaaaaaaaaaaaa"
+        },
+        {
+          "time": 1791460820000.0005,
+          "text": "second",
+          "stream": "stderr",
+          "task": "t1",
+          "serviceId": "nodeapiaaaaaaaaaaaaa"
+        }
+      ],
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | sort by _time asc | limit 500 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:59:30.123Z",
+            "endTime": "2026-10-08T12:00:30.123Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "get-at",
+      "result": {
+        "source": "axiom",
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spans": [
+          {
+            "spanId": "00f067aa0ba902b7",
+            "parentId": "",
+            "name": "GET /users/:id",
+            "service": "api",
+            "kind": "server",
+            "start": 1791460800123.4568,
+            "duration": 1.234567,
+            "status": "ok",
+            "statusMessage": "",
+            "scope": "@opentelemetry/instrumentation-http",
+            "attributes": [
+              [
+                "app.user.id",
+                "42"
+              ],
+              [
+                "app.user.ok",
+                "true"
+              ],
+              [
+                "app.user.tags",
+                "[\"a\",\"b\",null]"
+              ],
+              [
+                "big",
+                "1e+21"
+              ],
+              [
+                "http.request.method",
+                "GET"
+              ],
+              [
+                "http.response.status_code",
+                "200"
+              ],
+              [
+                "http.route",
+                "/users/:id"
+              ],
+              [
+                "tiny",
+                "1.5e-7"
+              ]
+            ],
+            "resource": [
+              [
+                "deployment.environment.name",
+                "production"
+              ],
+              [
+                "keel.environment_id",
+                "env1"
+              ],
+              [
+                "keel.service_id",
+                "nodeapiaaaaaaaaaaaaa"
+              ],
+              [
+                "service.name",
+                "api"
+              ]
+            ],
+            "events": [
+              {
+                "time": 1791460800500,
+                "name": "exception",
+                "attributes": [
+                  [
+                    "exception.stacktrace",
+                    "Error: x\n    at y (\"z\")"
+                  ],
+                  [
+                    "exception.type",
+                    "Error"
+                  ]
+                ]
+              },
+              {
+                "time": 1791460800500,
+                "name": "n2",
+                "attributes": []
+              },
+              {
+                "time": 1791460800250,
+                "name": "7",
+                "attributes": []
+              },
+              {
+                "time": 0,
+                "name": "",
+                "attributes": []
+              }
+            ]
+          },
+          {
+            "spanId": "b7ad6b7169203331",
+            "parentId": "00f067aa0ba902b7",
+            "name": "SELECT users",
+            "service": "api",
+            "kind": "client",
+            "start": 1791460800200,
+            "duration": 90500,
+            "status": "error",
+            "statusMessage": "boom",
+            "scope": "",
+            "attributes": [
+              [
+                "1",
+                "one"
+              ],
+              [
+                "2",
+                "two"
+              ],
+              [
+                "db.system",
+                "postgresql"
+              ],
+              [
+                "http.method",
+                "GET"
+              ],
+              [
+                "x",
+                "ex"
+              ]
+            ],
+            "resource": [
+              [
+                "keel.service_id",
+                "nodeapiaaaaaaaaaaaaa"
+              ]
+            ],
+            "events": []
+          }
+        ],
+        "logs": [
+          {
+            "time": 1791460800123.4568,
+            "text": "{\"trace_id\":\"4bf92f3577b34da6a3ce929d0e0e4736\",\"msg\":\"hi\"}",
+            "stream": "stdout",
+            "task": "t1",
+            "serviceId": "nodeapiaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where message contains \"4bf92f3577b34da6a3ce929d0e0e4736\" | sort by _time asc | limit 500 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:59:55.123Z",
+            "endTime": "2026-10-08T12:01:35.700Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where trace_id == \"4bf92f3577b34da6a3ce929d0e0e4736\" | sort by _time asc | limit 2000",
+            "startTime": "2026-10-08T11:00:10.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "get-no-at",
+      "result": {
+        "source": "axiom",
+        "traceId": "00f067aa0ba902b7",
+        "spans": [
+          {
+            "spanId": "00f067aa0ba902b7",
+            "parentId": "",
+            "name": "GET /users/:id",
+            "service": "api",
+            "kind": "server",
+            "start": 1791460800123.4568,
+            "duration": 1.234567,
+            "status": "ok",
+            "statusMessage": "",
+            "scope": "@opentelemetry/instrumentation-http",
+            "attributes": [
+              [
+                "app.user.id",
+                "42"
+              ],
+              [
+                "app.user.ok",
+                "true"
+              ],
+              [
+                "app.user.tags",
+                "[\"a\",\"b\",null]"
+              ],
+              [
+                "big",
+                "1e+21"
+              ],
+              [
+                "http.request.method",
+                "GET"
+              ],
+              [
+                "http.response.status_code",
+                "200"
+              ],
+              [
+                "http.route",
+                "/users/:id"
+              ],
+              [
+                "tiny",
+                "1.5e-7"
+              ]
+            ],
+            "resource": [
+              [
+                "deployment.environment.name",
+                "production"
+              ],
+              [
+                "keel.environment_id",
+                "env1"
+              ],
+              [
+                "keel.service_id",
+                "nodeapiaaaaaaaaaaaaa"
+              ],
+              [
+                "service.name",
+                "api"
+              ]
+            ],
+            "events": [
+              {
+                "time": 1791460800500,
+                "name": "exception",
+                "attributes": [
+                  [
+                    "exception.stacktrace",
+                    "Error: x\n    at y (\"z\")"
+                  ],
+                  [
+                    "exception.type",
+                    "Error"
+                  ]
+                ]
+              },
+              {
+                "time": 1791460800500,
+                "name": "n2",
+                "attributes": []
+              },
+              {
+                "time": 1791460800250,
+                "name": "7",
+                "attributes": []
+              },
+              {
+                "time": 0,
+                "name": "",
+                "attributes": []
+              }
+            ]
+          }
+        ],
+        "logs": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where message contains \"00f067aa0ba902b7\" | sort by _time asc | limit 500 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:59:55.123Z",
+            "endTime": "2026-10-08T12:00:05.124Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where trace_id == \"00f067aa0ba902b7\" | sort by _time asc | limit 2000",
+            "startTime": "2026-10-01T12:00:12.345Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "get-no-spans",
+      "result": {
+        "source": "axiom",
+        "traceId": "00f067aa0ba902b7",
+        "spans": [],
+        "logs": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where message contains \"00f067aa0ba902b7\" | sort by _time asc | limit 500 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:31:40.000Z",
+            "endTime": "2026-10-08T12:01:40.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where trace_id == \"00f067aa0ba902b7\" | sort by _time asc | limit 2000",
+            "startTime": "2026-10-08T10:46:40.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "get-old-sink",
+      "result": {
+        "source": "axiom",
+        "traceId": "00f067aa0ba902b7",
+        "spans": [],
+        "logs": []
+      },
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-logs'] | where service_id in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | where message contains \"00f067aa0ba902b7\" | sort by _time asc | limit 500 | project _time, message, stream, task, service_id",
+            "startTime": "2026-10-08T11:31:40.000Z",
+            "endTime": "2026-10-08T12:01:40.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "traces-around",
+      "result": [
+        {
+          "traceId": "00f067aa0ba902b7",
+          "name": "GET /",
+          "service": "",
+          "kind": "",
+          "start": 1791460810000,
+          "duration": 0,
+          "httpStatus": null,
+          "spans": 1,
+          "errors": 0,
+          "error": false,
+          "local": false
+        }
+      ],
+      "error": null,
+      "calls": [
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where isempty(ensure_field(\"parent_span_id\", typeof(string))) | where tostring(ensure_field(\"resource.custom\", typeof(dynamic))[\"keel.service_id\"]) in (\"nodeapiaaaaaaaaaaaaa\", \"nodeworkerbbbbbbbbbb\", \"nodedbcccccccccccccc\") | sort by _time desc | limit 100",
+            "startTime": "2026-10-08T11:59:30.000Z",
+            "endTime": "2026-10-08T12:00:30.000Z"
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/v1/datasets/_apl?format=tabular",
+          "authorization": "Bearer xaat-test-token-1234",
+          "contentType": "application/json",
+          "body": {
+            "apl": "['keel-traces'] | where trace_id in (\"00f067aa0ba902b7\") | extend failed = ensure_field(\"error\", typeof(bool)) == true or ensure_field(\"status.code\", typeof(string)) contains \"error\" | summarize spans = count(), errors = countif(failed) by trace_id",
+            "startTime": "2026-10-08T11:59:30.000Z",
+            "endTime": "2026-10-08T12:01:12.345Z"
+          }
+        }
+      ]
+    }
+  ],
+  "spans": [
+    {
+      "spanId": "00f067aa0ba902b7",
+      "parentId": "",
+      "name": "GET /users/:id",
+      "service": "api",
+      "kind": "server",
+      "start": 1791460800123.4568,
+      "duration": 1.234567,
+      "status": "ok",
+      "statusMessage": "",
+      "scope": "@opentelemetry/instrumentation-http",
+      "attributes": [
+        [
+          "app.user.id",
+          "42"
+        ],
+        [
+          "app.user.ok",
+          "true"
+        ],
+        [
+          "app.user.tags",
+          "[\"a\",\"b\",null]"
+        ],
+        [
+          "big",
+          "1e+21"
+        ],
+        [
+          "http.request.method",
+          "GET"
+        ],
+        [
+          "http.response.status_code",
+          "200"
+        ],
+        [
+          "http.route",
+          "/users/:id"
+        ],
+        [
+          "tiny",
+          "1.5e-7"
+        ]
+      ],
+      "resource": [
+        [
+          "deployment.environment.name",
+          "production"
+        ],
+        [
+          "keel.environment_id",
+          "env1"
+        ],
+        [
+          "keel.service_id",
+          "nodeapiaaaaaaaaaaaaa"
+        ],
+        [
+          "service.name",
+          "api"
+        ]
+      ],
+      "events": [
+        {
+          "time": 1791460800500,
+          "name": "exception",
+          "attributes": [
+            [
+              "exception.stacktrace",
+              "Error: x\n    at y (\"z\")"
+            ],
+            [
+              "exception.type",
+              "Error"
+            ]
+          ]
+        },
+        {
+          "time": 1791460800500,
+          "name": "n2",
+          "attributes": []
+        },
+        {
+          "time": 1791460800250,
+          "name": "7",
+          "attributes": []
+        },
+        {
+          "time": 0,
+          "name": "",
+          "attributes": []
+        }
+      ]
+    },
+    {
+      "spanId": "b7ad6b7169203331",
+      "parentId": "00f067aa0ba902b7",
+      "name": "SELECT users",
+      "service": "api",
+      "kind": "client",
+      "start": 1791460800200,
+      "duration": 90500,
+      "status": "error",
+      "statusMessage": "boom",
+      "scope": "",
+      "attributes": [
+        [
+          "1",
+          "one"
+        ],
+        [
+          "2",
+          "two"
+        ],
+        [
+          "db.system",
+          "postgresql"
+        ],
+        [
+          "http.method",
+          "PUT"
+        ],
+        [
+          "x",
+          "ex"
+        ]
+      ],
+      "resource": [
+        [
+          "keel.service_id",
+          "nodeapiaaaaaaaaaaaaa"
+        ]
+      ],
+      "events": []
+    },
+    {
+      "spanId": "c1",
+      "parentId": "",
+      "name": "work",
+      "service": "[object Object]",
+      "kind": "",
+      "start": 1791460800123.456,
+      "duration": 93784500,
+      "status": "unset",
+      "statusMessage": "",
+      "scope": "nested-scope",
+      "attributes": [
+        [
+          "_x",
+          "underscore"
+        ],
+        [
+          "a.b",
+          "dotted"
+        ],
+        [
+          "B",
+          "b"
+        ],
+        [
+          "e",
+          "e"
+        ],
+        [
+          "é",
+          "e-acute"
+        ],
+        [
+          "Z",
+          "z"
+        ]
+      ],
+      "resource": [],
+      "events": []
+    },
+    {
+      "spanId": "12",
+      "parentId": "",
+      "name": "",
+      "service": "",
+      "kind": "",
+      "start": 1791460800123.4568,
+      "duration": 0.25,
+      "status": "ok",
+      "statusMessage": "",
+      "scope": "",
+      "attributes": [],
+      "resource": [],
+      "events": []
+    },
+    {
+      "spanId": "",
+      "parentId": "",
+      "name": "",
+      "service": "",
+      "kind": "5",
+      "start": 0,
+      "duration": 0,
+      "status": "unset",
+      "statusMessage": "",
+      "scope": "",
+      "attributes": [],
+      "resource": [],
+      "events": []
+    },
+    {
+      "spanId": "",
+      "parentId": "",
+      "name": "",
+      "service": "via-nested",
+      "kind": "",
+      "start": 1791453601000,
+      "duration": 0.000123456,
+      "status": "unset",
+      "statusMessage": "",
+      "scope": "",
+      "attributes": [],
+      "resource": [],
+      "events": []
+    }
+  ],
+  "demux": [
+    {
+      "name": "multiplexed",
+      "lines": [
+        {
+          "time": 1791460800000,
+          "text": "first",
+          "stream": "stdout",
+          "task": "t2"
+        },
+        {
+          "time": 1791460801500,
+          "text": "oops",
+          "stream": "stderr",
+          "task": "t1"
+        },
+        {
+          "time": 1791460802123,
+          "text": "second",
+          "stream": "stdout",
+          "task": "t1"
+        }
+      ]
+    },
+    {
+      "name": "tty",
+      "lines": [
+        {
+          "time": 1791460800123,
+          "text": "hello",
+          "stream": "stdout",
+          "task": ""
+        },
+        {
+          "time": 0,
+          "text": "world",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "truncated",
+      "lines": [
+        {
+          "time": 1791460800000,
+          "text": "a",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "stdin-frame",
+      "lines": [
+        {
+          "time": 0,
+          "text": "plain line",
+          "stream": "stdout",
+          "task": ""
+        },
+        {
+          "time": 1791460800000,
+          "text": "late",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "cr-only",
+      "lines": [
+        {
+          "time": 0,
+          "text": "",
+          "stream": "stdout",
+          "task": ""
+        },
+        {
+          "time": 0,
+          "text": "no-stamp text here",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "details-only",
+      "lines": [
+        {
+          "time": 1791460800123,
+          "text": "",
+          "stream": "stdout",
+          "task": "t1"
+        }
+      ]
+    },
+    {
+      "name": "lowercase-z",
+      "lines": [
+        {
+          "time": 0,
+          "text": "2026-10-08t12:00:00z text",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "lines": []
+    },
+    {
+      "name": "split-lines",
+      "lines": [
+        {
+          "time": 1791460799000,
+          "text": "err",
+          "stream": "stderr",
+          "task": ""
+        },
+        {
+          "time": 1791460800000,
+          "text": "partial",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    },
+    {
+      "name": "bad-stamp",
+      "lines": [
+        {
+          "time": 0,
+          "text": "notatimeZ text",
+          "stream": "stdout",
+          "task": ""
+        },
+        {
+          "time": 0,
+          "text": "2026-13-01T00:00:00Z bad month",
+          "stream": "stdout",
+          "task": ""
+        }
+      ]
+    }
+  ]
+}

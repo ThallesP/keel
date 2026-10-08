@@ -6,15 +6,7 @@ package app
 
 import (
 	"context"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
-
-// withTracing adds the OTEL_* variables to env when the node's tracing switch is on
-// (docs/go/spec/observability.md). Called by: deploy (apply). Owner: observability.
-func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[string]string, error) {
-	panic("withTracing: implemented by the observability area")
-}
 
 // Recover is the start-up pass that replaces durable scheduling: observe everything, re-arm
 // deployment timeouts, proxy sync, data migrations. serve calls it once. Each area adds its part
@@ -25,5 +17,3 @@ func (a *App) Recover(ctx context.Context) {
 		a.recoverPart(ctx, fn) // a panicking part does not skip the next (platform_recover.go)
 	}
 }
-
-func (a *App) recoverObservability(ctx context.Context) {} // owner: observability (replace)

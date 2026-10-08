@@ -1,20 +1,20 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { Button } from "@my-better-t-app/ui/components/button";
 import { Input } from "@my-better-t-app/ui/components/input";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { useApproveDevice, useClaimDeviceCode, useDenyDevice } from "@/api/gen";
 import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
-import { authClient } from "@/lib/auth-client";
+import { errorMessage } from "@/lib/api";
+import { useAuth, useSession } from "@/lib/session";
 
 /**
  * Approves a `keel login` (apps/cli). The CLI prints a link to this page with its code; often an
  * agent ran it and passed the link on. Approving gives that CLI a session as the signed-in
- * account (better-auth's device authorization plugin, convex/auth.ts). Signed out, the _auth
- * layout shows sign-in first and keeps the URL.
+ * account (RFC 8628 device authorization, `/api/auth/device/*`). Signed out, the _auth layout
+ * shows sign-in first and keeps the URL.
  */
 export const Route = createFileRoute("/_auth/device")({
   component: DevicePage,
@@ -22,13 +22,6 @@ export const Route = createFileRoute("/_auth/device")({
     user_code: typeof s.user_code === "string" ? s.user_code : undefined,
   }),
 });
-
-type Status = "pending" | "approved" | "denied";
-
-/** What a failed device call says: the plugin answers in RFC 8628 shape. */
-function describe(error: { error_description?: string; message?: string; statusText?: string }) {
-  return error.error_description ?? error.message ?? error.statusText ?? "Something went wrong";
-}
 
 /** As the CLI prints it: ABCD-EFGH. */
 const pretty = (code: string) =>
@@ -64,33 +57,38 @@ function EnterCode() {
 }
 
 function Approve({ userCode }: { userCode: string }) {
-  const user = useQuery(api.auth.getCurrentUser);
+  const auth = useAuth();
+  const { user } = useSession();
   // Looking the code up while signed in also binds it to this account; only it can approve.
-  const [status, setStatus] = useState<Status | "invalid" | undefined>();
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    void authClient.device({ query: { user_code: userCode } }).then(({ data, error }) => {
-      if (!live) return;
-      // The only failures here: unknown or expired code (a used one is deleted).
-      setStatus(error ? "invalid" : (data.status as Status));
-    });
-    return () => {
-      live = false;
-    };
-  }, [userCode]);
+  // A write behind a GET: once per code, never retried or refetched on its own.
+  const lookup = useClaimDeviceCode(
+    { query: { user_code: userCode } },
+    {
+      query: {
+        staleTime: Infinity,
+        retry: false,
+        refetchOnWindowFocus: false,
+        meta: { realtime: false },
+      },
+    },
+  );
+  const approveDevice = useApproveDevice();
+  const denyDevice = useDenyDevice();
+  const [decided, setDecided] = useState<"approved" | "denied" | undefined>();
+  const busy = approveDevice.isPending || denyDevice.isPending;
 
   const decide = async (approve: boolean) => {
-    setBusy(true);
-    const { error } = approve
-      ? await authClient.device.approve({ userCode })
-      : await authClient.device.deny({ userCode });
-    setBusy(false);
-    if (error) toast.error(describe(error));
-    else setStatus(approve ? "approved" : "denied");
+    try {
+      await (approve ? approveDevice : denyDevice).mutateAsync({ body: { userCode } });
+    } catch (err) {
+      toast.error(errorMessage(err));
+      return;
+    }
+    setDecided(approve ? "approved" : "denied");
   };
 
+  // The only failures here: unknown or expired code (a used one is deleted).
+  const status = decided ?? (lookup.isError ? "invalid" : lookup.data?.status);
   if (status === undefined || user === undefined) return <Loader />;
   if (status === "invalid") {
     return (
@@ -143,7 +141,7 @@ function Approve({ userCode }: { userCode: string }) {
       <button
         type="button"
         className="mt-4 w-full text-center text-xs text-muted-foreground hover:underline"
-        onClick={() => void authClient.signOut()}
+        onClick={() => void auth.signOut().catch((err: unknown) => toast.error(errorMessage(err)))}
       >
         Not {user?.email}? Sign out
       </button>

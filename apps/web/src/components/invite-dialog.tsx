@@ -11,39 +11,48 @@ import { Label } from "@my-better-t-app/ui/components/label";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
+import { useCreateInvitation } from "@/api/gen";
+import type { OrganizationRole } from "@/api/types";
+import { errorMessage } from "@/lib/api";
+
+/**
+ * Whether a role may invite people: owners and admins. The server refuses members ("You are not
+ * allowed to invite users to this organization"), so the menu hides "Invite people…" for them.
+ */
+export const canInvite = (role: OrganizationRole | undefined) =>
+  role === "owner" || role === "admin";
 
 /**
  * Account → Invite people. Creates an organization invitation for an email and shows the link
  * to hand over; nothing is mailed. The link opens `/invite/$invitationId`, where that email can
- * create its account (sign-up is otherwise closed) or, if it already has one, join.
+ * create its account (sign-up is otherwise closed) or, if it already has one, join. The
+ * invitation is for the caller's organization (the server reads it from the session).
  */
 export function InviteDialog({
   open,
   onOpenChange,
-  organizationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  organizationId: string;
+  /** @deprecated Unused: the server takes the organization from the session. */
+  organizationId?: string;
 }) {
   const [email, setEmail] = useState("");
   const [link, setLink] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const createInvitation = useCreateInvitation();
+  const busy = createInvitation.isPending;
 
   const create = async () => {
-    setBusy(true);
-    const { data, error } = await authClient.organization.inviteMember({
-      email: email.trim(),
-      role: "member",
-      organizationId,
-    });
-    setBusy(false);
-    if (error || !data) {
-      toast.error(error?.message ?? "Could not create the invite");
+    let id: string;
+    try {
+      ({ id } = await createInvitation.mutateAsync({
+        body: { email: email.trim(), role: "member" },
+      }));
+    } catch (err) {
+      toast.error(errorMessage(err) || "Could not create the invite");
       return;
     }
-    setLink(`${window.location.origin}/invite/${data.id}`);
+    setLink(`${window.location.origin}/invite/${id}`);
   };
 
   const copy = async () => {

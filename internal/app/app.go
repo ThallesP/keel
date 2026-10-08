@@ -20,6 +20,7 @@ type App struct {
 
 	// Area ports (declared in ports_<area>.go).
 	Swarm Swarm
+	Logs  LogReader
 	Proxy Proxy
 	Axiom Axiom
 }

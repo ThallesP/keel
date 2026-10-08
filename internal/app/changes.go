@@ -6,7 +6,12 @@ import "sort"
 // "Realtime"). The dashboard refetches every query whose path starts with one of them.
 type Changes struct {
 	byOrg map[string]map[string]struct{}
+	after []func()
 }
+
+// AfterCommit runs fn once the transaction has committed (and only then): schedule jobs, start
+// applies, kick a proxy sync. Convex's scheduler.runAfter(0, ...) inside a mutation is this.
+func (c *Changes) AfterCommit(fn func()) { c.after = append(c.after, fn) }
 
 func (c *Changes) Add(organizationID string, topics ...string) {
 	if organizationID == "" {
@@ -55,6 +60,11 @@ func (c *Changes) Organization(org string) { c.Add(org, "/api/organization") }
 func (c *Changes) Everything(org string) { c.Add(org, "/api") }
 
 func (c *Changes) publish(p Publisher) {
+	defer func() {
+		for _, fn := range c.after {
+			fn()
+		}
+	}()
 	for org, set := range c.byOrg {
 		topics := make([]string, 0, len(set))
 		for t := range set {

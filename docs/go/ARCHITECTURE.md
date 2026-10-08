@@ -156,3 +156,32 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
   a Docker-in-Docker Swarm in CI, never the dev box's shared Swarm.
 - `go vet ./...`, `gofmt`, `go test ./...` must pass. `bun run check-types` + `bun run build` in
   `apps/web` must pass.
+
+## Building an area (implementation guide)
+
+The port is split into areas that are built in parallel, each in its own git worktree, then
+merged. Rules that keep the merge mechanical:
+
+- **Own your files.** An area owns `internal/app/<area>*.go`, `internal/app/ports_<area>.go`,
+  `internal/adapters/sqlite/<area>.go` + `queries/<area>.sql`, `internal/transport/http/<area>*.go`,
+  `internal/api/<area>.go`, plus any adapter package it is assigned. Don't edit other areas' files.
+- **Seams** (`internal/app/seams.go`): cross-area functions as stubs. Implement the ones you own by
+  moving them into your own file and deleting them from `seams.go` (that file is the only shared
+  one you may edit, and only to delete your stubs). Call the others as if they worked; their
+  tests are theirs.
+- **Shared files you may append to, never rewrite:** `go.mod`/`go.sum` (`go get`), new migration
+  files `migrations/0002_<area>.sql` (additive, only if 0001 truly lacks something; say why in
+  your report), `domain/` (new files, or new fields with a comment).
+- **sqlc:** query names start with the area (`AuthGetUser`, `CanvasInsertProject`,
+  `DeployListRunning`, `ObsGetSink`, `IngressListHTTP`). ASCII only in `queries/*.sql`. Regenerate
+  with `cd internal/adapters/sqlite && ~/go/bin/sqlc generate`; commit the generated `db/` files.
+- **Routes and operationIds** follow `docs/go/spec/web-data.md` §4 and §10 (the dashboard is
+  rewritten against them), and the path prefixes in "Realtime" above. Every write calls the right
+  `Changes` helper (web-data.md §10.3).
+- **Messages** are the Convex strings from the specs, verbatim. Codes from `domain`.
+- **Tests:** domain rules as table tests; use cases against `sqlite.OpenTest`-style temp databases
+  with hand-written fakes for Swarm/Proxy/Axiom ports. No network, no real Docker in unit tests.
+- **Done means:** `go build ./... && go vet ./... && go test ./...` green, `gofmt -l` empty, work
+  committed on your branch.
+
+Toolchain: `export PATH=$HOME/.local/go/bin:$HOME/go/bin:$PATH` (Go 1.27 via GOTOOLCHAIN=auto).

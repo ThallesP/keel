@@ -1,0 +1,250 @@
+{
+  "now": 1791460812345,
+  "sink": { "domain": "api.axiom.co", "dataset": "keel-logs", "traces": "keel-traces", "token": "xaat-test-token-1234" },
+  "serviceIds": ["nodeapiaaaaaaaaaaaaa", "nodeworkerbbbbbbbbbb", "nodedbcccccccccccccc"],
+  "spanRows": [
+    {
+      "_time": "2026-10-08T12:00:00.123456789Z",
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "span_id": "00f067aa0ba902b7",
+      "parent_span_id": "",
+      "name": "GET /users/:id",
+      "kind": "SPAN_KIND_SERVER",
+      "duration": 1234567,
+      "error": false,
+      "status.code": "STATUS_CODE_OK",
+      "status.message": "",
+      "service.name": "api",
+      "scope.name": "@opentelemetry/instrumentation-http",
+      "attributes.http.request.method": "GET",
+      "attributes.http.response.status_code": 200,
+      "attributes.custom": { "http.route": "/users/:id", "app.user": { "id": 42, "tags": ["a", "b", null], "ok": true }, "empty": "", "nil": null, "big": 1e21, "tiny": 1.5e-7 },
+      "resource.deployment.environment.name": "production",
+      "resource.custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa", "keel.environment_id": "env1" },
+      "resource.service.name": "api",
+      "events": [
+        { "time": "2026-10-08T12:00:00.5Z", "name": "exception", "attributes": { "exception.type": "Error", "exception.stacktrace": "Error: x\n    at y (\"z\")" } },
+        { "timestamp": 1791460800500000000, "name": "n2" },
+        { "time": null, "_time": "2026-10-08T12:00:00.25Z", "name": 7 },
+        null,
+        "str",
+        [1, 2]
+      ]
+    },
+    {
+      "_time": "2026-10-08T12:00:00.2Z",
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "span_id": "b7ad6b7169203331",
+      "parent_span_id": "00f067aa0ba902b7",
+      "name": "SELECT users",
+      "kind": "Client",
+      "duration": "1m30.5s",
+      "error": true,
+      "status.code": "ERROR",
+      "status.message": "boom",
+      "service.name": "api",
+      "attributes": { "http": { "method": "POST" }, "db.system": "postgresql" },
+      "attributes.http.method": "GET",
+      "attributes.custom": { "http.method": "PUT", "2": "two", "1": "one", "x": "ex" },
+      "status": { "code": "ok" },
+      "resource": { "custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa" } }
+    },
+    {
+      "_time": 1791460800123456,
+      "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "span_id": "c1",
+      "parent_span_id": null,
+      "name": "work",
+      "kind": "SPAN_KIND_UNSPECIFIED",
+      "duration": "1.02:03:04.5",
+      "error": "true",
+      "status.code": null,
+      "service.name": { "nested": true },
+      "scope": { "name": "nested-scope" },
+      "attributes.é": "e-acute",
+      "attributes.e": "e",
+      "attributes.Z": "z",
+      "attributes._x": "underscore",
+      "attributes.B": "b",
+      "attributes.a.b": "dotted"
+    },
+    {
+      "_time": "1791460800123456789",
+      "span_id": 12,
+      "name": null,
+      "kind": "",
+      "duration": "250µs",
+      "status.code": "Ok",
+      "events": { "not": "an array" }
+    },
+    {
+      "_time": "nope",
+      "duration": "garbage",
+      "kind": 5,
+      "status.code": 3
+    },
+    {
+      "_time": "2026-10-08T12:00:01+02:00",
+      "duration": "123.456",
+      "status": null,
+      "service": { "name": "via-nested" },
+      "resource.custom": null
+    }
+  ],
+  "demux": [
+    { "name": "multiplexed", "frames": [[1, "2026-10-08T12:00:02.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.service.id=s1,com.docker.swarm.task.id=t1 second\n2026-10-08T12:00:00.000000001Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t2 first\n"], [2, "2026-10-08T12:00:01.5Z com.docker.swarm.task.id=t1 oops\r\n"]] },
+    { "name": "tty", "raw": "2026-10-08T12:00:00.123Z hello\r\nworld\n\n" },
+    { "name": "truncated", "frames": [[1, "2026-10-08T12:00:00Z a\n"]], "tail": "AQAAAAAAAGRpbmNvbXBsZXRl" },
+    { "name": "stdin-frame", "frames": [[0, "plain line\n"], [1, "2026-10-08T12:00:00Z late\n"]] },
+    { "name": "cr-only", "frames": [[1, "\r\n\nno-stamp text here\n"]] },
+    { "name": "details-only", "frames": [[1, "2026-10-08T12:00:00.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t1\n"]] },
+    { "name": "lowercase-z", "frames": [[1, "2026-10-08t12:00:00z text\n"]] },
+    { "name": "empty", "raw": "" },
+    { "name": "split-lines", "frames": [[1, "2026-10-08T12:00:00Z par"], [1, "tial\n"], [2, "2026-10-08T11:59:59Z err\n"]] },
+    { "name": "bad-stamp", "frames": [[1, "notatimeZ text\n2026-13-01T00:00:00Z bad month\n"]] }
+  ],
+  "scenarios": [
+    {
+      "name": "overview-1h",
+      "call": "overview",
+      "args": { "range": "1h", "search": "  GET /users  " },
+      "rules": [
+        { "contains": "summarize spans = count()", "fields": ["trace_id", "spans", "errors"], "rows": [["4bf92f3577b34da6a3ce929d0e0e4736", 7, "1"], ["00f067aa0ba902b7", "3", 2]] },
+        { "contains": "by bin(_time", "fields": ["_time", "requests", "errors", "p50", "p95", "p99"], "rows": [
+          ["2026-10-08T12:00:00Z", 10, 1, "2.5ms", 2500000, ""],
+          ["2026-10-08T11:58:00Z", "4", null, null, "1.25s", 99000000],
+          ["2026-10-08T11:02:00Z", 1, 0, 1000000, 1000000, 1000000],
+          [1791460560000000000, 2, 2, "3ms", "4ms", "5ms"]
+        ] },
+        { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [[42, "3", 1500000, "12ms", null]] },
+        { "contains": "sort by _time desc | limit 100", "fields": ["_time", "trace_id", "name", "kind", "duration", "error", "status.code", "service.name", "attributes.http.response.status_code", "attributes.custom", "resource.deployment.environment.name"], "rows": [
+          ["2026-10-08T12:00:10.123456Z", "4bf92f3577b34da6a3ce929d0e0e4736", "GET /users/:id", "SPAN_KIND_SERVER", 1234567, false, "STATUS_CODE_OK", "api", 200, { "x": 1 }, "local"],
+          ["2026-10-08T11:59:00Z", "00f067aa0ba902b7", "POST /orders", "Server", "5ms", true, "STATUS_CODE_ERROR", "worker", null, { "http.status_code": "503" }, "production"],
+          ["2026-10-08T11:58:00Z", "xyz", "bad", null, null, null, null, null, "abc", null, null],
+          ["2026-10-08T11:57:00Z", "4bf92f3577b34da6a3ce929d0e0e4736", "GET /again", "server", 0, false, "unset", "api", -5, null, "local "]
+        ] }
+      ]
+    },
+    {
+      "name": "overview-24h-no-time-field",
+      "call": "overview",
+      "args": { "range": "24h", "search": "" },
+      "rules": [
+        { "contains": "by bin(_time", "fields": ["bucket", "requests", "errors", "p50", "p95", "p99"], "rows": [["2026-10-08T06:00:00Z", 5, 0, 1000000, 2000000, 3000000]] },
+        { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [] },
+        { "contains": "sort by _time desc", "noTables": true }
+      ]
+    },
+    {
+      "name": "overview-7d-empty-dataset",
+      "call": "overview",
+      "args": { "range": "7d", "search": "x" },
+      "rules": [{ "contains": "", "status": 400, "text": "{\"code\":400,\"message\":\"invalid field: parent_span_id\"}" }]
+    },
+    {
+      "name": "overview-15m-forbidden",
+      "call": "overview",
+      "args": { "range": "15m", "search": "" },
+      "rules": [
+        { "contains": "by bin(_time", "fields": ["_time"], "rows": [] },
+        { "contains": "summarize requests", "status": 403, "text": "  {\"message\":\n\t\"forbidden\"}  " },
+        { "contains": "sort by", "fields": ["_time"], "rows": [] }
+      ]
+    },
+    {
+      "name": "tail",
+      "call": "tail",
+      "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 200.9 },
+      "rules": [
+        { "contains": "where service_id ==", "fields": ["_time", "message", "stream", "task", "replica"], "rows": [
+          ["2026-10-08T12:00:05.987654321Z", "\u001b[31mred\u001b[0m", "stderr", "t2", 2],
+          ["2026-10-08T12:00:04Z", { "a": 1 }, "stdout", "t1", "1"],
+          [null, null, null, "", null],
+          ["bad", 12.5, "STDERR", "t1", 9],
+          ["2026-10-08T12:00:01Z", "x", "stdout", "t0", "x"],
+          ["2026-10-08T12:00:00Z", "y", "stdout", "T0", 0]
+        ] }
+      ]
+    },
+    {
+      "name": "tail-empty-dataset",
+      "call": "tail",
+      "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 5000 },
+      "rules": [{ "contains": "", "status": 400, "text": "invalid field: service_id" }]
+    },
+    {
+      "name": "recent",
+      "call": "recent",
+      "args": { "range": "1h", "search": " a\"b\\c ", "tail": 300 },
+      "rules": [
+        { "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [
+          ["2026-10-08T12:00:05.987654321Z", "a\"b\\c newest", "stderr", "t2", "nodeworkerbbbbbbbbbb"],
+          ["2026-10-08T12:00:04.1Z", "a\"b\\c older", "stdout", null, "nodeapiaaaaaaaaaaaaa"],
+          ["2026-10-08T12:00:04.123Z", 5, null, 3, null]
+        ] }
+      ]
+    },
+    {
+      "name": "recent-no-range",
+      "call": "recent",
+      "args": { "search": "", "tail": 0 },
+      "rules": [{ "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [] }]
+    },
+    {
+      "name": "around",
+      "call": "around",
+      "args": { "at": 1791460800123.75 },
+      "rules": [
+        { "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [
+          ["2026-10-08T11:59:40Z", "first", "stdout", "t1", "nodeapiaaaaaaaaaaaaa"],
+          ["2026-10-08T12:00:20.000000500Z", "second", "stderr", "t1", "nodeapiaaaaaaaaaaaaa"]
+        ] }
+      ]
+    },
+    {
+      "name": "get-at",
+      "call": "get",
+      "args": { "traceId": "4BF92F3577B34DA6A3CE929D0E0E4736", "at": 1791460810000 },
+      "rules": [
+        { "contains": "where trace_id ==", "spanRows": [0, 1] },
+        { "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [
+          ["2026-10-08T12:00:00.1234567Z", "{\"trace_id\":\"4bf92f3577b34da6a3ce929d0e0e4736\",\"msg\":\"hi\"}", "stdout", "t1", "nodeapiaaaaaaaaaaaaa"]
+        ] }
+      ]
+    },
+    {
+      "name": "get-no-at",
+      "call": "get",
+      "args": { "traceId": "00f067aa0ba902b7" },
+      "rules": [
+        { "contains": "where trace_id ==", "spanRows": [0] },
+        { "contains": "where service_id in", "fields": ["_time"], "rows": [] }
+      ]
+    },
+    {
+      "name": "get-no-spans",
+      "call": "get",
+      "args": { "traceId": "00f067aa0ba902b7", "at": 1791460000000.5 },
+      "rules": [
+        { "contains": "where trace_id ==", "fields": ["_time"], "rows": [] },
+        { "contains": "where service_id in", "fields": ["_time"], "rows": [] }
+      ]
+    },
+    {
+      "name": "get-old-sink",
+      "call": "get",
+      "noTraces": true,
+      "args": { "traceId": "00f067aa0ba902b7", "at": 1791460000000 },
+      "rules": [{ "contains": "where service_id in", "fields": ["_time"], "rows": [] }]
+    },
+    {
+      "name": "traces-around",
+      "call": "tracesAround",
+      "args": { "at": 1791460800000 },
+      "rules": [
+        { "contains": "summarize spans = count()", "fields": ["trace_id", "spans", "errors"], "rows": [] },
+        { "contains": "sort by _time desc", "fields": ["_time", "trace_id", "name"], "rows": [["2026-10-08T12:00:10Z", "00f067aa0ba902b7", "GET /"]] }
+      ]
+    }
+  ]
+}

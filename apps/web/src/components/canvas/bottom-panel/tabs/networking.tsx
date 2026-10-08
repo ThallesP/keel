@@ -1,8 +1,9 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+
+import { useGetControlPlane } from "@/api/gen";
 
 import { type ExposeOptions, useCanvasActions } from "../../actions";
 import { EndpointAddress } from "../../endpoint-address";
@@ -15,6 +16,9 @@ const PROTOCOLS = [
 ] as const;
 
 type Protocol = (typeof PROTOCOLS)[number]["id"];
+
+/** The API's own sentence for a port it refuses (`MsgPortRange`). */
+const PORT_RANGE = "Port must be 1–65535";
 
 const chipClass =
   "inline-flex h-4 w-11 shrink-0 items-center justify-center rounded-sm bg-surface-2 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted-foreground";
@@ -29,7 +33,10 @@ const buttonClass =
  * the toolbar's Expose; they never wait for Ship.
  */
 export function NetworkingSection({ node }: { node: RuntimeNode }) {
-  const ip = useQuery(api.nodes.publicAddress);
+  // The control plane's public IP is fixed for the life of the process: read once.
+  const ip = useGetControlPlane({
+    query: { staleTime: Infinity, meta: { realtime: false } },
+  }).data?.publicIp;
   const [adding, setAdding] = useState(false);
   const { endpoints } = node.data;
   const raw = endpoints
@@ -117,11 +124,19 @@ function AddEndpoint({ node, ip, onDone }: { node: RuntimeNode; ip?: string; onD
   const [port, setPort] = useState(node.data.port ? String(node.data.port) : "");
   const [busy, setBusy] = useState(false);
 
+  // Empty = the default (omitted). Text that is not a number never reaches the API: JSON would
+  // carry NaN (or Infinity) as null, which reads as "use the default" instead of the error
+  // Convex gave. Fractions and out-of-range numbers are sent; the server refuses them.
   const num = (s: string) => (s.trim() === "" ? undefined : Number(s));
+  const bad = (n: number | undefined) => n !== undefined && !Number.isFinite(n);
   const submit = async () => {
     const options: ExposeOptions = { protocol, port: num(port) };
     if (protocol === "http") options.domain = domain.trim() || undefined;
     else options.publicPort = num(publicPort);
+    if (bad(options.port) || bad(options.publicPort)) {
+      toast.error(PORT_RANGE);
+      return;
+    }
     setBusy(true);
     const ok = await actions.expose(node.id, options);
     setBusy(false);

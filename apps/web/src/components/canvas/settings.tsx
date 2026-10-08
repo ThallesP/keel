@@ -1,4 +1,3 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { Button } from "@my-better-t-app/ui/components/button";
 import {
   Dialog,
@@ -8,11 +7,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@my-better-t-app/ui/components/dialog";
-import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { attempt } from "./errors";
+import { useDisconnectLogSink, useGetLogSink } from "@/api/gen";
+import { succeeded } from "@/lib/panel-write";
+import { useSession } from "@/lib/session";
+
 import { AxiomMark, SignInButton } from "./observability/axiom-gate";
 import { PageHeader, Spinner } from "./primitives";
 
@@ -39,8 +40,10 @@ export function SettingsPage() {
  * in with Axiom lands back on Observability, where a pending org picker shows.
  */
 function ObservabilitySettings() {
-  const sink = useQuery(api.logSinks.get, {});
-  const organization = useQuery(api.organizations.current);
+  const { data } = useGetLogSink();
+  // undefined while loading, null when the organization logs to Docker only.
+  const sink = data?.sink;
+  const { organization } = useSession();
   const [confirming, setConfirming] = useState(false);
   const projects = organization ? `every project in ${organization.name}` : "every project";
 
@@ -117,11 +120,11 @@ function DisconnectDialog({
   onOpenChange: (open: boolean) => void;
   projects: string;
 }) {
-  const disconnect = useMutation(api.logSinks.disconnect);
+  const disconnect = useDisconnectLogSink();
   const [busy, setBusy] = useState(false);
   const confirm = async () => {
     setBusy(true);
-    const ok = (await attempt(disconnect({}).then(() => true))) === true;
+    const ok = await succeeded(disconnect.mutateAsync(undefined));
     setBusy(false);
     if (!ok) return;
     onOpenChange(false);

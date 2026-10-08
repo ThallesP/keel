@@ -1,12 +1,11 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction, useQuery } from "convex/react";
 import { Lock } from "lucide-react";
 import { useState } from "react";
 
+import { useGetNodeTracing, useSetNodeTracing } from "@/api/gen";
+import { succeeded } from "@/lib/panel-write";
+
 import { CopyPrompt } from "../../copy-prompt";
-import { attempt } from "../../errors";
 import { Spinner } from "../../primitives";
 
 /**
@@ -14,17 +13,19 @@ import { Spinner } from "../../primitives";
  * OTEL_* variables listed here on the next Ship; the service's own variables win over them.
  * The code side is the agent prompt's job.
  */
-export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
-  const tracing = useQuery(api.tracing.forNode, { nodeId });
-  const enable = useAction(api.tracing.enable);
+export function TracingSection({ nodeId }: { nodeId: string }) {
+  const { data } = useGetNodeTracing({ path: { id: nodeId } });
+  const setTracing = useSetNodeTracing();
   const [busy, setBusy] = useState(false);
-  if (tracing === undefined) {
+  if (data === undefined) {
     return (
       <div className="flex h-16 items-center justify-center">
         <Spinner />
       </div>
     );
   }
+  // null: not a service with a runtime, or not the caller's.
+  const { tracing } = data;
   if (!tracing) return null;
 
   const { enabled } = tracing;
@@ -40,7 +41,7 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
 
   const toggle = async () => {
     setBusy(true);
-    await attempt(enable({ nodeId, on: !enabled }));
+    await succeeded(setTracing.mutateAsync({ path: { id: nodeId }, body: { on: !enabled } }));
     setBusy(false);
   };
 
@@ -75,7 +76,7 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
         </div>
       </div>
       {enabled &&
-        tracing.env.map((v) => (
+        (tracing.env ?? []).map((v) => (
           <div
             key={v.key}
             className="flex h-8 items-center gap-2 border-t border-line/60 px-5 font-mono text-xs"

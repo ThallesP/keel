@@ -33,20 +33,6 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	panic("beginDeployment: implemented by the deploy area")
 }
 
-// computeEnv is the node's container environment: its variables with ${{ node.KEY }} references
-// expanded (docs/go/spec/projects.md §5.4). Called by: deploy (apply), observability (`keel run`).
-// Owner: canvas.
-func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
-	panic("computeEnv: implemented by the canvas area")
-}
-
-// markReferrersDirty marks every node whose variables reference node (transitively) dirty
-// (docs/go/spec/projects.md §5.6). Called by: canvas, observability (tracing switch), migrations.
-// Owner: canvas.
-func markReferrersDirty(tx Tx, ch *Changes, org string, node domain.Node) error {
-	panic("markReferrersDirty: implemented by the canvas area")
-}
-
 // withTracing adds the OTEL_* variables to env when the node's tracing switch is on
 // (docs/go/spec/observability.md). Called by: deploy (apply). Owner: observability.
 func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[string]string, error) {

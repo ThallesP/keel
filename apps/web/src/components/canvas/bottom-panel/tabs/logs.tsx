@@ -1,12 +1,11 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { LogLine, Replica, Tail } from "@my-better-t-app/backend/convex/logs";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { errorMessage } from "../../errors";
+import { useTailNodeLogs } from "@/api/gen";
+import type { LogLine, LogTail, Replica } from "@/api/types";
+import { errorMessage } from "@/lib/api";
+
 import { formatLogTime } from "../../format";
-import { asNodeId } from "../../mapping";
 import type { InfraNode } from "../../types";
 import { FollowingBadge, LogStream } from "../log-stream";
 import { PanelMain } from "../panel-frame";
@@ -14,33 +13,25 @@ import { PanelMain } from "../panel-frame";
 const POLL_MS = 3000;
 const TAIL = 300;
 
-/** Docker logs are the one thing polled, not subscribed: they never touch a table. */
+/**
+ * Service logs are the one thing polled, not pushed: they never touch a table, so no write
+ * invalidates them (`meta.realtime: false`). One call per poll, no retries: a failure shows its
+ * message until the next poll succeeds.
+ */
 function useServiceLogs(nodeId: string, enabled: boolean) {
-  const tail = useAction(api.logs.tail);
-  const [data, setData] = useState<Tail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const next = await tail({ nodeId: asNodeId(nodeId), tail: TAIL });
-        if (!cancelled) {
-          setData(next);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(errorMessage(err));
-      }
-    };
-    void load();
-    const id = setInterval(() => void load(), POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [nodeId, enabled, tail]);
-  return { data, error };
+  const { data, error } = useTailNodeLogs(
+    { path: { id: nodeId }, query: { tail: TAIL } },
+    {
+      query: {
+        enabled,
+        refetchInterval: POLL_MS,
+        staleTime: 0,
+        retry: false,
+        meta: { realtime: false },
+      },
+    },
+  );
+  return { data: data ?? null, error: error ? errorMessage(error) : null };
 }
 
 /** One muted hue per replica so interleaved lines read apart. Never the accent. */
@@ -79,14 +70,15 @@ function rawText(l: LogLine) {
 
 type BodyProps = {
   node: InfraNode;
-  data: Tail | null;
+  data: LogTail | null;
   error: string | null;
   raw: boolean;
   following: boolean;
 };
 
 function LogBody({ node, data, error, raw, following }: BodyProps) {
-  const label = useMemo(() => replicaLabels(data?.replicas ?? []), [data?.replicas]);
+  const replicas = data?.replicas;
+  const label = useMemo(() => replicaLabels(replicas ?? []), [replicas]);
   if (error) return <p className="text-xs text-danger">{error}</p>;
   if (node.type === "volume") return <p className="text-xs text-faint">Volumes have no logs.</p>;
   if (data === null) {
@@ -96,12 +88,13 @@ function LogBody({ node, data, error, raw, following }: BodyProps) {
       </p>
     );
   }
-  if (data.lines.length === 0) return <p className="text-xs text-faint">No log output.</p>;
-  const tagged = data.replicas.length > 1 || data.lines.some((l) => l.task !== "");
+  const lines = data.lines ?? [];
+  if (lines.length === 0) return <p className="text-xs text-faint">No log output.</p>;
+  const tagged = (replicas?.length ?? 0) > 1 || lines.some((l) => l.task !== "");
   return (
     <LogStream
       following={following}
-      lines={data.lines.map((l, i) => ({
+      lines={lines.map((l, i) => ({
         key: `${l.time}:${i}`,
         time: raw || !l.time ? undefined : formatLogTime(l.time),
         tag: raw || !tagged ? undefined : <ReplicaTag {...label(l.task)} />,

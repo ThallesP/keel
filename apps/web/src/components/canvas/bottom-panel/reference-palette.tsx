@@ -1,15 +1,14 @@
-import type { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { FunctionReturnType } from "convex/server";
 import { Braces, Lock } from "lucide-react";
 import { useMemo, type RefObject } from "react";
 
+import type { ReferenceSource } from "@/api/types";
 import { Palette, type PalettePage } from "@/components/palette";
 
 import { NodeTypeIcon } from "../nodes/icons";
 
-export type ReferenceSource = FunctionReturnType<typeof api.variables.referenceable>[number];
+export type { ReferenceSource };
 
-/** `${{ postgres.DATABASE_URL }}`. Mirrors `REF_RE` in `packages/backend/convex/variables.ts`. */
+/** `${{ postgres.DATABASE_URL }}`. Mirrors `canvasRefRE` in `internal/domain/reference.go`. */
 export const refText = (node: string, key: string) => `\${{ ${node}.${key} }}`;
 
 const GENERIC = new Set(["URL", "HOST", "PORT"]);
@@ -26,7 +25,7 @@ function pages(
   const keysOf = (source: ReferenceSource): PalettePage => ({
     title: source.name,
     placeholder: "Which variable?",
-    items: source.keys.map((k) => ({
+    items: (source.keys ?? []).map((k) => ({
       id: k.key,
       label: k.key,
       hint: [k.provided ? "generated" : "variable", k.secret && "secret"]
@@ -61,7 +60,7 @@ function pages(
             label: s.name,
             hint: s.image ?? s.type,
             // Typing a key (`DATABASE_URL`) narrows to the nodes that have it.
-            keywords: s.keys.map((k) => k.key.toLowerCase()),
+            keywords: (s.keys ?? []).map((k) => k.key.toLowerCase()),
             icon: <NodeTypeIcon type={s.type} />,
             onSelect: () => keysOf(s),
           })),

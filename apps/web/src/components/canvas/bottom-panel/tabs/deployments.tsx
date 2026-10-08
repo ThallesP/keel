@@ -1,11 +1,11 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { useMemo } from "react";
+
+import { useListNodeDeployments } from "@/api/gen";
 
 import { EndpointAddress } from "../../endpoint-address";
 import { formatElapsed, timeAgo } from "../../format";
-import { asNodeId, toDeployment } from "../../mapping";
+import { toDeployment } from "../../mapping";
 import { SectionLabel } from "../../primitives";
 import { statusLabel } from "../../status";
 import { useCanvasDispatch } from "../../store";
@@ -223,8 +223,9 @@ export function DeploymentsTab({ node }: { node: InfraNode }) {
   const dispatch = useCanvasDispatch();
   const link = useDeploymentLink();
   const now = useNow();
-  const docs = useQuery(api.deployments.listForNode, { nodeId: asNodeId(node.id) });
-  const rows = useMemo(() => (docs ?? []).map(toDeployment), [docs]);
+  // Newest first; live while a deploy runs (log lines, step icons) through realtime invalidation.
+  const { data: docs } = useListNodeDeployments({ path: { id: node.id } });
+  const rows = useMemo(() => (docs ?? []).map((d) => toDeployment(d)), [docs]);
   const [current, ...history] = rows;
   // Selection is the URL (`?deployment=`), so a row is a link and a reload keeps it.
   const selected = rows.find((r) => r.id === link.deploymentId) ?? current;

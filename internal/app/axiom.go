@@ -42,7 +42,7 @@ func AxiomBaseURL(domain string) string {
 
 const (
 	axiomQueryWindowMs = 30 * 24 * 60 * 60_000 // tail queries look back 30 days
-	axiomUntilSlackMs  = 60_000                 // end of a query window: now + 60s
+	axiomUntilSlackMs  = 60_000                // end of a query window: now + 60s
 )
 
 // aplLit is an APL string literal.

@@ -5,6 +5,8 @@ package app_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -140,6 +142,7 @@ func newObsEnv(t *testing.T, now int64) *obsEnv {
 		Jobs:   e.jobs,
 		Now:    func() int64 { return e.now },
 		Config: app.Config{SiteURL: "https://keel.example.ts.net"},
+		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return e
 }

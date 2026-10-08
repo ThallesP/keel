@@ -18,14 +18,14 @@ import (
 )
 
 const (
-	traceList       = 100                 // requests per overview (the dashboard's REQUESTS)
-	traceMaxSpans   = 2000                // spans per trace
-	traceWindowMs   = 7 * 24 * 3_600_000  // a trace opened without `at` is looked for this far back
-	traceHourMs     = 3_600_000           // with `at`, spans are looked for from the hour before it
-	traceLogSlackMs = 5_000               // slack around a trace's spans when looking for its lines
-	traceLogWindow  = 15 * 60_000         // without spans, how far either side of `at`
-	traceLogLines   = 500                 // lines per trace
-	traceSearchMax  = 200                 // search is cut to this many characters
+	traceList       = 100                // requests per overview (the dashboard's REQUESTS)
+	traceMaxSpans   = 2000               // spans per trace
+	traceWindowMs   = 7 * 24 * 3_600_000 // a trace opened without `at` is looked for this far back
+	traceHourMs     = 3_600_000          // with `at`, spans are looked for from the hour before it
+	traceLogSlackMs = 5_000              // slack around a trace's spans when looking for its lines
+	traceLogWindow  = 15 * 60_000        // without spans, how far either side of `at`
+	traceLogLines   = 500                // lines per trace
+	traceSearchMax  = 200                // search is cut to this many characters
 	traceRoot       = `where isempty(ensure_field("parent_span_id", typeof(string)))`
 	traceFailed     = `ensure_field("error", typeof(bool)) == true or ensure_field("status.code", typeof(string)) contains "error"`
 	traceServiceID  = `tostring(ensure_field("resource.custom", typeof(dynamic))["keel.service_id"])`

@@ -290,6 +290,100 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	}
 }
 
+// A follower waiting for room in a queue that is then dropped (token rotation while the sink was
+// down) is released, and the line it holds goes to the service's new sink: only what was queued
+// for the removed sink is dropped.
+func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
+	d := newFakeDocker()
+	c := task('a', "n1", "1", "running")
+	d.setContainers(c)
+	var lines []string
+	for i := range 5 {
+		lines = append(lines, "2024-01-01T00:00:0"+strconv.Itoa(i)+"Z line "+strconv.Itoa(i))
+	}
+	d.script(c.ID, logScript{data: stamped(lines...)})
+	rotated := sinkA
+	rotated.Token = "xaat-rotated"
+	ss := newSinkSet()
+	s, state, logs := newTestShipper(t, d, ss)
+	s.maxQueue = 2
+	s.flushEvery = time.Hour // nothing is sent but by Flush: the old sink never drains
+	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	reconcile(t, s)
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067201.000000001" }) // lines 0, 1 queued
+	time.Sleep(20 * time.Millisecond)
+	if s.lastRead(c.ID) != "1704067201.000000001" {
+		t.Fatal("read past a full queue")
+	}
+
+	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: rotated}})
+	waitFor(t, func() bool {
+		r := s.lastRead(c.ID)
+		return r == "1704067203.000000001" || r == "1704067204.000000001"
+	})
+	s.Flush(context.Background())
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067204.000000001" })
+	s.Flush(context.Background())
+	if got := ss.get(rotated).messages(); !slices.Equal(got, []string{"line 2", "line 3", "line 4"}) {
+		t.Fatalf("new sink got %v, want the held line 2 and the rest", got)
+	}
+	if got := ss.get(sinkA).messages(); len(got) != 0 {
+		t.Fatalf("the removed sink was sent %v", got)
+	}
+	if !strings.Contains(logs.String(), "[logs] dropping 2 queued lines for a removed sink") {
+		t.Fatalf("log = %s", logs.String())
+	}
+	waitFor(t, func() bool { v, _ := state.LogsSince(c.ID); return v == "1704067204.000000001" })
+}
+
+// Room comes back below half of maxQueue, not as soon as one batch went out.
+func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
+	d := newFakeDocker()
+	c := task('a', "n1", "1", "running")
+	var lines []string
+	for i := range 6 {
+		lines = append(lines, "2024-01-01T00:00:0"+strconv.Itoa(i)+"Z line "+strconv.Itoa(i))
+	}
+	d.setContainers(c)
+	d.script(c.ID, logScript{data: stamped(lines...)})
+	ss := newSinkSet()
+	gate := make(chan struct{})
+	ss.setup = func(f *fakeSink) { f.gate = gate }
+	s, _, _ := newTestShipper(t, d, ss)
+	s.maxQueue = 4
+	s.flushEvery = time.Hour // no drain until the queue is full
+	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	reconcile(t, s)
+	// Lines 0-3 fill the queue; line 4 waits.
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" })
+	sink := ss.get(sinkA)
+	held := func() bool {
+		time.Sleep(20 * time.Millisecond)
+		return s.lastRead(c.ID) == "1704067203.000000001"
+	}
+	if !held() {
+		t.Fatal("read past a full queue")
+	}
+	s.mu.Lock()
+	s.flushLines = 1 // one line per send from here on
+	s.mu.Unlock()
+	go s.Flush(context.Background())
+	gate <- struct{}{} // line 0 delivered: 3 queued
+	waitFor(t, func() bool { return len(sink.messages()) == 1 })
+	if !held() {
+		t.Fatal("room came back at 3 of 4 queued")
+	}
+	gate <- struct{}{} // line 1 delivered: 2 queued, not under half
+	waitFor(t, func() bool { return len(sink.messages()) == 2 })
+	if !held() {
+		t.Fatal("room came back at 2 of 4 queued")
+	}
+	gate <- struct{}{} // line 2 delivered: 1 queued, under half
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067205.000000001" })
+	close(gate)
+	waitFor(t, func() bool { return len(sink.messages()) == 6 })
+}
+
 func TestShipperReconcileFollowers(t *testing.T) {
 	d := newFakeDocker()
 	running := task('1', "n1", "1", "running")

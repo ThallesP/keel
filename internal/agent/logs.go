@@ -403,19 +403,34 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 }
 
 // ship queues one line for its service's current sink, waiting for room first. false when the
-// service lost its sink or the follower was stopped.
+// service lost its sink or the follower was stopped. When the queue it waited on was removed
+// meanwhile (the sink was disconnected or its token changed), the line is routed again instead of
+// going into the removed queue: only what was already queued for a removed sink is dropped.
 func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, base LogEvent, line Line) bool {
-	s.mu.Lock()
-	sink := s.sinkByService[serviceID]
-	if sink == nil {
+	for {
+		s.mu.Lock()
+		sink := s.sinkByService[serviceID]
+		if sink == nil {
+			s.mu.Unlock()
+			return false
+		}
+		q := s.queueForLocked(sink)
 		s.mu.Unlock()
-		return false
+		if !s.waitForRoom(ctx, q) {
+			return false
+		}
+		if s.enqueueLine(ctx, q, containerID, base, line) {
+			return true
+		}
+		if ctx.Err() != nil {
+			return false
+		}
 	}
-	q := s.queueForLocked(sink)
-	s.mu.Unlock()
-	if !s.waitForRoom(ctx, q) {
-		return false
-	}
+}
+
+// enqueueLine adds the line to q, unless the follower was stopped or q is no longer its sink's
+// queue (false either way).
+func (s *Shipper) enqueueLine(ctx context.Context, q *queue, containerID string, base LogEvent, line Line) bool {
 	ev := base
 	ev.Message = line.Text
 	ev.Stream = line.Stream
@@ -429,7 +444,7 @@ func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, base 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || s.queues[q.sink.Key()] != q {
 		return false
 	}
 	ev.Node = s.nodeID
@@ -450,8 +465,8 @@ func (s *Shipper) queueForLocked(sink Sink) *queue {
 }
 
 // waitForRoom returns once the queue has room, or false when the follower is stopped meanwhile.
-// Like the worker, a woken follower does not re-check: the drain woke it below half capacity, or
-// the queue was removed (its next line goes to whatever sink the service has then).
+// Like the worker, a woken follower does not re-check the length: the drain woke it below half
+// capacity, or the queue was removed (ship then routes the line again).
 func (s *Shipper) waitForRoom(ctx context.Context, q *queue) bool {
 	s.mu.Lock()
 	if len(q.entries) < s.maxQueue || ctx.Err() != nil {

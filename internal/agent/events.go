@@ -95,6 +95,11 @@ func (f *Forwarder) stream(ctx context.Context) {
 		}
 		if relevant(e) {
 			resync = !f.Poster.PostEvents(ctx, e.Raw, resync)
+			if ctx.Err() != nil {
+				// Shutting down mid-POST: the event was not delivered, so the resume point stays
+				// before it and the next start replays it (the worker exited before moving it).
+				return
+			}
 		}
 		if e.TimeNano != 0 {
 			f.State.SetEventsSince(eventsSinceAfter(e.TimeNano))

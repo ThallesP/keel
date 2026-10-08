@@ -189,6 +189,41 @@ func TestForwarderResyncAfterFailure(t *testing.T) {
 	}
 }
 
+// cancellingPoster accepts the first POST and is shut down (ctx cancelled) during the second.
+type cancellingPoster struct {
+	cancel context.CancelFunc
+	n      int
+}
+
+func (p *cancellingPoster) PostEvents(ctx context.Context, _ []byte, _ bool) bool {
+	p.n++
+	if p.n < 3 {
+		return true // the resync "[]" and the first event
+	}
+	p.cancel() // SIGTERM while this POST retries
+	<-ctx.Done()
+	return false
+}
+
+// A signal during an event's POST leaves the resume point before that event: it was not
+// delivered, and the next start replays it.
+func TestForwarderShutdownMidPostKeepsTheEvent(t *testing.T) {
+	d := newFakeDocker()
+	d.streams = []eventScript{{events: []Event{
+		ev("node", "update", "n", nil, 1704067200000000001),
+		ev("node", "update", "n", nil, 1704067200000000005),
+	}}}
+	state := LoadState(t.TempDir() + "/s.json")
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &cancellingPoster{cancel: cancel}
+	f, _, _, _ := newTestForwarder(d, nil, state)
+	f.Poster = p
+	f.Run(ctx)
+	if got := state.EventsSince(); got != "1704067200.000000002" {
+		t.Fatalf("eventsSince = %q, want just after the delivered event", got)
+	}
+}
+
 func TestForwarderDockerDown(t *testing.T) {
 	d := newFakeDocker()
 	d.streams = []eventScript{{err: errors.New("connect: no such file or directory")}}

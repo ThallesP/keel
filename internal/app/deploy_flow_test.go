@@ -637,3 +637,29 @@ func TestReconcileOnlyTheAffectedEnvironment(t *testing.T) {
 	}
 	_ = b
 }
+
+// Without keel agent there are no Docker events: a rolling update that outlasts the settle
+// re-checks is polled until Swarm reports it done, so the deployment still settles.
+func TestUpdateSettlesWithoutEvents(t *testing.T) {
+	w := newWorld(t)
+	a := w.addNode("api")
+	w.ship(app.ShipOptions{})
+	w.jobs.advance(time.Second)
+	w.swarm.updateState[a.ID] = "updating"
+	id := w.ship(app.ShipOptions{Only: []string{a.ID}})
+	w.jobs.advance(10 * time.Second) // well past the two settle re-checks
+	if d := w.deployment(id); d.Status != domain.DeploymentRunning {
+		t.Fatalf("settled while Swarm still updates: %s", d.Status)
+	}
+	w.swarm.updateState[a.ID] = "completed"
+	w.jobs.advance(3 * time.Second)
+	if d := w.deployment(id); d.Status != domain.DeploymentSuccess {
+		t.Fatalf("after Swarm completed: %s %s", d.Status, stepStatuses(d))
+	}
+	// And the polling stops once done.
+	n := len(w.swarm.observed)
+	w.jobs.advance(30 * time.Second)
+	if len(w.swarm.observed) != n {
+		t.Fatalf("kept polling after completion: %d → %d", n, len(w.swarm.observed))
+	}
+}

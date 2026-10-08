@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package proxy is `keel proxy`, the control plane's public edge (was apps/proxy + the keel-proxy
 // image): Caddy and caddy-l4 as libraries, with only the modules Keel's config uses, plus Keel's
 // own modules. `keel serve` owns the configuration and pushes all of it through the admin API on

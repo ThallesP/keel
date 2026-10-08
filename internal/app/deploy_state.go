@@ -64,8 +64,11 @@ var (
 const (
 	deployTimeout      = 5 * time.Minute // DEPLOY_TIMEOUT_MS
 	observeDebounce    = 500 * time.Millisecond
-	observeSettleDelay = 2 * time.Second  // SETTLE_MS
-	observeSettleMax   = 2                // SETTLE_MAX
+	observeSettleDelay = 2 * time.Second // SETTLE_MS
+	observeSettleMax   = 2               // SETTLE_MAX
+	// observeUpdatingMax bounds the re-checks of a service Swarm reports as updating: up to the
+	// deployment timeout, after which the timeout job fails the step anyway.
+	observeUpdatingMax = int(deployTimeout / observeSettleDelay)
 	applyDeadline      = 15 * time.Minute // a pull can take minutes (postgres:16 took 224 s)
 	// dockerCallDeadline bounds the Docker calls of scans and removals (Convex capped every action
 	// at 10 min). Without it a hung daemon would pile up one goroutine per event-driven scan, since

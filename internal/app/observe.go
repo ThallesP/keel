@@ -254,7 +254,14 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 		a.Log.Error("observeNode", "node", id, "err", err)
 		return
 	}
-	if settle < observeSettleMax && settlingTasks(tasks, observed.Revision) {
+	switch {
+	case settle < observeSettleMax && settlingTasks(tasks, observed.Revision):
+		a.scheduleObserveFor(ctx, id, observeSettleDelay, settle+1)
+	case svc != nil && updateInProgress(svc.UpdateState) && settle < observeUpdatingMax:
+		// A rolling update (start-first, then the UpdateConfig monitor window) outlasts the two
+		// settle re-checks. keel agent's "service update ... completed" event normally triggers
+		// the next scan; polling until Swarm says it is done means a deployment settles without
+		// an agent too (a fresh install before keel-agent runs, a dev serve).
 		a.scheduleObserveFor(ctx, id, observeSettleDelay, settle+1)
 	}
 }
@@ -428,4 +435,9 @@ func observedFace(n domain.Node) nodeFace {
 		f.finishedAt = *o.FinishedAt
 	}
 	return f
+}
+
+// updateInProgress: Swarm is still rolling the service forward or back.
+func updateInProgress(state string) bool {
+	return state == "updating" || state == "rollback_started"
 }

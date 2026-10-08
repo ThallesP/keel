@@ -2,7 +2,10 @@ package password
 
 import (
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // Vectors made with node:crypto scrypt exactly as @better-auth/utils 0.4.1 hashes
@@ -88,5 +91,64 @@ func TestZeroValueUsesDefaults(t *testing.T) {
 	var h Hasher
 	if h.params() != DefaultParams {
 		t.Fatalf("zero Hasher params: %+v", h.params())
+	}
+}
+
+// Hashing is bounded: with every slot taken, Hash and Verify wait, so a burst of unauthenticated
+// sign-ins cannot make the server hold more than cap(slots) hashes' memory at once.
+func TestHashingWaitsForASlot(t *testing.T) {
+	h := fast()
+	hash, err := h.Hash("correct-horse-battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < cap(slots); i++ {
+		slots <- struct{}{}
+	}
+	done := make(chan string, 4)
+	go func() { _, _ = h.Hash("x-password"); done <- "hash" }()
+	go func() { h.Verify(hash, "correct-horse-battery"); done <- "argon2id" }()
+	go func() { h.Verify(betterAuthVectors[0].hash, betterAuthVectors[0].password); done <- "scrypt" }()
+	go func() { h.Verify("", "missing-account"); done <- "dummy" }()
+	select {
+	case what := <-done:
+		t.Fatalf("%s ran without a free slot", what)
+	case <-time.After(100 * time.Millisecond):
+	}
+	for i := 0; i < cap(slots); i++ {
+		<-slots
+	}
+	for i := 0; i < 4; i++ {
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("hashing still blocked after the slots were freed")
+		}
+	}
+}
+
+func TestWithSlotBoundsConcurrency(t *testing.T) {
+	var running, peak atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < 4*cap(slots); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			withSlot(func() {
+				n := running.Add(1)
+				for {
+					p := peak.Load()
+					if n <= p || peak.CompareAndSwap(p, n) {
+						break
+					}
+				}
+				time.Sleep(5 * time.Millisecond)
+				running.Add(-1)
+			})
+		}()
+	}
+	wg.Wait()
+	if p := peak.Load(); p > int32(cap(slots)) || p < 1 {
+		t.Fatalf("peak %d concurrent hashes, bound %d", p, cap(slots))
 	}
 }

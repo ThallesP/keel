@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -69,6 +70,20 @@ const (
 // typed with a different Unicode composition still matches.
 func normalize(password string) []byte { return []byte(norm.NFKC.String(password)) }
 
+// slots bounds how many hashes run at once. Each argon2id hash holds Params.Memory (19 MiB by
+// default) and each Better Auth scrypt check 32 MiB while it runs. Sign-in is unauthenticated and
+// its limiter counts per client and email, so without a bound a burst of sign-ins with made-up
+// emails would make keel serve allocate gigabytes. Callers past the bound wait their turn: hashing
+// is CPU-bound, so running more at once would not finish any sooner.
+var slots = make(chan struct{}, max(2, runtime.GOMAXPROCS(0)))
+
+// withSlot runs fn once a hashing slot is free.
+func withSlot(fn func()) {
+	slots <- struct{}{}
+	defer func() { <-slots }()
+	fn()
+}
+
 var b64 = base64.RawStdEncoding
 
 // Hash is a fresh argon2id hash: $argon2id$v=19$m=<KiB>,t=<passes>,p=<lanes>$<salt>$<key>.
@@ -78,7 +93,8 @@ func (h *Hasher) Hash(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	key := argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen)
+	var key []byte
+	withSlot(func() { key = argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen) })
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, p.Memory, p.Time, p.Threads, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
 }
@@ -95,7 +111,8 @@ func (h *Hasher) Verify(hash, password string) (ok, rehash bool) {
 			h.dummy(password)
 			return false, false
 		}
-		got := argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen)
+		var got []byte
+		withSlot(func() { got = argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen) })
 		if subtle.ConstantTimeCompare(got, key) != 1 {
 			return false, false
 		}
@@ -121,7 +138,10 @@ func verifyScrypt(hash, password string) bool {
 	if err != nil || len(want) != scryptKeyLen {
 		return false
 	}
-	got, err := scrypt.Key(normalize(password), []byte(saltHex), scryptN, scryptR, scryptP, scryptKeyLen)
+	var got []byte
+	withSlot(func() {
+		got, err = scrypt.Key(normalize(password), []byte(saltHex), scryptN, scryptR, scryptP, scryptKeyLen)
+	})
 	if err != nil {
 		return false
 	}
@@ -131,7 +151,9 @@ func verifyScrypt(hash, password string) bool {
 // dummy spends one hash's worth of time.
 func (h *Hasher) dummy(password string) {
 	p := h.params()
-	_ = argon2.IDKey(normalize(password), make([]byte, p.SaltLen), p.Time, p.Memory, p.Threads, p.KeyLen)
+	withSlot(func() {
+		_ = argon2.IDKey(normalize(password), make([]byte, p.SaltLen), p.Time, p.Memory, p.Threads, p.KeyLen)
+	})
 }
 
 var errMalformed = errors.New("malformed argon2id hash")

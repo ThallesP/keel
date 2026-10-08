@@ -158,7 +158,7 @@ func TestCaddyAppsDeterministic(t *testing.T) {
 	}
 }
 
-func TestBlame(t *testing.T) {
+func TestProxyBlameListener(t *testing.T) {
 	routes := []ProxyRoute{
 		{NodeID: "a", Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "a.example.com"},
 		{NodeID: "b", Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "b.example.com"},
@@ -210,23 +210,23 @@ func TestBlame(t *testing.T) {
 		{"no listener named", "json: cannot unmarshal string", nil},
 	}
 	for _, c := range cases {
-		got := blame(c.message, routes)
+		got := blameListener(c.message, routes)
 		if len(got) != len(c.want) || (len(c.want) > 0 && !reflect.DeepEqual(got, c.want)) {
 			t.Errorf("%s:\n got %v\nwant %v", c.name, got, c.want)
 		}
 	}
 }
 
-func TestErrorText(t *testing.T) {
-	if got := errorText(errors.New("  a\n  b\tc ")); got != "a b c" {
+func TestProxyErrorText(t *testing.T) {
+	if got := proxyErrorText(errors.New("  a\n  b\tc ")); got != "a b c" {
 		t.Errorf("got %q", got)
 	}
-	if got := errorText(errors.New(strings.Repeat("x", 400))); len(got) != 300 {
+	if got := proxyErrorText(errors.New(strings.Repeat("x", 400))); len(got) != 300 {
 		t.Errorf("len %d", len(got))
 	}
 }
 
-func TestEngineIsRedis(t *testing.T) {
+func TestIngressEngineIsRedis(t *testing.T) {
 	cases := map[string]bool{
 		"redis:7": true, "redis": true, "docker.io/library/redis:7-alpine": true,
 		"redis@sha256:abc": true, "ghcr.io/acme/redis:1@sha256:abc": true,
@@ -239,7 +239,7 @@ func TestEngineIsRedis(t *testing.T) {
 	}
 }
 
-func TestSelectorKey(t *testing.T) {
+func TestIngressUnexposeKey(t *testing.T) {
 	f := func(v float64) *float64 { return &v }
 	cases := []struct {
 		protocol domain.EndpointProtocol
@@ -256,9 +256,9 @@ func TestSelectorKey(t *testing.T) {
 		{domain.ProtocolTCP, "", nil, "", false},
 	}
 	for _, c := range cases {
-		key, ok := selectorKey(c.protocol, c.name, c.public)
+		key, ok := unexposeKey(c.protocol, c.name, c.public)
 		if key != c.key || ok != c.ok {
-			t.Errorf("selectorKey(%s, %q, %v) = %q %v", c.protocol, c.name, c.public, key, ok)
+			t.Errorf("unexposeKey(%s, %q, %v) = %q %v", c.protocol, c.name, c.public, key, ok)
 		}
 	}
 }

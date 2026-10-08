@@ -43,7 +43,7 @@ type ProxyRoute struct {
 
 // Key is the route's endpointKey (http:<domain>, tcp:<publicPort>, udp:<publicPort>).
 func (r ProxyRoute) Key() string {
-	return endpointKey(r.Protocol, r.Domain, r.PublicPort)
+	return ingressKey(r.Protocol, r.Domain, r.PublicPort)
 }
 
 // Proxy is keel-proxy's admin API over its unix socket (adapters/caddy). Errors are already the

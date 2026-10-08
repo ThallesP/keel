@@ -65,7 +65,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 		}
 		port := node.Desired.Port
 		if in.Port != nil {
-			p, err := portArg(*in.Port)
+			p, err := exposePort(*in.Port)
 			if err != nil {
 				return err
 			}
@@ -133,7 +133,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			if in.PublicPort == nil {
 				public, err = domain.AllocatePublicPort(*port, taken)
 			} else {
-				public, err = portArg(*in.PublicPort)
+				public, err = exposePort(*in.PublicPort)
 			}
 			if err != nil {
 				return err
@@ -208,7 +208,7 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 					return err
 				}
 			}
-			key, ok := selectorKey(in.Protocol, name, in.PublicPort)
+			key, ok := unexposeKey(in.Protocol, name, in.PublicPort)
 			for _, e := range node.Endpoints {
 				if !ok || e.Key() != key {
 					keep = append(keep, e)
@@ -266,31 +266,31 @@ func followPort(tx Tx, ch *Changes, scope NodeScope, port int, now int64) (bool,
 	return true, nil
 }
 
-// portArg is Convex validPort for a JSON number: an integer in 1..65535.
-func portArg(f float64) (int, error) {
+// exposePort is Convex validPort for a JSON number: an integer in 1..65535.
+func exposePort(f float64) (int, error) {
 	if f != math.Trunc(f) || f < 1 || f > 65535 {
 		return 0, domain.Invalid(domain.MsgPortRange)
 	}
 	return int(f), nil
 }
 
-// selectorKey is unexpose's endpointKey. ok=false when the public port is not an integer port
+// unexposeKey is unexpose's endpointKey. ok=false when the public port is not an integer port
 // (Convex built a key like tcp:5432.5 that matches nothing; Q13).
-func selectorKey(protocol domain.EndpointProtocol, name string, publicPort *float64) (string, bool) {
+func unexposeKey(protocol domain.EndpointProtocol, name string, publicPort *float64) (string, bool) {
 	if protocol == domain.ProtocolHTTP {
-		return endpointKey(protocol, name, 0), true
+		return ingressKey(protocol, name, 0), true
 	}
 	if publicPort == nil {
 		return "", false
 	}
-	p, err := portArg(*publicPort)
+	p, err := exposePort(*publicPort)
 	if err != nil {
 		return "", false
 	}
-	return endpointKey(protocol, "", p), true
+	return ingressKey(protocol, "", p), true
 }
 
-func endpointKey(protocol domain.EndpointProtocol, name string, publicPort int) string {
+func ingressKey(protocol domain.EndpointProtocol, name string, publicPort int) string {
 	e := domain.Endpoint{Protocol: protocol, Domain: name}
 	if protocol != domain.ProtocolHTTP {
 		e.PublicPort = &publicPort

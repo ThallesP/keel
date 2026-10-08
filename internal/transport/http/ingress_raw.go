@@ -35,7 +35,7 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 		ingressText(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	if len(body) > 3*ingressMaxBody || utf16Len(body) > ingressMaxBody {
+	if len(body) > 3*ingressMaxBody || ingressUTF16Len(body) > ingressMaxBody {
 		ingressText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
@@ -77,9 +77,9 @@ func ingressBearerOK(r *http.Request, expected string) bool {
 	return subtle.ConstantTimeCompare(a, b)&lengthOK == 1
 }
 
-// utf16Len is the JavaScript length of the UTF-8 text b (invalid bytes count one each, as the
+// ingressUTF16Len is the JavaScript length of the UTF-8 text b (invalid bytes count one each, as the
 // decoder's replacement characters would).
-func utf16Len(b []byte) int {
+func ingressUTF16Len(b []byte) int {
 	n := 0
 	for len(b) > 0 {
 		r, size := utf8.DecodeRune(b)

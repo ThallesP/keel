@@ -230,11 +230,11 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 	}
 }
 
-func TestIngressUTF16Len(t *testing.T) {
+func TestIngressUTF16Length(t *testing.T) {
 	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, string([]byte{0xff, 'a'}): 2}
 	for in, want := range cases {
-		if got := utf16Len([]byte(in)); got != want {
-			t.Errorf("utf16Len(%q) = %d, want %d", in, got, want)
+		if got := ingressUTF16Len([]byte(in)); got != want {
+			t.Errorf("ingressUTF16Len(%q) = %d, want %d", in, got, want)
 		}
 	}
 }

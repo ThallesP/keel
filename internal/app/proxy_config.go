@@ -25,17 +25,17 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 	if len(web) > 0 {
 		listen := make([]string, 0, len(addrs))
 		for _, a := range addrs {
-			listen = append(listen, "host-tcp/"+hostPort(a, 443))
+			listen = append(listen, "host-tcp/"+caddyHostPort(a, 443))
 		}
 		handlers := make([]any, 0, len(web))
 		managed := []string{}
 		for _, r := range web {
 			handlers = append(handlers, map[string]any{
 				"match":    []any{map[string]any{"host": []string{r.Domain}}},
-				"handle":   []any{map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": upstream(r)}}}},
+				"handle":   []any{map[string]any{"handler": "reverse_proxy", "upstreams": []any{map[string]any{"dial": caddyUpstream(r)}}}},
 				"terminal": true,
 			})
-			if !internalName(r.Domain) {
+			if !caddyInternalName(r.Domain) {
 				managed = append(managed, r.Domain)
 			}
 		}
@@ -49,7 +49,7 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 		}}}
 		if (acme.CA != "" || acme.Email != "") && len(managed) > 0 {
 			apps["tls"] = map[string]any{"automation": map[string]any{"policies": []any{
-				map[string]any{"subjects": managed, "issuers": issuers(acme)},
+				map[string]any{"subjects": managed, "issuers": caddyIssuers(acme)},
 			}}}
 		}
 		apps["events"] = map[string]any{"subscriptions": []any{map[string]any{
@@ -62,9 +62,9 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 		for _, r := range raw {
 			listen := make([]string, 0, len(addrs))
 			for _, a := range addrs {
-				listen = append(listen, "host-"+string(r.Protocol)+"/"+hostPort(a, r.PublicPort))
+				listen = append(listen, "host-"+string(r.Protocol)+"/"+caddyHostPort(a, r.PublicPort))
 			}
-			dial := upstream(r)
+			dial := caddyUpstream(r)
 			if r.Protocol == domain.ProtocolUDP {
 				dial = "udp/" + dial
 			}
@@ -81,10 +81,10 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 	return apps
 }
 
-// issuers: with no `tls` app Caddy uses Let's Encrypt alone (its ZeroSSL fallback needs an
+// caddyIssuers: with no `tls` app Caddy uses Let's Encrypt alone (its ZeroSSL fallback needs an
 // email). KEEL_ACME_EMAIL gives the pair Caddy would build, Let's Encrypt then ZeroSSL;
 // KEEL_ACME_CA (a staging CA) replaces both.
-func issuers(acme proxyACME) []any {
+func caddyIssuers(acme proxyACME) []any {
 	if acme.CA != "" {
 		issuer := map[string]any{"module": "acme", "ca": acme.CA}
 		if acme.Email != "" {
@@ -98,19 +98,19 @@ func issuers(acme proxyACME) []any {
 	}
 }
 
-func hostPort(addr string, port int) string {
+func caddyHostPort(addr string, port int) string {
 	if strings.Contains(addr, ":") {
 		return "[" + addr + "]:" + strconv.Itoa(port)
 	}
 	return addr + ":" + strconv.Itoa(port)
 }
 
-// upstream is the node's Swarm service on the keel overlay, resolved by Docker DNS when a
+// caddyUpstream is the node's Swarm service on the keel overlay, resolved by Docker DNS when a
 // connection is made: redeploys and rescheduling never touch the proxy.
-func upstream(r ProxyRoute) string {
+func caddyUpstream(r ProxyRoute) string {
 	return domain.ServicePrefix + r.NodeID + ":" + strconv.Itoa(r.Port)
 }
 
-// internalName: localhost names get Caddy's internal CA through automatic HTTPS (dev), never an
+// caddyInternalName: localhost names get Caddy's internal CA through automatic HTTPS (dev), never an
 // ACME policy.
-func internalName(d string) bool { return d == "localhost" || strings.HasSuffix(d, ".localhost") }
+func caddyInternalName(d string) bool { return d == "localhost" || strings.HasSuffix(d, ".localhost") }

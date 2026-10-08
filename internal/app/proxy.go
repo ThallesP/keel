@@ -133,7 +133,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 		return routeStatus{NodeID: r.NodeID, Key: r.Key(), Port: r.Port, Status: s}
 	}
 	fail := func(err error) ([]routeStatus, bool) {
-		msg := errorText(err)
+		msg := proxyErrorText(err)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
 		out := make([]routeStatus, 0, len(routes))
 		for _, r := range routes {
@@ -171,7 +171,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 		if !errors.As(err, &rejected) {
 			return fail(err)
 		}
-		blamed := blame(rejected.Message, live)
+		blamed := blameListener(rejected.Message, live)
 		if len(blamed) == 0 {
 			return fail(errors.New(rejected.Message))
 		}
@@ -216,10 +216,10 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 
 var blameRE = regexp.MustCompile(`listen (tcp|udp) \S*?:(\d+): (.+?)(?:$|\n)`)
 
-// blame: the endpoints a refused load is about. Caddy loads all or nothing and names the
+// blameListener: the endpoints a refused load is about. Caddy loads all or nothing and names the
 // listener that would not bind; that endpoint fails alone and the rest load without it. TCP 80
 // and 443 belong to every http endpoint. Empty when the error names no live endpoint. §5.1.3.
-func blame(message string, routes []ProxyRoute) map[string]string {
+func blameListener(message string, routes []ProxyRoute) map[string]string {
 	m := blameRE.FindStringSubmatch(message)
 	if m == nil {
 		return nil
@@ -244,8 +244,8 @@ func blame(message string, routes []ProxyRoute) map[string]string {
 	return blamed
 }
 
-// errorText: whitespace runs collapsed, trimmed, at most 300 characters.
-func errorText(err error) string {
+// proxyErrorText: whitespace runs collapsed, trimmed, at most 300 characters.
+func proxyErrorText(err error) string {
 	return domain.TruncateRunes(domain.CollapseSpace(err.Error()), 300)
 }
 
@@ -281,7 +281,7 @@ func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) e
 			changed := false
 			for i, e := range eps {
 				s, ok := byNode[id][e.Key()]
-				if ok && s.Port == e.Port && !sameStatus(s.Status, e.Status) {
+				if ok && s.Port == e.Port && !sameEndpointStatus(s.Status, e.Status) {
 					eps[i].Status = s.Status
 					changed = true
 				}
@@ -300,7 +300,9 @@ func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) e
 	})
 }
 
-func sameStatus(a, b domain.EndpointStatus) bool { return a.State == b.State && a.Error == b.Error }
+func sameEndpointStatus(a, b domain.EndpointStatus) bool {
+	return a.State == b.State && a.Error == b.Error
+}
 
 func (a *App) environmentChanged(tx Tx, ch *Changes, environmentID string) error {
 	org, err := tx.OrganizationOfEnvironment(environmentID)

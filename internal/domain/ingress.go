@@ -81,7 +81,7 @@ var labelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // or fails with "Domain must look like app.example.com". Accepts punycode, `*.localhost` and
 // dotted IPs (proxy-ingress.md Q9); rejects wildcards, single labels and underscores.
 func ValidDomain(raw string) (string, error) {
-	d := strings.ToLower(strings.TrimFunc(raw, jsSpace))
+	d := strings.ToLower(strings.TrimFunc(raw, isJSTrimSpace))
 	d = strings.TrimSuffix(d, ".")
 	labels := strings.Split(d, ".")
 	ok := len(d) <= 253 && len(labels) >= 2
@@ -94,8 +94,8 @@ func ValidDomain(raw string) (string, error) {
 	return d, nil
 }
 
-// jsSpace is what JavaScript's String.prototype.trim removes.
-func jsSpace(r rune) bool { return unicode.IsSpace(r) || r == 0xFEFF }
+// isJSTrimSpace is what JavaScript's String.prototype.trim removes.
+func isJSTrimSpace(r rune) bool { return unicode.IsSpace(r) || r == 0xFEFF }
 
 // AllocatePublicPort: port when nothing holds it on that protocol, else the first free port from
 // 20000. taken includes 80 and 443 for tcp. Only Keel's own endpoints count (Q8).
@@ -130,9 +130,9 @@ func CertHint(err, ip string) string {
 	if m := acmeErrorRE.FindStringSubmatch(err); m != nil {
 		kind, detail = m[1], m[2]
 	}
-	detail = replaceFirst(fetchingRE, detail)
-	detail = replaceFirst(caSuffixRE, detail)
-	detail = replaceFirst(firewallHintRE, detail)
+	detail = removeFirstMatch(fetchingRE, detail)
+	detail = removeFirstMatch(caSuffixRE, detail)
+	detail = removeFirstMatch(firewallHintRE, detail)
 	detail = TruncateRunes(detail, 200)
 	switch kind {
 	case "connection", "unauthorized", "tls":
@@ -146,7 +146,7 @@ func CertHint(err, ip string) string {
 	return "Could not get a certificate: " + detail
 }
 
-func replaceFirst(re *regexp.Regexp, s string) string {
+func removeFirstMatch(re *regexp.Regexp, s string) string {
 	loc := re.FindStringIndex(s)
 	if loc == nil {
 		return s

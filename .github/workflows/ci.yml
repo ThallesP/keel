@@ -31,6 +31,14 @@ jobs:
           fi
       - run: go vet ./...
       - run: go test ./...
+      - name: openapi.json is current
+        run: |
+          # The dashboard's hooks and the CLI are built against this file: a handler change must
+          # come with `make openapi`.
+          go run ./cmd/keel openapi > /tmp/openapi.json
+          if ! diff -u openapi.json /tmp/openapi.json; then
+            echo "openapi.json is stale: run make openapi and commit it"; exit 1
+          fi
 
   # The dashboard, embedded into the binary by the image build.
   web:

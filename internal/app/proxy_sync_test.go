@@ -360,4 +360,35 @@ func TestProxyRecover(t *testing.T) {
 	if e.jobs.every["proxy:resync"] != 2*time.Minute {
 		t.Fatalf("resync: %v", e.jobs.every)
 	}
+
+	// Run again: nothing left to move, nothing written.
+	e.pub.take()
+	e.app.RecoverIngressForTest(e.ctx)
+	if got := e.pub.take(); len(got) != 0 {
+		t.Fatalf("second start published %v", got)
+	}
+}
+
+// The IP flipped back after the node was exposed again on the other IP: the old endpoint cannot
+// take a name its sibling already serves, and the rest of the migration still runs.
+func TestProxyRecoverKeepsDomainsUnique(t *testing.T) {
+	e := newIngressEnv(t)
+	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
+	e.node(igPG, igEnvA, domain.NodeService, "web", "web:1", 8080)
+	live := domain.EndpointStatus{State: domain.EndpointLive, At: 1}
+	e.setEndpoints(igAPI,
+		domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api-16w41g.198-51-100-2.sslip.io", Status: live},
+		domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api-16w41g.203-0-113-7.sslip.io", Status: live},
+	)
+	e.setEndpoints(igPG, domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "web-i8r0ew.198-51-100-2.sslip.io", Status: live})
+	e.app.RecoverIngressForTest(e.ctx)
+
+	if got := igStatus(e.endpoints(igAPI)); !reflect.DeepEqual(got, []string{
+		"http:api-16w41g.198-51-100-2.sslip.io live ", "http:api-16w41g.203-0-113-7.sslip.io live ",
+	}) {
+		t.Fatalf("api: %q", got)
+	}
+	if got := e.endpoints(igPG)[0]; got.Domain != "web-i8r0ew.203-0-113-7.sslip.io" || got.Status.State != domain.EndpointStarting {
+		t.Fatalf("web: %+v", got)
+	}
 }

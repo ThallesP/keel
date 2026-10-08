@@ -46,6 +46,8 @@ type ingressState struct {
 	// failed: the last sync could not load any config (proxy down, an error no endpoint owns).
 	// The resync keeps retrying then even with nothing exposed (Q6).
 	failed atomic.Bool
+	// resyncArmed: the 2-minute resync is registered (once per App).
+	resyncArmed atomic.Bool
 }
 
 var ingressStates sync.Map // *App → *ingressState
@@ -380,13 +382,15 @@ func (a *App) recoverIngress(ctx context.Context) {
 		}
 	}
 	a.ScheduleProxySync()
-	if a.Jobs != nil {
+	if a.Jobs != nil && a.ingress().resyncArmed.CompareAndSwap(false, true) {
 		a.Jobs.Every(proxyResyncName, ProxyResyncInterval, a.ResyncProxy)
 	}
 }
 
 // moveDefaultDomains: every http endpoint on this node's default sslip.io pattern for another IP
-// moves to ip, keeping its name, and starts over (migrations.run step 3).
+// moves to ip, keeping its name, and starts over (migrations.run step 3). One whose new domain an
+// endpoint already holds (the same node exposed again on the current IP, then the IP flipped back)
+// stays where it is: domains are unique, and the holder already serves that name.
 func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 	moved := 0
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -394,6 +398,14 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 		nodes, err := tx.AllNodes()
 		if err != nil {
 			return err
+		}
+		held := map[string]bool{}
+		for _, node := range nodes {
+			for _, e := range node.Endpoints {
+				if e.Protocol == domain.ProtocolHTTP {
+					held[e.Domain] = true
+				}
+			}
 		}
 		at := a.Now()
 		for _, node := range nodes {
@@ -403,7 +415,8 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 				if e.Protocol != domain.ProtocolHTTP {
 					continue
 				}
-				if d, ok := domain.MovedDefaultDomain(node.ID, e.Domain, ip); ok {
+				if d, ok := domain.MovedDefaultDomain(node.ID, e.Domain, ip); ok && !held[d] {
+					held[d] = true
 					eps[i].Domain = d
 					eps[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: at}
 					changed = true

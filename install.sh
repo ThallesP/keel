@@ -252,6 +252,7 @@ migrate_convex() {
   convex_upgrade_pending || return 0
   if [ "${KEEL_SKIP_CONVEX_IMPORT:-}" = 1 ]; then
     log "KEEL_SKIP_CONVEX_IMPORT=1: starting without the Convex-era data"
+    rm -f "$KEEL_DIR/convex-import.json" # a skip after an earlier import is still reported
     rm -f "$KEEL_DIR/convex-import.pending"
     convex_not_imported
     return 0
@@ -303,6 +304,8 @@ migrate_convex() {
 # open), the Convex data is not in it. Says so on every run.
 recheck_convex_data() {
   [ "$CONVEX_IMPORT_NEEDED" = false ] && [ "$CONVEX_IMPORT" = null ] || return 0
+  # An import already ran into this database: an empty one (nobody had signed up) leaves sign-up open.
+  [ ! -f "$KEEL_DIR/convex-import.json" ] || return 0
   docker volume inspect "$CONVEX_VOLUME" >/dev/null 2>&1 || return 0
   if curl -fsS "$SITE_URL/api/auth/sign-up-open" 2>/dev/null | grep -E '"open"[[:space:]]*:[[:space:]]*true' >/dev/null; then
     convex_not_imported
@@ -386,8 +389,13 @@ main() {
   if [ "$CONVEX_IMPORT_NEEDED" = true ]; then
     printf '\033[1mThe data of the Convex-based Keel is not imported:\033[0m it stays in the Docker volume\n%s (see the warning above). Keep that volume.\n' "$CONVEX_VOLUME" >&2
   elif [ "$CONVEX_IMPORT" != null ]; then
-    printf '\033[1mThe data of the Convex-based Keel is imported\033[0m (report: %s).\nSign in to the dashboard again; CLI logins keep working. Once the dashboard shows\neverything, remove what the old control plane left behind:\n  sudo rm -r %s %s\n  sudo docker volume rm %s\n' \
-      "$KEEL_DIR/convex-import.json" "$KEEL_DIR/convex-export" "$KEEL_DIR/compose.convex.yml" "$CONVEX_VOLUME" >&2
+    # The report's users count: none means the old install had no account yet, so sign up.
+    next_step='Sign in to the dashboard again; CLI logins keep working.'
+    if [[ "$CONVEX_IMPORT" != *'"users":'* ]] || [[ "$CONVEX_IMPORT" == *'"users": 0'* ]]; then
+      next_step='It had no account yet: open the dashboard and sign up.'
+    fi
+    printf '\033[1mThe data of the Convex-based Keel is imported\033[0m (report: %s).\n%s Once the dashboard shows\neverything, remove what the old control plane left behind:\n  sudo rm -r %s %s\n  sudo docker volume rm %s\n' \
+      "$KEEL_DIR/convex-import.json" "$next_step" "$KEEL_DIR/convex-export" "$KEEL_DIR/compose.convex.yml" "$CONVEX_VOLUME" >&2
   else
     printf 'Open the dashboard from any device on your tailnet and sign up.\n' >&2
   fi

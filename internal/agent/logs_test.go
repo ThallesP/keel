@@ -205,7 +205,7 @@ func TestShipperBatchesOf500(t *testing.T) {
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, state, _ := newTestShipper(t, d, ss)
-	s.flushEvery = time.Hour // only the 500-line threshold and Flush send
+	s.flushEvery = time.Hour                                        // only the 500-line threshold and Flush send
 	state.Checkpoint([]resumePoint{{c.ID, "1704067200.000000001"}}) // exited, undelivered: pending
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
@@ -272,7 +272,10 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	key := sinkKey(sinkA)
-	waitFor(t, func() bool { q := s.queued(); return q[key] == 3 && q[key+" draining"] == 0 && len(ss.get(sinkA).sent()) > 0 })
+	waitFor(t, func() bool {
+		q := s.queued()
+		return q[key] == 3 && q[key+" draining"] == 0 && len(ss.get(sinkA).sent()) > 0
+	})
 
 	s.ApplyConfig(nil)
 	if q := s.queued(); len(q) != 0 {

@@ -1,7 +1,9 @@
 // Package mesh is how `keel agent` reaches the control plane. By default over the host's network:
 // Swarm already needs the host's tailscaled, so KEEL_URL is reachable from every node. Opt-in:
-// with KEEL_TS_AUTHKEY set (and a binary built with -tags tsnet), through an embedded, ephemeral
-// Tailscale node named keel-agent-<hostname> whose state lives in a temporary directory.
+// with KEEL_TS_AUTHKEY set, through an embedded, ephemeral Tailscale node (tsnet) named
+// keel-agent-<hostname> whose state lives in a temporary directory. tsnet adds about 20 MB to the
+// binary (measured: 20.7 → 41.2 MB, 14.0 → 28.2 MB stripped), under the 40 MB that would have put
+// it behind a build tag.
 package mesh
 
 import (
@@ -13,8 +15,8 @@ import (
 
 // Options configure Open.
 type Options struct {
-	AuthKey  string                          // KEEL_TS_AUTHKEY; "" = host network
-	Hostname string                          // this machine's name; "" = os.Hostname()
+	AuthKey  string                           // KEEL_TS_AUTHKEY; "" = host network
+	Hostname string                           // this machine's name; "" = os.Hostname()
 	Logf     func(format string, args ...any) // one-line notices (may be nil)
 }
 
@@ -39,8 +41,7 @@ func OptionsFromEnv(logf func(format string, args ...any)) Options {
 	return Options{AuthKey: strings.TrimSpace(os.Getenv("KEEL_TS_AUTHKEY")), Logf: logf}
 }
 
-// Open returns the client: through tsnet when an auth key is set and tsnet is compiled in, else
-// http.DefaultTransport.
+// Open returns the client: through tsnet when an auth key is set, else http.DefaultTransport.
 func Open(ctx context.Context, opts Options) (*Mesh, error) {
 	if opts.AuthKey == "" {
 		return direct(), nil

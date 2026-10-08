@@ -1,4 +1,3 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,16 +7,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@my-better-t-app/ui/components/dropdown-menu";
-import { useQuery } from "convex/react";
 import { useState } from "react";
 
 import { InviteDialog } from "@/components/invite-dialog";
-import { authClient } from "@/lib/auth-client";
+import { useAuth, useSession } from "@/lib/session";
+
+import { attempt } from "./errors";
 
 /** Topbar avatar. Signing out flips the `_auth` gate back to the sign-in form. */
 export function AccountMenu() {
-  const user = useQuery(api.auth.getCurrentUser);
-  const organization = useQuery(api.organizations.current);
+  const { user, organization } = useSession();
+  const auth = useAuth();
   const [inviting, setInviting] = useState(false);
   return (
     <>
@@ -41,14 +41,18 @@ export function AccountMenu() {
             {organization && (
               <DropdownMenuItem onClick={() => setInviting(true)}>Invite people…</DropdownMenuItem>
             )}
-            <DropdownMenuItem variant="destructive" onClick={() => void authClient.signOut()}>
+            <DropdownMenuItem variant="destructive" onClick={() => void attempt(auth.signOut())}>
               Sign out
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
       {organization && (
-        <InviteDialog open={inviting} onOpenChange={setInviting} organizationId={organization.id} />
+        // TODO(merge): drop `organizationId` once invite-dialog.tsx takes the organization from
+        // the session (web-data.md B5). Spread, so this compiles on either side of that change.
+        <InviteDialog
+          {...{ open: inviting, onOpenChange: setInviting, organizationId: organization.id }}
+        />
       )}
     </>
   );

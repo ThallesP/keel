@@ -1,17 +1,15 @@
-import type { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
+import type { Deployment as ApiDeployment, NodeView } from "@/api/types";
 
 import { formatClock } from "./format";
 import type { CanvasNode, Deployment, Endpoint, RuntimeData } from "./types";
 
-// Convex docs → the UI's own types (types.ts stays the source of truth for components).
+// API answers → the UI's own types (types.ts stays the source of truth for components).
 
-export type NodeDoc = FunctionReturnType<typeof api.nodes.list>[number];
-export type DeploymentDoc = NonNullable<FunctionReturnType<typeof api.deployments.latest>>;
-
-/** React Flow ids are strings; every node id on the canvas is a Convex id. */
-export const asNodeId = (id: string) => id as Id<"nodes">;
+/**
+ * @deprecated Ids are plain strings now; pass them as they are. Kept (an identity) only so files
+ * still migrating keep compiling; delete once nothing imports it.
+ */
+export const asNodeId = (id: string): string => id;
 
 const ENGINE_NAMES: Record<string, string> = {
   postgres: "Postgres",
@@ -29,7 +27,7 @@ export function engineLabel(image: string | undefined, fallback: string): string
   return tag && tag !== "latest" ? `${pretty} ${tag}` : pretty;
 }
 
-function runtime(n: NodeDoc): RuntimeData {
+function runtime(n: NodeView): RuntimeData {
   return {
     name: n.name,
     status: n.status,
@@ -42,7 +40,7 @@ function runtime(n: NodeDoc): RuntimeData {
     stoppedAt: n.stoppedAt,
     finishedAt: n.finishedAt,
     public: n.public,
-    endpoints: n.endpoints,
+    endpoints: n.endpoints ?? [],
   };
 }
 
@@ -55,18 +53,18 @@ function bestHttp(endpoints: Endpoint[]) {
     .sort((a, b) => RANK[a.state] - RANK[b.state])[0];
 }
 
-export function toCanvasNode(n: NodeDoc): CanvasNode {
+export function toCanvasNode(n: NodeView): CanvasNode {
   const base = {
-    id: n.id as string,
+    id: n.id,
     position: n.position,
-    ...(n.parentId ? { parentId: n.parentId as string, extent: "parent" as const } : {}),
+    ...(n.parentId ? { parentId: n.parentId, extent: "parent" as const } : {}),
   };
   switch (n.type) {
     case "service":
       return {
         ...base,
         type: "service",
-        data: { ...runtime(n), http: bestHttp(n.endpoints) },
+        data: { ...runtime(n), http: bestHttp(n.endpoints ?? []) },
       };
     case "database":
       return {
@@ -97,30 +95,31 @@ export function toCanvasNode(n: NodeDoc): CanvasNode {
 }
 
 /** Parents must precede children for React Flow to resolve `parentId`. */
-export function toCanvasNodes(docs: NodeDoc[]): CanvasNode[] {
-  const groups = docs.filter((d) => d.type === "group");
-  const rest = docs.filter((d) => d.type !== "group");
+export function toCanvasNodes(nodes: NodeView[]): CanvasNode[] {
+  const groups = nodes.filter((n) => n.type === "group");
+  const rest = nodes.filter((n) => n.type !== "group");
   return [...groups, ...rest].map(toCanvasNode);
 }
 
-export function toDeployment(d: DeploymentDoc): Deployment {
-  const nameOf = new Map(d.steps.map((s) => [s.nodeId, s.label]));
-  const multi = d.steps.filter((s) => s.nodeId).length > 1;
+export function toDeployment(d: ApiDeployment): Deployment {
+  const steps = d.steps ?? [];
+  const nameOf = new Map(steps.map((s) => [s.nodeId, s.label]));
+  const multi = steps.filter((s) => s.nodeId).length > 1;
   return {
-    id: d._id,
+    id: d.id,
     sha: d.sha,
     message: d.message,
     status: d.status,
     startedAt: d.startedAt,
     finishedAt: d.finishedAt,
-    steps: d.steps.map((s) => ({
+    steps: steps.map((s) => ({
       nodeId: s.nodeId ?? "",
       label: s.label,
       status: s.status,
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
     })),
-    log: d.log.map((l) => {
+    log: (d.log ?? []).map((l) => {
       const who = multi && l.nodeId ? `${nameOf.get(l.nodeId) ?? "?"}  ` : "";
       return `${formatClock(l.at - d.startedAt)}  ${who}${l.text}`;
     }),

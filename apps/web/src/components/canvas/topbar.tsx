@@ -1,9 +1,8 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
+import { useListNodes } from "@/api/gen";
 import { Logo } from "@/components/logo";
 
 import { AccountMenu } from "./account-menu";
@@ -21,8 +20,8 @@ function ShipButton() {
   const { environmentId } = useEnvironment();
   const summary = useSummary();
   const deployment = useLatestDeployment();
-  // Shared with the canvas subscription; no extra round-trip.
-  const nodes = useQuery(api.nodes.list, { environmentId });
+  // Shared with the canvas's query (same key); no extra round-trip.
+  const { data: nodeList } = useListNodes({ path: { id: environmentId } });
   const actions = useCanvasActions();
   const now = useNow();
 
@@ -32,12 +31,12 @@ function ShipButton() {
   // asking for it would fail with "Nothing to ship" every time; once none is left the button
   // is a plain Ship again, which takes every node with pending changes.
   const retry = useMemo(() => {
-    if (deployment?.status !== "failed" || !nodes) return [];
-    const alive = new Set<string>(nodes.map((n) => n.id));
+    if (deployment?.status !== "failed" || !nodeList) return [];
+    const alive = new Set((nodeList.nodes ?? []).map((n) => n.id));
     return deployment.steps
       .filter((s) => s.status === "failed" && alive.has(s.nodeId))
       .map((s) => s.nodeId);
-  }, [deployment, nodes]);
+  }, [deployment, nodeList]);
   const failed = retry.length > 0;
   const ship = useCallback(() => {
     if (running) return;

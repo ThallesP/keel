@@ -68,8 +68,8 @@ var Engines = map[Engine]EngineSpec{
 	EngineRedis:    {Type: NodeCache, Image: "redis:7", Port: 6379},
 }
 
-// imageRepo: `ghcr.io/acme/api:1.2@sha256:…` → `api` (the JS split("@")[0].split("/").pop().split(":")[0]).
-func imageRepo(image string) string {
+// canvasImageRepo: `ghcr.io/acme/api:1.2@sha256:…` → `api` (the JS split("@")[0].split("/").pop().split(":")[0]).
+func canvasImageRepo(image string) string {
 	s, _, _ := strings.Cut(image, "@")
 	if i := strings.LastIndexByte(s, '/'); i >= 0 {
 		s = s[i+1:]
@@ -84,26 +84,26 @@ func EngineOf(image string) Engine {
 	if image == "" {
 		return ""
 	}
-	e := Engine(imageRepo(image))
+	e := Engine(canvasImageRepo(image))
 	if _, ok := Engines[e]; ok {
 		return e
 	}
 	return ""
 }
 
-// secretAlphabet has no l, o, I, O, 0 or 1.
-const secretAlphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+// canvasSecretAlphabet has no l, o, I, O, 0 or 1.
+const canvasSecretAlphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-// RandomSecret is n characters drawn uniformly from secretAlphabet with crypto/rand.
+// RandomSecret is n characters drawn uniformly from canvasSecretAlphabet with crypto/rand.
 func RandomSecret(n int) string {
-	max := big.NewInt(int64(len(secretAlphabet)))
+	max := big.NewInt(int64(len(canvasSecretAlphabet)))
 	b := make([]byte, n)
 	for i := range b {
 		k, err := rand.Int(rand.Reader, max)
 		if err != nil {
 			panic(err) // crypto/rand never fails on supported platforms
 		}
-		b[i] = secretAlphabet[k.Int64()]
+		b[i] = canvasSecretAlphabet[k.Int64()]
 	}
 	return string(b)
 }
@@ -148,12 +148,12 @@ func UniqueName(base string, taken map[string]bool) string {
 	}
 }
 
-var nonName = regexp.MustCompile(`[^a-z0-9-]+`)
+var canvasNonName = regexp.MustCompile(`[^a-z0-9-]+`)
 
 // NameFromImage: `ghcr.io/acme/api-server:1.2` → `api-server`; fallback when nothing is left.
 // Trimmed of leading/trailing `-` before the 40-char cut, so it may end in `-` (as in TS).
 func NameFromImage(image, fallback string) string {
-	s := nonName.ReplaceAllString(strings.ToLower(imageRepo(image)), "-")
+	s := canvasNonName.ReplaceAllString(strings.ToLower(canvasImageRepo(image)), "-")
 	s = strings.Trim(s, "-")
 	if len(s) > MaxNameLen {
 		s = s[:MaxNameLen]
@@ -192,7 +192,7 @@ func NextPosition(nodes []Node) Position {
 
 // PortNumber validates a JSON number as a port (JS Number.isInteger: 80.0 is fine, 80.5 is not).
 func PortNumber(p *float64) (*int, error) {
-	v, ok := intNumber(p, 1, 65535)
+	v, ok := canvasIntNumber(p, 1, 65535)
 	if !ok {
 		return nil, Invalid("Port must be 1–65535")
 	}
@@ -201,14 +201,14 @@ func PortNumber(p *float64) (*int, error) {
 
 // ReplicasNumber validates a JSON number as a replica count.
 func ReplicasNumber(r *float64) (*int, error) {
-	v, ok := intNumber(r, 0, 20)
+	v, ok := canvasIntNumber(r, 0, 20)
 	if !ok {
 		return nil, Invalid("Replicas must be 0–20")
 	}
 	return v, nil
 }
 
-func intNumber(p *float64, lo, hi int) (*int, bool) {
+func canvasIntNumber(p *float64, lo, hi int) (*int, bool) {
 	if p == nil {
 		return nil, true
 	}

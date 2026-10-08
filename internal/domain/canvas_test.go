@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestEngineOf(t *testing.T) {
+func TestCanvasEngineOf(t *testing.T) {
 	cases := map[string]Engine{
 		"postgres:16":                 EnginePostgres,
 		"docker.io/library/mysql:8.4": EngineMySQL,
@@ -25,7 +25,7 @@ func TestEngineOf(t *testing.T) {
 	}
 }
 
-func TestNameFromImage(t *testing.T) {
+func TestCanvasNameFromImage(t *testing.T) {
 	long := strings.Repeat("a", 45)
 	cases := []struct{ image, want string }{
 		{"ghcr.io/acme/api-server:1.2", "api-server"},
@@ -44,7 +44,7 @@ func TestNameFromImage(t *testing.T) {
 	}
 }
 
-func TestUniqueName(t *testing.T) {
+func TestCanvasUniqueName(t *testing.T) {
 	taken := map[string]bool{"api": true, "api-2": true, "web": true}
 	cases := []struct{ base, want string }{
 		{"db", "db"},
@@ -69,7 +69,7 @@ func TestUniqueName(t *testing.T) {
 	}
 }
 
-func TestNextPosition(t *testing.T) {
+func TestCanvasNextPosition(t *testing.T) {
 	w := 500.0
 	cases := []struct {
 		name  string
@@ -89,7 +89,7 @@ func TestNextPosition(t *testing.T) {
 	}
 }
 
-func TestPortAndReplicasNumbers(t *testing.T) {
+func TestCanvasPortAndReplicasNumbers(t *testing.T) {
 	f := func(v float64) *float64 { return &v }
 	ports := []struct {
 		in *float64
@@ -122,7 +122,7 @@ func TestPortAndReplicasNumbers(t *testing.T) {
 	}
 }
 
-func TestSeedVariables(t *testing.T) {
+func TestCanvasSeedVariables(t *testing.T) {
 	keys := func(e Engine) (out []string) {
 		for _, v := range SeedVariables(e) {
 			out = append(out, v.Key)
@@ -152,7 +152,7 @@ func TestSeedVariables(t *testing.T) {
 	}
 }
 
-func TestRandomSecret(t *testing.T) {
+func TestCanvasRandomSecret(t *testing.T) {
 	seen := map[rune]bool{}
 	for range 200 {
 		s := RandomSecret(20)
@@ -160,7 +160,7 @@ func TestRandomSecret(t *testing.T) {
 			t.Fatalf("len %d", len(s))
 		}
 		for _, r := range s {
-			if !strings.ContainsRune(secretAlphabet, r) {
+			if !strings.ContainsRune(canvasSecretAlphabet, r) {
 				t.Fatalf("%q outside the alphabet", r)
 			}
 			seen[r] = true
@@ -176,7 +176,7 @@ func TestRandomSecret(t *testing.T) {
 	}
 }
 
-func TestUTF16LenAndTrimJS(t *testing.T) {
+func TestCanvasUTF16LenAndTrimJS(t *testing.T) {
 	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, "a😀b": 4}
 	for in, want := range cases {
 		if got := UTF16Len(in); got != want {
@@ -196,7 +196,7 @@ func TestUTF16LenAndTrimJS(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig(t *testing.T) {
+func TestCanvasDefaultConfig(t *testing.T) {
 	if c := DefaultConfig(NodeVolume); c.SizeGb == nil || *c.SizeGb != 10 || c.Width != nil {
 		t.Errorf("volume config %+v", c)
 	}

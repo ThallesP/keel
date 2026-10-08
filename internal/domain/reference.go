@@ -10,11 +10,11 @@ import (
 // environment, by name) or `${{ POSTGRES_USER }}` (the row's own node). They resolve at apply time,
 // so every ship sees current values (docs/go/spec/projects.md §5). Owner: the canvas area.
 
-// jsSpace is ECMAScript `\s` (RE2's `\s` is ASCII only and lacks \v).
-const jsSpace = `[\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]*`
+// canvasJSSpace is ECMAScript `\s` (RE2's `\s` is ASCII only and lacks \v).
+const canvasJSSpace = `[\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]*`
 
-// refRE is convex/variables.ts REF_RE.
-var refRE = regexp.MustCompile(`\$\{\{` + jsSpace + `(?:([a-z0-9-]{1,40})\.)?([A-Z_][A-Z0-9_]{0,63})` + jsSpace + `\}\}`)
+// canvasRefRE is convex/variables.ts REF_RE.
+var canvasRefRE = regexp.MustCompile(`\$\{\{` + canvasJSSpace + `(?:([a-z0-9-]{1,40})\.)?([A-Z_][A-Z0-9_]{0,63})` + canvasJSSpace + `\}\}`)
 
 // MaxRefDepth guards reference chains (a → b → a): anything deeper resolves to "".
 const MaxRefDepth = 5
@@ -27,7 +27,7 @@ type RefMatch struct {
 
 // FindRefs: every reference in value, left to right, non-overlapping.
 func FindRefs(value string) []RefMatch {
-	idx := refRE.FindAllStringSubmatchIndex(value, -1)
+	idx := canvasRefRE.FindAllStringSubmatchIndex(value, -1)
 	out := make([]RefMatch, 0, len(idx))
 	for _, m := range idx {
 		r := RefMatch{Start: m[0], End: m[1], Key: value[m[4]:m[5]]}
@@ -39,8 +39,8 @@ func FindRefs(value string) []RefMatch {
 	return out
 }
 
-// pointsAt: does a reference found in a row of rowNodeID name node?
-func pointsAt(name, rowNodeID string, node Node) bool {
+// canvasPointsAt: does a reference found in a row of rowNodeID name node?
+func canvasPointsAt(name, rowNodeID string, node Node) bool {
 	if name == "" {
 		return rowNodeID == node.ID
 	}
@@ -61,7 +61,7 @@ func RewriteRefs(value, rowNodeID string, node Node, to func(oldKey string) (nam
 	for _, m := range refs {
 		b.WriteString(value[last:m.Start])
 		last = m.End
-		if !pointsAt(m.Name, rowNodeID, node) {
+		if !canvasPointsAt(m.Name, rowNodeID, node) {
 			b.WriteString(value[m.Start:m.End])
 			continue
 		}

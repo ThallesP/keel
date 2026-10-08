@@ -23,10 +23,10 @@ var export = map[string]string{
 	"environments/documents.jsonl": `{"_id":"e1","_creationTime":22,"projectId":"p1","name":"production","isProduction":true}`,
 	"nodes/documents.jsonl": `{"_id":"child","_creationTime":30,"environmentId":"e1","type":"service","name":"api","parentId":"grp","position":{"x":1.5,"y":2},"config":{},"desired":{"image":"nginx:1","revision":2,"replicas":1,"port":80},"observed":{"revision":2,"running":1,"state":"ok","nodeIds":["sw1"],"at":40},"endpoints":[{"protocol":"http","port":80,"domain":"api.example.com","status":{"state":"live","at":41}}],"dirty":true,"shippedAt":35}
 {"_id":"grp","_creationTime":31,"environmentId":"e1","type":"group","name":"g","position":{"x":0,"y":0},"config":{"width":400,"height":300}}`,
-	"variables/documents.jsonl":   `{"_id":"v1","_creationTime":32,"nodeId":"child","key":"PORT","value":"80","secret":false}`,
-	"deployments/documents.jsonl": `{"_id":"d1","_creationTime":33,"environmentId":"e1","message":"ship api","status":"success","startedAt":34,"finishedAt":36,"steps":[{"nodeId":"child","label":"api","status":"done","startedAt":34,"appliedAt":35,"finishedAt":36},{"label":"health checks","status":"done"}],"log":[{"at":35,"nodeId":"child","text":"pulled nginx:1 in 1.0s"}]}`,
-	"logSinks/documents.jsonl":    `{"_id":"ls1","_creationTime":50,"projectId":"p1","sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel-logs","token":"xaat-1"}}`,
-	"otlpKeys/documents.jsonl":    `{"_id":"k1","_creationTime":51,"environmentId":"e1","key":"keel_otlp_abc"}`,
+	"variables/documents.jsonl":    `{"_id":"v1","_creationTime":32,"nodeId":"child","key":"PORT","value":"80","secret":false}`,
+	"deployments/documents.jsonl":  `{"_id":"d1","_creationTime":33,"environmentId":"e1","message":"ship api","status":"success","startedAt":34,"finishedAt":36,"steps":[{"nodeId":"child","label":"api","status":"done","startedAt":34,"appliedAt":35,"finishedAt":36},{"label":"health checks","status":"done"}],"log":[{"at":35,"nodeId":"child","text":"pulled nginx:1 in 1.0s"}]}`,
+	"logSinks/documents.jsonl":     `{"_id":"ls1","_creationTime":50,"projectId":"p1","sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel-logs","token":"xaat-1"}}`,
+	"otlpKeys/documents.jsonl":     `{"_id":"k1","_creationTime":51,"environmentId":"e1","key":"keel_otlp_abc"}`,
 	"axiomPending/documents.jsonl": `{"_id":"x","_creationTime":52,"organizationId":"o1","token":"t","orgs":[]}`,
 }
 

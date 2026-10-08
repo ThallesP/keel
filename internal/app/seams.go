@@ -22,7 +22,7 @@ func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[s
 // Owner: foundation (the list); areas (their parts).
 func (a *App) Recover(ctx context.Context) {
 	for _, fn := range []func(context.Context){a.recoverDeploy, a.recoverIngress, a.recoverObservability} {
-		fn(ctx)
+		a.recoverPart(ctx, fn) // a panicking part does not skip the next (platform_recover.go)
 	}
 }
 

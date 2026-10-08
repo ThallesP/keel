@@ -64,7 +64,7 @@ func (o *JSONObject) Keys() []string {
 	}
 	var index, other []string
 	for _, k := range o.keys {
-		if _, ok := arrayIndex(k); ok {
+		if _, ok := jsArrayIndex(k); ok {
 			index = append(index, k)
 		} else {
 			other = append(other, k)
@@ -74,15 +74,15 @@ func (o *JSONObject) Keys() []string {
 		return other
 	}
 	sort.Slice(index, func(i, j int) bool {
-		a, _ := arrayIndex(index[i])
-		b, _ := arrayIndex(index[j])
+		a, _ := jsArrayIndex(index[i])
+		b, _ := jsArrayIndex(index[j])
 		return a < b
 	})
 	return append(index, other...)
 }
 
-// arrayIndex: k is a canonical array index ("0", "17"; not "01", not ≥ 2^32-1).
-func arrayIndex(k string) (int, bool) {
+// jsArrayIndex: k is a canonical array index ("0", "17"; not "01", not ≥ 2^32-1).
+func jsArrayIndex(k string) (int, bool) {
 	if k == "" || len(k) > 10 || (len(k) > 1 && k[0] == '0') {
 		return 0, false
 	}
@@ -174,7 +174,7 @@ func jsGet(obj any, key string) (any, bool) {
 		if key == "length" {
 			return float64(len(o)), true
 		}
-		if i, ok := arrayIndex(key); ok && i < len(o) {
+		if i, ok := jsArrayIndex(key); ok && i < len(o) {
 			return o[i], true
 		}
 	}
@@ -321,8 +321,8 @@ func toLowerASCII(c rune) rune {
 	return c
 }
 
-// num is the providers' num(): a number as is, else Number(x) || 0.
-func num(v any) float64 {
+// jsNum is the providers' num(): a number as is, else Number(x) || 0.
+func jsNum(v any) float64 {
 	if f, ok := v.(float64); ok {
 		return f
 	}
@@ -474,8 +474,8 @@ func jsEncodeURIComponent(s string) string {
 	return b.String()
 }
 
-// formEncode is URLSearchParams.toString(): application/x-www-form-urlencoded, keys in order.
-func formEncode(pairs [][2]string) string {
+// jsFormEncode is URLSearchParams.toString(): application/x-www-form-urlencoded, keys in order.
+func jsFormEncode(pairs [][2]string) string {
 	const hex = "0123456789ABCDEF"
 	enc := func(b *strings.Builder, s string) {
 		for i := 0; i < len(s); i++ {
@@ -507,15 +507,15 @@ func formEncode(pairs [][2]string) string {
 // ── Collation ────────────────────────────────────────────────────────────────────────────────
 
 var (
-	collatorMu sync.Mutex
-	collator   = collate.New(language.English)
+	jsCollatorMu sync.Mutex
+	jsCollator   = collate.New(language.English)
 )
 
 // localeCompare is a.localeCompare(b) (ICU root/English collation).
 func localeCompare(a, b string) int {
-	collatorMu.Lock()
-	defer collatorMu.Unlock()
-	return collator.CompareString(a, b)
+	jsCollatorMu.Lock()
+	defer jsCollatorMu.Unlock()
+	return jsCollator.CompareString(a, b)
 }
 
 // ── Dates ────────────────────────────────────────────────────────────────────────────────────
@@ -574,23 +574,23 @@ func jsDateParse(s string) (float64, bool) {
 	return float64(t), true
 }
 
-var subMsRE = regexp.MustCompile(`\.[0-9]{3}([0-9]+)`)
+var jsSubMsRE = regexp.MustCompile(`\.[0-9]{3}([0-9]+)`)
 
-// preciseTime is Date.parse plus the sub-millisecond digits of the stamp; unparseable → 0.
-func preciseTime(v any) float64 {
+// axiomPreciseTime is Date.parse plus the sub-millisecond digits of the stamp; unparseable → 0.
+func axiomPreciseTime(v any) float64 {
 	iso := jsString(v)
 	ms, ok := jsDateParse(iso)
 	if !ok {
 		return 0
 	}
-	if m := subMsRE.FindStringSubmatch(iso); m != nil {
+	if m := jsSubMsRE.FindStringSubmatch(iso); m != nil {
 		frac, _ := strconv.ParseFloat("0."+m[1], 64)
 		return ms + frac
 	}
 	return ms
 }
 
-// isoTime is new Date(ms).toISOString() (the time value truncated toward zero).
-func isoTime(ms float64) string {
+// jsISOTime is new Date(ms).toISOString() (the time value truncated toward zero).
+func jsISOTime(ms float64) string {
 	return time.UnixMilli(int64(math.Trunc(ms))).UTC().Format("2006-01-02T15:04:05.000Z")
 }

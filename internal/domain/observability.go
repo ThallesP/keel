@@ -42,13 +42,13 @@ const (
 	DatasetTraces = "keel-traces"
 )
 
-var datasetRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
+var axiomDatasetRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // ValidDataset: Axiom dataset names (letters, digits, - _ .; not starting with . or -).
-func ValidDataset(name string) bool { return datasetRE.MatchString(name) }
+func ValidDataset(name string) bool { return axiomDatasetRE.MatchString(name) }
 
 // TokenHint is "…" + the token's last 4 characters: all the UI ever sees of a sink token.
-func TokenHint(token string) string { return "…" + lastChars(token, 4) }
+func TokenHint(token string) string { return "…" + obsLastChars(token, 4) }
 
 // OTLPKeyPrefix starts every OTLP relay ingest key.
 const OTLPKeyPrefix = "keel_otlp_"
@@ -59,11 +59,11 @@ func MaskOTLPKey(key string) string {
 	if key == "" {
 		return OTLPKeyPrefix + "…"
 	}
-	return OTLPKeyPrefix + "…" + lastChars(key, 4)
+	return OTLPKeyPrefix + "…" + obsLastChars(key, 4)
 }
 
-// lastChars is JS s.slice(-n) for the ASCII strings tokens are.
-func lastChars(s string, n int) string {
+// obsLastChars is JS s.slice(-n) for the ASCII strings tokens are.
+func obsLastChars(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
 		return s
@@ -90,33 +90,33 @@ type RangeSpec struct {
 	BinMs int64
 }
 
-const minuteMs, hourMs = 60_000, 3_600_000
+const rangeMinuteMs, rangeHourMs = 60_000, 3_600_000
 
-var ranges = map[TimeRange]RangeSpec{
-	Range15m: {Ms: 15 * minuteMs, Bin: "30s", BinMs: 30_000},
-	Range1h:  {Ms: hourMs, Bin: "2m", BinMs: 2 * minuteMs},
-	Range24h: {Ms: 24 * hourMs, Bin: "1h", BinMs: hourMs},
-	Range7d:  {Ms: 7 * 24 * hourMs, Bin: "6h", BinMs: 6 * hourMs},
+var timeRanges = map[TimeRange]RangeSpec{
+	Range15m: {Ms: 15 * rangeMinuteMs, Bin: "30s", BinMs: 30_000},
+	Range1h:  {Ms: rangeHourMs, Bin: "2m", BinMs: 2 * rangeMinuteMs},
+	Range24h: {Ms: 24 * rangeHourMs, Bin: "1h", BinMs: rangeHourMs},
+	Range7d:  {Ms: 7 * 24 * rangeHourMs, Bin: "6h", BinMs: 6 * rangeHourMs},
 }
 
 // Spec is the range's spec; ok=false for an unknown range.
 func (r TimeRange) Spec() (RangeSpec, bool) {
-	s, ok := ranges[r]
+	s, ok := timeRanges[r]
 	return s, ok
 }
 
-func (r TimeRange) Valid() bool { _, ok := ranges[r]; return ok }
+func (r TimeRange) Valid() bool { _, ok := timeRanges[r]; return ok }
 
 // RangeWindow is the window a range covers, aligned like APL's bin(): count buckets, the last
 // one holding now (timeRange.ts rangeWindow).
 func RangeWindow(r TimeRange, now int64) (from, to int64, count int) {
-	s := ranges[r]
+	s := timeRanges[r]
 	count = int(math.Round(float64(s.Ms) / float64(s.BinMs)))
-	from = floorDiv(now, s.BinMs)*s.BinMs - int64(count-1)*s.BinMs
+	from = rangeFloorDiv(now, s.BinMs)*s.BinMs - int64(count-1)*s.BinMs
 	return from, from + int64(count)*s.BinMs, count
 }
 
-func floorDiv(a, b int64) int64 {
+func rangeFloorDiv(a, b int64) int64 {
 	q := a / b
 	if (a%b != 0) && ((a < 0) != (b < 0)) {
 		q--

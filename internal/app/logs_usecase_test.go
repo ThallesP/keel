@@ -10,7 +10,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func frame(stream byte, text string) []byte {
+func obsFrame(stream byte, text string) []byte {
 	n := len(text)
 	return append([]byte{stream, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}, text...)
 }
@@ -18,13 +18,13 @@ func frame(stream byte, text string) []byte {
 func TestTailNodeLogsFromDocker(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
-	logs := &fakeLogReader{
+	logs := &obsFakeLogReader{
 		found: true,
-		body:  append(frame(1, "2026-10-08T12:00:01.000000001Z com.docker.swarm.task.id=t2 b\n"), frame(2, "2026-10-08T12:00:00Z com.docker.swarm.task.id=t1 a\n")...),
+		body:  append(obsFrame(1, "2026-10-08T12:00:01.000000001Z com.docker.swarm.task.id=t2 b\n"), obsFrame(2, "2026-10-08T12:00:00Z com.docker.swarm.task.id=t1 a\n")...),
 		tasks: []app.SwarmTask{{ID: "t2", Slot: 2, State: "running"}, {ID: "t1", Slot: 1, State: "shutdown"}, {ID: "t0", Slot: 1}},
 	}
 	e.app.Logs = logs
-	tail, err := e.app.TailNodeLogs(ctx, e.member, nodeAPI, 5000)
+	tail, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 5000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,24 +35,24 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 		},
 		Replicas: []domain.LogReplica{{Task: "t0", Slot: 1, State: "unknown"}, {Task: "t1", Slot: 1, State: "shutdown"}, {Task: "t2", Slot: 2, State: "running"}},
 	}
-	if !reflect.DeepEqual(tail, want) || logs.service != "svc-"+nodeAPI || logs.tail != 1000 {
+	if !reflect.DeepEqual(tail, want) || logs.service != "svc-"+obsNodeAPI || logs.tail != 1000 {
 		t.Fatalf("tail %+v (service %s, tail %d)", tail, logs.service, logs.tail)
 	}
 
 	// Task listing failures only drop the replicas; a missing service is an empty tail.
 	logs.tasksErr = errors.New("boom")
-	tail, _ = e.app.TailNodeLogs(ctx, e.member, nodeAPI, 200)
+	tail, _ = e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200)
 	if len(tail.Replicas) != 0 || len(tail.Lines) != 2 {
 		t.Fatalf("tasks error: %+v", tail)
 	}
 	logs.found, logs.body = false, nil
-	tail, err = e.app.TailNodeLogs(ctx, e.member, nodeVolume, 200)
+	tail, err = e.app.TailNodeLogs(ctx, e.member, obsNodeVolume, 200)
 	if err != nil || tail.Source != "docker" || tail.Lines == nil || tail.Replicas == nil || len(tail.Lines)+len(tail.Replicas) != 0 {
 		t.Fatalf("missing service: %+v %v", tail, err)
 	}
 	// Docker failures are server errors (not wrapped), as before.
 	logs.err = errors.New("socket gone")
-	if _, err := e.app.TailNodeLogs(ctx, e.member, nodeAPI, 200); err == nil || domain.CodeOf(err) != domain.CodeServerError {
+	if _, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200); err == nil || domain.CodeOf(err) != domain.CodeServerError {
 		t.Fatalf("docker error: %v", err)
 	}
 }
@@ -62,77 +62,77 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 func TestObservabilityIsScopedToTheOrganization(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
-	e.app.Axiom = &fakeAxiom{}
-	e.app.Logs = &fakeLogReader{found: true}
-	e.setSink(t, "org", tracesOn)
+	e.app.Axiom = &obsFakeAxiom{}
+	e.app.Logs = &obsFakeLogReader{found: true}
+	e.setSink(t, "org", obsTracesOn)
 	f := e.foreigner
 
-	_, err := e.app.TailNodeLogs(ctx, f, nodeAPI, 100)
-	wantCode(t, err, domain.CodeServiceNotFound, "Node not found")
+	_, err := e.app.TailNodeLogs(ctx, f, obsNodeAPI, 100)
+	obsWantCode(t, err, domain.CodeServiceNotFound, "Node not found")
 	_, err = e.app.EnvironmentLogs(ctx, f, "env", "", 300, "")
-	wantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
+	obsWantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
 	_, err = e.app.LogsAround(ctx, f, "env", 1)
-	wantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
+	obsWantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
 	_, err = e.app.TraceOverview(ctx, f, "env", domain.Range1h, "", "")
-	wantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
+	obsWantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
 	_, err = e.app.GetTrace(ctx, f, "env", "4bf92f3577b34da6a3ce929d0e0e4736", 0)
-	wantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
+	obsWantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
 	_, err = e.app.TracesAround(ctx, f, "env", 1)
-	wantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
-	wantCode(t, e.app.SetNodeTracing(ctx, f, nodeAPI, true), domain.CodeServiceNotFound, "Node not found")
-	if v, _ := e.app.NodeTracing(ctx, f, nodeAPI); v != nil {
+	obsWantCode(t, err, domain.CodeProjectNotFound, "Environment not found")
+	obsWantCode(t, e.app.SetNodeTracing(ctx, f, obsNodeAPI, true), domain.CodeServiceNotFound, "Node not found")
+	if v, _ := e.app.NodeTracing(ctx, f, obsNodeAPI); v != nil {
 		t.Fatal("foreign tracing view")
 	}
-	if n := e.node(t, nodeAPI); n.Desired.Tracing || n.Dirty {
+	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || n.Dirty {
 		t.Fatal("a foreign member changed the node")
 	}
 	// The foreign organization has no sink of its own: its own environment says so.
 	_, err = e.app.TraceOverview(ctx, f, "env2", domain.Range1h, "", "")
-	wantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
+	obsWantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
 	// Our own nodeId filter cannot reach into another environment.
-	_, err = e.app.TraceOverview(ctx, e.member, "env", domain.Range1h, "", nodeForeign)
-	wantCode(t, err, domain.CodeServiceNotFound, "Node not found")
+	_, err = e.app.TraceOverview(ctx, e.member, "env", domain.Range1h, "", obsNodeForeign)
+	obsWantCode(t, err, domain.CodeServiceNotFound, "Node not found")
 	// Signed out.
-	_, err = e.app.TailNodeLogs(ctx, e.signedOut, nodeAPI, 100)
-	wantCode(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	_, err = e.app.TailNodeLogs(ctx, e.signedOut, obsNodeAPI, 100)
+	obsWantCode(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 	_, err = e.app.EnvironmentLogs(ctx, e.signedOut, "env", "", 300, "")
-	wantCode(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	obsWantCode(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 }
 
 func TestLogsAndTracesNeedAStore(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
-	e.app.Axiom = &fakeAxiom{}
+	e.app.Axiom = &obsFakeAxiom{}
 	_, err := e.app.EnvironmentLogs(ctx, e.member, "env", "", 300, domain.Range1h)
-	wantCode(t, err, domain.CodeInvalidInput, "Connect Axiom to search all logs")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Connect Axiom to search all logs")
 	_, err = e.app.LogsAround(ctx, e.member, "env", 5)
-	wantCode(t, err, domain.CodeInvalidInput, "Connect Axiom to search all logs")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Connect Axiom to search all logs")
 	_, err = e.app.TracesAround(ctx, e.member, "env", 5)
-	wantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
+	obsWantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
 	// "Not a trace id" is checked before anything else.
 	_, err = e.app.GetTrace(ctx, e.signedOut, "missing", "xyz", 0)
-	wantCode(t, err, domain.CodeInvalidInput, "Not a trace id")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Not a trace id")
 
-	old := tracesOn
+	old := obsTracesOn
 	old.Traces = ""
 	e.setSink(t, "org", old)
 	_, err = e.app.TraceOverview(ctx, e.member, "env", domain.Range15m, "", "")
-	wantCode(t, err, domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
+	obsWantCode(t, err, domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
 	around, err := e.app.TracesAround(ctx, e.member, "env", 5)
 	if err != nil || around == nil || len(around) != 0 {
 		t.Fatalf("around on an old sink: %v %v", around, err)
 	}
 	_, err = e.app.TraceOverview(ctx, e.member, "env", "2d", "", "")
-	wantCode(t, err, domain.CodeInvalidInput, "Range must be one of 15m, 1h, 24h, 7d")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Range must be one of 15m, 1h, 24h, 7d")
 }
 
 func TestEnvironmentWithoutServicesQueriesNothing(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_791_460_812_345)
-	ax := &fakeAxiom{}
+	ax := &obsFakeAxiom{}
 	e.app.Axiom = ax
 	e.exec(t, `DELETE FROM nodes WHERE environment_id = 'env' AND type != 'volume'`)
-	e.setSink(t, "org", tracesOn)
+	e.setSink(t, "org", obsTracesOn)
 	o, err := e.app.TraceOverview(ctx, e.member, "env", domain.Range15m, "", "")
 	if err != nil {
 		t.Fatal(err)

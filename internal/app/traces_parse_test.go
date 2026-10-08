@@ -42,7 +42,7 @@ func loadScenarioFiles(t *testing.T) (fixture struct {
 	return fixture, golden
 }
 
-func jsonEqual(t *testing.T, got any, want json.RawMessage) bool {
+func obsJSONEqual(t *testing.T, got any, want json.RawMessage) bool {
 	t.Helper()
 	gb, err := json.Marshal(got)
 	if err != nil {
@@ -61,8 +61,8 @@ func TestSpanOfMatchesTypeScript(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got := spanOf(v.(*JSONObject))
-		if !jsonEqual(t, got, golden.Spans[i]) {
+		got := axiomSpanOf(v.(*JSONObject))
+		if !obsJSONEqual(t, got, golden.Spans[i]) {
 			gb, _ := json.MarshalIndent(got, "", " ")
 			t.Errorf("span row %d\n got: %s\nwant: %s", i, gb, golden.Spans[i])
 		}
@@ -92,7 +92,7 @@ func TestDemuxMatchesTypeScript(t *testing.T) {
 		if golden.Demux[i].Name != d.Name {
 			t.Fatalf("golden out of order")
 		}
-		if !jsonEqual(t, got, golden.Demux[i].Lines) {
+		if !obsJSONEqual(t, got, golden.Demux[i].Lines) {
 			gb, _ := json.Marshal(got)
 			t.Errorf("%s\n got: %s\nwant: %s", d.Name, gb, golden.Demux[i].Lines)
 		}
@@ -140,18 +140,18 @@ func TestDurationAndTime(t *testing.T) {
 		{nil, 0},
 	}
 	for _, c := range times {
-		if got := timeOf(c.in); got != c.want {
+		if got := axiomTimeOf(c.in); got != c.want {
 			t.Errorf("timeOf(%v) = %v, want %v", c.in, got, c.want)
 		}
 	}
 	for in, want := range map[any]string{"SPAN_KIND_SERVER": "server", "Client": "client", "span_kind_unspecified": "", "unspecified": "", nil: "", float64(3): "3"} {
-		if got := kindOf(in); got != want {
+		if got := spanKindOf(in); got != want {
 			t.Errorf("kindOf(%v) = %q, want %q", in, got, want)
 		}
 	}
 }
 
-func TestPick(t *testing.T) {
+func TestRowPick(t *testing.T) {
 	v, _ := DecodeJSON([]byte(`{"a.b":1,"a":{"b":2,"c":{"d":3}},"x":null,"x.y":4,"l":[{"k":5}]}`))
 	row := v.(*JSONObject)
 	cases := []struct {
@@ -168,17 +168,17 @@ func TestPick(t *testing.T) {
 		{".a", nil, false},
 	}
 	for _, c := range cases {
-		got, ok := pick(row, c.path)
+		got, ok := rowPick(row, c.path)
 		if ok != c.ok || !reflect.DeepEqual(got, c.want) {
 			t.Errorf("pick(%q) = %v, %v; want %v, %v", c.path, got, ok, c.want, c.ok)
 		}
 	}
 	// A present null ends the search: "n.y" is not looked for in "n" once "n.y" is null.
 	v, _ = DecodeJSON([]byte(`{"n.y":null,"n":{"y":1}}`))
-	if got, ok := pick(v, "n.y"); !ok || got != nil {
+	if got, ok := rowPick(v, "n.y"); !ok || got != nil {
 		t.Errorf("present null: %v %v", got, ok)
 	}
-	if _, ok := pick("str", "a"); ok {
+	if _, ok := rowPick("str", "a"); ok {
 		t.Error("pick on a string")
 	}
 }

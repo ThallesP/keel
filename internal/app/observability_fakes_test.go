@@ -9,9 +9,9 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// fakeAxiom is an in-memory app.Axiom. Errors are injected per method; every call is recorded
+// obsFakeAxiom is an in-memory app.Axiom. Errors are injected per method; every call is recorded
 // as a short line ("Query keel-logs <apl>", "CreateDataset org=o1 keel-logs", …).
-type fakeAxiom struct {
+type obsFakeAxiom struct {
 	mu    sync.Mutex
 	calls []string
 
@@ -35,13 +35,13 @@ type fakeAxiom struct {
 	forwardErr  error
 }
 
-func (f *fakeAxiom) record(format string, args ...any) {
+func (f *obsFakeAxiom) record(format string, args ...any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, fmt.Sprintf(format, args...))
 }
 
-func (f *fakeAxiom) take() []string {
+func (f *obsFakeAxiom) take() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := f.calls
@@ -49,7 +49,7 @@ func (f *fakeAxiom) take() []string {
 	return out
 }
 
-func (f *fakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]*app.JSONObject, error) {
+func (f *obsFakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]*app.JSONObject, error) {
 	f.record("Query %s %s %s", t.Domain, t.Token, q.APL)
 	if f.queryErr != nil {
 		if err := f.queryErr(t, q); err != nil {
@@ -59,47 +59,47 @@ func (f *fakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery
 	return f.queryRows, nil
 }
 
-func (f *fakeAxiom) CreateDataset(_ context.Context, t app.AxiomTarget, orgID, name, description string) error {
+func (f *obsFakeAxiom) CreateDataset(_ context.Context, t app.AxiomTarget, orgID, name, description string) error {
 	f.record("CreateDataset %s %s org=%s %s %q", t.Domain, t.Token, orgID, name, description)
 	return f.createErr[name]
 }
 
-func (f *fakeAxiom) Datasets(_ context.Context, t app.AxiomTarget, orgID string) ([]app.AxiomDataset, error) {
+func (f *obsFakeAxiom) Datasets(_ context.Context, t app.AxiomTarget, orgID string) ([]app.AxiomDataset, error) {
 	f.record("Datasets %s %s org=%s", t.Domain, t.Token, orgID)
 	return f.datasets, f.datasetsErr
 }
 
-func (f *fakeAxiom) MintToken(_ context.Context, t app.AxiomTarget, orgID string, req app.AxiomTokenRequest) (string, error) {
+func (f *obsFakeAxiom) MintToken(_ context.Context, t app.AxiomTarget, orgID string, req app.AxiomTokenRequest) (string, error) {
 	f.record("MintToken %s %s org=%s %s [%s]", t.Domain, t.Token, orgID, req.Name, strings.Join(req.Datasets, ","))
 	f.mintReq = req
 	return f.minted, f.mintErr
 }
 
-func (f *fakeAxiom) Orgs(_ context.Context, t app.AxiomTarget) ([]app.AxiomOrgInfo, error) {
+func (f *obsFakeAxiom) Orgs(_ context.Context, t app.AxiomTarget) ([]app.AxiomOrgInfo, error) {
 	f.record("Orgs %s %s", t.Domain, t.Token)
 	return f.orgs, f.orgsErr
 }
 
-func (f *fakeAxiom) RegisterClient(_ context.Context, authURL, redirectURI string) (string, error) {
+func (f *obsFakeAxiom) RegisterClient(_ context.Context, authURL, redirectURI string) (string, error) {
 	f.record("RegisterClient %s %s", authURL, redirectURI)
 	return f.clientID, f.registerErr
 }
 
-func (f *fakeAxiom) ExchangeCode(_ context.Context, authURL string, x app.AxiomCodeExchange) (string, error) {
+func (f *obsFakeAxiom) ExchangeCode(_ context.Context, authURL string, x app.AxiomCodeExchange) (string, error) {
 	f.record("ExchangeCode %s %s", authURL, x.Code)
 	f.exchanged = x
 	return f.token, f.exchangeErr
 }
 
-func (f *fakeAxiom) ForwardTraces(_ context.Context, fw app.OTLPForward) (app.HTTPReply, error) {
+func (f *obsFakeAxiom) ForwardTraces(_ context.Context, fw app.OTLPForward) (app.HTTPReply, error) {
 	f.mu.Lock()
 	f.forwarded = append(f.forwarded, fw)
 	f.mu.Unlock()
 	return f.forwardRes, f.forwardErr
 }
 
-// fakeLogReader is an in-memory app.LogReader.
-type fakeLogReader struct {
+// obsFakeLogReader is an in-memory app.LogReader.
+type obsFakeLogReader struct {
 	body     []byte
 	found    bool
 	err      error
@@ -109,11 +109,11 @@ type fakeLogReader struct {
 	tail     int
 }
 
-func (r *fakeLogReader) ReadServiceLogs(_ context.Context, service string, tail int) ([]byte, bool, error) {
+func (r *obsFakeLogReader) ReadServiceLogs(_ context.Context, service string, tail int) ([]byte, bool, error) {
 	r.service, r.tail = service, tail
 	return r.body, r.found, r.err
 }
 
-func (r *fakeLogReader) ListLogReplicas(context.Context, string) ([]app.SwarmTask, error) {
+func (r *obsFakeLogReader) ListLogReplicas(context.Context, string) ([]app.SwarmTask, error) {
 	return r.tasks, r.tasksErr
 }

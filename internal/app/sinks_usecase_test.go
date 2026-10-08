@@ -14,10 +14,10 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func strp(s string) *string   { return &s }
-func f64p(f float64) *float64 { return &f }
+func obsStrp(s string) *string   { return &s }
+func obsF64p(f float64) *float64 { return &f }
 
-func sinkOfOrg(t *testing.T, e *obsEnv, org string) *app.SinkRecord {
+func obsSinkOfOrg(t *testing.T, e *obsEnv, org string) *app.SinkRecord {
 	t.Helper()
 	var rec *app.SinkRecord
 	err := e.store.Read(context.Background(), func(tx app.Tx) error {
@@ -49,7 +49,7 @@ func TestLogSinkViewAndDisconnect(t *testing.T) {
 	if !reflect.DeepEqual(v, want) {
 		t.Fatalf("view %+v", v)
 	}
-	e.setSink(t, "org", tracesOnWithOrg())
+	e.setSink(t, "org", obsTracesOnWithOrg())
 	v, _ = e.app.LogSink(ctx, e.member)
 	if v.Traces == nil || *v.Traces != "keel-traces" || v.Org == nil || *v.Org != "Acme Inc" {
 		t.Fatalf("traces/org: %+v", v)
@@ -64,25 +64,25 @@ func TestLogSinkViewAndDisconnect(t *testing.T) {
 	if err := e.app.DisconnectLogSink(ctx, e.foreigner); err != nil {
 		t.Fatal(err)
 	}
-	if sinkOfOrg(t, e, "org") == nil {
+	if obsSinkOfOrg(t, e, "org") == nil {
 		t.Fatal("a foreign disconnect removed the sink")
 	}
 	e.pub.take("org")
 	if err := e.app.DisconnectLogSink(ctx, e.member); err != nil {
 		t.Fatal(err)
 	}
-	if sinkOfOrg(t, e, "org") != nil {
+	if obsSinkOfOrg(t, e, "org") != nil {
 		t.Fatal("still connected")
 	}
 	if got := e.pub.take("org"); !reflect.DeepEqual(got, []string{"/api/nodes", "/api/organization"}) {
 		t.Errorf("topics %v", got)
 	}
-	wantCode(t, e.app.DisconnectLogSink(ctx, domain.Actor{UserID: "u3"}), domain.CodeNoOrganization, domain.MsgNoOrganization)
-	wantCode(t, e.app.DisconnectLogSink(ctx, e.signedOut), domain.CodeNotAuthenticated, "Not authenticated")
+	obsWantCode(t, e.app.DisconnectLogSink(ctx, domain.Actor{UserID: "u3"}), domain.CodeNoOrganization, domain.MsgNoOrganization)
+	obsWantCode(t, e.app.DisconnectLogSink(ctx, e.signedOut), domain.CodeNotAuthenticated, "Not authenticated")
 }
 
-func tracesOnWithOrg() domain.LogSink {
-	s := tracesOn
+func obsTracesOnWithOrg() domain.LogSink {
+	s := obsTracesOn
 	s.Org = "Acme Inc"
 	return s
 }
@@ -90,24 +90,24 @@ func tracesOnWithOrg() domain.LogSink {
 func TestConnectAxiom(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 7_000)
-	ax := &fakeAxiom{}
+	ax := &obsFakeAxiom{}
 	e.app.Axiom = ax
 	connect := func(domainName, dataset string, traces *string, token string) error {
 		_, _, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: domainName, Dataset: dataset, Traces: traces, Token: token})
 		return err
 	}
-	wantCode(t, connect("evil.example.com", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
-	wantCode(t, connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
-	wantCode(t, connect("api.axiom.co", "-logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
-	wantCode(t, connect("api.axiom.co", "logs", strp(""), "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
-	wantCode(t, connect("api.axiom.co", "logs", nil, "  short  "), domain.CodeInvalidInput, "That does not look like an Axiom API token")
+	obsWantCode(t, connect("evil.example.com", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
+	obsWantCode(t, connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
+	obsWantCode(t, connect("api.axiom.co", "-logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
+	obsWantCode(t, connect("api.axiom.co", "logs", obsStrp(""), "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
+	obsWantCode(t, connect("api.axiom.co", "logs", nil, "  short  "), domain.CodeInvalidInput, "That does not look like an Axiom API token")
 	if len(ax.take()) != 0 {
 		t.Fatal("Axiom was called before validation passed")
 	}
 
 	// A 409 on create is fine; the query proves the token.
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 409, Detail: "dataset exists"}}
-	dataset, traces, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Traces: strp("spans"), Token: "  xaat-12345678  "})
+	dataset, traces, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Traces: obsStrp("spans"), Token: "  xaat-12345678  "})
 	if err != nil || dataset != "logs" || traces == nil || *traces != "spans" {
 		t.Fatalf("connect: %s %v %v", dataset, traces, err)
 	}
@@ -118,17 +118,17 @@ func TestConnectAxiom(t *testing.T) {
 		!strings.HasPrefix(calls[3], "Query api.axiom.co xaat-12345678 ['spans'] | limit 1") {
 		t.Fatalf("calls %q", calls)
 	}
-	rec := sinkOfOrg(t, e, "org")
+	rec := obsSinkOfOrg(t, e, "org")
 	if rec == nil || rec.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "logs", Traces: "spans", Token: "xaat-12345678"}) || rec.ConnectedAt != 7_000 {
 		t.Fatalf("saved %+v", rec)
 	}
 
 	// 403 on create is the token's fault; 400/500 are left to the query.
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 403, Detail: "forbidden"}}
-	wantCode(t, connect("api.axiom.co", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Axiom 403: forbidden")
+	obsWantCode(t, connect("api.axiom.co", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Axiom 403: forbidden")
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 500}}
 	ax.queryErr = func(app.AxiomTarget, app.AxiomQuery) error { return &app.AxiomError{Status: 401, Detail: "bad token"} }
-	wantCode(t, connect("api.axiom.co", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Axiom 401: bad token")
+	obsWantCode(t, connect("api.axiom.co", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Axiom 401: bad token")
 	ax.queryErr = nil
 	ax.createErr = nil
 
@@ -137,26 +137,26 @@ func TestConnectAxiom(t *testing.T) {
 	if err := connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := sinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" || rec.Sink.Traces != "" {
+	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" || rec.Sink.Traces != "" {
 		t.Fatalf("local sink %+v", rec.Sink)
 	}
 	_, _, err = e.app.ConnectAxiom(ctx, domain.Actor{UserID: "u3"}, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Token: "xaat-12345678"})
-	wantCode(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
+	obsWantCode(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }
 
 func TestBeginAxiomSignIn(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 10_000)
-	ax := &fakeAxiom{clientID: "client-1"}
+	ax := &obsFakeAxiom{clientID: "client-1"}
 	e.app.Axiom = ax
 	const redirect = "https://keel.example.ts.net/axiom/callback"
 
 	for _, bad := range []string{"not a url", "ftp://x/axiom/callback", "https://x/axiom/callback/", "https://x/other", "/axiom/callback", "https://x"} {
 		_, err := e.app.BeginAxiomSignIn(ctx, e.member, bad)
-		wantCode(t, err, domain.CodeInvalidInput, "Bad redirect URI")
+		obsWantCode(t, err, domain.CodeInvalidInput, "Bad redirect URI")
 	}
 	_, err := e.app.BeginAxiomSignIn(ctx, domain.Actor{UserID: "u3"}, redirect)
-	wantCode(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
+	obsWantCode(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 	if len(ax.take()) != 0 {
 		t.Fatal("DCR for a caller without an organization")
 	}
@@ -202,15 +202,15 @@ func TestBeginAxiomSignIn(t *testing.T) {
 	}
 
 	// DCR refused.
-	ax.clientID, ax.registerErr = "", &app.OAuthError{Status: 400, Body: obj(t, `{"error":"invalid_redirect_uri","error_description":""}`)}
+	ax.clientID, ax.registerErr = "", &app.OAuthError{Status: 400, Body: obsObj(t, `{"error":"invalid_redirect_uri","error_description":""}`)}
 	_, err = e.app.BeginAxiomSignIn(ctx, e.member, "http://10.0.0.1/axiom/callback")
-	wantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: invalid_redirect_uri")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: invalid_redirect_uri")
 	ax.registerErr = &app.OAuthError{Status: 502}
 	_, err = e.app.BeginAxiomSignIn(ctx, e.member, "http://10.0.0.2/axiom/callback")
-	wantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: HTTP 502")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: HTTP 502")
 }
 
-func obj(t *testing.T, s string) *app.JSONObject {
+func obsObj(t *testing.T, s string) *app.JSONObject {
 	t.Helper()
 	v, err := app.DecodeJSON([]byte(s))
 	if err != nil {
@@ -219,13 +219,13 @@ func obj(t *testing.T, s string) *app.JSONObject {
 	return v.(*app.JSONObject)
 }
 
-// jwt is an unsigned JWT with the given claims.
-func jwt(claims string) string {
+// obsJWT is an unsigned JWT with the given claims.
+func obsJWT(claims string) string {
 	return "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".sig"
 }
 
-// startSignIn begins a sign-in and returns its state.
-func startSignIn(t *testing.T, e *obsEnv, actor domain.Actor) string {
+// obsStartSignIn begins a sign-in and returns its state.
+func obsStartSignIn(t *testing.T, e *obsEnv, actor domain.Actor) string {
 	t.Helper()
 	raw, err := e.app.BeginAxiomSignIn(context.Background(), actor, "https://keel.example.ts.net/axiom/callback")
 	if err != nil {
@@ -238,16 +238,16 @@ func startSignIn(t *testing.T, e *obsEnv, actor domain.Actor) string {
 func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 20_000)
-	ax := &fakeAxiom{clientID: "client-1", token: jwt(`{"aud":"mcp"}`), minted: "xaat-minted-ABCD",
-		orgs:     []app.AxiomOrgInfo{{ID: "acme-x1", Name: "Acme Axiom", DefaultEdgeDeployment: strp("cloud.eu-central-1.aws"), MaxDatasets: f64p(3)}},
+	ax := &obsFakeAxiom{clientID: "client-1", token: obsJWT(`{"aud":"mcp"}`), minted: "xaat-minted-ABCD",
+		orgs:     []app.AxiomOrgInfo{{ID: "acme-x1", Name: "Acme Axiom", DefaultEdgeDeployment: obsStrp("cloud.eu-central-1.aws"), MaxDatasets: obsF64p(3)}},
 		datasets: []app.AxiomDataset{{Name: "keel-logs"}, {Name: "otel-demo-traces", Shared: true}}}
 	e.app.Axiom = ax
-	state := startSignIn(t, e, e.member)
+	state := obsStartSignIn(t, e, e.member)
 	ax.take()
 
 	// Another organization cannot use this state, and its attempt does not burn it.
 	_, err := e.app.CompleteAxiomSignIn(ctx, e.foreigner, state, "code")
-	wantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
 	if e.count(t, `SELECT COUNT(*) FROM axiom_sign_ins WHERE state = ?`, state) != 1 {
 		t.Fatal("a foreign callback consumed the sign-in")
 	}
@@ -278,11 +278,11 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	if ax.mintReq.Description != "Keel: logs and traces go in, the control plane reads them back" {
 		t.Fatalf("token description %q", ax.mintReq.Description)
 	}
-	rec := sinkOfOrg(t, e, "org")
+	rec := obsSinkOfOrg(t, e, "org")
 	if rec.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.eu.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-minted-ABCD", Org: "Acme Axiom"}) {
 		t.Fatalf("sink %+v", rec.Sink)
 	}
-	if got := e.pub.take("org"); !contains(got, "/api/organization") || !contains(got, "/api/nodes") {
+	if got := e.pub.take("org"); !obsContains(got, "/api/organization") || !obsContains(got, "/api/nodes") {
 		t.Errorf("topics %v", got)
 	}
 	if e.count(t, `SELECT COUNT(*) FROM axiom_sign_ins`) != 0 {
@@ -290,54 +290,54 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	}
 	// Replayed callback.
 	_, err = e.app.CompleteAxiomSignIn(ctx, e.member, state, "the-code")
-	wantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
 }
 
 func TestCompleteAxiomSignInFailures(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 30_000)
-	ax := &fakeAxiom{clientID: "c", token: jwt(`{"aud":["a","b"]}`)}
+	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{"aud":["a","b"]}`)}
 	e.app.Axiom = ax
 	complete := func() error {
-		_, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code")
+		_, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 		return err
 	}
-	ax.exchangeErr = &app.OAuthError{Status: 400, Body: obj(t, `{"error":"invalid_grant","error_description":"code expired"}`)}
-	wantCode(t, complete(), domain.CodeInvalidInput, "Axiom sign-in failed: code expired")
+	ax.exchangeErr = &app.OAuthError{Status: 400, Body: obsObj(t, `{"error":"invalid_grant","error_description":"code expired"}`)}
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Axiom sign-in failed: code expired")
 	ax.exchangeErr = nil
 	ax.orgsErr = &app.AxiomError{Status: 401, Detail: "bad audience"}
-	wantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud ["a","b"])`)
+	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud ["a","b"])`)
 	ax.token = "opaque"
-	wantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud (not a JWT))`)
-	ax.token = jwt(`{}`)
-	wantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud null)`)
+	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud (not a JWT))`)
+	ax.token = obsJWT(`{}`)
+	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud null)`)
 	ax.orgsErr = nil
-	wantCode(t, complete(), domain.CodeInvalidInput, "This Axiom account has no organization")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "This Axiom account has no organization")
 
 	// Provisioning failures.
-	ax.orgs = []app.AxiomOrgInfo{{ID: "o1", Name: "Free Org", MaxDatasets: f64p(3)}}
+	ax.orgs = []app.AxiomOrgInfo{{ID: "o1", Name: "Free Org", MaxDatasets: obsF64p(3)}}
 	ax.datasetsErr = &app.AxiomError{Status: 403}
-	wantCode(t, complete(), domain.CodeInvalidInput, "Listing datasets: Axiom 403")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Listing datasets: Axiom 403")
 	ax.datasetsErr = nil
 	ax.datasets = []app.AxiomDataset{{Name: "a"}, {Name: "b"}, {Name: "c"}, {Name: "sample", Shared: true}}
 	ax.createErr = map[string]error{"keel-logs": &app.AxiomError{Status: 400, Detail: "Bad Request"}}
-	wantCode(t, complete(), domain.CodeInvalidInput,
+	obsWantCode(t, complete(), domain.CodeInvalidInput,
 		"Free Org is at its Axiom plan's limit of 3 datasets (a, b, c). Keel needs keel-logs and keel-traces: delete 2 in Axiom or pick another org. (Axiom 400: Bad Request)")
 	ax.datasets = []app.AxiomDataset{{Name: "a"}, {Name: "b"}}
 	ax.createErr = map[string]error{"keel-traces": &app.AxiomError{Status: 400, Detail: "Bad Request"}}
-	wantCode(t, complete(), domain.CodeInvalidInput,
+	obsWantCode(t, complete(), domain.CodeInvalidInput,
 		"Free Org is at its Axiom plan's limit of 3 datasets (a, b, keel-logs). Keel needs keel-traces: delete 1 in Axiom or pick another org. (Axiom 400: Bad Request)")
 	ax.datasets = nil
-	wantCode(t, complete(), domain.CodeInvalidInput, "Creating keel-traces: Axiom 400: Bad Request")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Creating keel-traces: Axiom 400: Bad Request")
 	ax.createErr = map[string]error{"keel-logs": &app.AxiomError{Status: 500, Detail: "oops"}}
 	ax.datasets = []app.AxiomDataset{{Name: "a"}, {Name: "b"}, {Name: "c"}}
-	wantCode(t, complete(), domain.CodeInvalidInput, "Creating keel-logs: Axiom 500: oops")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Creating keel-logs: Axiom 500: oops")
 	ax.createErr = nil
 	ax.datasets = []app.AxiomDataset{{Name: "keel-logs"}, {Name: "keel-traces"}}
 	ax.mintErr = &app.AxiomError{Status: 403, Detail: "no"}
-	wantCode(t, complete(), domain.CodeInvalidInput, "Minting the ingest token: Axiom 403: no")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Minting the ingest token: Axiom 403: no")
 	ax.mintErr = nil
-	wantCode(t, complete(), domain.CodeInvalidInput, "Axiom did not return a token")
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Axiom did not return a token")
 	ax.minted = "xaat-1"
 	ax.queryErr = func(_ app.AxiomTarget, q app.AxiomQuery) error {
 		if strings.Contains(q.APL, "keel-traces") {
@@ -345,36 +345,36 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 		}
 		return nil
 	}
-	wantCode(t, complete(), domain.CodeInvalidInput, "Querying keel-traces: Axiom 403: no read")
-	if sinkOfOrg(t, e, "org") != nil {
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Querying keel-traces: Axiom 403: no read")
+	if obsSinkOfOrg(t, e, "org") != nil {
 		t.Fatal("a failed sign-in saved a sink")
 	}
 
 	// Expired: 10 minutes after begin.
 	ax.queryErr = nil
-	state := startSignIn(t, e, e.member)
+	state := obsStartSignIn(t, e, e.member)
 	e.now += 10 * 60_000
 	_, err := e.app.CompleteAxiomSignIn(ctx, e.member, state, "code")
-	wantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
 }
 
 func TestAxiomOrgPick(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 40_000)
 	orgs := []app.AxiomOrgInfo{
-		{ID: "o1", Name: "One", Region: strp("us-east-1")},
-		{ID: "o2", Name: "Two", DefaultEdgeDeployment: strp(""), Region: strp("eu-west-1")},
+		{ID: "o1", Name: "One", Region: obsStrp("us-east-1")},
+		{ID: "o2", Name: "Two", DefaultEdgeDeployment: obsStrp(""), Region: obsStrp("eu-west-1")},
 	}
-	ax := &fakeAxiom{clientID: "c", token: jwt(`{"axiomDefaultOrg":"nope"}`), orgs: orgs, minted: "xaat-2"}
+	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{"axiomDefaultOrg":"nope"}`), orgs: orgs, minted: "xaat-2"}
 	e.app.Axiom = ax
 
 	// Several orgs and no usable claim: the pick waits.
 	e.pub.take("org")
-	res, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code")
+	res, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 	if err != nil || !res.Choose {
 		t.Fatalf("pending: %+v %v", res, err)
 	}
-	if got := e.pub.take("org"); !contains(got, "/api/organization") {
+	if got := e.pub.take("org"); !obsContains(got, "/api/organization") {
 		t.Errorf("topics %v", got)
 	}
 	choices, err := e.app.PendingAxiomOrgs(ctx, e.member)
@@ -386,15 +386,15 @@ func TestAxiomOrgPick(t *testing.T) {
 	}
 	// A foreign member cannot pick for us.
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.foreigner, "o1")
-	wantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 	// Unknown org id: the pick is consumed anyway.
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o9")
-	wantCode(t, err, domain.CodeNotFound, "Organization not found")
+	obsWantCode(t, err, domain.CodeNotFound, "Organization not found")
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
-	wantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 
 	// Again, and pick o2: "" edge deployment is used as is (not the region), so the US host.
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code"); err != nil {
+	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
 	ax.take()
@@ -402,7 +402,7 @@ func TestAxiomOrgPick(t *testing.T) {
 	if err != nil || dataset != "keel-logs" || org != "Two" {
 		t.Fatalf("choose: %s %s %v", dataset, org, err)
 	}
-	if rec := sinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.axiom.co" || rec.Sink.Org != "Two" {
+	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.axiom.co" || rec.Sink.Org != "Two" {
 		t.Fatalf("sink %+v", rec.Sink)
 	}
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.member); c != nil {
@@ -410,15 +410,15 @@ func TestAxiomOrgPick(t *testing.T) {
 	}
 
 	// The token's axiomDefaultOrg names a listed org: provisioned right away there.
-	ax.token = jwt(`{"axiomDefaultOrg":"o1"}`)
-	res, err = e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code")
+	ax.token = obsJWT(`{"axiomDefaultOrg":"o1"}`)
+	res, err = e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 	if err != nil || res.Choose || res.Org != "One" {
 		t.Fatalf("claimed org: %+v %v", res, err)
 	}
 
 	// Cancel drops a pending pick; expired picks are gone.
-	ax.token = jwt(`{}`)
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code"); err != nil {
+	ax.token = obsJWT(`{}`)
+	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.app.CancelAxiomSignIn(ctx, e.foreigner); err != nil {
@@ -433,7 +433,7 @@ func TestAxiomOrgPick(t *testing.T) {
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.member); c != nil {
 		t.Fatal("cancel kept the pick")
 	}
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code"); err != nil {
+	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
 	e.now += 10 * 60_000
@@ -441,28 +441,28 @@ func TestAxiomOrgPick(t *testing.T) {
 		t.Fatal("expired pick still listed")
 	}
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
-	wantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
+	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 }
 
 func TestAxiomAPIOverride(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 50_000)
-	ax := &fakeAxiom{clientID: "c", token: jwt(`{}`), orgs: []app.AxiomOrgInfo{{ID: "o1", Name: "Mock", Region: strp("eu-1")}}, minted: "xaat-3"}
+	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{}`), orgs: []app.AxiomOrgInfo{{ID: "o1", Name: "Mock", Region: obsStrp("eu-1")}}, minted: "xaat-3"}
 	e.app.Axiom = ax
 	// Without the flag the override is ignored.
 	e.app.Config.AxiomAPIURL = "http://127.0.0.1:4318"
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code"); err != nil {
+	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := sinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.eu.axiom.co" {
+	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.eu.axiom.co" {
 		t.Fatalf("domain %s", rec.Sink.Domain)
 	}
 	e.app.Config.AllowLocalSinks = true
 	ax.take()
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, startSignIn(t, e, e.member), "code"); err != nil {
+	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := sinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" {
+	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" {
 		t.Fatalf("domain %s", rec.Sink.Domain)
 	}
 	if calls := ax.take(); !strings.HasPrefix(calls[1], "Orgs http://127.0.0.1:4318 ") {

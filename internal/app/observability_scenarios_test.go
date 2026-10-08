@@ -24,7 +24,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-type scenarioRule struct {
+type obsScenarioRule struct {
 	Contains string   `json:"contains"`
 	Fields   []string `json:"fields"`
 	Rows     [][]any  `json:"rows"`
@@ -34,24 +34,24 @@ type scenarioRule struct {
 	Text     string   `json:"text"`
 }
 
-type scenario struct {
-	Name     string          `json:"name"`
-	Call     string          `json:"call"`
-	NoTraces bool            `json:"noTraces"`
-	Args     map[string]any  `json:"args"`
-	Rules    []scenarioRule  `json:"rules"`
-	Raw      json.RawMessage `json:"-"`
+type obsScenario struct {
+	Name     string            `json:"name"`
+	Call     string            `json:"call"`
+	NoTraces bool              `json:"noTraces"`
+	Args     map[string]any    `json:"args"`
+	Rules    []obsScenarioRule `json:"rules"`
+	Raw      json.RawMessage   `json:"-"`
 }
 
-type scenarioFixture struct {
+type obsScenarioFixture struct {
 	Now        int64             `json:"now"`
 	Sink       domain.LogSink    `json:"sink"`
 	ServiceIDs []string          `json:"serviceIds"`
 	SpanRows   []json.RawMessage `json:"spanRows"`
-	Scenarios  []scenario        `json:"scenarios"`
+	Scenarios  []obsScenario     `json:"scenarios"`
 }
 
-type goldenCall struct {
+type obsGoldenCall struct {
 	Method        string         `json:"method"`
 	Path          string         `json:"path"`
 	Authorization string         `json:"authorization"`
@@ -59,14 +59,14 @@ type goldenCall struct {
 	Body          map[string]any `json:"body"`
 }
 
-type goldenScenario struct {
+type obsGoldenScenario struct {
 	Name   string          `json:"name"`
 	Result json.RawMessage `json:"result"`
 	Error  *string         `json:"error"`
-	Calls  []goldenCall    `json:"calls"`
+	Calls  []obsGoldenCall `json:"calls"`
 }
 
-func readJSON(t *testing.T, path string, v any) {
+func obsReadJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -77,22 +77,22 @@ func readJSON(t *testing.T, path string, v any) {
 	}
 }
 
-// fakeAxiomAPL answers APL queries by the first rule whose `contains` is in the APL, and records
+// obsAPLServer answers APL queries by the first rule whose `contains` is in the APL, and records
 // every request.
-type fakeAxiomAPL struct {
+type obsAPLServer struct {
 	mu       sync.Mutex
-	rules    []scenarioRule
+	rules    []obsScenarioRule
 	spanRows []json.RawMessage
-	calls    []goldenCall
+	calls    []obsGoldenCall
 }
 
-func (f *fakeAxiomAPL) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (f *obsAPLServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
 	var body map[string]any
 	_ = json.Unmarshal(data, &body)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, goldenCall{
+	f.calls = append(f.calls, obsGoldenCall{
 		Method: r.Method, Path: r.URL.RequestURI(), Authorization: r.Header.Get("Authorization"),
 		ContentType: r.Header.Get("Content-Type"), Body: body,
 	})
@@ -113,7 +113,7 @@ func (f *fakeAxiomAPL) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // table builds Axiom's tabular answer (column-major) by hand, keeping the fixture's key order.
-func (f *fakeAxiomAPL) table(rule scenarioRule) []byte {
+func (f *obsAPLServer) table(rule obsScenarioRule) []byte {
 	if rule.NoTables {
 		return []byte(`{"tables":[]}`)
 	}
@@ -124,7 +124,7 @@ func (f *fakeAxiomAPL) table(rule scenarioRule) []byte {
 		fields = nil
 		for _, i := range rule.SpanRows {
 			raw := f.spanRows[i]
-			fields = appendKeys(fields, raw)
+			fields = obsAppendKeys(fields, raw)
 			var m map[string]json.RawMessage
 			_ = json.Unmarshal(raw, &m)
 			objs = append(objs, m)
@@ -177,8 +177,8 @@ func (f *fakeAxiomAPL) table(rule scenarioRule) []byte {
 	return []byte(b.String())
 }
 
-// appendKeys adds the object's keys, in document order, that fields lacks.
-func appendKeys(fields []string, raw json.RawMessage) []string {
+// obsAppendKeys adds the object's keys, in document order, that fields lacks.
+func obsAppendKeys(fields []string, raw json.RawMessage) []string {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	_, _ = dec.Token() // {
 	for dec.More() {
@@ -197,34 +197,34 @@ func appendKeys(fields []string, raw json.RawMessage) []string {
 	return fields
 }
 
-func (f *fakeAxiomAPL) reset(rules []scenarioRule) {
+func (f *obsAPLServer) reset(rules []obsScenarioRule) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.rules, f.calls = rules, nil
 }
 
-func (f *fakeAxiomAPL) sortedCalls() []goldenCall {
+func (f *obsAPLServer) sortedCalls() []obsGoldenCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := append([]goldenCall(nil), f.calls...)
+	out := append([]obsGoldenCall(nil), f.calls...)
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Body["apl"].(string) < out[j].Body["apl"].(string)
 	})
 	return out
 }
 
-func argFloat(args map[string]any, k string) float64 {
+func obsArgFloat(args map[string]any, k string) float64 {
 	f, _ := args[k].(float64)
 	return f
 }
 
-func argString(args map[string]any, k string) string {
+func obsArgString(args map[string]any, k string) string {
 	s, _ := args[k].(string)
 	return s
 }
 
-// asJSON normalizes v to what encoding/json decodes it to (numbers as float64).
-func asJSON(t *testing.T, v any) any {
+// obsAsJSON normalizes v to what encoding/json decodes it to (numbers as float64).
+func obsAsJSON(t *testing.T, v any) any {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -238,14 +238,14 @@ func asJSON(t *testing.T, v any) any {
 }
 
 func TestAxiomScenariosMatchTypeScript(t *testing.T) {
-	var fx scenarioFixture
-	readJSON(t, "testdata/axiom_scenarios.json", &fx)
+	var fx obsScenarioFixture
+	obsReadJSON(t, "testdata/axiom_scenarios.json", &fx)
 	var golden struct {
-		Scenarios []goldenScenario `json:"scenarios"`
+		Scenarios []obsGoldenScenario `json:"scenarios"`
 	}
-	readJSON(t, "testdata/axiom_scenarios.golden.json", &golden)
+	obsReadJSON(t, "testdata/axiom_scenarios.golden.json", &golden)
 
-	fake := &fakeAxiomAPL{spanRows: fx.SpanRows}
+	fake := &obsAPLServer{spanRows: fx.SpanRows}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
 
@@ -276,17 +276,17 @@ func TestAxiomScenariosMatchTypeScript(t *testing.T) {
 			a := s.Args
 			switch s.Call {
 			case "overview":
-				result, err = env.app.TraceOverview(ctx, actor, "env", domain.TimeRange(argString(a, "range")), argString(a, "search"), "")
+				result, err = env.app.TraceOverview(ctx, actor, "env", domain.TimeRange(obsArgString(a, "range")), obsArgString(a, "search"), "")
 			case "tail":
-				result, err = env.app.TailNodeLogs(ctx, actor, argString(a, "serviceId"), argFloat(a, "tail"))
+				result, err = env.app.TailNodeLogs(ctx, actor, obsArgString(a, "serviceId"), obsArgFloat(a, "tail"))
 			case "recent":
-				result, err = env.app.EnvironmentLogs(ctx, actor, "env", argString(a, "search"), argFloat(a, "tail"), domain.TimeRange(argString(a, "range")))
+				result, err = env.app.EnvironmentLogs(ctx, actor, "env", obsArgString(a, "search"), obsArgFloat(a, "tail"), domain.TimeRange(obsArgString(a, "range")))
 			case "around":
-				result, err = env.app.LogsAround(ctx, actor, "env", argFloat(a, "at"))
+				result, err = env.app.LogsAround(ctx, actor, "env", obsArgFloat(a, "at"))
 			case "get":
-				result, err = env.app.GetTrace(ctx, actor, "env", argString(a, "traceId"), argFloat(a, "at"))
+				result, err = env.app.GetTrace(ctx, actor, "env", obsArgString(a, "traceId"), obsArgFloat(a, "at"))
 			case "tracesAround":
-				result, err = env.app.TracesAround(ctx, actor, "env", argFloat(a, "at"))
+				result, err = env.app.TracesAround(ctx, actor, "env", obsArgFloat(a, "at"))
 			default:
 				t.Fatalf("unknown call %s", s.Call)
 			}
@@ -303,7 +303,7 @@ func TestAxiomScenariosMatchTypeScript(t *testing.T) {
 				}
 				var want any
 				_ = json.Unmarshal(g.Result, &want)
-				if got := asJSON(t, result); !reflect.DeepEqual(got, want) {
+				if got := obsAsJSON(t, result); !reflect.DeepEqual(got, want) {
 					gb, _ := json.MarshalIndent(got, "", " ")
 					wb, _ := json.MarshalIndent(want, "", " ")
 					t.Fatalf("result differs\n got: %s\nwant: %s", gb, wb)

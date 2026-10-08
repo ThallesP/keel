@@ -27,7 +27,7 @@ type axiomCfg struct {
 
 func (c axiomCfg) target() AxiomTarget { return AxiomTarget{Domain: c.Domain, Token: c.Token} }
 
-func logsCfg(s domain.LogSink) axiomCfg {
+func axiomLogsCfg(s domain.LogSink) axiomCfg {
 	return axiomCfg{Domain: s.Domain, Dataset: s.Dataset, Token: s.Token}
 }
 
@@ -59,10 +59,10 @@ func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, since fl
 	if until != nil {
 		end = *until
 	}
-	return a.Axiom.Query(ctx, cfg.target(), AxiomQuery{APL: apl, StartTime: isoTime(since), EndTime: isoTime(end)})
+	return a.Axiom.Query(ctx, cfg.target(), AxiomQuery{APL: apl, StartTime: jsISOTime(since), EndTime: jsISOTime(end)})
 }
 
-var invalidFieldRE = regexp.MustCompile(`Axiom 400.*invalid field`)
+var axiomInvalidFieldRE = regexp.MustCompile(`Axiom 400.*invalid field`)
 
 // axiomRows is tailQuery / spans: a dataset nothing reached yet has no fields and APL rejects
 // them with 400 "invalid field"; that is "no rows", not an error. since nil = now - 30 days.
@@ -73,7 +73,7 @@ func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, since, un
 	}
 	rows, err := a.axiomQuery(ctx, cfg, apl, from, until)
 	if err != nil {
-		if invalidFieldRE.MatchString(err.Error()) {
+		if axiomInvalidFieldRE.MatchString(err.Error()) {
 			return []*JSONObject{}, nil
 		}
 		return nil, err
@@ -81,11 +81,11 @@ func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, since, un
 	return rows, nil
 }
 
-func f64(x float64) *float64 { return &x }
+func obsF64(x float64) *float64 { return &x }
 
 var (
-	existsRE   = regexp.MustCompile(`(?i)exists|409`)
-	forbidenRE = regexp.MustCompile(`40[13]`)
+	axiomExistsRE  = regexp.MustCompile(`(?i)exists|409`)
+	axiomAuthErrRE = regexp.MustCompile(`40[13]`)
 )
 
 // axiomVerify is the connect-time check: the token can create/see the dataset and query it.
@@ -96,7 +96,7 @@ func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
 	err := a.Axiom.CreateDataset(ctx, cfg.target(), "", cfg.Dataset, "Keel container logs")
 	// 409 / "already exists" is the normal case on reconnect. Anything else but 401/403 is left
 	// to the query below, which proves access.
-	if err != nil && !existsRE.MatchString(err.Error()) && forbidenRE.MatchString(err.Error()) {
+	if err != nil && !axiomExistsRE.MatchString(err.Error()) && axiomAuthErrRE.MatchString(err.Error()) {
 		return err
 	}
 	return a.axiomCanQuery(ctx, cfg)
@@ -108,7 +108,7 @@ func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
 	return err
 }
 
-func streamOf(v any) string {
+func logStreamOf(v any) string {
 	if s, ok := v.(string); ok && s == "stderr" {
 		return "stderr"
 	}
@@ -130,7 +130,7 @@ func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n i
 		msg, _ := r.Get("message")
 		stream, _ := r.Get("stream")
 		task, _ := r.Get("task")
-		lines[len(rows)-1-i] = domain.ServiceLogLine{Time: ms, Text: jsString(msg), Stream: streamOf(stream), Task: jsString(task)}
+		lines[len(rows)-1-i] = domain.ServiceLogLine{Time: ms, Text: jsString(msg), Stream: logStreamOf(stream), Task: jsString(task)}
 	}
 	replicas := []domain.LogReplica{}
 	seen := map[string]bool{}
@@ -142,14 +142,14 @@ func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n i
 		}
 		seen[task] = true
 		rv, _ := r.Get("replica")
-		replicas = append(replicas, domain.LogReplica{Task: task, Slot: int(num(rv)), State: ""})
+		replicas = append(replicas, domain.LogReplica{Task: task, Slot: int(jsNum(rv)), State: ""})
 	}
-	sortReplicas(replicas)
+	sortLogReplicas(replicas)
 	return domain.LogTail{Source: domain.LogSourceAxiom, Lines: lines, Replicas: replicas}, nil
 }
 
-// sortReplicas: by slot, then task (localeCompare); stable.
-func sortReplicas(rs []domain.LogReplica) {
+// sortLogReplicas: by slot, then task (localeCompare); stable.
+func sortLogReplicas(rs []domain.LogReplica) {
 	sort.SliceStable(rs, func(i, j int) bool {
 		if rs[i].Slot != rs[j].Slot {
 			return rs[i].Slot < rs[j].Slot
@@ -202,7 +202,7 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 			at = len(rows) - 1 - i
 		}
 		lines[at] = domain.EnvironmentLogLine{
-			ServiceLogLine: domain.ServiceLogLine{Time: preciseTime(t), Text: jsString(msg), Stream: streamOf(stream), Task: jsString(task)},
+			ServiceLogLine: domain.ServiceLogLine{Time: axiomPreciseTime(t), Text: jsString(msg), Stream: logStreamOf(stream), Task: jsString(task)},
 			ServiceID:      jsString(sid),
 		}
 	}
@@ -229,9 +229,9 @@ func (a *App) axiomAPIOverride() string {
 	return ""
 }
 
-func base64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+func obsBase64URL(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
-func randomBytes(n int) []byte {
+func obsRandom(n int) []byte {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		panic(err) // crypto/rand never fails on supported platforms
@@ -239,31 +239,31 @@ func randomBytes(n int) []byte {
 	return b
 }
 
-// pkceChallenge is base64url(SHA-256(verifier)).
-func pkceChallenge(verifier string) string {
+// axiomPKCEChallenge is base64url(SHA-256(verifier)).
+func axiomPKCEChallenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
-	return base64url(sum[:])
+	return obsBase64URL(sum[:])
 }
 
 // axiomAuthorizeURL is a fresh PKCE verifier + state and the authorize URL (S256 challenge).
 func (a *App) axiomAuthorizeURL(clientID, redirectURI string) (state, verifier, url string) {
-	verifier = base64url(randomBytes(32))
-	state = base64url(randomBytes(16))
-	url = a.axiomAuthURL() + "/oauth2/authorize?" + formEncode([][2]string{
+	verifier = obsBase64URL(obsRandom(32))
+	state = obsBase64URL(obsRandom(16))
+	url = a.axiomAuthURL() + "/oauth2/authorize?" + jsFormEncode([][2]string{
 		{"client_id", clientID},
 		{"response_type", "code"},
 		{"redirect_uri", redirectURI},
 		{"scope", "openid profile email"},
 		{"state", state},
-		{"code_challenge", pkceChallenge(verifier)},
+		{"code_challenge", axiomPKCEChallenge(verifier)},
 		{"code_challenge_method", "S256"},
 	})
 	return state, verifier, url
 }
 
-// jwtClaims are a JWT's claims, unverified (the token came straight from Axiom's token
+// axiomJWTClaims are a JWT's claims, unverified (the token came straight from Axiom's token
 // endpoint); nil when it is not a JWT.
-func jwtClaims(token string) *JSONObject {
+func axiomJWTClaims(token string) *JSONObject {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
 		return nil
@@ -283,9 +283,9 @@ func jwtClaims(token string) *JSONObject {
 	return obj
 }
 
-// jwtAudience is JSON.stringify(aud ?? null) of the token, for error messages. Never the token.
-func jwtAudience(token string) string {
-	c := jwtClaims(token)
+// axiomJWTAudience is JSON.stringify(aud ?? null) of the token, for error messages. Never the token.
+func axiomJWTAudience(token string) string {
+	c := axiomJWTClaims(token)
 	if c == nil {
 		return "(not a JWT)"
 	}
@@ -296,7 +296,7 @@ func jwtAudience(token string) string {
 // axiomChosenOrg is the org picked on Axiom's consent page: the token's axiomDefaultOrg claim
 // (undocumented; an org id like ramp-vcrw), "" when absent.
 func axiomChosenOrg(token string) string {
-	if c := jwtClaims(token); c != nil {
+	if c := axiomJWTClaims(token); c != nil {
 		if v, ok := c.Get("axiomDefaultOrg"); ok {
 			if s, ok := v.(string); ok {
 				return s
@@ -306,7 +306,7 @@ func axiomChosenOrg(token string) string {
 	return ""
 }
 
-var euRE = regexp.MustCompile(`eu-`)
+var axiomEURE = regexp.MustCompile(`eu-`)
 
 // axiomOrgs is the orgs the personal token can see, each with the API host its data lives on.
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
@@ -319,7 +319,7 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 	if err != nil {
 		// The sign-in token is issued for Axiom's MCP server; if its API ever stops taking it,
 		// say so plainly instead of a bare 401.
-		return nil, errors.New(err.Error() + " (Axiom API rejected the sign-in token, aud " + jwtAudience(token) + ")")
+		return nil, errors.New(err.Error() + " (Axiom API rejected the sign-in token, aud " + axiomJWTAudience(token) + ")")
 	}
 	orgs := make([]domain.AxiomOrg, len(infos))
 	for i, o := range infos {
@@ -332,7 +332,7 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 				edge = *o.Region
 			}
 			d = domain.AxiomDomains[0]
-			if euRE.MatchString(edge) {
+			if axiomEURE.MatchString(edge) {
 				d = domain.AxiomDomains[1]
 			}
 		}

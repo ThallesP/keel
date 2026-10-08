@@ -12,8 +12,8 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// clampTail is min(max(1, floor(tail)), 1000).
-func clampTail(tail float64) int {
+// clampLogTail is min(max(1, floor(tail)), 1000).
+func clampLogTail(tail float64) int {
 	if math.IsNaN(tail) {
 		return 1
 	}
@@ -30,7 +30,7 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 		if err != nil {
 			return err
 		}
-		rec, err := sinkOf(tx, scope.Org)
+		rec, err := orgSinkOf(tx, scope.Org)
 		if err != nil {
 			return err
 		}
@@ -43,9 +43,9 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 	if err != nil {
 		return domain.LogTail{}, err
 	}
-	n := clampTail(tail)
+	n := clampLogTail(tail)
 	if sink != nil && sink.Kind == domain.SinkKindAxiom {
-		return a.axiomTail(ctx, logsCfg(*sink), nodeID, n)
+		return a.axiomTail(ctx, axiomLogsCfg(*sink), nodeID, n)
 	}
 	return a.dockerTail(ctx, nodeID, n)
 }
@@ -64,23 +64,23 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
 		return domain.EnvironmentLogs{}, domain.Invalid(msgNoLogStore)
 	}
-	q := linesQuery{N: clampTail(tail), Search: jsSlice(search, 200)}
+	q := linesQuery{N: clampLogTail(tail), Search: jsSlice(search, 200)}
 	if rng != "" {
 		// The same bucket-aligned start as the trace overview, so lines and requests cover one window.
 		from, _, _ := domain.RangeWindow(rng, a.Now())
-		q.From = f64(float64(from))
+		q.From = obsF64(float64(from))
 	}
-	lines, err := a.axiomLines(ctx, logsCfg(*scope.Sink), scope.ServiceIDs, q)
+	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, q)
 	if err != nil {
 		return domain.EnvironmentLogs{}, obsInvalid(err)
 	}
 	return domain.EnvironmentLogs{Source: domain.LogSourceAxiom, Lines: lines}, nil
 }
 
-const aroundMs = 30_000
+const logsAroundMs = 30_000
 
-// validMoment: `at` must be a finite epoch ms (a JSON number never is NaN; a query string can be).
-func validMoment(at float64) error {
+// validLogMoment: `at` must be a finite epoch ms (a JSON number never is NaN; a query string can be).
+func validLogMoment(at float64) error {
 	if math.IsNaN(at) || math.IsInf(at, 0) {
 		return domain.Invalid("at: not a time")
 	}
@@ -90,7 +90,7 @@ func validMoment(at float64) error {
 // LogsAround is every service's lines within 30 s either side of at, oldest first: the context
 // of a log line that names no trace. Axiom only.
 func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID string, at float64) ([]domain.EnvironmentLogLine, error) {
-	if err := validMoment(at); err != nil {
+	if err := validLogMoment(at); err != nil {
 		return nil, err
 	}
 	scope, err := a.envSinkScope(ctx, actor, environmentID)
@@ -100,8 +100,8 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
 		return nil, domain.Invalid(msgNoLogStore)
 	}
-	lines, err := a.axiomLines(ctx, logsCfg(*scope.Sink), scope.ServiceIDs, linesQuery{
-		N: 500, From: f64(at - aroundMs), To: f64(at + aroundMs), OldestFirst: true,
+	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, linesQuery{
+		N: 500, From: obsF64(at - logsAroundMs), To: obsF64(at + logsAroundMs), OldestFirst: true,
 	})
 	if err != nil {
 		return nil, obsInvalid(err)
@@ -146,6 +146,6 @@ func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogT
 		}
 		replicas[i] = domain.LogReplica{Task: t.ID, Slot: t.Slot, State: state}
 	}
-	sortReplicas(replicas)
+	sortLogReplicas(replicas)
 	return domain.LogTail{Source: domain.LogSourceDocker, Lines: demuxDockerLogs(res.body), Replicas: replicas}, nil
 }

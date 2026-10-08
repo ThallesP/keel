@@ -15,7 +15,7 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-func fakeEngine(t *testing.T, handler http.HandlerFunc) *Swarm {
+func logsFakeEngine(t *testing.T, handler http.HandlerFunc) *Swarm {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -28,7 +28,7 @@ func fakeEngine(t *testing.T, handler http.HandlerFunc) *Swarm {
 
 func TestReadServiceLogs(t *testing.T) {
 	var query string
-	s := fakeEngine(t, func(w http.ResponseWriter, r *http.Request) {
+	s := logsFakeEngine(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/services/svc-abc/logs"):
 			query = r.URL.RawQuery
@@ -63,7 +63,7 @@ func TestReadServiceLogs(t *testing.T) {
 
 func TestListLogReplicas(t *testing.T) {
 	var filters string
-	s := fakeEngine(t, func(w http.ResponseWriter, r *http.Request) {
+	s := logsFakeEngine(t, func(w http.ResponseWriter, r *http.Request) {
 		filters = r.URL.Query().Get("filters")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[{"ID":"t1","Slot":2,"Status":{"State":"running"}},{"ID":"t0","Status":{}}]`))

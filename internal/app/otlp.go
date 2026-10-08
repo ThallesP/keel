@@ -33,7 +33,7 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	if !errors.Is(err, ErrNoRow) {
 		return "", err
 	}
-	key = domain.OTLPKeyPrefix + base64url(randomBytes(24))
+	key = domain.OTLPKeyPrefix + obsBase64URL(obsRandom(24))
 	if err := tx.InsertOTLPKey(scope.Environment.ID, key, a.Now()); err != nil {
 		return "", err
 	}
@@ -69,7 +69,7 @@ func (a *App) otlpRoute(ctx context.Context, key string) (sink *OTLPForward, fou
 			return err
 		}
 		found = true
-		rec, err := sinkOf(tx, org)
+		rec, err := orgSinkOf(tx, org)
 		if err != nil || rec == nil || rec.Sink.Kind != domain.SinkKindAxiom || rec.Sink.Traces == "" {
 			return err
 		}
@@ -95,7 +95,7 @@ type OTLPResponse struct {
 	Body        []byte
 }
 
-func otlpText(status int, body string) OTLPResponse {
+func otlpTextReply(status int, body string) OTLPResponse {
 	return OTLPResponse{Status: status, Body: []byte(body)}
 }
 
@@ -113,26 +113,26 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 		var err error
 		if sink, found, err = a.otlpRoute(ctx, key); err != nil {
 			a.Log.Error("otlp: route", "err", err)
-			return otlpText(500, "internal error")
+			return otlpTextReply(500, "internal error")
 		}
 	}
 	if !found {
-		return otlpText(401, "unauthorized")
+		return otlpTextReply(401, "unauthorized")
 	}
 	ctype, _, _ := strings.Cut(r.ContentType, ";")
 	ctype = strings.ToLower(jsTrim(ctype))
 	if ctype != "application/x-protobuf" && ctype != "application/json" {
-		return otlpText(415, "OTLP over HTTP: application/x-protobuf or application/json")
+		return otlpTextReply(415, "OTLP over HTTP: application/x-protobuf or application/json")
 	}
 	if r.ContentLength > otlpMaxBody {
-		return otlpText(413, "too large")
+		return otlpTextReply(413, "too large")
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, otlpMaxBody+1))
 	if err != nil {
-		return otlpText(400, "bad request")
+		return otlpTextReply(400, "bad request")
 	}
 	if len(body) > otlpMaxBody {
-		return otlpText(413, "too large")
+		return otlpTextReply(413, "too large")
 	}
 	if sink == nil {
 		accepted := OTLPResponse{Status: 200, ContentType: ctype, Body: []byte{}}
@@ -150,7 +150,7 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 	res, err := a.Axiom.ForwardTraces(fctx, fwd)
 	if err != nil {
 		a.Log.Warn("otlp: Axiom unreachable: " + err.Error())
-		return otlpText(503, "sink unreachable")
+		return otlpTextReply(503, "sink unreachable")
 	}
 	if res.Status >= 200 && res.Status < 300 {
 		ct := res.ContentType
@@ -167,13 +167,13 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 	a.Log.Warn(msg)
 	switch res.Status {
 	case 429, 502, 503, 504:
-		return otlpText(res.Status, detail)
+		return otlpTextReply(res.Status, detail)
 	}
 	if detail == "" {
 		detail = "rejected"
 	}
 	if res.Status >= 500 {
-		return otlpText(503, detail)
+		return otlpTextReply(503, detail)
 	}
-	return otlpText(400, detail)
+	return otlpTextReply(400, detail)
 }

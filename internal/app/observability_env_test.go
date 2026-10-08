@@ -19,35 +19,35 @@ import (
 )
 
 const (
-	nodeAPI     = "nodeapiaaaaaaaaaaaaa"
-	nodeWorker  = "nodeworkerbbbbbbbbbb"
-	nodeDB      = "nodedbcccccccccccccc"
-	nodeVolume  = "nodevolumedddddddddd"
-	nodeForeign = "nodeforeigneeeeeeeee"
+	obsNodeAPI     = "nodeapiaaaaaaaaaaaaa"
+	obsNodeWorker  = "nodeworkerbbbbbbbbbb"
+	obsNodeDB      = "nodedbcccccccccccccc"
+	obsNodeVolume  = "nodevolumedddddddddd"
+	obsNodeForeign = "nodeforeigneeeeeeeee"
 )
 
-type published struct {
+type obsPublished struct {
 	org    string
 	topics []string
 }
 
-type recordingPublisher struct {
+type obsPublisher struct {
 	mu  sync.Mutex
-	got []published
+	got []obsPublished
 }
 
-func (p *recordingPublisher) Publish(org string, topics []string) {
+func (p *obsPublisher) Publish(org string, topics []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.got = append(p.got, published{org, append([]string(nil), topics...)})
+	p.got = append(p.got, obsPublished{org, append([]string(nil), topics...)})
 }
 
 // topics is every topic published to org since the last call, sorted, deduplicated.
-func (p *recordingPublisher) take(org string) []string {
+func (p *obsPublisher) take(org string) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	set := map[string]bool{}
-	var rest []published
+	var rest []obsPublished
 	for _, x := range p.got {
 		if x.org != org {
 			rest = append(rest, x)
@@ -66,12 +66,12 @@ func (p *recordingPublisher) take(org string) []string {
 	return out
 }
 
-type fakeJobs struct {
+type obsJobs struct {
 	every map[string]func(context.Context)
 }
 
-func (j *fakeJobs) After(string, time.Duration, func(context.Context)) {}
-func (j *fakeJobs) Every(name string, _ time.Duration, fn func(context.Context)) {
+func (j *obsJobs) After(string, time.Duration, func(context.Context)) {}
+func (j *obsJobs) Every(name string, _ time.Duration, fn func(context.Context)) {
 	if j.every == nil {
 		j.every = map[string]func(context.Context){}
 	}
@@ -82,8 +82,8 @@ type obsEnv struct {
 	store     *sqlite.Store
 	app       *app.App
 	now       int64
-	pub       *recordingPublisher
-	jobs      *fakeJobs
+	pub       *obsPublisher
+	jobs      *obsJobs
 	member    domain.Actor
 	foreigner domain.Actor
 	signedOut domain.Actor
@@ -111,11 +111,11 @@ func newObsEnv(t *testing.T, now int64) *obsEnv {
 	}
 	desired := func() *domain.Desired { return &domain.Desired{Image: "nginx:1", Revision: 1, Replicas: 1} }
 	nodes := []domain.Node{
-		{ID: nodeAPI, EnvironmentID: "env", Type: domain.NodeService, Name: "api", Desired: desired(), CreatedAt: 1},
-		{ID: nodeWorker, EnvironmentID: "env", Type: domain.NodeService, Name: "worker", Desired: desired(), CreatedAt: 2},
-		{ID: nodeDB, EnvironmentID: "env", Type: domain.NodeDatabase, Name: "postgres", Desired: desired(), CreatedAt: 3},
-		{ID: nodeVolume, EnvironmentID: "env", Type: domain.NodeVolume, Name: "data", CreatedAt: 4},
-		{ID: nodeForeign, EnvironmentID: "env2", Type: domain.NodeService, Name: "secret-svc", Desired: desired(), CreatedAt: 5},
+		{ID: obsNodeAPI, EnvironmentID: "env", Type: domain.NodeService, Name: "api", Desired: desired(), CreatedAt: 1},
+		{ID: obsNodeWorker, EnvironmentID: "env", Type: domain.NodeService, Name: "worker", Desired: desired(), CreatedAt: 2},
+		{ID: obsNodeDB, EnvironmentID: "env", Type: domain.NodeDatabase, Name: "postgres", Desired: desired(), CreatedAt: 3},
+		{ID: obsNodeVolume, EnvironmentID: "env", Type: domain.NodeVolume, Name: "data", CreatedAt: 4},
+		{ID: obsNodeForeign, EnvironmentID: "env2", Type: domain.NodeService, Name: "secret-svc", Desired: desired(), CreatedAt: 5},
 	}
 	err = store.Write(ctx, func(tx app.Tx) error {
 		for _, n := range nodes {
@@ -131,8 +131,8 @@ func newObsEnv(t *testing.T, now int64) *obsEnv {
 	e := &obsEnv{
 		store:     store,
 		now:       now,
-		pub:       &recordingPublisher{},
-		jobs:      &fakeJobs{},
+		pub:       &obsPublisher{},
+		jobs:      &obsJobs{},
 		member:    domain.Actor{UserID: "u1", OrganizationID: "org", Role: domain.RoleMember},
 		foreigner: domain.Actor{UserID: "u2", OrganizationID: "org2", Role: domain.RoleOwner},
 	}
@@ -183,7 +183,7 @@ func (e *obsEnv) count(t *testing.T, q string, args ...any) int {
 	return n
 }
 
-func wantCode(t *testing.T, err error, code, msg string) {
+func obsWantCode(t *testing.T, err error, code, msg string) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("no error, want %s %q", code, msg)

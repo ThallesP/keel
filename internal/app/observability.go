@@ -47,7 +47,7 @@ func obsErr(code, msg string) error { return &domain.Error{Code: code, Message: 
 
 func errTracesOff(msg string) error { return obsErr(domain.CodeTracesOff, msg) }
 
-func errNodeNotFound() error { return domain.E(domain.CodeServiceNotFound, domain.MsgNodeNotFound) }
+func errObsNodeNotFound() error { return domain.E(domain.CodeServiceNotFound, domain.MsgNodeNotFound) }
 
 // obsEnvironment is the environment when the actor may see it. Missing or foreign →
 // "Environment not found" with PROJECT_NOT_FOUND, the code the CLI gives that message.
@@ -65,8 +65,8 @@ func obsEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
 	return scope, nil
 }
 
-// sinkOf is the organization's sink, nil when it has none.
-func sinkOf(tx Tx, org string) (*SinkRecord, error) {
+// orgSinkOf is the organization's sink, nil when it has none.
+func orgSinkOf(tx Tx, org string) (*SinkRecord, error) {
 	if org == "" {
 		return nil, nil
 	}
@@ -96,7 +96,7 @@ func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentI
 			return err
 		}
 		s.EnvScope = scope
-		rec, err := sinkOf(tx, scope.Org)
+		rec, err := orgSinkOf(tx, scope.Org)
 		if err != nil {
 			return err
 		}

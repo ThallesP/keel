@@ -14,7 +14,7 @@ import (
 
 const dockerTaskKey = "com.docker.swarm.task.id="
 
-var stampMsRE = regexp.MustCompile(`(\.[0-9]{3})[0-9]+Z$`)
+var dockerStampMsRE = regexp.MustCompile(`(\.[0-9]{3})[0-9]+Z$`)
 
 // parseDockerLine: `2026-09-14T04:05:06.123456789Z com.docker.swarm.node.id=…,com.docker.swarm.
 // task.id=… text` → time, task, text. The details block exists only with details=1, the stamp
@@ -28,7 +28,7 @@ func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 		stamp = rest[:space]
 	}
 	if strings.HasSuffix(stamp, "Z") {
-		if ms, ok := jsDateParse(stampMsRE.ReplaceAllString(stamp, "${1}Z")); ok {
+		if ms, ok := jsDateParse(dockerStampMsRE.ReplaceAllString(stamp, "${1}Z")); ok {
 			t = ms
 			rest = rest[space+1:]
 		}
@@ -67,8 +67,8 @@ func splitDockerLines(text, stream string) []domain.ServiceLogLine {
 	return out
 }
 
-// decodeUTF8 is Buffer.toString("utf8"): invalid bytes become U+FFFD.
-func decodeUTF8(b []byte) string {
+// dockerUTF8 is Buffer.toString("utf8"): invalid bytes become U+FFFD.
+func dockerUTF8(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)
 	}
@@ -93,7 +93,7 @@ func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 		if typ > 2 || off+8+n > len(buf) || off+8+n < off {
 			break // not multiplexed (TTY) or truncated
 		}
-		payload := decodeUTF8(buf[off+8 : off+8+n])
+		payload := dockerUTF8(buf[off+8 : off+8+n])
 		if typ == 2 {
 			stderr.WriteString(payload)
 		} else {
@@ -102,7 +102,7 @@ func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 		off += 8 + n
 	}
 	if off == 0 && len(buf) > 0 {
-		lines := splitDockerLines(decodeUTF8(buf), "stdout")
+		lines := splitDockerLines(dockerUTF8(buf), "stdout")
 		if lines == nil {
 			lines = []domain.ServiceLogLine{}
 		}

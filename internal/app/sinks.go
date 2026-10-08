@@ -22,7 +22,7 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 	}
 	var view *domain.LogSinkView
 	err := a.read(ctx, func(tx Tx) error {
-		rec, err := sinkOf(tx, actor.OrganizationID)
+		rec, err := orgSinkOf(tx, actor.OrganizationID)
 		if err != nil || rec == nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 		return "", nil, err
 	}
 	allowLocal := a.Config.AllowLocalSinks
-	if !slices.Contains(domain.AxiomDomains, in.Domain) && !(allowLocal && containsScheme(in.Domain)) {
+	if !slices.Contains(domain.AxiomDomains, in.Domain) && !(allowLocal && sinkDomainHasScheme(in.Domain)) {
 		return "", nil, domain.Invalid(msgRegion)
 	}
 	names := []string{in.Dataset}
@@ -122,7 +122,7 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 	return in.Dataset, in.Traces, nil
 }
 
-func containsScheme(s string) bool {
+func sinkDomainHasScheme(s string) bool {
 	for i := 0; i+3 <= len(s); i++ {
 		if s[i:i+3] == "://" {
 			return true
@@ -436,7 +436,7 @@ func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSinkEntry, error) {
 			}
 			rec, seen := sinks[p.OrganizationID]
 			if !seen {
-				if rec, err = sinkOf(tx, p.OrganizationID); err != nil {
+				if rec, err = orgSinkOf(tx, p.OrganizationID); err != nil {
 					return err
 				}
 				sinks[p.OrganizationID] = rec

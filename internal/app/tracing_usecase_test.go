@@ -10,9 +10,9 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-var tracesOn = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-abcdefgh"}
+var obsTracesOn = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-abcdefgh"}
 
-func otlpKeyOf(t *testing.T, e *obsEnv, env string) string {
+func obsOTLPKeyOf(t *testing.T, e *obsEnv, env string) string {
 	t.Helper()
 	var key string
 	_ = e.store.DB().QueryRow(`SELECT key FROM otlp_keys WHERE environment_id = ?`, env).Scan(&key)
@@ -24,73 +24,73 @@ func TestSetNodeTracing(t *testing.T) {
 	e := newObsEnv(t, 1_000)
 
 	// No sink, then a sink from before traces: turning on is refused, nothing changes.
-	wantCode(t, e.app.SetNodeTracing(ctx, e.member, nodeAPI, true), domain.CodeTracesOff, "Connect Axiom to see traces")
-	old := tracesOn
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true), domain.CodeTracesOff, "Connect Axiom to see traces")
+	old := obsTracesOn
 	old.Traces = ""
 	e.setSink(t, "org", old)
-	wantCode(t, e.app.SetNodeTracing(ctx, e.member, nodeAPI, true), domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
-	if n := e.node(t, nodeAPI); n.Desired.Tracing || n.Dirty || otlpKeyOf(t, e, "env") != "" {
-		t.Fatalf("refused switch changed something: %+v key=%q", n, otlpKeyOf(t, e, "env"))
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true), domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
+	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || n.Dirty || obsOTLPKeyOf(t, e, "env") != "" {
+		t.Fatalf("refused switch changed something: %+v key=%q", n, obsOTLPKeyOf(t, e, "env"))
 	}
 	// Turning off needs nothing.
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeAPI, false); err != nil {
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, false); err != nil {
 		t.Fatal(err)
 	}
-	if n := e.node(t, nodeAPI); n.Dirty {
+	if n := e.node(t, obsNodeAPI); n.Dirty {
 		t.Fatal("an unchanged switch marked the node dirty")
 	}
 
-	e.setSink(t, "org", tracesOn)
+	e.setSink(t, "org", obsTracesOn)
 	e.pub.take("org")
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeAPI, true); err != nil {
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true); err != nil {
 		t.Fatal(err)
 	}
-	n := e.node(t, nodeAPI)
+	n := e.node(t, obsNodeAPI)
 	if !n.Desired.Tracing || !n.Dirty || n.Desired.Revision != 1 {
 		t.Fatalf("after enable: %+v", n.Desired)
 	}
-	key := otlpKeyOf(t, e, "env")
+	key := obsOTLPKeyOf(t, e, "env")
 	if !regexp.MustCompile(`^keel_otlp_[A-Za-z0-9_-]{32}$`).MatchString(key) {
 		t.Fatalf("ingest key %q", key)
 	}
 	topics := e.pub.take("org")
-	for _, want := range []string{"/api/environments/env", "/api/nodes/" + nodeAPI, "/api/nodes/" + nodeWorker} {
-		if !contains(topics, want) {
+	for _, want := range []string{"/api/environments/env", "/api/nodes/" + obsNodeAPI, "/api/nodes/" + obsNodeWorker} {
+		if !obsContains(topics, want) {
 			t.Errorf("topics %v lack %s", topics, want)
 		}
 	}
 
 	// Enabling again: no-op on the node (dirty untouched), same key.
-	e.exec(t, `UPDATE nodes SET dirty = 0 WHERE id = ?`, nodeAPI)
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeAPI, true); err != nil {
+	e.exec(t, `UPDATE nodes SET dirty = 0 WHERE id = ?`, obsNodeAPI)
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true); err != nil {
 		t.Fatal(err)
 	}
-	if n := e.node(t, nodeAPI); n.Dirty || otlpKeyOf(t, e, "env") != key {
-		t.Fatalf("re-enable: dirty=%v key changed=%v", n.Dirty, otlpKeyOf(t, e, "env") != key)
+	if n := e.node(t, obsNodeAPI); n.Dirty || obsOTLPKeyOf(t, e, "env") != key {
+		t.Fatalf("re-enable: dirty=%v key changed=%v", n.Dirty, obsOTLPKeyOf(t, e, "env") != key)
 	}
 	// Another service of the environment shares the key.
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeWorker, true); err != nil {
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeWorker, true); err != nil {
 		t.Fatal(err)
 	}
 	if e.count(t, `SELECT COUNT(*) FROM otlp_keys`) != 1 {
 		t.Fatal("a second key was made")
 	}
 	// Off: the switch goes, dirty again.
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeAPI, false); err != nil {
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, false); err != nil {
 		t.Fatal(err)
 	}
-	if n := e.node(t, nodeAPI); n.Desired.Tracing || !n.Dirty {
+	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || !n.Dirty {
 		t.Fatalf("after disable: %+v dirty=%v", n.Desired, n.Dirty)
 	}
 
 	// Only services; foreign and missing nodes are not found.
-	wantCode(t, e.app.SetNodeTracing(ctx, e.member, nodeDB, true), domain.CodeInvalidInput, "Only services can be traced")
-	wantCode(t, e.app.SetNodeTracing(ctx, e.member, nodeVolume, false), domain.CodeInvalidInput, "Only services can be traced")
-	wantCode(t, e.app.SetNodeTracing(ctx, e.member, "missing", true), domain.CodeServiceNotFound, "Node not found")
-	wantCode(t, e.app.SetNodeTracing(ctx, e.signedOut, nodeAPI, true), domain.CodeNotAuthenticated, "Not authenticated")
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeDB, true), domain.CodeInvalidInput, "Only services can be traced")
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeVolume, false), domain.CodeInvalidInput, "Only services can be traced")
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, "missing", true), domain.CodeServiceNotFound, "Node not found")
+	obsWantCode(t, e.app.SetNodeTracing(ctx, e.signedOut, obsNodeAPI, true), domain.CodeNotAuthenticated, "Not authenticated")
 }
 
-func contains(list []string, s string) bool {
+func obsContains(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {
 			return true
@@ -105,7 +105,7 @@ func TestNodeTracingView(t *testing.T) {
 	e.app.Config.OTLPURL = ""
 	e.app.Config.SiteURL = "http://100.64.0.1:8080"
 
-	v, err := e.app.NodeTracing(ctx, e.member, nodeAPI)
+	v, err := e.app.NodeTracing(ctx, e.member, obsNodeAPI)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestNodeTracingView(t *testing.T) {
 		{Key: "OTEL_EXPORTER_OTLP_PROTOCOL", Value: "http/protobuf"},
 		{Key: "OTEL_EXPORTER_OTLP_HEADERS", Value: "Authorization=Bearer%20keel_otlp_…", Secret: true},
 		{Key: "OTEL_SERVICE_NAME", Value: "api"},
-		{Key: "OTEL_RESOURCE_ATTRIBUTES", Value: "keel.service_id=" + nodeAPI + ",keel.environment_id=env,deployment.environment.name=production"},
+		{Key: "OTEL_RESOURCE_ATTRIBUTES", Value: "keel.service_id=" + obsNodeAPI + ",keel.environment_id=env,deployment.environment.name=production"},
 		{Key: "OTEL_TRACES_EXPORTER", Value: "otlp"},
 		{Key: "OTEL_METRICS_EXPORTER", Value: "none"},
 		{Key: "OTEL_LOGS_EXPORTER", Value: "none"},
@@ -124,17 +124,17 @@ func TestNodeTracingView(t *testing.T) {
 	}
 
 	// With a key, traces on, tracing on, and the service's own endpoint and service name.
-	e.setSink(t, "org", tracesOn)
-	if err := e.app.SetNodeTracing(ctx, e.member, nodeAPI, true); err != nil {
+	e.setSink(t, "org", obsTracesOn)
+	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true); err != nil {
 		t.Fatal(err)
 	}
-	e.exec(t, `INSERT INTO variables (id, node_id, key, value, secret) VALUES ('v1', ?, 'OTEL_SERVICE_NAME', 'mine', 0), ('v2', ?, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://x', 0)`, nodeAPI, nodeAPI)
+	e.exec(t, `INSERT INTO variables (id, node_id, key, value, secret) VALUES ('v1', ?, 'OTEL_SERVICE_NAME', 'mine', 0), ('v2', ?, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://x', 0)`, obsNodeAPI, obsNodeAPI)
 	e.app.Config.OTLPURL = "http://100.64.0.1:3211/otlp/"
-	v, err = e.app.NodeTracing(ctx, e.member, nodeAPI)
+	v, err = e.app.NodeTracing(ctx, e.member, obsNodeAPI)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := otlpKeyOf(t, e, "env")
+	key := obsOTLPKeyOf(t, e, "env")
 	if !v.Enabled || v.Traces != "on" {
 		t.Fatalf("enabled=%v traces=%s", v.Enabled, v.Traces)
 	}
@@ -156,7 +156,7 @@ func TestNodeTracingView(t *testing.T) {
 	for _, c := range []struct {
 		actor domain.Actor
 		id    string
-	}{{e.member, nodeDB}, {e.member, nodeVolume}, {e.foreigner, nodeAPI}, {e.member, nodeForeign}, {e.member, "missing"}, {e.signedOut, nodeAPI}} {
+	}{{e.member, obsNodeDB}, {e.member, obsNodeVolume}, {e.foreigner, obsNodeAPI}, {e.member, obsNodeForeign}, {e.member, "missing"}, {e.signedOut, obsNodeAPI}} {
 		if v, err := e.app.NodeTracing(ctx, c.actor, c.id); err != nil || v != nil {
 			t.Errorf("NodeTracing(%+v, %s) = %+v, %v; want nil", c.actor, c.id, v, err)
 		}
@@ -166,28 +166,28 @@ func TestNodeTracingView(t *testing.T) {
 func TestLocalTracingEnv(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
-	lt, err := e.app.LocalTracingEnv(ctx, e.member, nodeAPI)
+	lt, err := e.app.LocalTracingEnv(ctx, e.member, obsNodeAPI)
 	if err != nil || lt.Env != nil || lt.Reason != "Connect Axiom to see traces" {
 		t.Fatalf("no sink: %+v %v", lt, err)
 	}
-	old := tracesOn
+	old := obsTracesOn
 	old.Traces = ""
 	e.setSink(t, "org", old)
-	lt, _ = e.app.LocalTracingEnv(ctx, e.member, nodeAPI)
-	if lt.Env != nil || lt.Reason != "Sign in with Axiom again to turn on traces" || otlpKeyOf(t, e, "env") != "" {
+	lt, _ = e.app.LocalTracingEnv(ctx, e.member, obsNodeAPI)
+	if lt.Env != nil || lt.Reason != "Sign in with Axiom again to turn on traces" || obsOTLPKeyOf(t, e, "env") != "" {
 		t.Fatalf("old sink: %+v", lt)
 	}
-	e.setSink(t, "org", tracesOn)
-	lt, err = e.app.LocalTracingEnv(ctx, e.member, nodeAPI)
+	e.setSink(t, "org", obsTracesOn)
+	lt, err = e.app.LocalTracingEnv(ctx, e.member, obsNodeAPI)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := otlpKeyOf(t, e, "env")
+	key := obsOTLPKeyOf(t, e, "env")
 	want := map[string]string{
 		"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
 		"OTEL_EXPORTER_OTLP_HEADERS":  "Authorization=Bearer%20" + key,
 		"OTEL_SERVICE_NAME":           "api",
-		"OTEL_RESOURCE_ATTRIBUTES":    "keel.service_id=" + nodeAPI + ",keel.environment_id=env,deployment.environment.name=local",
+		"OTEL_RESOURCE_ATTRIBUTES":    "keel.service_id=" + obsNodeAPI + ",keel.environment_id=env,deployment.environment.name=local",
 		"OTEL_TRACES_EXPORTER":        "otlp",
 		"OTEL_METRICS_EXPORTER":       "none",
 		"OTEL_LOGS_EXPORTER":          "none",
@@ -198,10 +198,10 @@ func TestLocalTracingEnv(t *testing.T) {
 	wantErr := func(actor domain.Actor, id, code, msg string) {
 		t.Helper()
 		_, err := e.app.LocalTracingEnv(ctx, actor, id)
-		wantCode(t, err, code, msg)
+		obsWantCode(t, err, code, msg)
 	}
-	wantErr(e.member, nodeDB, domain.CodeInvalidInput, "Only services can be traced")
-	wantErr(e.foreigner, nodeAPI, domain.CodeServiceNotFound, "Node not found")
+	wantErr(e.member, obsNodeDB, domain.CodeInvalidInput, "Only services can be traced")
+	wantErr(e.foreigner, obsNodeAPI, domain.CodeServiceNotFound, "Node not found")
 }
 
 func TestTracingPromptNamesWhatTheCallerSees(t *testing.T) {
@@ -223,15 +223,15 @@ func TestTracingPromptNamesWhatTheCallerSees(t *testing.T) {
 		node, env string
 		want      string
 	}{
-		{e.member, nodeAPI, "", service},
-		{e.member, nodeAPI, "env", service},
-		{e.member, nodeDB, "env", project},
-		{e.member, nodeDB, "", none},
+		{e.member, obsNodeAPI, "", service},
+		{e.member, obsNodeAPI, "env", service},
+		{e.member, obsNodeDB, "env", project},
+		{e.member, obsNodeDB, "", none},
 		{e.member, "", "env", project},
 		{e.member, "", "", none},
-		{e.foreigner, nodeAPI, "env", none},
-		{e.signedOut, nodeAPI, "env", none},
-		{e.member, nodeForeign, "env2", none},
+		{e.foreigner, obsNodeAPI, "env", none},
+		{e.signedOut, obsNodeAPI, "env", none},
+		{e.member, obsNodeForeign, "env2", none},
 	}
 	for _, c := range cases {
 		if got := prompt(c.actor, c.node, c.env); got != c.want {

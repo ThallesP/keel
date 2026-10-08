@@ -124,10 +124,10 @@ func TracingVarOrder(key string) int {
 	return -1
 }
 
-// tracesState is whether the organization can store traces: no sink, a sink from before traces,
+// orgTracesState is whether the organization can store traces: no sink, a sink from before traces,
 // or yes.
-func tracesState(tx Tx, org string) (string, error) {
-	rec, err := sinkOf(tx, org)
+func orgTracesState(tx Tx, org string) (string, error) {
+	rec, err := orgSinkOf(tx, org)
 	if err != nil {
 		return "", err
 	}
@@ -140,7 +140,7 @@ func tracesState(tx Tx, org string) (string, error) {
 	return domain.TracesOn, nil
 }
 
-func requireTraces(state string) error {
+func requireTracesOn(state string) error {
 	switch state {
 	case domain.TracesOff:
 		return errTracesOff(msgNoSink)
@@ -159,7 +159,7 @@ func tracingScope(tx Tx, actor domain.Actor, nodeID string) (NodeScope, string, 
 	if scope.Node.Type != domain.NodeService || scope.Node.Desired == nil {
 		return NodeScope{}, "", domain.Invalid(msgOnlyServicesTrace)
 	}
-	state, err := tracesState(tx, scope.Org)
+	state, err := orgTracesState(tx, scope.Org)
 	return scope, state, err
 }
 
@@ -174,7 +174,7 @@ func (a *App) SetNodeTracing(ctx context.Context, actor domain.Actor, nodeID str
 			return err
 		}
 		if on {
-			if err := requireTraces(state); err != nil {
+			if err := requireTracesOn(state); err != nil {
 				return err
 			}
 			if _, err := a.ensureOTLPKey(tx, ch, scope.EnvScope); err != nil {
@@ -223,7 +223,7 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 		for _, k := range keys {
 			own[k] = true
 		}
-		state, err := tracesState(tx, scope.Org)
+		state, err := orgTracesState(tx, scope.Org)
 		if err != nil {
 			return err
 		}

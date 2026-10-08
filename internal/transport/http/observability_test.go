@@ -140,7 +140,7 @@ func (h *obsHarness) setSink(t *testing.T, sink domain.LogSink) {
 	}
 }
 
-func wantProblem(t *testing.T, r obsReply, status int, code, detail string) {
+func obsWantProblem(t *testing.T, r obsReply, status int, code, detail string) {
 	t.Helper()
 	var p struct {
 		Status int    `json:"status"`
@@ -179,9 +179,9 @@ func TestObservabilityRoutes(t *testing.T) {
 	if !strings.HasPrefix(r.body, `{"tracing":{"enabled":false,"traces":"old","env":[{"key":"OTEL_EXPORTER_OTLP_ENDPOINT","value":"https://keel.example.com/otlp","secret":false,"overridden":false}`) {
 		t.Fatalf("tracing view: %s", r.body)
 	}
-	wantProblem(t, h.do(t, "member", "PUT", "/api/nodes/api/tracing", `{"on":true}`), 409, domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
-	wantProblem(t, h.do(t, "foreigner", "PUT", "/api/nodes/api/tracing", `{"on":false}`), 404, domain.CodeServiceNotFound, "Node not found")
-	wantProblem(t, h.do(t, "", "PUT", "/api/nodes/api/tracing", `{"on":false}`), 401, domain.CodeNotAuthenticated, "Not authenticated")
+	obsWantProblem(t, h.do(t, "member", "PUT", "/api/nodes/api/tracing", `{"on":true}`), 409, domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
+	obsWantProblem(t, h.do(t, "foreigner", "PUT", "/api/nodes/api/tracing", `{"on":false}`), 404, domain.CodeServiceNotFound, "Node not found")
+	obsWantProblem(t, h.do(t, "", "PUT", "/api/nodes/api/tracing", `{"on":false}`), 401, domain.CodeNotAuthenticated, "Not authenticated")
 	if r := h.do(t, "member", "POST", "/api/nodes/api/tracing/local-env", ""); r.status != 200 || r.body != `{"env":null,"reason":"Sign in with Axiom again to turn on traces"}` {
 		t.Fatalf("local env: %d %s", r.status, r.body)
 	}
@@ -200,10 +200,10 @@ func TestObservabilityRoutes(t *testing.T) {
 	}
 
 	// Traces: validation is a 422 problem; a missing environment is PROJECT_NOT_FOUND.
-	wantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces?range=2d", ""), 422, domain.CodeInvalidInput, "")
-	wantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces", ""), 422, domain.CodeInvalidInput, "")
-	wantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces/xyz", ""), 422, domain.CodeInvalidInput, "Not a trace id")
-	wantProblem(t, h.do(t, "foreigner", "GET", "/api/environments/env/traces?range=1h", ""), 404, domain.CodeProjectNotFound, "Environment not found")
+	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces?range=2d", ""), 422, domain.CodeInvalidInput, "")
+	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces", ""), 422, domain.CodeInvalidInput, "")
+	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces/xyz", ""), 422, domain.CodeInvalidInput, "Not a trace id")
+	obsWantProblem(t, h.do(t, "foreigner", "GET", "/api/environments/env/traces?range=1h", ""), 404, domain.CodeProjectNotFound, "Environment not found")
 	r = h.do(t, "member", "GET", "/api/environments/env/traces?range=15m&search=GET", "")
 	if r.status != 200 || !strings.Contains(r.body, `"bucketMs":30000`) || !strings.Contains(r.body, `"stats":{"requests":0,"errors":0,"p50":null,"p95":null,"p99":null}`) || !strings.Contains(r.body, `"traces":[]`) {
 		t.Fatalf("overview: %d %s", r.status, r.body)
@@ -223,8 +223,8 @@ func TestObservabilityRoutes(t *testing.T) {
 	if r := h.do(t, "member", "GET", "/api/environments/env/logs/around?at=5", ""); r.status != 200 || r.body != `[]` {
 		t.Fatalf("around: %d %s", r.status, r.body)
 	}
-	wantProblem(t, h.do(t, "member", "GET", "/api/environments/env/logs/around", ""), 422, domain.CodeInvalidInput, "")
-	wantProblem(t, h.do(t, "foreigner", "GET", "/api/nodes/api/logs", ""), 404, domain.CodeServiceNotFound, "Node not found")
+	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/logs/around", ""), 422, domain.CodeInvalidInput, "")
+	obsWantProblem(t, h.do(t, "foreigner", "GET", "/api/nodes/api/logs", ""), 404, domain.CodeServiceNotFound, "Node not found")
 
 	// The prompt.
 	r = h.do(t, "member", "GET", "/api/tracing/prompt?nodeId=api", "")
@@ -238,11 +238,11 @@ func TestObservabilityRoutes(t *testing.T) {
 	if r := h.do(t, "member", "DELETE", "/api/organization/log-sink", ""); r.status != 204 {
 		t.Fatalf("disconnect: %d %s", r.status, r.body)
 	}
-	wantProblem(t, h.do(t, "", "DELETE", "/api/organization/log-sink", ""), 401, domain.CodeNotAuthenticated, "")
+	obsWantProblem(t, h.do(t, "", "DELETE", "/api/organization/log-sink", ""), 401, domain.CodeNotAuthenticated, "")
 	if r := h.do(t, "member", "DELETE", "/api/organization/axiom/pending", ""); r.status != 204 {
 		t.Fatalf("cancel: %d", r.status)
 	}
-	wantProblem(t, h.do(t, "member", "POST", "/api/organization/axiom/sign-in", `{"redirectUri":"https://x/nope"}`), 422, domain.CodeInvalidInput, "Bad redirect URI")
+	obsWantProblem(t, h.do(t, "member", "POST", "/api/organization/axiom/sign-in", `{"redirectUri":"https://x/nope"}`), 422, domain.CodeInvalidInput, "Bad redirect URI")
 }
 
 func TestNodeLogsDefaultTail(t *testing.T) {

@@ -51,7 +51,7 @@ func (a *App) traceScope(ctx context.Context, actor domain.Actor, environmentID 
 	if s.Sink == nil || s.Sink.Kind != domain.SinkKindAxiom {
 		return traceScope{}, errTracesOff(msgNoSink)
 	}
-	out := traceScope{logs: logsCfg(*s.Sink), serviceIDs: s.ServiceIDs}
+	out := traceScope{logs: axiomLogsCfg(*s.Sink), serviceIDs: s.ServiceIDs}
 	if s.Sink.Traces != "" {
 		t := out.logs
 		t.Dataset = s.Sink.Traces
@@ -108,22 +108,22 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 			id, _ := r.Get("trace_id")
 			s, _ := r.Get("spans")
 			e, _ := r.Get("errors")
-			perTrace[jsString(id)] = counts{num(s), num(e)}
+			perTrace[jsString(id)] = counts{jsNum(s), jsNum(e)}
 		}
 	}
 	out := make([]domain.TraceSummary, len(latest))
 	for i, r := range latest {
 		get := func(k string) any { v, _ := r.Get(k); return v }
 		traceID := jsString(get("trace_id"))
-		isErr := statusOf(r) == "error"
+		isErr := spanStatusOf(r) == "error"
 		s := domain.TraceSummary{
 			TraceID:    traceID,
 			Name:       jsString(get("name")),
-			Service:    jsString(pickValue(r, "service.name")),
-			Kind:       kindOf(get("kind")),
-			Start:      timeOf(get("_time")),
+			Service:    jsString(rowPickValue(r, "service.name")),
+			Kind:       spanKindOf(get("kind")),
+			Start:      axiomTimeOf(get("_time")),
 			Duration:   durationOf(get("duration")),
-			HTTPStatus: httpStatusOf(r),
+			HTTPStatus: spanHTTPStatus(r),
 			Spans:      1,
 			Error:      isErr,
 		}
@@ -133,7 +133,7 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 		if c, ok := perTrace[traceID]; ok {
 			s.Spans, s.Errors = c.spans, c.errors
 		}
-		if env, ok := pickValue(r, "resource.deployment.environment.name").(string); ok && env == "local" {
+		if env, ok := rowPickValue(r, "resource.deployment.environment.name").(string); ok && env == "local" {
 			s.Local = true
 		}
 		out[i] = s
@@ -162,7 +162,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 			found = found || id == nodeID
 		}
 		if !found {
-			return domain.TraceOverview{}, errNodeNotFound()
+			return domain.TraceOverview{}, errObsNodeNotFound()
 		}
 		ids = []string{nodeID}
 	}
@@ -208,8 +208,8 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 				t, _ = r.Get(keys[0])
 			}
 		}
-		bucket := math.Floor(timeOf(t)/binMs) * binMs
-		byBucket[bucket] = statsOf(r)
+		bucket := math.Floor(axiomTimeOf(t)/binMs) * binMs
+		byBucket[bucket] = traceStatsOf(r)
 	}
 	buckets := make([]domain.TraceBucket, count)
 	for i := range buckets {
@@ -222,7 +222,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	}
 	stats := domain.TraceStats{}
 	if len(totals) > 0 {
-		stats = statsOf(totals[0])
+		stats = traceStatsOf(totals[0])
 	}
 	return domain.TraceOverview{
 		Source: domain.LogSourceAxiom, From: from, To: to, BucketMs: binMs,
@@ -258,7 +258,7 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 			return domain.Trace{}, obsInvalid(err)
 		}
 		for _, r := range rows {
-			spans = append(spans, spanOf(r))
+			spans = append(spans, axiomSpanOf(r))
 		}
 	}
 	// The lines can only have been written while the trace ran: look there when its spans say
@@ -276,9 +276,9 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 			lo = math.Min(lo, s.Start)
 			hi = math.Max(hi, s.Start+s.Duration)
 		}
-		from, to = lo-traceLogSlackMs, f64(hi+traceLogSlackMs)
+		from, to = lo-traceLogSlackMs, obsF64(hi+traceLogSlackMs)
 	case at != 0:
-		from, to = at-traceLogWindow, f64(at+traceLogWindow)
+		from, to = at-traceLogWindow, obsF64(at+traceLogWindow)
 	default:
 		from = now - traceWindowMs
 	}
@@ -292,7 +292,7 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 // TracesAround is the requests that started within 30 s either side of at, newest first: the
 // traces near a log line. Empty without a traces dataset.
 func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentID string, at float64) ([]domain.TraceSummary, error) {
-	if err := validMoment(at); err != nil {
+	if err := validLogMoment(at); err != nil {
 		return nil, err
 	}
 	scope, err := a.traceScope(ctx, actor, environmentID)
@@ -302,7 +302,7 @@ func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentI
 	if scope.traces == nil {
 		return []domain.TraceSummary{}, nil
 	}
-	out, err := a.traceRequests(ctx, *scope.traces, scope.serviceIDs, "", at-aroundMs, f64(at+aroundMs), traceList)
+	out, err := a.traceRequests(ctx, *scope.traces, scope.serviceIDs, "", at-logsAroundMs, obsF64(at+logsAroundMs), traceList)
 	if err != nil {
 		return nil, obsInvalid(err)
 	}

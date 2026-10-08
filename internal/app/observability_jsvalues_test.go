@@ -114,7 +114,7 @@ func TestJSEncoders(t *testing.T) {
 	var want string
 	_ = json.Unmarshal(g.Form[0], &pairs)
 	_ = json.Unmarshal(g.Form[1], &want)
-	if got := formEncode(pairs); got != want {
+	if got := jsFormEncode(pairs); got != want {
 		t.Errorf("URLSearchParams = %q, want %q", got, want)
 	}
 }
@@ -151,7 +151,7 @@ func TestJSONOrderAndStringify(t *testing.T) {
 
 func TestISOTime(t *testing.T) {
 	for _, c := range loadJSGolden(t).ISO {
-		if got := isoTime(c[0].(float64)); got != c[1].(string) {
+		if got := jsISOTime(c[0].(float64)); got != c[1].(string) {
 			t.Errorf("toISOString(%v) = %q, want %q", c[0], got, c[1])
 		}
 	}
@@ -165,7 +165,7 @@ func TestPreciseTimeAndSlice(t *testing.T) {
 		"bad":                            0,
 	}
 	for in, want := range cases {
-		if got := preciseTime(in); got != want {
+		if got := axiomPreciseTime(in); got != want {
 			t.Errorf("preciseTime(%q) = %v, want %v", in, got, want)
 		}
 	}
@@ -187,7 +187,7 @@ func TestAPLLiteral(t *testing.T) {
 
 func TestClampTail(t *testing.T) {
 	for in, want := range map[float64]int{200: 200, 200.9: 200, 0: 1, -5: 1, 1000: 1000, 1001: 1000, 5000: 1000, 0.5: 1, math.NaN(): 1} {
-		if got := clampTail(in); got != want {
+		if got := clampLogTail(in); got != want {
 			t.Errorf("clampTail(%v) = %d, want %d", in, got, want)
 		}
 	}

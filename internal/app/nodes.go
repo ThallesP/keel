@@ -53,7 +53,7 @@ type CreatedNode struct {
 func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID string, in CreateNodeInput) (CreatedNode, error) {
 	var out CreatedNode
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		scope, err := requireEnvironment(tx, actor, environmentID)
+		scope, err := canvasRequireEnvironment(tx, actor, environmentID)
 		if err != nil {
 			return err
 		}

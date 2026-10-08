@@ -106,7 +106,7 @@ func TestCanvasCreateNodeErrors(t *testing.T) {
 	for _, c := range cases {
 		target := env
 		if c.code == "" {
-			target, c.code, c.msg = "nope", domain.CodeNotFound, "Environment not found"
+			target, c.code, c.msg = "nope", domain.CodeProjectNotFound, "Environment not found"
 		}
 		_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), target, c.in)
 		if err == nil || domain.CodeOf(err) != c.code || err.Error() != c.msg {
@@ -570,7 +570,7 @@ func TestCanvasOtherOrganization(t *testing.T) {
 		t.Errorf("by slug %+v", home)
 	}
 	_, err := k.app.CreateNode(k.ctx, b, env, app.CreateNodeInput{Type: domain.NodeService})
-	canvasWantErr(t, err, domain.CodeNotFound, "Environment not found")
+	canvasWantErr(t, err, domain.CodeProjectNotFound, "Environment not found")
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, b, api, app.NodeUpdate{Name: canvasPtr("mine")}), domain.CodeServiceNotFound, "Node not found")
 	canvasWantErr(t, k.app.MoveNode(k.ctx, b, api, domain.Position{X: 1}), domain.CodeServiceNotFound, "Node not found")
 	_, err = k.app.DuplicateNode(k.ctx, b, api)

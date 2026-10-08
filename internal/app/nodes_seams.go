@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+
 	"github.com/ThallesP/keel/internal/domain"
 )
 
@@ -86,4 +88,17 @@ func canvasCreatedAt(now int64, siblings []domain.Node) int64 {
 // canvasNameTaken is the message for a node name already used in the environment.
 func canvasNameTaken(name string) error {
 	return domain.E(domain.CodeNameTaken, "\"%s\" is already taken", name)
+}
+
+// canvasRequireEnvironment is requireEnvironment with the code a missing or foreign environment
+// carries in this API: PROJECT_NOT_FOUND (docs/go/spec/projects.md §2.1, cli-install.md A9 row 8
+// and C1). access.go answers NOT_FOUND, which is not a code the CLI knows; once the foundation
+// fixes it there, this is requireEnvironment.
+func canvasRequireEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
+	scope, err := requireEnvironment(tx, actor, id)
+	var de *domain.Error
+	if errors.As(err, &de) && de.Code == domain.CodeNotFound && de.Message == domain.MsgEnvironmentNotFound {
+		return scope, domain.E(domain.CodeProjectNotFound, domain.MsgEnvironmentNotFound)
+	}
+	return scope, err
 }

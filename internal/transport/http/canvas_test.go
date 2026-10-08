@@ -133,7 +133,7 @@ func TestCanvasHTTPNodes(t *testing.T) {
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "Bad"}, 422, "INVALID_INPUT", "Name: 1–40 chars, a-z 0-9 and - only")
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "port": 80.5}, 422, "INVALID_INPUT", "Port must be 1–65535")
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "api"}, 409, "NAME_TAKEN", `"api" is already taken`)
-	c.problem("POST", "/api/environments/nope/nodes", map[string]any{"type": "service"}, 404, "NOT_FOUND", "Environment not found")
+	c.problem("POST", "/api/environments/nope/nodes", map[string]any{"type": "service"}, 404, "PROJECT_NOT_FOUND", "Environment not found")
 	if status, _, raw := c.do("POST", "/api/environments/env/nodes", map[string]any{"type": "bogus"}); status != 422 || !strings.Contains(raw, `"code":"INVALID_INPUT"`) {
 		t.Errorf("bad type: %d %s", status, raw)
 	}
@@ -165,6 +165,13 @@ func TestCanvasHTTPNodes(t *testing.T) {
 	var vol struct{ ID string }
 	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "volume"}, 201, &vol)
 	c.problem("POST", "/api/nodes/"+vol.ID+"/stop", nil, 422, "INVALID_INPUT", "This node type cannot be stopped")
+	// Already at 0 replicas: nothing ships, and the field is null rather than absent (web-data M9).
+	var idle struct{ ID string }
+	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "idle", "replicas": 0}, 201, &idle)
+	if status, _, raw := c.do("POST", "/api/nodes/"+idle.ID+"/stop", nil); status != 200 || raw != `{"deploymentId":null}` {
+		t.Errorf("stop at 0 replicas: %d %s", status, raw)
+	}
+	c.problem("POST", "/api/nodes/nope/stop", nil, 404, "SERVICE_NOT_FOUND", "Node not found")
 	for _, id := range []string{vol.ID, vol.ID, "nope"} {
 		if status, _, raw := c.do("DELETE", "/api/nodes/"+id, nil); status != 204 {
 			t.Errorf("delete %s: %d %s", id, status, raw)
@@ -246,7 +253,7 @@ func TestCanvasHTTPProjectsAndAccess(t *testing.T) {
 	}
 	c.problem("PATCH", "/api/nodes/"+node.ID, map[string]any{"name": "mine"}, 404, "SERVICE_NOT_FOUND", "Node not found")
 	c.problem("POST", "/api/nodes/"+node.ID+"/start", nil, 404, "SERVICE_NOT_FOUND", "Node not found")
-	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service"}, 404, "NOT_FOUND", "Environment not found")
+	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service"}, 404, "PROJECT_NOT_FOUND", "Environment not found")
 	if status, _, _ := c.do("DELETE", "/api/nodes/"+node.ID, nil); status != 204 {
 		t.Errorf("foreign delete status %d", status)
 	}

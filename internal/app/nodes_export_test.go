@@ -48,6 +48,10 @@ func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[stri
 	return env, list, err
 }
 
+// RecoverCanvas runs the canvas part of the start-up pass alone (Recover also runs the other
+// areas' parts, which need their ports).
+func (a *App) RecoverCanvas(ctx context.Context) { a.recoverCanvas(ctx) }
+
 // CanvasMarkReferrersDirty runs the markReferrersDirty seam on a node and returns the topics.
 func (a *App) CanvasMarkReferrersDirty(ctx context.Context, nodeID string) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {

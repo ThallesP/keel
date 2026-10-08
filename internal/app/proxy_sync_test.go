@@ -1,10 +1,12 @@
 package app_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -318,19 +320,105 @@ func TestProxyCertReport(t *testing.T) {
 	}
 }
 
-// A report that lands while a sync runs (which may have read /keel/certs before the
-// certificate existed) is followed by another sync (Q5).
+// The race of proxy-ingress.md §8 / Q5: the certificate arrives (and is reported live) right
+// after a sync read /keel/certs as pending, so that sync writes `starting` over the report. The
+// sync then goes once more and the endpoint ends live, with no 2-minute wait.
 func TestProxyCertReportDuringSync(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
+	const name = "api-16w41g.203-0-113-7.sslip.io"
+	reported := false
+	e.proxy.onCerts = func() {
+		if reported {
+			return
+		}
+		reported = true
+		e.proxy.certs = map[string]app.ProxyCert{name: {State: "ok"}}
+		if err := e.app.ReportCert(e.ctx, app.CertObtained, name, ""); err != nil {
+			t.Error(err)
+		}
+		if got := e.endpoints(igAPI)[0].Status.State; got != domain.EndpointLive {
+			t.Errorf("report not written: %s", got)
+		}
+	}
 	e.jobs.Run(t)
-	release := e.app.HoldProxySyncForTest()
-	if err := e.app.ReportCert(e.ctx, app.CertObtained, "api-16w41g.203-0-113-7.sslip.io", ""); err != nil {
+	if got := e.endpoints(igAPI)[0].Status.State; got != domain.EndpointLive {
+		t.Fatalf("a report during a sync was overwritten: %s", got)
+	}
+	if len(e.proxy.certCalls) != 2 {
+		t.Fatalf("certs read %d times, want 2 (the sync, then once more)", len(e.proxy.certCalls))
+	}
+
+	// With no sync running, a report schedules nothing.
+	if err := e.app.ReportCert(e.ctx, app.CertObtained, name, ""); err != nil {
 		t.Fatal(err)
 	}
-	release()
-	if !e.jobs.Pending("proxy:sync") {
-		t.Fatal("no sync after a report during a sync")
+	if e.jobs.Pending("proxy:sync") {
+		t.Fatal("a report with no sync running scheduled one")
+	}
+}
+
+// Jobs coalesces only syncs that have not started: each one asked for while a sync runs is fired
+// in its own goroutine. They must neither wait for the running sync nor each run a full sync
+// after it: they collapse into one more pass (the coalescing trigger of §5.1).
+func TestProxySyncCoalescesWhileRunning(t *testing.T) {
+	e := newIngressEnv(t)
+	igExposeAll(t, e)
+	e.jobs.Run(t)
+	before := e.proxy.loadCount()
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	e.proxy.onLoad = func(call int) {
+		if call == before+1 {
+			close(entered)
+			<-release
+		}
+	}
+	first := make(chan struct{})
+	go func() { e.app.SyncProxy(e.ctx); close(first) }()
+	<-entered
+
+	var wg sync.WaitGroup
+	for range 3 {
+		wg.Add(1)
+		go func() { defer wg.Done(); e.app.SyncProxy(e.ctx) }()
+	}
+	returned := make(chan struct{})
+	go func() { wg.Wait(); close(returned) }()
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("syncs asked for during a running sync waited for it")
+	}
+	close(release)
+	<-first
+	if got := e.proxy.loadCount() - before; got != 2 {
+		t.Fatalf("4 syncs asked for during one load pushed %d configs, want 2", got)
+	}
+
+	// The loop is free again: the next sync runs.
+	e.app.SyncProxy(e.ctx)
+	if got := e.proxy.loadCount() - before; got != 3 {
+		t.Fatalf("after the burst: %d loads, want 3", got)
+	}
+}
+
+// A sync whose context is cancelled frees the loop for the next one.
+func TestProxySyncCancelledFreesTheLoop(t *testing.T) {
+	e := newIngressEnv(t)
+	igExposeAll(t, e)
+	ctx, cancel := context.WithCancel(e.ctx)
+	e.proxy.onLoad = func(int) {
+		cancel()
+		e.app.SyncProxy(e.ctx) // asked for meanwhile: dropped with the cancelled loop
+	}
+	e.app.SyncProxy(ctx)
+	e.proxy.onLoad = nil
+	n := e.proxy.loadCount()
+	e.app.SyncProxy(e.ctx)
+	if got := e.proxy.loadCount(); got != n+1 {
+		t.Fatalf("loads %d → %d: the loop stayed taken", n, got)
 	}
 }
 

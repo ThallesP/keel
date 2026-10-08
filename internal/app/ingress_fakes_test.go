@@ -81,6 +81,7 @@ type igProxy struct {
 	certs     map[string]app.ProxyCert
 	certsErr  error
 	certCalls [][]string
+	onCerts   func() // runs after Certs took its answer, before the caller sees it
 	reportURL string
 }
 
@@ -103,8 +104,21 @@ func (p *igProxy) LoadApps(_ context.Context, apps []byte) error {
 }
 
 func (p *igProxy) Certs(_ context.Context, names []string) (map[string]app.ProxyCert, error) {
+	p.mu.Lock()
 	p.certCalls = append(p.certCalls, names)
-	return p.certs, p.certsErr
+	certs, err, hook := p.certs, p.certsErr, p.onCerts
+	p.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return certs, err
+}
+
+// loadCount is how many configs were pushed so far.
+func (p *igProxy) loadCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.loads)
 }
 
 func (p *igProxy) ReportURL() string { return p.reportURL }

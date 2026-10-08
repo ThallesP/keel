@@ -40,9 +40,12 @@ const (
 // ingressState is the per-App state of the sync loop. App's fields belong to the foundation, so
 // it lives beside it, keyed by the App.
 type ingressState struct {
-	// mu serializes syncs: Jobs coalesces pending syncs, and this makes a sync that is scheduled
-	// while another runs wait for it instead of overlapping.
-	mu sync.Mutex
+	// mu guards running and again: the coalescing trigger of proxy-ingress.md §5.1. One sync runs
+	// at a time; however many are asked for while it runs (Jobs only coalesces syncs that have not
+	// started), they collapse into one more pass after it, and none of them waits for it.
+	mu      sync.Mutex
+	running bool
+	again   bool
 	// failed: the last sync could not load any config (proxy down, an error no endpoint owns).
 	// The resync keeps retrying then even with nothing exposed (Q6).
 	failed atomic.Bool
@@ -55,6 +58,48 @@ var ingressStates sync.Map // *App → *ingressState
 func (a *App) ingress() *ingressState {
 	v, _ := ingressStates.LoadOrStore(a, &ingressState{})
 	return v.(*ingressState)
+}
+
+// begin claims the sync loop. false: a sync is running, and it will go again for this caller.
+func (st *ingressState) begin() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.running {
+		st.again = true
+		return false
+	}
+	st.running = true
+	return true
+}
+
+// next says whether the running sync must go again (someone asked meanwhile), and otherwise
+// frees the loop in the same critical section, so no request can fall in between.
+func (st *ingressState) next() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.again {
+		st.again = false
+		return true
+	}
+	st.running = false
+	return false
+}
+
+// release frees the loop after a sync that did not finish (cancelled, or panicked): the next
+// request runs instead of finding the loop taken forever.
+func (st *ingressState) release() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.running, st.again = false, false
+}
+
+// againIfRunning makes a sync that is running now go once more when it is done.
+func (st *ingressState) againIfRunning() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.running {
+		st.again = true
+	}
 }
 
 // ScheduleProxySync rebuilds and loads keel-proxy's config soon (coalesced by Jobs). Safe to call
@@ -80,14 +125,34 @@ type routeStatus struct {
 
 // SyncProxy loads the config for every endpoint and records each endpoint's status. When the
 // endpoints changed while it loaded, it goes again (at most 3 passes), so the latest set wins.
+// Called while another sync runs, it returns at once and that sync runs once more when it is
+// done (however many calls came meanwhile), so syncs never overlap and never queue up.
 func (a *App) SyncProxy(ctx context.Context) {
 	if a.Proxy == nil {
 		a.Log.Warn("keel-proxy sync skipped: no proxy configured")
 		return
 	}
 	st := a.ingress()
-	st.mu.Lock()
-	defer st.mu.Unlock()
+	if !st.begin() {
+		return
+	}
+	finished := false
+	defer func() {
+		if !finished {
+			st.release()
+		}
+	}()
+	for ctx.Err() == nil {
+		a.syncProxy(ctx, st)
+		if !st.next() {
+			finished = true
+			return
+		}
+	}
+}
+
+// syncProxy is one sync: up to 3 passes, until the endpoints did not move during a load.
+func (a *App) syncProxy(ctx context.Context, st *ingressState) {
 	reporter := proxyReporter{URL: a.Proxy.ReportURL(), Token: a.Config.WorkerToken}
 	if reporter.URL == "" {
 		reporter.URL = a.Config.SiteURL + "/proxy/events"
@@ -357,15 +422,8 @@ func (a *App) ReportCert(ctx context.Context, event, name, certError string) err
 		}
 		if len(ids) > 0 {
 			// A sync running now may have read /keel/certs before this certificate existed and would
-			// write `starting` over it (Q5): sync again once it is done, which reads it as ok.
-			ch.AfterCommit(func() {
-				st := a.ingress()
-				if st.mu.TryLock() {
-					st.mu.Unlock()
-					return
-				}
-				a.ScheduleProxySync()
-			})
+			// write `starting` over it (Q5): it goes once more when done, and reads it as ok.
+			ch.AfterCommit(a.ingress().againIfRunning)
 		}
 		return nil
 	})

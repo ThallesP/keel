@@ -363,8 +363,8 @@ func TestAuthHTTPDeviceLogin(t *testing.T) {
 	if again := poll(); again.status != 400 || again.str("error") != "invalid_grant" {
 		t.Fatalf("second token: %d %s", again.status, again.raw)
 	}
-	// CLI sign-out with its bearer and no Origin.
-	if out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", bearer: got.str("access_token")}); out.status != 200 {
+	// CLI sign-out with its bearer, no Origin, and the `{}` body keel logout sends.
+	if out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", bearer: got.str("access_token"), body: map[string]string{}}); out.status != 200 {
 		t.Fatalf("CLI sign-out: %d %s", out.status, out.raw)
 	}
 	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: got.str("access_token")}); me.str("user", "id") != "" {

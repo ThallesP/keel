@@ -170,13 +170,9 @@ func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirect
 			}
 			return "", obsInvalid(err)
 		}
+		// First writer wins; this sign-in still uses the client it registered.
 		clientID = id
-		err = a.write(ctx, func(tx Tx, _ *Changes) error {
-			if err := tx.SaveAxiomClient(redirectURI, clientID, a.Now()); err != nil {
-				return err
-			}
-			return nil
-		})
+		err = a.write(ctx, func(tx Tx, _ *Changes) error { return tx.SaveAxiomClient(redirectURI, clientID, a.Now()) })
 		if err != nil {
 			return "", err
 		}

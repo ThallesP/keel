@@ -33,7 +33,14 @@ jobs:
       - run: go test ./...
       - name: openapi.json is current
         run: |
-          # keel serve + keel agent in one test process against the runner's own fresh Swarm: deploy,
+          # The dashboard's hooks and the CLI are built against this file: a handler change must
+          # come with `make openapi`.
+          go run ./cmd/keel openapi > /tmp/openapi.json
+          if ! diff -u openapi.json /tmp/openapi.json; then
+            echo "openapi.json is stale: run make openapi and commit it"; exit 1
+          fi
+
+  # keel serve + keel agent in one test process against the runner's own fresh Swarm: deploy,
   # ship a variable change, stop, start, redeploy, delete (internal/serve/swarm_it_test.go).
   swarm:
     runs-on: ubuntu-24.04
@@ -49,13 +56,6 @@ jobs:
       - run: go test ./internal/serve -run SwarmIT -v -count=1 -timeout 15m
         env:
           KEEL_IT_DOCKER_HOST: unix:///var/run/docker.sock
-
-  # The dashboard's hooks and the CLI are built against this file: a handler change must
-          # come with `make openapi`.
-          go run ./cmd/keel openapi > /tmp/openapi.json
-          if ! diff -u openapi.json /tmp/openapi.json; then
-            echo "openapi.json is stale: run make openapi and commit it"; exit 1
-          fi
 
   # The dashboard, embedded into the binary by the image build.
   web:

@@ -28,31 +28,52 @@ import (
 type Config struct {
 	URL          string        // KEEL_URL (required), trailing "/" stripped
 	Token        string        // KEEL_WORKER_TOKEN, else /run/secrets/keel_worker_token (trimmed)
-	StatePath    string        // KEEL_STATE, default /var/lib/keel-worker/state.json
+	StatePath    string        // KEEL_STATE, default on the mounted state volume (defaultStatePath)
 	ConfigPoll   time.Duration // KEEL_CONFIG_POLL_MS, default 30 s
 	DockerSocket string        // DOCKER_SOCKET, default /var/run/docker.sock
 }
 
 const (
-	defaultStatePath  = "/var/lib/keel-worker/state.json"
+	agentStateDir     = "/var/lib/keel-agent"  // keel-agent's state volume (cli-install.md B7)
+	workerStateDir    = "/var/lib/keel-worker" // the Bun worker's keel-worker-state mount
 	defaultSecretPath = "/run/secrets/keel_worker_token"
 	defaultSocket     = "/var/run/docker.sock"
 	defaultConfigPoll = 30 * time.Second
 	shutdownBudget    = 5 * time.Second // Swarm's stop grace period is 10 s
 )
 
-// ConfigFromEnv reads the agent's environment.
-func ConfigFromEnv() (Config, error) { return configFrom(os.Getenv, defaultSecretPath) }
+// defaultStatePath is state.json on whichever state volume the service mounts, so the resume
+// points survive a restart either way: /var/lib/keel-agent (the keel-agent service, B7, also when
+// it reuses the keel-worker-state volume, B6.4), or /var/lib/keel-worker when only that exists
+// (the Bun worker's keel-worker service with the image swapped). A state file off the volume is
+// lost at every restart, and every container is then re-read from its sink's connect time.
+func defaultStatePath(isDir func(string) bool) string {
+	if !isDir(agentStateDir) && isDir(workerStateDir) {
+		return workerStateDir + "/state.json"
+	}
+	return agentStateDir + "/state.json"
+}
 
-func configFrom(getenv func(string) string, secretPath string) (Config, error) {
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
+}
+
+// ConfigFromEnv reads the agent's environment.
+func ConfigFromEnv() (Config, error) { return configFrom(os.Getenv, defaultSecretPath, isDir) }
+
+func configFrom(getenv func(string) string, secretPath string, isDir func(string) bool) (Config, error) {
 	cfg := Config{
 		URL:          strings.TrimRight(getenv("KEEL_URL"), "/"),
-		StatePath:    orDefault(getenv("KEEL_STATE"), defaultStatePath),
+		StatePath:    getenv("KEEL_STATE"),
 		ConfigPoll:   defaultConfigPoll,
 		DockerSocket: orDefault(getenv("DOCKER_SOCKET"), defaultSocket),
 	}
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (Convex site URL, e.g. https://x.convex.site)")
+	}
+	if cfg.StatePath == "" {
+		cfg.StatePath = defaultStatePath(isDir)
 	}
 	// Number(KEEL_CONFIG_POLL_MS) in the worker; empty, garbage or <= 0 keep the default instead of
 	// polling in a tight loop.

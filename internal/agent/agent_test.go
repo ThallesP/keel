@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -31,7 +32,7 @@ func TestConfigFromEnv(t *testing.T) {
 		{
 			name: "defaults", secret: missing,
 			env:  map[string]string{"KEEL_URL": "http://100.64.0.1:3211//", "KEEL_WORKER_TOKEN": "tok"},
-			want: Config{URL: "http://100.64.0.1:3211", Token: "tok", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
+			want: Config{URL: "http://100.64.0.1:3211", Token: "tok", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
 		},
 		{
 			name: "overrides", secret: missing,
@@ -42,17 +43,17 @@ func TestConfigFromEnv(t *testing.T) {
 		{
 			name: "fractional poll", secret: missing,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "tok", "KEEL_CONFIG_POLL_MS": " 250.5 "},
-			want: Config{URL: "http://x", Token: "tok", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 250500 * time.Microsecond, DockerSocket: "/var/run/docker.sock"},
+			want: Config{URL: "http://x", Token: "tok", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 250500 * time.Microsecond, DockerSocket: "/var/run/docker.sock"},
 		},
 		{
 			name: "token from the Swarm secret", secret: secret,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_CONFIG_POLL_MS": "abc"},
-			want: Config{URL: "http://x", Token: "from-secret", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
+			want: Config{URL: "http://x", Token: "from-secret", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
 		},
 		{
 			name: "env token wins over the secret", secret: secret,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "env", "KEEL_CONFIG_POLL_MS": "0"},
-			want: Config{URL: "http://x", Token: "env", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
+			want: Config{URL: "http://x", Token: "env", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},
 		},
 		{
 			name: "no url", secret: secret, env: map[string]string{"KEEL_WORKER_TOKEN": "tok"},
@@ -65,7 +66,7 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := configFrom(func(k string) string { return tt.env[k] }, tt.secret)
+			got, err := configFrom(func(k string) string { return tt.env[k] }, tt.secret, func(string) bool { return false })
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Fatalf("err = %v, want %q", err, tt.wantErr)
@@ -76,6 +77,43 @@ func TestConfigFromEnv(t *testing.T) {
 				t.Fatalf("config = %+v, %v\nwant %+v", got, err, tt.want)
 			}
 		})
+	}
+}
+
+// Without KEEL_STATE the state file goes on the mounted state volume: keel-agent's
+// /var/lib/keel-agent (B7, B6.4), or the Bun worker's /var/lib/keel-worker when only that one is
+// mounted (image swapped on the keel-worker service). Off the volume it would be lost at every
+// restart and every container re-read from its sink's connect time.
+func TestDefaultStatePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		mounted []string
+		want    string
+	}{
+		{"keel-agent volume", []string{"/var/lib/keel-agent"}, "/var/lib/keel-agent/state.json"},
+		{"keel-worker volume (image swap)", []string{"/var/lib/keel-worker"}, "/var/lib/keel-worker/state.json"},
+		{"both", []string{"/var/lib/keel-agent", "/var/lib/keel-worker"}, "/var/lib/keel-agent/state.json"},
+		{"none (created on first write)", nil, "/var/lib/keel-agent/state.json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := func(p string) bool { return slices.Contains(tt.mounted, p) }
+			if got := defaultStatePath(dir); got != tt.want {
+				t.Fatalf("defaultStatePath = %s, want %s", got, tt.want)
+			}
+			env := map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "tok"}
+			cfg, err := configFrom(func(k string) string { return env[k] }, "/nope", dir)
+			if err != nil || cfg.StatePath != tt.want {
+				t.Fatalf("config state = %q, %v; want %s", cfg.StatePath, err, tt.want)
+			}
+			env["KEEL_STATE"] = "/s/state.json"
+			if cfg, _ := configFrom(func(k string) string { return env[k] }, "/nope", dir); cfg.StatePath != "/s/state.json" {
+				t.Fatalf("KEEL_STATE ignored: %q", cfg.StatePath)
+			}
+		})
+	}
+	if !isDir(t.TempDir()) || isDir(filepath.Join(t.TempDir(), "missing")) {
+		t.Fatal("isDir")
 	}
 }
 

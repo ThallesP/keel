@@ -261,6 +261,7 @@ type TracingEnvVar struct {
 
 // TracingView is a service's tracing (tracing.forNode). The ingest key is masked.
 type TracingView struct {
+	_       struct{}        `nullable:"true"` // reads return it or null
 	Enabled bool            `json:"enabled"`
 	Traces  string          `json:"traces" enum:"off,old,on"`
 	Env     []TracingEnvVar `json:"env"`
@@ -268,12 +269,13 @@ type TracingView struct {
 
 // LogSinkView is the organization's sink as the UI may see it: never the token.
 type LogSinkView struct {
-	Kind      string  `json:"kind" enum:"axiom"`
-	Domain    string  `json:"domain"`
-	Dataset   string  `json:"dataset"`
-	Traces    *string `json:"traces" nullable:"true"`
-	Org       *string `json:"org" nullable:"true"`
-	TokenHint string  `json:"tokenHint" doc:"… and the token's last 4 characters"`
+	_         struct{} `nullable:"true"` // reads return it or null
+	Kind      string   `json:"kind" enum:"axiom"`
+	Domain    string   `json:"domain"`
+	Dataset   string   `json:"dataset"`
+	Traces    *string  `json:"traces" nullable:"true"`
+	Org       *string  `json:"org" nullable:"true"`
+	TokenHint string   `json:"tokenHint" doc:"… and the token's last 4 characters"`
 }
 
 // AxiomOrgChoice is an org the user can pick after Sign in with Axiom (names only).

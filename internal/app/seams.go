@@ -45,19 +45,6 @@ func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[s
 	panic("withTracing: implemented by the observability area")
 }
 
-// followPort moves every unpinned endpoint of the node to port (docs/go/spec/proxy-ingress.md).
-// Returns true when one moved (the caller then calls ScheduleProxySync after commit).
-// Called by: deploy (apply). Owner: ingress.
-func followPort(tx Tx, ch *Changes, scope NodeScope, port int, now int64) (bool, error) {
-	panic("followPort: implemented by the ingress area")
-}
-
-// ScheduleProxySync rebuilds and loads keel-proxy's config soon (coalesced). Safe to call often.
-// Called by: canvas (node delete), deploy (apply), ingress. Owner: ingress.
-func (a *App) ScheduleProxySync() {
-	panic("ScheduleProxySync: implemented by the ingress area")
-}
-
 // ScheduleObserve observes one node's Swarm service soon, debounced per node (500 ms default,
 // docs/go/spec/projects.md §8.6). Called by: canvas (node delete), deploy. Owner: deploy.
 func (a *App) ScheduleObserve(nodeID string) {
@@ -81,5 +68,4 @@ func (a *App) Recover(ctx context.Context) {
 }
 
 func (a *App) recoverDeploy(ctx context.Context)        {} // owner: deploy (replace)
-func (a *App) recoverIngress(ctx context.Context)       {} // owner: ingress (replace)
 func (a *App) recoverObservability(ctx context.Context) {} // owner: observability (replace)

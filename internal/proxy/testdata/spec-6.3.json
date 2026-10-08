@@ -1,0 +1,58 @@
+{
+  "admin": { "listen": "unix//run/keel-proxy/admin.sock|0600" },
+  "apps": {
+    "http": {
+      "servers": {
+        "public": {
+          "listen": ["host-tcp/203.0.113.7:443", "host-tcp/[2001:db8::1]:443"],
+          "protocols": ["h1", "h2"],
+          "routes": [
+            {
+              "match": [{ "host": ["api-16w41g.203-0-113-7.sslip.io"] }],
+              "handle": [{ "handler": "reverse_proxy", "upstreams": [{ "dial": "svc-j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4:8080" }] }],
+              "terminal": true
+            },
+            {
+              "match": [{ "host": ["app.example.com"] }],
+              "handle": [{ "handler": "reverse_proxy", "upstreams": [{ "dial": "svc-j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4:8080" }] }],
+              "terminal": true
+            }
+          ]
+        }
+      }
+    },
+    "tls": {
+      "automation": {
+        "policies": [
+          {
+            "subjects": ["api-16w41g.203-0-113-7.sslip.io", "app.example.com"],
+            "issuers": [
+              { "module": "acme", "email": "ops@example.com" },
+              { "module": "acme", "ca": "https://acme.zerossl.com/v2/DV90", "email": "ops@example.com" }
+            ]
+          }
+        ]
+      }
+    },
+    "events": {
+      "subscriptions": [
+        {
+          "events": ["cert_obtained", "cert_failed"],
+          "handlers": [{ "handler": "keel", "url": "http://100.64.0.1:3211/proxy/events", "token": "<KEEL_WORKER_TOKEN>" }]
+        }
+      ]
+    },
+    "layer4": {
+      "servers": {
+        "tcp-5432": {
+          "listen": ["host-tcp/203.0.113.7:5432", "host-tcp/[2001:db8::1]:5432"],
+          "routes": [{ "handle": [{ "handler": "proxy", "upstreams": [{ "dial": ["svc-k17cs4z0mn2mr6yr7gx8tjqe1n7rw9qj:5432"] }] }] }]
+        },
+        "udp-27015": {
+          "listen": ["host-udp/203.0.113.7:27015", "host-udp/[2001:db8::1]:27015"],
+          "routes": [{ "handle": [{ "handler": "proxy", "upstreams": [{ "dial": ["udp/svc-jd7f9g6h5k4m3n2p1q0r9s8t7v6w5x4y:27015"] }] }] }]
+        }
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ import { CanvasOverlay } from "@/lib/canvas-overlay";
 
 import { useEnvironment } from "./environment";
 import { attempt } from "./errors";
+import { useCanvasDispatch } from "./store";
 import type { Endpoint, InfraNodeType } from "./types";
 import { useDeploymentLink } from "./use-deployment-link";
 
@@ -78,6 +79,7 @@ type NodeListData = { nodes: NodeView[] | null };
 export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   const { environmentId } = useEnvironment();
   const link = useDeploymentLink();
+  const dispatch = useCanvasDispatch();
   const queryClient = useQueryClient();
   const [overlay] = useState(() => new CanvasOverlay());
 
@@ -121,8 +123,15 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
           createNode({ path: env, body: { type, position, ...options } }),
         );
         if (!result.ok) return;
-        overlay.arrive(result.data.id);
-        if (result.data.deploymentId) link.open(result.data.deploymentId);
+        const { id, deploymentId } = result.data;
+        if (deploymentId) {
+          // The panel shows the new node before the deployment is linked: selecting the arriving
+          // node drops a link that belongs to another node, and the node list (refetched before
+          // this write resolved) can deliver it before the panel has resolved the deployment.
+          dispatch({ type: "openTab", nodeId: id, tab: "deployments" });
+          link.open(deploymentId);
+        }
+        overlay.arrive(id);
       },
       start: async (id) => {
         const result = await attempt(startNode({ path: { id } }));
@@ -193,6 +202,7 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   }, [
     environmentId,
     link,
+    dispatch,
     queryClient,
     overlay,
     createNode,

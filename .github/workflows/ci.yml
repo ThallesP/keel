@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   # The keel binary: one Go module at the repo root (serve, proxy, agent and the CLI). `./...`
-  # stops at nested modules, so apps/proxy (Convex era) is not part of it.
+  # stops at nested modules.
   go:
     runs-on: ubuntu-24.04
     steps:

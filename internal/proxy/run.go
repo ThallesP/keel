@@ -33,7 +33,7 @@ import (
 // control plane mounts the same directory (adapters/caddy).
 const DefaultSocket = "/run/keel-proxy/admin.sock"
 
-// baseConfig is apps/proxy/caddy.json: the admin endpoint only. The control plane then POSTs
+// baseConfig is caddy.json (was apps/proxy/caddy.json): the admin endpoint only. The control plane then POSTs
 // /config/apps; nothing else is ever configured here.
 //
 //go:embed caddy.json

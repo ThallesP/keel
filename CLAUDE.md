@@ -16,14 +16,15 @@ Differentiator: UI/UX and deploy DX.
 ## Install and release
 
 - `install.sh` is the product's front door: one idempotent command, re-run = upgrade, `KEEL_JSON=1` for agents. Its contract (options, output, verification) is documented in `README.md`; keep the two in sync.
-- Control plane = `deploy/compose.yml` (self-hosted Convex + web). Images `ghcr.io/thallesp/keel-{web,functions,worker}` come from `.github/workflows/images.yml`. `ci.yml` runs `install.sh` end to end; anything that changes install behaviour must keep it green.
-- Web gets its Convex URLs at runtime (`/config.js`, `apps/web/src/lib/config.ts`). Never bake deployment URLs into the web build.
+- One binary, `keel` (`cmd/keel`, `internal/`, `docs/go/ARCHITECTURE.md`), one image `ghcr.io/thallesp/keel` (root `Dockerfile`, built by `.github/workflows/images.yml`). Control plane = `deploy/compose.yml`: `keel serve` (API, embedded dashboard, SQLite in the `keel-data` volume, Swarm driver; manages the `keel-agent` global service itself) and `keel proxy` (the public edge, its own container, never the Docker socket), both from that image. `ci.yml` runs Go and web checks and `install.sh` end to end; anything that changes install behaviour must keep it green.
+- Upgrades from a Convex-era install keep `keel_convex-data` and the Convex secrets in `.env`, and say the data is not imported (`convexImportNeeded`) until `keel import-convex` exists and ran. Never delete that volume.
+- The dashboard and the API share one origin; `keel serve` serves `/config.js` (runtime config). Never bake deployment URLs into the web build.
 
 ## CLI
 
-- `apps/cli` is `keel`, a Go CLI for agents first (Railway CLI is the benchmark). Thin client over the public Convex functions over Convex's HTTP API; it finds an install through the dashboard's `/config.js`, so keep that file's shape.
-- Its output contract (JSON envelope like `install.sh`, error codes, exit codes) is in `apps/cli/README.md`. Fields and codes are only ever added.
-- It maps Convex errors to codes by their `ConvexError` message (`translate` in `internal/keel/api.go`); rewording one of those messages means updating it there.
+- The CLI is the same binary (`internal/cli`), for agents first (Railway CLI is the benchmark). Thin client over Keel's HTTP API (`/api`, session token as bearer); it finds an install through the dashboard URL (`/api/meta`), so keep that response's shape.
+- Its output contract (JSON envelope like `install.sh`, error codes, exit codes) is in `docs/cli.md`. Fields and codes are only ever added.
+- Error codes come from the server: every API error is `application/problem+json` with a `code` from the CLI's vocabulary (`domain.Code*`); the CLI uses it as is and only computes the `fix`. Messages stay the Convex-era strings verbatim.
 
 ## Design docs
 

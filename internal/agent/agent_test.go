@@ -40,6 +40,11 @@ func TestConfigFromEnv(t *testing.T) {
 			want: Config{URL: "https://keel.example", Token: "tok", StatePath: "/s/state.json", ConfigPoll: 1500 * time.Millisecond, DockerSocket: "/run/docker.sock"},
 		},
 		{
+			name: "fractional poll", secret: missing,
+			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "tok", "KEEL_CONFIG_POLL_MS": " 250.5 "},
+			want: Config{URL: "http://x", Token: "tok", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 250500 * time.Microsecond, DockerSocket: "/var/run/docker.sock"},
+		},
+		{
 			name: "token from the Swarm secret", secret: secret,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_CONFIG_POLL_MS": "abc"},
 			want: Config{URL: "http://x", Token: "from-secret", StatePath: "/var/lib/keel-worker/state.json", ConfigPoll: 30 * time.Second, DockerSocket: "/var/run/docker.sock"},

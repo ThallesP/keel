@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -53,8 +54,10 @@ func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (Convex site URL, e.g. https://x.convex.site)")
 	}
-	if ms, err := strconv.Atoi(strings.TrimSpace(getenv("KEEL_CONFIG_POLL_MS"))); err == nil && ms > 0 {
-		cfg.ConfigPoll = time.Duration(ms) * time.Millisecond
+	// Number(KEEL_CONFIG_POLL_MS) in the worker; empty, garbage or <= 0 keep the default instead of
+	// polling in a tight loop.
+	if ms, err := strconv.ParseFloat(strings.TrimSpace(getenv("KEEL_CONFIG_POLL_MS")), 64); err == nil && ms > 0 && !math.IsInf(ms, 0) {
+		cfg.ConfigPoll = time.Duration(ms * float64(time.Millisecond))
 	}
 	if t := getenv("KEEL_WORKER_TOKEN"); t != "" {
 		cfg.Token = t

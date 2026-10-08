@@ -76,7 +76,10 @@ export function isRealtimeQuery(query: Query): boolean {
  * Refetches the active queries under any of the topics (inactive ones are marked stale and
  * refetch when next used). Resolves once those refetches settled; never rejects.
  */
-export function invalidateTopics(queryClient: QueryClient, topics: readonly string[]): Promise<void> {
+export function invalidateTopics(
+  queryClient: QueryClient,
+  topics: readonly string[],
+): Promise<void> {
   if (topics.length === 0) return Promise.resolve();
   return queryClient.invalidateQueries(
     {

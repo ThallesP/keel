@@ -49,7 +49,11 @@ export class ApiError extends Error {
     const problem = isObject(body) ? (body as Partial<Problem> & Partial<DeviceError>) : undefined;
     const detail = str(problem?.detail) ?? str(problem?.error_description);
     const title = str(problem?.title) ?? (init.statusText?.trim() || undefined);
-    super(detail ?? title ?? (typeof body === "string" && body.trim() ? body.trim() : `HTTP ${init.status}`));
+    super(
+      detail ??
+        title ??
+        (typeof body === "string" && body.trim() ? body.trim() : `HTTP ${init.status}`),
+    );
     this.status = init.status;
     this.code = str(problem?.code) ?? str(problem?.error) ?? "UNKNOWN";
     this.detail = detail;

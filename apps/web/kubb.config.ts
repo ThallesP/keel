@@ -13,7 +13,11 @@ export default defineConfig({
   root: ".",
   input: "../../openapi.json",
   // JSON numbers stay numbers: times are epoch ms (`Date.now()` arithmetic), counts are small.
-  adapter: adapterOas({ integerType: "number", unknownType: "unknown", emptySchemaType: "unknown" }),
+  adapter: adapterOas({
+    integerType: "number",
+    unknownType: "unknown",
+    emptySchemaType: "unknown",
+  }),
   // One barrel, `@/api/gen`: types, zod schemas, fetch functions and hooks by name.
   output: { path: "./src/api/gen", clean: true, barrel: { type: "named" } },
   plugins: [
@@ -30,7 +34,7 @@ export default defineConfig({
       // then the query parameters object when the operation has any: realtime topics and
       // Keel-Invalidate name path prefixes (docs/go/ARCHITECTURE.md, "Realtime").
       queryKey: ({ node }) => {
-        const p = node.path.replace(/\{([^}]+)\}/g, (_, n) => "${path." + n + "}");
+        const p = (node.path ?? "").replace(/\{([^}]+)\}/g, (_, n) => "${path." + n + "}");
         const hasQuery = node.parameters.some((x) => x.in === "query");
         return hasQuery ? ["`" + p + "`", "...(query ? [query] : [])"] : ["`" + p + "`"];
       },

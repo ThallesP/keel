@@ -93,9 +93,12 @@ export type TraceSummary = G.TraceSummary;
 export type TraceBucket = G.TraceBucket;
 export type TraceStats = G.TraceStats;
 
-/** The generated `Trace` with its attributes typed as tuples (no runtime change). */
-export function asTrace(trace: G.Trace): Trace;
+/**
+ * The generated `Trace` with its attributes typed as tuples (no runtime change). Works as a
+ * query `select`: `useGetTrace(…, { query: { select: asTrace } })`.
+ */
 export function asTrace(trace: G.Trace | undefined): Trace | undefined;
+export function asTrace(trace: G.Trace): Trace;
 export function asTrace(trace: G.Trace | undefined): Trace | undefined {
   return trace as Trace | undefined;
 }

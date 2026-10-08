@@ -14,7 +14,15 @@
 //   3xxx codes reconnect (centrifuge does it); any other terminal close is retried here.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Centrifuge, type DisconnectedContext } from "centrifuge";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { Me } from "@/api/gen";
 

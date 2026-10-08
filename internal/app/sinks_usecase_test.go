@@ -14,7 +14,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func strp(s string) *string { return &s }
+func strp(s string) *string   { return &s }
 func f64p(f float64) *float64 { return &f }
 
 func sinkOfOrg(t *testing.T, e *obsEnv, org string) *app.SinkRecord {

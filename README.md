@@ -29,7 +29,7 @@ You need a Tailscale account (the free plan works). Reading [install.sh](install
 1. Installs Docker ([get.docker.com](https://get.docker.com)) and Tailscale ([tailscale.com/install.sh](https://tailscale.com/install.sh)) if they are missing, and joins the tailnet. Looks up the server's public IPv4 (`api.ipify.org`), which names the HTTPS domains of exposed services.
 2. Writes its state to `/opt/keel`. `.env` (mode 0600) holds generated secrets and settings; `compose.yml` defines the control plane.
 3. Initialises Docker Swarm on the tailnet address and creates the `keel` overlay network.
-4. Starts the control plane with Docker Compose (`docker compose -p keel`): two containers from one image, `ghcr.io/thallesp/keel`.
+4. On a server that ran the Convex-era Keel, moves its data into the new database first (see [Upgrade](#upgrade)). Then starts the control plane with Docker Compose (`docker compose -p keel`): two containers from one image, `ghcr.io/thallesp/keel`.
    - `keel`: `keel serve`, the dashboard and its API. Its SQLite database lives in the `keel_keel-data` volume; it has the Docker socket mounted, because it drives Swarm.
    - `proxy`: `keel proxy` ([Caddy](https://caddyserver.com) with [caddy-l4](https://github.com/mholt/caddy-l4)), the public way in to exposed services. It listens on nothing until you expose something and never gets the Docker socket; see [docs/networking.md](docs/networking.md).
 5. `keel serve` runs its data migrations, syncs the proxy and starts the `keel-agent` global service: one agent per server, forwarding Docker events and shipping container logs.
@@ -49,7 +49,9 @@ Re-run the install command. It is idempotent: secrets are kept, the image is pul
 
 Pin a version with `KEEL_VERSION` (an image tag such as `1.2.3` or `sha-abc1234`). The pin is remembered by later runs.
 
-**From a Convex-era install** (Keel before the single binary): the new control plane starts with an empty database. Your accounts, projects, services and variables stay in the Docker volume `keel_convex-data`, which the installer never deletes, and every run says so until they are imported (a `warning:` line; `"convexImportNeeded": true` in JSON). `keel import-convex` (coming) moves them over. Meanwhile deployed services keep running, but Keel does not manage them and exposed ones lose their public endpoints. Certificates carry over (`keel_proxy-data`), the old `keel-worker` service gives way to `keel-agent`, and the Convex-era secrets stay in `/opt/keel/.env`.
+**From a Convex-era install** (Keel before the single binary), the installer moves your data before the new control plane first starts. While the old Convex backend still runs (it starts it from the saved `compose.convex.yml` if needed), it exports the deployment with the old `keel-functions` image into `/opt/keel/convex-export/snapshot.zip`, then imports that into the new database with `keel import-convex` (report in `/opt/keel/convex-import.json`, and as `convexImport` in JSON). Accounts keep their passwords and CLI logins keep working; the dashboard asks you to sign in again. If the export or the import fails, the installer stops with an `error:` and a `fix:` line, the old control plane keeps running, and re-running retries. Certificates carry over (`keel_proxy-data`), the old `keel-worker` service gives way to `keel-agent`, and the Convex-era secrets stay in `/opt/keel/.env`.
+
+The installer never deletes the old data: the volume `keel_convex-data`, the snapshot and `compose.convex.yml` stay until you remove them, once the dashboard shows everything (`sudo rm -r /opt/keel/convex-export /opt/keel/compose.convex.yml`, `sudo docker volume rm keel_convex-data`). To start empty instead, re-run with `KEEL_SKIP_CONVEX_IMPORT=1`: every later run then warns that the data is not imported (`"convexImportNeeded": true` in JSON) until someone signs up. Meanwhile deployed services keep running, but Keel does not manage them and exposed ones lose their public endpoints.
 
 ### Options
 
@@ -70,6 +72,7 @@ All optional. Values you pass are saved in `/opt/keel/.env` and reused by later 
 | `KEEL_SRC`               | –                  | Use a local checkout instead of fetching (development)                                                                                                                                                                          |
 | `KEEL_IMAGE_PREFIX`      | `ghcr.io/thallesp` | Image registry and namespace                                                                                                                                                                                                    |
 | `KEEL_PULL`              | `1`                | `0`: use images already present locally                                                                                                                                                                                         |
+| `KEEL_SKIP_CONVEX_IMPORT` | –                 | `1`: when upgrading a Convex-era install, start without its data instead of exporting and importing it (see [Upgrade](#upgrade)). The data stays in `keel_convex-data`. Not saved                                                |
 
 Pass them to the root side of the pipe: `curl -fsSL … | sudo KEEL_VERSION=1.2.3 bash`.
 
@@ -89,7 +92,7 @@ The installer stops at the first problem and prints an `error:` line plus a `fix
 
 - **Logs:** `sudo docker compose -p keel logs keel proxy` for the control plane, and `sudo docker service logs keel-agent` for the agents.
 - **An exposed service says "Open ports 80 and 443…":** the certificate authority could not reach the server. Check the firewall or router; the endpoint turns live by itself once it can.
-- **"this server ran the Convex-based Keel":** the data is safe in `keel_convex-data`; see [Upgrade](#upgrade).
+- **"exporting the Convex-era data failed" / "importing the Convex-era data failed":** nothing new was started and the old control plane keeps running; fix what the output says and re-run. The data is safe in `keel_convex-data`; see [Upgrade](#upgrade).
 
 ## Install with an agent
 
@@ -103,8 +106,8 @@ curl -fsSL https://raw.githubusercontent.com/ThallesP/keel/main/install.sh \
 The contract:
 
 - **Output:** stdout is exactly one JSON object and progress goes to stderr.
-  - Success prints `{"ok":true,"url":…,"apiUrl":…,"convexUrl":…,"convexSiteUrl":…,"version":…,"stateDir":"/opt/keel","publicIp":…,"convexImportNeeded":false,"warnings":[]}` and exits 0. `publicIp` is `""` when it could not be detected. `apiUrl`, `convexUrl` and `convexSiteUrl` all equal `url` (the last two predate the single control plane and stay for older readers). `warnings` repeats every `warning:` line of the run.
-  - `convexImportNeeded` is `true` when the server ran the Convex-era Keel and its data is not imported yet: it is safe in the volume `keel_convex-data` (see [Upgrade](#upgrade)). Tell your human before anyone signs up.
+  - Success prints `{"ok":true,"url":…,"apiUrl":…,"convexUrl":…,"convexSiteUrl":…,"version":…,"stateDir":"/opt/keel","publicIp":…,"convexImportNeeded":false,"convexImport":null,"warnings":[]}` and exits 0. `publicIp` is `""` when it could not be detected. `apiUrl`, `convexUrl` and `convexSiteUrl` all equal `url` (the last two predate the single control plane and stay for older readers). `warnings` repeats every `warning:` line of the run.
+  - Upgrading a Convex-era install: `convexImport` is what this run imported, `{"imported":{<table>:n,…},"skipped":{<table>:n,…},"warnings":[…]}` (else `null`). `convexImportNeeded` is `true` when the data is not imported (only after `KEEL_SKIP_CONVEX_IMPORT=1`): it is safe in the volume `keel_convex-data` (see [Upgrade](#upgrade)). Tell your human either way.
   - Failure prints `{"ok":false,"error":…,"fix":…,"warnings":[…]}` and exits non-zero. `fix` is the next step to try.
 - **Without `KEEL_TAILSCALE_AUTHKEY`:** if the server is not on a tailnet yet, the installer prints a login URL on stderr and waits up to 15 minutes. Relay the URL to a human.
 - **Idempotent:** re-running is safe, never rotates secrets, and is also how you upgrade.

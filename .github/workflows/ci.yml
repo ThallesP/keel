@@ -49,8 +49,8 @@ jobs:
         working-directory: apps/web
 
   # Runs install.sh end to end on a fresh runner against the image built from this commit, twice:
-  # the second run must be a no-op upgrade that keeps every secret and the data. Then once more
-  # over a Convex-era data volume, which must be kept and reported.
+  # the second run must be a no-op upgrade that keeps every secret and the data. Then over a
+  # Convex-era data volume it cannot export: it must stop, or start empty when told to.
   install:
     runs-on: ubuntu-24.04
     steps:
@@ -76,7 +76,7 @@ jobs:
           # Fields are only ever added: the Convex-era URLs stay, equal to url.
           jq -e '.apiUrl == .url and .convexUrl == .url and .convexSiteUrl == .url' first.json
           jq -e '.version == "ci" and .stateDir == "/opt/keel" and (.publicIp | type) == "string"' first.json
-          jq -e '.convexImportNeeded == false and (.warnings | type) == "array"' first.json
+          jq -e '.convexImportNeeded == false and .convexImport == null and (.warnings | type) == "array"' first.json
       - name: Sign up and sign in against the installed control plane
         run: |
           site="http://$KEEL_ADDR"
@@ -164,23 +164,28 @@ jobs:
           export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
           "$RUNNER_TEMP/keel" whoami | jq -e '.ok and .user.email == "ci@example.com"'
           "$RUNNER_TEMP/keel" project list | jq -e '[.projects[].slug] == ["ci-app"]'
-      - name: An upgrade over Convex-era data keeps the data and says so
+      - name: Over Convex-era data it imports or stops; KEEL_SKIP_CONVEX_IMPORT=1 starts empty knowingly
         run: |
           compose() { sudo docker compose -p keel --env-file /opt/keel/.env -f /opt/keel/compose.yml "$@"; }
-          # What an upgraded Convex install looks like: its data volume, no SQLite database yet.
+          # Convex-era data and no SQLite database yet, but no old backend and no admin key to
+          # export it with: the installer stops before starting anything.
           compose down
           sudo docker volume rm keel_keel-data
           sudo docker volume create keel_convex-data
-          sudo -E ./install.sh > third.json
-          jq -e '.ok and .convexImportNeeded and (.warnings | any(contains("keel_convex-data")))' third.json
+          ! sudo -E ./install.sh > third.json
+          jq -e '.ok == false and (.fix | contains("KEEL_SKIP_CONVEX_IMPORT=1"))' third.json
+          [ -z "$(compose ps -q)" ]
+          # Skipping knowingly starts empty, keeps the data, and says so.
+          sudo -E KEEL_SKIP_CONVEX_IMPORT=1 ./install.sh > fourth.json
+          jq -e '.ok and .convexImportNeeded and .convexImport == null and (.warnings | any(contains("keel_convex-data")))' fourth.json
           # Nothing imported and no account yet: every re-run says it again.
-          sudo -E ./install.sh > fourth.json
-          jq -e '.ok and .convexImportNeeded' fourth.json
+          sudo -E ./install.sh > fifth.json
+          jq -e '.ok and .convexImportNeeded' fifth.json
           sudo docker volume inspect keel_convex-data > /dev/null
       - name: Diagnostics
         if: failure()
         run: |
-          cat first.json second.json third.json fourth.json 2>/dev/null || true
+          cat first.json second.json third.json fourth.json fifth.json 2>/dev/null || true
           sudo docker compose -p keel ps || true
           sudo docker compose -p keel logs --tail 200 || true
           sudo docker service ps keel-agent --no-trunc || true

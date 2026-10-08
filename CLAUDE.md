@@ -17,7 +17,7 @@ Differentiator: UI/UX and deploy DX.
 
 - `install.sh` is the product's front door: one idempotent command, re-run = upgrade, `KEEL_JSON=1` for agents. Its contract (options, output, verification) is documented in `README.md`; keep the two in sync.
 - One binary, `keel` (`cmd/keel`, `internal/`, `docs/go/ARCHITECTURE.md`), one image `ghcr.io/thallesp/keel` (root `Dockerfile`, built by `.github/workflows/images.yml`). Control plane = `deploy/compose.yml`: `keel serve` (API, embedded dashboard, SQLite in the `keel-data` volume, Swarm driver; manages the `keel-agent` global service itself) and `keel proxy` (the public edge, its own container, never the Docker socket), both from that image. `ci.yml` runs Go and web checks and `install.sh` end to end; anything that changes install behaviour must keep it green.
-- Upgrades from a Convex-era install keep `keel_convex-data` and the Convex secrets in `.env`, and say the data is not imported (`convexImportNeeded`) until `keel import-convex` exists and ran. Never delete that volume.
+- Upgrading a Convex-era install: before `keel serve` first starts, `install.sh` exports the old deployment (old `keel-functions` image, old backend) and imports it with `keel import-convex`; any failure stops it before the new services start (`KEEL_SKIP_CONVEX_IMPORT=1` starts empty knowingly). It never deletes `keel_convex-data`, the snapshot, `compose.convex.yml` or the Convex secrets in `.env`.
 - The dashboard and the API share one origin; `keel serve` serves `/config.js` (runtime config). Never bake deployment URLs into the web build.
 
 ## CLI

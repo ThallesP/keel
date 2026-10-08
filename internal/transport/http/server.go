@@ -165,13 +165,16 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 	})
 }
 
-// SessionToken: the keel_session cookie, else `Authorization: Bearer <token>`.
+// SessionToken: `Authorization: Bearer <token>` when the request has one, else the keel_session
+// cookie. The bearer wins so that the credential that authenticates a request is the one its
+// CSRF exemption is based on (authViaCookie): a bearer request is never acted on with the
+// browser's ambient cookie.
 func SessionToken(r *http.Request) string {
-	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
-		return c.Value
-	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	}
+	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
+		return c.Value
 	}
 	return ""
 }
@@ -228,6 +231,8 @@ func StatusOf(code string) int {
 		return 409
 	case domain.CodeAuthorizationPending:
 		return 428
+	case domain.CodeRateLimited:
+		return 429
 	case domain.CodeInvalidInput:
 		return 422
 	case domain.CodeUnavailable:
@@ -248,6 +253,8 @@ func codeForStatus(status int) string {
 		return domain.CodeConflict
 	case 400, 422:
 		return domain.CodeInvalidInput
+	case 429:
+		return domain.CodeRateLimited
 	case 503:
 		return domain.CodeUnavailable
 	}

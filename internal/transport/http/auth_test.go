@@ -371,3 +371,42 @@ func TestAuthHTTPDeviceLogin(t *testing.T) {
 		t.Fatalf("CLI session survived sign-out: %s", me.raw)
 	}
 }
+
+// A request that carries a bearer is authenticated by that bearer, never by the browser's
+// cookie: its CSRF exemption rests on the bearer, so the ambient cookie must not be what it acts
+// with.
+func TestAuthHTTPBearerWinsOverCookie(t *testing.T) {
+	h := authServe(t, "http://keel.test")
+	owner := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
+		body: map[string]string{"email": "owner@example.com", "password": "correct-horse-battery", "name": "Owner"}}).str("token")
+	inv := h.do(authReq{method: "POST", path: "/api/organization/invitations", bearer: owner, body: map[string]string{"email": "member@example.com"}})
+	member := h.do(authReq{method: "POST", path: "/api/auth/sign-up", body: map[string]string{
+		"email": "member@example.com", "password": "correct-horse-battery", "name": "Member", "invitationId": inv.str("id")}}).str("token")
+	if member == "" {
+		t.Fatal("member sign-up failed")
+	}
+
+	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: member, cookie: owner}); me.str("user", "email") != "member@example.com" {
+		t.Fatalf("me with bearer and cookie: %s", me.raw)
+	}
+	invite := func(r authReq) authResp {
+		r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
+		return h.do(r)
+	}
+	// Cross-site with the owner's cookie and the member's bearer: acts as the member (who may not
+	// invite), not as the owner.
+	r := invite(authReq{bearer: member, cookie: owner, origin: "http://evil.example"})
+	authExpect(t, r, 403, "FORBIDDEN", "You are not allowed to invite users to this organization")
+	// A made-up bearer next to a valid cookie is signed out, not the cookie's account.
+	r = invite(authReq{bearer: "made-up", cookie: owner, origin: "http://evil.example"})
+	authExpect(t, r, 401, "NOT_AUTHENTICATED", "Not authenticated")
+	if r.sessionCookie() != nil {
+		t.Fatal("a bearer request got a session cookie")
+	}
+}
+
+func TestAuthHTTPRateLimitedStatus(t *testing.T) {
+	if got := transport.StatusOf(domain.CodeRateLimited); got != http.StatusTooManyRequests {
+		t.Fatalf("RATE_LIMITED is HTTP %d", got)
+	}
+}

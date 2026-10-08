@@ -9,6 +9,11 @@ type Actor struct {
 	Role           string // owner | admin | member
 	SessionID      string
 	System         bool // internal callers: jobs, the agent, the proxy
+
+	// Auth area: when the session ends (unix ms), and whether resolving it on this request pushed
+	// that out (sliding renewal, auth-orgs.md §4.4). The transport then re-sends the cookie.
+	SessionExpiresAt int64
+	SessionRenewed   bool
 }
 
 // SystemActor is used by background jobs and bearer-protected internal routes.

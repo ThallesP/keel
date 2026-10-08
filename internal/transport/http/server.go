@@ -141,10 +141,19 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 
 type actorKey struct{}
 
-// withActor resolves the session (cookie, else bearer) once per request.
+// withActor resolves the session (cookie, else bearer) once per request. Cookie-authenticated
+// unsafe requests must come from this site (Origin, else Referer: CSRF, auth_session.go); bearer
+// requests are exempt. A session renewed on the way gets its cookie re-sent.
 func (s *Server) withActor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := SessionToken(r)
+		viaCookie := authViaCookie(r)
+		if viaCookie && !authSafeMethod(r.Method) {
+			if msg := s.authCSRFRefusal(r); msg != "" {
+				authForbidden(w, msg)
+				return
+			}
+		}
 		actor := domain.Actor{}
 		if token != "" && s.app != nil && s.app.Store != nil {
 			a, err := s.app.ResolveSession(r.Context(), token)
@@ -154,17 +163,25 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 				actor = a
 			}
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
+		if viaCookie && actor.SessionRenewed {
+			c := s.authSessionCookie(token, actor.SessionExpiresAt)
+			http.SetCookie(w, &c)
+		}
+		ctx := authWithClient(context.WithValue(r.Context(), actorKey{}, actor), r)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// SessionToken: the keel_session cookie, else `Authorization: Bearer <token>`.
+// SessionToken: `Authorization: Bearer <token>` when the request has one, else the keel_session
+// cookie. The bearer wins so that the credential that authenticates a request is the one its
+// CSRF exemption is based on (authViaCookie): a bearer request is never acted on with the
+// browser's ambient cookie.
 func SessionToken(r *http.Request) string {
-	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
-		return c.Value
-	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	}
+	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
+		return c.Value
 	}
 	return ""
 }
@@ -221,6 +238,8 @@ func StatusOf(code string) int {
 		return 409
 	case domain.CodeAuthorizationPending:
 		return 428
+	case domain.CodeRateLimited:
+		return 429
 	case domain.CodeInvalidInput:
 		return 422
 	case domain.CodeUnavailable:
@@ -241,6 +260,8 @@ func codeForStatus(status int) string {
 		return domain.CodeConflict
 	case 400, 422:
 		return domain.CodeInvalidInput
+	case 429:
+		return domain.CodeRateLimited
 	case 503:
 		return domain.CodeUnavailable
 	}

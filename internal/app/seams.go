@@ -10,14 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// joinOrFound is the actor's membership, founding the install's organization when there is none
-// yet (convex/projects.ts joinOrFound). Returns the actor with OrganizationID/Role set.
-// Errors: NOT_AUTHENTICATED; NO_ORGANIZATION when an organization exists and the actor is not in
-// it. Called by: canvas (EnsureDefaultProject, CreateProject). Owner: auth.
-func joinOrFound(tx Tx, actor domain.Actor, now int64) (domain.Actor, error) {
-	panic("joinOrFound: implemented by the auth area")
-}
-
 // ShipOptions are beginDeployment's options (docs/go/spec/projects.md §7.1).
 type ShipOptions struct {
 	Only    []string // nil = every dirty deployable node; non-nil (even empty) = exactly these

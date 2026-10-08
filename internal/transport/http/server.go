@@ -87,7 +87,7 @@ func New(a *app.App, opts Options) http.Handler {
 	humaAPI := humago.New(mux, Config(a.Config.Version))
 	s.Register(humaAPI)
 	s.registerRaw(mux)
-	return s.withActor(mux)
+	return s.withActor(withInvalidations(mux))
 }
 
 // Register adds every Huma operation. `keel openapi` calls it with a nil app to print the spec.
@@ -121,6 +121,13 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(s.opts.ConfigJS))
+	})
+	// Plain-text version, as Convex's /version answered (cli-install.md B3): older install
+	// verification steps still curl "$convexUrl/version", and convexUrl is now the dashboard URL.
+	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(s.app.Config.Version + "\n"))
 	})
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, &api.Problem{Status: 404, Title: "Not Found", Detail: "No such API route", Code: domain.CodeNotFound})

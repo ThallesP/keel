@@ -69,6 +69,7 @@ func (a *App) write(ctx context.Context, fn func(tx Tx, ch *Changes) error) erro
 	if err := a.Store.Write(ctx, func(tx Tx) error { return fn(tx, ch) }); err != nil {
 		return err
 	}
+	recordInvalidations(ctx, ch) // the request's Keel-Invalidate header (platform_invalidations.go)
 	ch.publish(a.Events)
 	return nil
 }

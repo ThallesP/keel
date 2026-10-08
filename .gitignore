@@ -58,3 +58,7 @@ coverage
 .cache
 tmp
 temp
+
+# keel serve dev state (make dev) and local builds (make build)
+.keel
+/bin

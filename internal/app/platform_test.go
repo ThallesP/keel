@@ -1,0 +1,119 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// invStore runs write callbacks without a database (they touch no Tx here).
+type invStore struct{ commitErr error }
+
+func (s invStore) Read(_ context.Context, fn func(Tx) error) error { return fn(nil) }
+func (s invStore) Write(_ context.Context, fn func(Tx) error) error {
+	if err := fn(nil); err != nil {
+		return err
+	}
+	return s.commitErr
+}
+
+type invPublisher struct {
+	mu  sync.Mutex
+	got map[string][]string
+}
+
+func (p *invPublisher) Publish(org string, topics []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.got == nil {
+		p.got = map[string][]string{}
+	}
+	p.got[org] = append(p.got[org], topics...)
+}
+
+func TestWriteRecordsInvalidationsForTheRequest(t *testing.T) {
+	pub := &invPublisher{}
+	a := New(App{Store: invStore{}, Events: pub})
+	ctx, rec := WithInvalidations(context.Background())
+
+	if err := a.write(ctx, func(_ Tx, ch *Changes) error {
+		ch.Projects("org-a")
+		ch.Environment("org-a", "env1")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.write(ctx, func(_ Tx, ch *Changes) error {
+		ch.Projects("org-a") // deduped
+		ch.Organization("org-b")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A write that fails publishes nothing and records nothing.
+	boom := errors.New("boom")
+	if err := a.write(ctx, func(_ Tx, ch *Changes) error {
+		ch.Environment("org-a", "rolled-back")
+		return boom
+	}); !errors.Is(err, boom) {
+		t.Fatalf("err = %v", err)
+	}
+	// Neither does one whose commit fails.
+	failing := New(App{Store: invStore{commitErr: boom}, Events: pub})
+	_ = failing.write(ctx, func(_ Tx, ch *Changes) error { ch.Environment("org-a", "not-committed"); return nil })
+
+	if got, want := rec.Topics("org-a"), []string{"/api/environments/env1", "/api/projects"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("org-a topics = %v, want %v", got, want)
+	}
+	if got, want := rec.Topics("org-b"), []string{"/api/organization"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("org-b topics = %v, want %v", got, want)
+	}
+	if got, want := rec.Topics(""), []string{"/api/environments/env1", "/api/organization", "/api/projects"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("all topics = %v, want %v", got, want)
+	}
+	if got := rec.Topics("org-c"); len(got) != 0 {
+		t.Fatalf("org-c topics = %v", got)
+	}
+	// The WebSocket publication is unchanged.
+	if len(pub.got["org-a"]) == 0 || len(pub.got["org-b"]) == 0 {
+		t.Fatalf("published %v", pub.got)
+	}
+
+	// Writes without a recorder (jobs) work as before.
+	if err := a.write(context.Background(), func(_ Tx, ch *Changes) error { ch.Projects("org-a"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if InvalidationsFrom(context.Background()) != nil {
+		t.Fatal("recorder out of nowhere")
+	}
+	var none *Invalidations
+	none.Add("org-a", "/api/projects") // nil-safe
+	if none.Topics("") != nil {
+		t.Fatal("nil recorder has topics")
+	}
+}
+
+// One area's recovery part panicking must not skip the parts after it.
+func TestRecoverPartContainsPanics(t *testing.T) {
+	var logs strings.Builder
+	a := New(App{Log: slog.New(slog.NewTextHandler(&logs, nil))})
+	var ran []string
+	for _, part := range []func(context.Context){
+		func(context.Context) { ran = append(ran, "deploy") },
+		func(context.Context) { panic("nil map in ingress") },
+		func(context.Context) { ran = append(ran, "observability") },
+	} {
+		a.recoverPart(context.Background(), part)
+	}
+	if !reflect.DeepEqual(ran, []string{"deploy", "observability"}) {
+		t.Fatalf("ran %v", ran)
+	}
+	if !strings.Contains(logs.String(), "nil map in ingress") {
+		t.Fatalf("panic not logged: %s", logs.String())
+	}
+	a.Recover(context.Background()) // the stubs on this branch: still fine
+}

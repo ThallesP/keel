@@ -33,7 +33,24 @@ jobs:
       - run: go test ./...
       - name: openapi.json is current
         run: |
-          # The dashboard's hooks and the CLI are built against this file: a handler change must
+          # keel serve + keel agent in one test process against the runner's own fresh Swarm: deploy,
+  # ship a variable change, stop, start, redeploy, delete (internal/serve/swarm_it_test.go).
+  swarm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Swarm
+        run: |
+          docker swarm init --advertise-addr 127.0.0.1
+          docker network create -d overlay --attachable --opt com.docker.network.driver.mtu=1200 keel
+      - run: go test ./internal/serve -run SwarmIT -v -count=1 -timeout 15m
+        env:
+          KEEL_IT_DOCKER_HOST: unix:///var/run/docker.sock
+
+  # The dashboard's hooks and the CLI are built against this file: a handler change must
           # come with `make openapi`.
           go run ./cmd/keel openapi > /tmp/openapi.json
           if ! diff -u openapi.json /tmp/openapi.json; then

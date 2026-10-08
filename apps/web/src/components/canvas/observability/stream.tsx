@@ -1,8 +1,7 @@
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { TraceSummary } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
+import type { ProjectLine, TraceSummary } from "@/api/types";
 import { AnsiText } from "@/lib/ansi";
 
 import { formatDuration, formatLogTime } from "../format";

@@ -1,8 +1,8 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { getRouteApi } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
 import { Search } from "lucide-react";
 import { useMemo } from "react";
+
+import { useListNodes } from "@/api/gen";
 
 import { useEnvironment } from "../environment";
 
@@ -10,8 +10,8 @@ import { useEnvironment } from "../environment";
 
 export const route = getRouteApi("/_auth/p/$projectId");
 
-/** What logSinks.get returns for an Axiom sink; never the token. */
-export type Sink = { domain: string; dataset: string; traces: string | null; org: string | null };
+/** What `GET /api/organization/log-sink` returns for an Axiom sink; never the token. */
+export type { Sink } from "@/api/types";
 
 export function SearchField({
   value,
@@ -56,7 +56,7 @@ export type ServiceLabel = { text: string; tone: string };
  */
 export function useServices() {
   const { environmentId } = useEnvironment();
-  const nodes = useQuery(api.nodes.list, { environmentId });
+  const nodes = useListNodes({ path: { id: environmentId } }).data?.nodes;
   return useMemo(() => {
     const byId = new Map<string, ServiceLabel>();
     const byName = new Map<string, ServiceLabel>();

@@ -5,30 +5,25 @@ import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import z from "zod";
 
-import { authClient } from "@/lib/auth-client";
+import { errorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/session";
 
 /** `onSwitchToSignUp` is only offered while sign-up is open (no account yet); see AuthForms. */
 export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp?: () => void }) {
+  const auth = useAuth();
   const form = useForm({
     defaultValues: {
       email: "",
       password: "",
     },
     onSubmit: async ({ value }) => {
-      await authClient.signIn.email(
-        {
-          email: value.email,
-          password: value.password,
-        },
-        {
-          onSuccess: () => {
-            toast.success("Sign in successful");
-          },
-          onError: (error) => {
-            toast.error(error.error.message || error.error.statusText);
-          },
-        },
-      );
+      try {
+        await auth.signIn({ email: value.email, password: value.password });
+      } catch (err) {
+        toast.error(errorMessage(err));
+        return;
+      }
+      toast.success("Sign in successful");
     },
     validators: {
       onSubmit: z.object({

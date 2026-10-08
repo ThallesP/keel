@@ -1,19 +1,20 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { Button } from "@my-better-t-app/ui/components/button";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useGetInvitation } from "@/api/gen";
+import type { PublicInvitation } from "@/api/types";
 import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
 import SignUpForm from "@/components/sign-up-form";
-import { authClient } from "@/lib/auth-client";
+import { errorMessage } from "@/lib/api";
+import { SessionGate, useAuth, useSession } from "@/lib/session";
 
 /**
  * An invite link, made in Account → Invite people. Signed out: the sign-up form for the invited
  * email. Signed in as that email: one click to join. Sign-up elsewhere is closed once the first
- * account exists (convex/auth.ts), so this is how everyone else gets in.
+ * account exists (`POST /api/auth/sign-up`), so this is how everyone else gets in.
  */
 export const Route = createFileRoute("/invite/$invitationId")({ component: InvitePage });
 
@@ -23,19 +24,25 @@ function Accept({
   onDone,
 }: {
   invitationId: string;
-  invitation: { email: string; organization: string };
+  invitation: PublicInvitation;
   onDone: () => void;
 }) {
-  const user = useQuery(api.auth.getCurrentUser);
+  const auth = useAuth();
+  const { user } = useSession();
   const [busy, setBusy] = useState(false);
   if (user === undefined) return <Loader />;
   const matches = user?.email.toLowerCase() === invitation.email.toLowerCase();
   const join = async () => {
     setBusy(true);
-    const { error } = await authClient.organization.acceptInvitation({ invitationId });
+    try {
+      await auth.acceptInvitation(invitationId);
+    } catch (err) {
+      setBusy(false);
+      toast.error(errorMessage(err) || "Could not accept the invitation");
+      return;
+    }
     setBusy(false);
-    if (error) toast.error(error.message ?? "Could not accept the invitation");
-    else onDone();
+    onDone();
   };
   return (
     <div>
@@ -57,7 +64,13 @@ function Accept({
             This invite is for {invitation.email}, but you are signed in as {user?.email}. Sign out
             to create that account.
           </p>
-          <Button variant="outline" className="w-full" onClick={() => void authClient.signOut()}>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() =>
+              void auth.signOut().catch((err: unknown) => toast.error(errorMessage(err)))
+            }
+          >
             Sign out
           </Button>
         </>
@@ -66,9 +79,26 @@ function Accept({
   );
 }
 
+/**
+ * The invitation as the link first showed it. Signing up or joining spends it, and the session
+ * change that follows refetches every query, so a later answer would read "not found" for the
+ * moment before the page moves on.
+ */
+function useInvitation(invitationId: string): PublicInvitation | null | undefined {
+  const { data } = useGetInvitation(
+    { path: { id: invitationId } },
+    { query: { staleTime: Infinity, refetchOnWindowFocus: false, meta: { realtime: false } } },
+  );
+  const [first, setFirst] = useState<{ id: string; invitation: PublicInvitation | null }>();
+  if (data !== undefined && first?.id !== invitationId) {
+    setFirst({ id: invitationId, invitation: data.invitation });
+  }
+  return first?.id === invitationId ? first.invitation : data?.invitation;
+}
+
 function InvitePage() {
   const { invitationId } = Route.useParams();
-  const invitation = useQuery(api.organizations.invitation, { id: invitationId });
+  const invitation = useInvitation(invitationId);
   const navigate = useNavigate();
   const goHome = () => void navigate({ to: "/", replace: true });
 
@@ -88,17 +118,14 @@ function InvitePage() {
     );
   } else {
     body = (
-      <>
-        <Authenticated>
-          <Accept invitationId={invitationId} invitation={invitation} onDone={goHome} />
-        </Authenticated>
-        <Unauthenticated>
+      <SessionGate
+        loading={<Loader />}
+        signedOut={
           <SignUpForm invitation={{ id: invitationId, ...invitation }} onSuccess={goHome} />
-        </Unauthenticated>
-        <AuthLoading>
-          <Loader />
-        </AuthLoading>
-      </>
+        }
+      >
+        <Accept invitationId={invitationId} invitation={invitation} onDone={goHome} />
+      </SessionGate>
     );
   }
   return <AuthShell>{body}</AuthShell>;

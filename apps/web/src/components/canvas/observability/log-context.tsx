@@ -1,14 +1,12 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { TraceSummary } from "@my-better-t-app/backend/convex/traces";
-import { useAction } from "convex/react";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { useListLogsAround, useListTracesAround } from "@/api/gen";
+import type { ProjectLine, TraceSummary } from "@/api/types";
 import { stripAnsi } from "@/lib/ansi";
+import { errorMessage } from "@/lib/api";
 
 import { useEnvironment } from "../environment";
-import { errorMessage } from "../errors";
 import { formatDuration, formatLogTime, formatTimestamp } from "../format";
 import { SectionLabel } from "../primitives";
 import { useServices } from "./chrome";
@@ -35,20 +33,21 @@ export function LogContext({
 }) {
   const { environmentId } = useEnvironment();
   const services = useServices();
-  const linesAround = useAction(api.logs.around);
-  const requestsAround = useAction(api.traces.around);
-  const [data, setData] = useState<{ lines: ProjectLine[]; requests: TraceSummary[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([linesAround({ environmentId, at }), requestsAround({ environmentId, at })])
-      .then(([lines, requests]) => !cancelled && setData({ lines, requests }))
-      .catch((err) => !cancelled && setError(errorMessage(err)));
-    return () => {
-      cancelled = true;
-    };
-  }, [environmentId, at, linesAround, requestsAround]);
+  // Once per (environment, at): what was around a moment does not change.
+  const once = { query: { staleTime: Infinity, meta: { realtime: false } } };
+  const request = { path: { id: environmentId }, query: { at } };
+  const linesAround = useListLogsAround(request, once);
+  const requestsAround = useListTracesAround(request, once);
+  // Either failing fails the view.
+  const failure = linesAround.error ?? requestsAround.error;
+  const error = failure ? errorMessage(failure) : null;
+  const data = useMemo(
+    () =>
+      linesAround.data === undefined || requestsAround.data === undefined
+        ? null
+        : { lines: linesAround.data ?? [], requests: requestsAround.data ?? [] },
+    [linesAround.data, requestsAround.data],
+  );
 
   const events = useMemo(() => data?.lines.map(lineEvent) ?? [], [data]);
   const focused = events.find(

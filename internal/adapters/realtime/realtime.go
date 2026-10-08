@@ -83,7 +83,7 @@ type Server struct {
 
 	mu       sync.Mutex
 	closed   bool
-	pending  map[string]*batch                           // organization → topics waiting for the window
+	pending  map[string]*batch                          // organization → topics waiting for the window
 	sessions map[string]map[*centrifuge.Client]struct{} // Keel session id → its connections
 }
 

@@ -116,7 +116,7 @@ func TestImageEngine(t *testing.T) {
 }
 
 func TestAgentSpec(t *testing.T) {
-	spec := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "tok"})
+	spec := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "tok"}, "sec1")
 	got, err := json.Marshal(spec)
 	if err != nil {
 		t.Fatal(err)
@@ -128,12 +128,13 @@ func TestAgentSpec(t *testing.T) {
 			"ContainerSpec": {
 				"Image": "ghcr.io/thallesp/keel:1.0@sha256:abc",
 				"Command": ["keel", "agent"],
-				"Env": ["KEEL_URL=http://100.64.0.1:8080", "KEEL_WORKER_TOKEN=tok"],
+				"Env": ["KEEL_URL=http://100.64.0.1:8080"],
 				"Mounts": [
 					{"Type": "bind", "Source": "/var/run/docker.sock", "Target": "/var/run/docker.sock", "ReadOnly": true},
 					{"Type": "volume", "Source": "keel-worker-state", "Target": "/var/lib/keel-worker"}
 				],
-				"StopGracePeriod": 10000000000
+				"StopGracePeriod": 10000000000,
+				"Secrets": [{"File": {"Name": "keel_worker_token", "UID": "0", "GID": "0", "Mode": 256}, "SecretID": "sec1", "SecretName": "`+agentSecretName("tok")+`"}]
 			},
 			"RestartPolicy": {"Condition": "any", "Delay": 2000000000},
 			"Networks": [{"Target": "host"}],
@@ -145,8 +146,8 @@ func TestAgentSpec(t *testing.T) {
 		t.Errorf("agent spec:\n got %s\nwant %s", got, want)
 	}
 	// The fingerprint moves with anything that matters and only then.
-	same := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "tok"})
-	other := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "rotated"})
+	same := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "tok"}, "sec1")
+	other := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "rotated"}, "sec2")
 	if same.Labels[agentSpecLabel] != spec.Labels[agentSpecLabel] || other.Labels[agentSpecLabel] == spec.Labels[agentSpecLabel] {
 		t.Error("fingerprint")
 	}

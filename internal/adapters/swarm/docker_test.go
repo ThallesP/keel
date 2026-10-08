@@ -228,7 +228,9 @@ func TestDockerEnsureAgent(t *testing.T) {
 			_, _ = io.WriteString(w, `{"ID":"agent"}`)
 		},
 		"POST /services/keel-agent/update": jsonReply(`{}`),
-		"GET /secrets":                     jsonReply(`[{"ID":"s1","Spec":{"Name":"keel-worker-token-abc"}}]`),
+		"GET /secrets":                     jsonReply(`[{"ID":"s1","Spec":{"Name":"keel-worker-token-abc"}},{"ID":"s0","Spec":{"Name":"keel-agent-token-old"}}]`),
+		"POST /secrets/create":             jsonReply(`{"ID":"snew"}`),
+		"DELETE /secrets/s0":               func(w http.ResponseWriter, _ *http.Request) {},
 		"DELETE /secrets/s1":               func(w http.ResponseWriter, _ *http.Request) {},
 		"GET /configs":                     jsonReply(`[]`),
 	})

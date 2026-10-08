@@ -155,6 +155,9 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 | `KEEL_OTLP_URL`                       | OTLP relay URL injected into traced services                                   |
 | `KEEL_PROXY_SOCKET` (`/run/keel-proxy/admin.sock`) | keel-proxy admin socket (the edge stays its own container)        |
 | `DOCKER_HOST`                         | Docker socket (default `unix:///var/run/docker.sock`)                          |
+| `KEEL_PROXY_REPORT_URL`               | Where keel-proxy POSTs certificate events (an IP URL the host netns reaches; default `<site>/proxy/events`) |
+| `KEEL_AGENT_IMAGE`                    | When set, serve creates/updates the `keel-agent` global service from this image (token as a Swarm secret) |
+| `KEEL_AGENT_CONTROL_URL`              | The `KEEL_URL` agents reach serve at (tailnet URL; default `KEEL_SITE_URL`)    |
 | `KEEL_AXIOM_AUTH_URL`, `KEEL_AXIOM_API_URL`, `KEEL_ALLOW_LOCAL_SINKS` | Axiom overrides for tests, as before            |
 
 ## Testing

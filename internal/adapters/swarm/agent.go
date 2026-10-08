@@ -28,15 +28,26 @@ const (
 	agentSpecLabel   = "keel.agent.spec" // fingerprint of the spec below: unchanged → no update
 	agentStateVolume = "keel-worker-state"
 	agentStateDir    = "/var/lib/keel-worker"
-	dockerSocketPath = "/var/run/docker.sock"
+	// The worker token reaches the agent as a Swarm secret, never as service env (which anyone
+	// with `docker service inspect` reads). Named after a hash of the token so a rotation is a new
+	// secret and a spec change; not keel-worker-token-*, which removeLegacyAgents deletes.
+	agentSecretPrefix = "keel-agent-token-"
+	agentSecretTarget = "keel_worker_token" // the agent reads /run/secrets/keel_worker_token
+	dockerSocketPath  = "/var/run/docker.sock"
 )
 
 // legacyAgentServices are what keel-agent replaces: the Bun worker (deploy-worker.sh) and the
 // shell forwarder before it. Running both would ship every log line twice.
 var legacyAgentServices = []string{"keel-worker", "keel-events"}
 
-// agentSpec is the service spec for image (already pinned).
-func agentSpec(image string, a app.AgentSpec) swarm.ServiceSpec {
+// agentSecretName is the secret holding token.
+func agentSecretName(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return agentSecretPrefix + hex.EncodeToString(sum[:6])
+}
+
+// agentSpec is the service spec for image (already pinned); secretID is the token's secret.
+func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec {
 	restartDelay := 2 * time.Second
 	grace := 10 * time.Second
 	spec := swarm.ServiceSpec{
@@ -45,7 +56,12 @@ func agentSpec(image string, a app.AgentSpec) swarm.ServiceSpec {
 			ContainerSpec: &swarm.ContainerSpec{
 				Image:   image,
 				Command: []string{"keel", "agent"},
-				Env:     []string{"KEEL_URL=" + a.ControlURL, "KEEL_WORKER_TOKEN=" + a.Token},
+				Env:     []string{"KEEL_URL=" + a.ControlURL},
+				Secrets: []*swarm.SecretReference{{
+					SecretID:   secretID,
+					SecretName: agentSecretName(a.Token),
+					File:       &swarm.SecretReferenceFileTarget{Name: agentSecretTarget, UID: "0", GID: "0", Mode: 0o400},
+				}},
 				Mounts: []mount.Mount{
 					{Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath, ReadOnly: true},
 					{Type: mount.TypeVolume, Source: agentStateVolume, Target: agentStateDir},
@@ -66,7 +82,11 @@ func agentSpec(image string, a app.AgentSpec) swarm.ServiceSpec {
 // EnsureAgent creates keel-agent, or updates it when its spec changed, then removes the legacy
 // services it replaces.
 func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
-	spec := agentSpec(s.pinnedImage(ctx, a.Image), a)
+	secretID, err := s.ensureAgentSecret(ctx, a.Token)
+	if err != nil {
+		return err
+	}
+	spec := agentSpec(s.pinnedImage(ctx, a.Image), a, secretID)
 	res, err := s.cli.ServiceInspect(ctx, agentServiceName, client.ServiceInspectOptions{})
 	switch {
 	case cerrdefs.IsNotFound(err):
@@ -83,7 +103,44 @@ func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
 		}
 	}
 	s.removeLegacyAgents(ctx)
+	s.removeStaleAgentSecrets(ctx, agentSecretName(a.Token))
 	return nil
+}
+
+// ensureAgentSecret is the id of the secret holding token, created when missing.
+func (s *Swarm) ensureAgentSecret(ctx context.Context, token string) (string, error) {
+	name := agentSecretName(token)
+	res, err := s.cli.SecretList(ctx, client.SecretListOptions{Filters: make(client.Filters).Add("name", name)})
+	if err != nil {
+		return "", err
+	}
+	for _, sec := range res.Items {
+		if sec.Spec.Name == name {
+			return sec.ID, nil
+		}
+	}
+	created, err := s.cli.SecretCreate(ctx, client.SecretCreateOptions{Spec: swarm.SecretSpec{
+		Annotations: swarm.Annotations{Name: name, Labels: map[string]string{"keel.agent": "token"}},
+		Data:        []byte(token),
+	}})
+	if err != nil {
+		return "", err
+	}
+	return created.ID, nil
+}
+
+// removeStaleAgentSecrets removes the secrets of earlier tokens, best effort: one still held by a
+// task that is shutting down goes on the next start.
+func (s *Swarm) removeStaleAgentSecrets(ctx context.Context, keep string) {
+	res, err := s.cli.SecretList(ctx, client.SecretListOptions{Filters: make(client.Filters).Add("name", agentSecretPrefix)})
+	if err != nil {
+		return
+	}
+	for _, sec := range res.Items {
+		if strings.HasPrefix(sec.Spec.Name, agentSecretPrefix) && sec.Spec.Name != keep {
+			_, _ = s.cli.SecretRemove(ctx, sec.ID, client.SecretRemoveOptions{})
+		}
+	}
 }
 
 // pinnedImage is image@<digest> when the local image has a repo digest (pulled or pushed), so

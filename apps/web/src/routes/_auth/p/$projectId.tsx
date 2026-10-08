@@ -1,9 +1,9 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
 
+import { useGetProjectBySlug } from "@/api/gen";
 import { Canvas } from "@/components/canvas/canvas";
 import Loader from "@/components/loader";
+import { errorMessage } from "@/lib/api";
 
 /**
  * `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable.
@@ -42,19 +42,21 @@ export const Route = createFileRoute("/_auth/p/$projectId")({
 /** Resolves the slug to its production environment and hands it to the canvas. */
 function ProjectPage() {
   const { projectId } = Route.useParams();
-  const project = useQuery(api.projects.getBySlug, { slug: projectId });
+  const { data, error } = useGetProjectBySlug({ path: { slug: projectId } });
+  // undefined while loading; null when no such project, or not the caller's.
+  const project = data?.project;
 
-  if (project === undefined) {
+  if (project === undefined && !error) {
     return (
       <div className="h-svh bg-canvas">
         <Loader />
       </div>
     );
   }
-  if (project === null) {
+  if (!project) {
     return (
       <div className="flex h-svh flex-col items-center justify-center gap-2 bg-canvas text-sm text-muted-foreground">
-        <span>Project “{projectId}” not found.</span>
+        <span>{project === null ? `Project “${projectId}” not found.` : errorMessage(error)}</span>
         <Link to="/" className="text-primary hover:underline">
           Go to your project
         </Link>

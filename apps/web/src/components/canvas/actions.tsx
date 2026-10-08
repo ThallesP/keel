@@ -1,14 +1,27 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import { useMutation } from "convex/react";
-import { createContext, useContext, useMemo, useRef, type ReactNode, type RefObject } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+
+import {
+  listNodesQueryKey,
+  useCreateNode,
+  useDeleteNode,
+  useDuplicateNode,
+  useExposeNode,
+  useMoveNode,
+  useShipEnvironment,
+  useStartNode,
+  useStopNode,
+  useUnexposeNode,
+  useUpdateNode,
+} from "@/api/gen";
+import type { NodeView, Position } from "@/api/types";
+import { CanvasOverlay } from "@/lib/canvas-overlay";
 
 import { useEnvironment } from "./environment";
 import { attempt } from "./errors";
-import { asNodeId } from "./mapping";
+import { useCanvasDispatch } from "./store";
 import type { Endpoint, InfraNodeType } from "./types";
 import { useDeploymentLink } from "./use-deployment-link";
-
-type Position = { x: number; y: number };
 
 /**
  * Service: an image to run. Database / cache: an engine from the catalog. Omit for the type
@@ -50,126 +63,159 @@ export type CanvasActions = {
   removeNodes: (ids: string[]) => void;
   /** Ship every dirty node, or `only` these (re-pulling their images). */
   ship: (only?: string[]) => Promise<void>;
-  /** Ids created by this client; the graph sync selects them once the query delivers them. */
-  selectOnArrival: RefObject<Set<string>>;
+  /**
+   * Moves and deletes still in flight (re-applied over every node list until they settle), and
+   * the ids this client created, which the graph sync selects once the list delivers them.
+   */
+  overlay: CanvasOverlay;
 };
 
 const Context = createContext<CanvasActions | null>(null);
+
+/** `GET /api/environments/{id}/nodes` as cached (`useListNodes`' data). */
+type NodeListData = { nodes: NodeView[] | null };
 
 /** Every mutation the canvas fires, scoped to the current environment. Failures become toasts. */
 export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   const { environmentId } = useEnvironment();
   const link = useDeploymentLink();
-  const selectOnArrival = useRef(new Set<string>());
+  const dispatch = useCanvasDispatch();
+  const queryClient = useQueryClient();
+  const [overlay] = useState(() => new CanvasOverlay());
 
-  const createNode = useMutation(api.nodes.create);
-  const renameNode = useMutation(api.nodes.rename);
-  const duplicateNode = useMutation(api.nodes.duplicate);
-  const startDeployment = useMutation(api.deployments.start);
-  const startNode = useMutation(api.nodes.start);
-  const stopNode = useMutation(api.nodes.stop);
-  const moveRaw = useMutation(api.nodes.move);
-  const removeNodeRaw = useMutation(api.nodes.remove);
-  const exposeNode = useMutation(api.nodes.expose);
-  const unexposeNode = useMutation(api.nodes.unexpose);
+  // `mutateAsync` is stable for the life of each hook.
+  const createNode = useCreateNode().mutateAsync;
+  const updateNode = useUpdateNode().mutateAsync;
+  const duplicateNode = useDuplicateNode().mutateAsync;
+  const shipEnvironment = useShipEnvironment().mutateAsync;
+  const startNode = useStartNode().mutateAsync;
+  const stopNode = useStopNode().mutateAsync;
+  const moveNode = useMoveNode().mutateAsync;
+  const deleteNode = useDeleteNode().mutateAsync;
+  const exposeNode = useExposeNode().mutateAsync;
+  const unexposeNode = useUnexposeNode().mutateAsync;
 
-  // Drag end and delete update the local graph instantly; optimistic updates keep the
-  // subscription in step so a concurrent server push cannot snap things back.
-  const moveNode = useMemo(
-    () =>
-      moveRaw.withOptimisticUpdate((store, { id, position }) => {
-        const nodes = store.getQuery(api.nodes.list, { environmentId });
-        if (!nodes) return;
-        const next = nodes.map((n) => (n.id === id ? { ...n, position } : n));
-        store.setQuery(api.nodes.list, { environmentId }, next);
-      }),
-    [moveRaw, environmentId],
-  );
-  const removeNode = useMemo(
-    () =>
-      removeNodeRaw.withOptimisticUpdate((store, { id }) => {
-        const nodes = store.getQuery(api.nodes.list, { environmentId });
-        if (!nodes) return;
-        const next = nodes.filter((n) => n.id !== id);
-        store.setQuery(api.nodes.list, { environmentId }, next);
-      }),
-    [removeNodeRaw, environmentId],
-  );
+  const value = useMemo<CanvasActions>(() => {
+    const env = { id: environmentId };
+    const nodesKey = listNodesQueryKey({ path: env });
 
-  const value = useMemo<CanvasActions>(
-    () => ({
+    // Drag end and delete update the local graph instantly. The overlay keeps the node list in
+    // step until the write settles, so a refetch that lands first cannot snap things back; the
+    // cache edit shows the change to the node list's other readers (Ship's Retry, Observability)
+    // at once. A failed write drops its overlay entry and refetches: the node goes back to where
+    // the server has it, and `attempt` toasts why.
+    const editNodes = async (edit: (nodes: NodeView[]) => NodeView[]) => {
+      await queryClient.cancelQueries({ queryKey: nodesKey });
+      queryClient.setQueryData<NodeListData>(
+        nodesKey,
+        (old) => old && { ...old, nodes: edit(old.nodes ?? []) },
+      );
+    };
+    const settled = async (ok: boolean, settle: () => void) => {
+      settle();
+      // On success the write's own invalidation already refetched the list (read-your-writes).
+      if (!ok) await queryClient.invalidateQueries({ queryKey: nodesKey });
+    };
+
+    return {
       create: async (type, position, options) => {
-        const result = await attempt(createNode({ environmentId, type, position, ...options }));
-        if (!result) return;
-        selectOnArrival.current.add(result.id);
-        if (result.deploymentId) link.open(result.deploymentId);
+        const result = await attempt(
+          createNode({ path: env, body: { type, position, ...options } }),
+        );
+        if (!result.ok) return;
+        const { id, deploymentId } = result.data;
+        if (deploymentId) {
+          // The panel shows the new node before the deployment is linked: selecting the arriving
+          // node drops a link that belongs to another node, and the node list (refetched before
+          // this write resolved) can deliver it before the panel has resolved the deployment.
+          dispatch({ type: "openTab", nodeId: id, tab: "deployments" });
+          link.open(deploymentId);
+        }
+        overlay.arrive(id);
       },
       start: async (id) => {
-        const did = await attempt(startNode({ id: asNodeId(id) }));
-        if (did) link.open(did);
+        const result = await attempt(startNode({ path: { id } }));
+        if (result.ok) link.open(result.data.deploymentId);
       },
       stop: async (id) => {
-        const did = await attempt(stopNode({ id: asNodeId(id) }));
-        if (did) link.open(did);
+        const result = await attempt(stopNode({ path: { id } }));
+        // null: already at 0 replicas, nothing shipped.
+        if (result.ok && result.data.deploymentId) link.open(result.data.deploymentId);
       },
       redeploy: async (id, refresh) => {
-        const did = await attempt(
-          startDeployment({ environmentId, only: [asNodeId(id)], refresh }),
-        );
-        if (did) link.open(did);
+        const result = await attempt(shipEnvironment({ path: env, body: { only: [id], refresh } }));
+        if (result.ok) link.open(result.data.id);
       },
-      move: (id, position) => void attempt(moveNode({ id: asNodeId(id), position })),
+      move: (id, position) => {
+        const settle = overlay.move(id, position);
+        void (async () => {
+          await editNodes((nodes) => nodes.map((n) => (n.id === id ? { ...n, position } : n)));
+          const result = await attempt(moveNode({ path: { id }, body: position }));
+          await settled(result.ok, settle);
+        })();
+      },
       rename: async (id, name) => {
-        await attempt(renameNode({ id: asNodeId(id), name }));
+        await attempt(updateNode({ path: { id }, body: { name } }));
       },
       expose: async (id, options) =>
-        (await attempt(exposeNode({ id: asNodeId(id), ...options }))) !== undefined,
+        (await attempt(exposeNode({ path: { id }, body: options ?? {} }))).ok,
       unexpose: async (id, endpoint) => {
         await attempt(
           unexposeNode({
-            id: asNodeId(id),
-            ...(endpoint && {
-              protocol: endpoint.protocol,
-              domain: endpoint.domain,
-              publicPort: endpoint.publicPort,
-            }),
+            path: { id },
+            body: endpoint
+              ? {
+                  protocol: endpoint.protocol,
+                  domain: endpoint.domain,
+                  publicPort: endpoint.publicPort,
+                }
+              : {},
           }),
         );
       },
       duplicate: async (id) => {
-        const copy = await attempt(duplicateNode({ id: asNodeId(id) }));
-        if (copy) selectOnArrival.current.add(copy);
+        const result = await attempt(duplicateNode({ path: { id } }));
+        if (result.ok) overlay.arrive(result.data.id);
       },
       removeNodes: (ids) => {
-        for (const id of ids) void attempt(removeNode({ id: asNodeId(id) }));
+        if (ids.length === 0) return;
+        const settles = ids.map((id) => overlay.remove(id));
+        const gone = new Set(ids);
+        void (async () => {
+          await editNodes((nodes) => nodes.filter((n) => !gone.has(n.id)));
+          await Promise.all(
+            ids.map(async (id, i) => {
+              const result = await attempt(deleteNode({ path: { id } }));
+              await settled(result.ok, settles[i]!);
+            }),
+          );
+        })();
       },
       ship: async (only) => {
-        const id = await attempt(
-          startDeployment({
-            environmentId,
-            only: only?.map(asNodeId),
-            refresh: only !== undefined,
-          }),
+        const result = await attempt(
+          shipEnvironment({ path: env, body: { only, refresh: only !== undefined } }),
         );
-        if (id) link.open(id);
+        if (result.ok) link.open(result.data.id);
       },
-      selectOnArrival,
-    }),
-    [
-      environmentId,
-      link,
-      createNode,
-      moveNode,
-      renameNode,
-      exposeNode,
-      unexposeNode,
-      duplicateNode,
-      removeNode,
-      startDeployment,
-      startNode,
-      stopNode,
-    ],
-  );
+      overlay,
+    };
+  }, [
+    environmentId,
+    link,
+    dispatch,
+    queryClient,
+    overlay,
+    createNode,
+    updateNode,
+    duplicateNode,
+    shipEnvironment,
+    startNode,
+    stopNode,
+    moveNode,
+    deleteNode,
+    exposeNode,
+    unexposeNode,
+  ]);
 
   return <Context value={value}>{children}</Context>;
 }

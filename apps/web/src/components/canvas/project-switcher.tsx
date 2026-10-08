@@ -1,9 +1,8 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
 import { Box, ChevronDown, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { useCreateProject, useListProjects } from "@/api/gen";
 import { Palette, type PalettePage } from "@/components/palette";
 
 import { useEnvironment } from "./environment";
@@ -24,8 +23,8 @@ export function ProjectSwitcher() {
   const { projectId, projectName } = useEnvironment();
   const { view } = route.useSearch();
   const navigate = useNavigate();
-  const projects = useQuery(api.projects.list);
-  const create = useMutation(api.projects.create);
+  const { data: projectList } = useListProjects();
+  const create = useCreateProject().mutateAsync;
   const [open, setOpen] = useState(false);
   useHotkey(
     { key: "p" },
@@ -41,16 +40,16 @@ export function ProjectSwitcher() {
       placeholder: "Name it, e.g. my-app",
       items: [],
       onSubmit: (name) => {
-        void attempt(create({ name })).then((p) => p && go(p.slug));
+        void attempt(create({ body: { name } })).then((r) => r.ok && go(r.data.slug));
       },
       submitLabel: (name) => `Create ${name}`,
       submitHint: "Empty canvas · production environment",
       submitIcon: <Plus {...ICON} />,
     };
-    const sorted = [...(projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = [...(projectList?.projects ?? [])].sort((a, b) => a.name.localeCompare(b.name));
     return {
       title: "Projects",
-      placeholder: projects ? "Switch to…" : "Loading projects…",
+      placeholder: projectList ? "Switch to…" : "Loading projects…",
       items: [
         ...sorted.map((p) => ({
           id: p.id,
@@ -71,7 +70,7 @@ export function ProjectSwitcher() {
         },
       ],
     };
-  }, [projects, projectId, view, navigate, create]);
+  }, [projectList, projectId, view, navigate, create]);
 
   return (
     <>

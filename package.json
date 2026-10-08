@@ -31,8 +31,6 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "dev:web": "turbo run dev -F web --",
-    "dev:server": "turbo run dev -F @my-better-t-app/backend --",
-    "dev:setup": "turbo run dev:setup -F @my-better-t-app/backend --",
     "env:generate": "varlock codegen --path ./apps/web/",
     "postinstall": "varlock codegen --path ./apps/web/",
     "check": "oxlint && oxfmt --write"

@@ -1,14 +1,12 @@
 import type { Node } from "@xyflow/react";
 
-/** Mirrors `NodeStatus` in `packages/backend/convex/status.ts`. `done`: one-shot image exited 0. */
-export type NodeStatus =
-  | "healthy"
-  | "done"
-  | "deploying"
-  | "stopping"
-  | "error"
-  | "stopped"
-  | "pending";
+import type * as Api from "@/api/types";
+
+/**
+ * `healthy | done | deploying | stopping | error | stopped | pending`, as the API derives it
+ * (`internal/domain/status.go`). `done`: one-shot image exited 0.
+ */
+export type NodeStatus = Api.NodeStatus;
 
 /** Live runtime fields shared by everything Swarm runs (service, database, cache). */
 export type RuntimeData = {
@@ -33,21 +31,13 @@ export type RuntimeData = {
   endpoints: Endpoint[];
 };
 
-/** Mirrors `endpointView` in `packages/backend/convex/endpoints.ts`. */
-export type Endpoint = {
-  protocol: "http" | "tcp" | "udp";
-  /** Container port the proxy dials. */
-  port: number;
-  /** http only. */
-  domain?: string;
-  /** tcp / udp only: the port on the control plane. */
-  publicPort?: number;
-  /** `https://<domain>` or `<public IP>:<publicPort>`. */
-  address: string;
-  /** http `starting`: loaded, waiting for its certificate. */
-  state: "starting" | "live" | "failed";
-  error?: string;
-};
+/**
+ * A public endpoint, as the API sends it: `protocol`, the container `port` the proxy dials,
+ * `domain` (http only), `publicPort` (tcp / udp only: the port on the control plane), `address`
+ * (`https://<domain>` or `<public IP>:<publicPort>`), `state` (http `starting`: loaded, waiting
+ * for its certificate) and `error`.
+ */
+export type Endpoint = Api.EndpointView;
 
 export type ServiceData = RuntimeData & {
   /** The first https endpoint, shown as the card's subtitle. */
@@ -90,7 +80,7 @@ export type RuntimeNode = Exclude<InfraNode, VolumeNode>;
 
 export type PanelTab = "deployments" | "variables" | "logs" | "settings";
 
-export type DeployStepStatus = "pending" | "running" | "done" | "failed";
+export type DeployStepStatus = Api.DeployStepStatus;
 
 export type DeployStep = {
   /** Empty string for the final "health checks" step. */
@@ -106,7 +96,7 @@ export type Deployment = {
   id: string;
   sha?: string;
   message: string;
-  status: "running" | "success" | "failed";
+  status: Api.DeploymentStatus;
   startedAt: number;
   finishedAt?: number;
   steps: DeployStep[];

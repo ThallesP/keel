@@ -16,6 +16,13 @@ const (
 	DeviceCodeLength    = 40
 	DeviceUserCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	DeviceUserCodeLen   = 8
+
+	// DeviceCodeKeep is how long an expired code is kept before a new login sweeps it. Better
+	// Auth deleted expired codes only when they were polled, so a CLI still polling (keel login
+	// --wait polls every few seconds) or a /device tab left open gets "Device code has expired" /
+	// "User code has expired", not "Invalid device code" / "Invalid user code". Short, because
+	// creating codes needs no session: the sweep is what bounds the table.
+	DeviceCodeKeep = int64(60 * 60 * 1000)
 )
 
 type DeviceStatus string

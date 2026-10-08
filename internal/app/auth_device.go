@@ -42,8 +42,9 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string) (DeviceStar
 	var userCode string
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
 		now := a.Now()
-		// Codes are only deleted when polled; sweep the stale ones so user codes stay free.
-		if err := tx.AuthDeleteExpiredDeviceCodes(now); err != nil {
+		// Codes are only deleted when polled; sweep the long-expired ones so the table does not
+		// grow. Recently expired ones stay so their poller still hears "expired".
+		if err := tx.AuthDeleteExpiredDeviceCodes(now - domain.DeviceCodeKeep); err != nil {
 			return err
 		}
 		for {

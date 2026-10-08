@@ -782,12 +782,23 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	authWantRefusal(t, poll(expired.DeviceCode), 400, "expired_token", "Device code has expired")
 	authWantRefusal(t, poll(expired.DeviceCode), 400, "invalid_grant", "Invalid device code")
 
-	// A new link sweeps expired ones that nobody polled.
+	// A new link does not sweep a code that just expired: its poller (keel login --wait) and its
+	// /device tab still hear "expired", as with Better Auth, which never swept.
 	stale, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
 	f.now += domain.DeviceCodeTTL + 1
 	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli"); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, stale.UserCode)
+	authWantRefusal(t, err, 400, "expired_token", "User code has expired")
+	authWantRefusal(t, poll(stale.DeviceCode), 400, "expired_token", "Device code has expired")
+
+	// Long-expired codes nobody polled are swept by the next new link.
+	forgotten, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	f.now += domain.DeviceCodeTTL + domain.DeviceCodeKeep + 1
+	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.app.ClaimDeviceCode(f.ctx, alice, forgotten.UserCode)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 }

@@ -9,12 +9,14 @@ import (
 // (NFKC, salt = the hex string's ASCII bytes, N=16384 r=16 p=1 dkLen=64).
 var betterAuthVectors = []struct{ password, hash string }{
 	{"correct-horse-battery", "0123456789abcdef0123456789abcdef:68b228eae069737062c56fbe239acdc9517ba0c0ed53447e2697faa281de7aab26e6e87571f29175a258c42d8a9fde39d6cd344c160472b76897c7bcfe0a1f53"},
-	// "ﬁancé-Ⅸ-pässword" with a ligature, a roman numeral and a combining diaeresis: NFKC matters.
-	{"ﬁancé-Ⅸ-pässword", "a1b2c3d4e5f60718293a4b5c6d7e8f90:d6f43c886f0278532fef79e8f38c9e4cd4e10fdb9dbc7af09e569af41ff565cb4b3e843772829ca1e91aac25d44df66e9d5cec863363cd6c2d89a82fbaeb077c"},
+	// U+FB01 ligature, U+2168 roman numeral nine and a combining diaeresis (U+0308): NFKC matters.
+	{"\ufb01anc\u00e9-\u2168-pa\u0308ssword", "a1b2c3d4e5f60718293a4b5c6d7e8f90:d6f43c886f0278532fef79e8f38c9e4cd4e10fdb9dbc7af09e569af41ff565cb4b3e843772829ca1e91aac25d44df66e9d5cec863363cd6c2d89a82fbaeb077c"},
 }
 
 // Cheap parameters keep the tests fast; production uses DefaultParams.
-func fast() *Hasher { return &Hasher{Params: Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}} }
+func fast() *Hasher {
+	return &Hasher{Params: Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}}
+}
 
 func TestVerifyBetterAuthScrypt(t *testing.T) {
 	h := fast()
@@ -28,7 +30,7 @@ func TestVerifyBetterAuthScrypt(t *testing.T) {
 		}
 	}
 	// The NFKC form of the second password is the same password.
-	if ok, _ := h.Verify(betterAuthVectors[1].hash, "fiancé-IX-pässword"); !ok {
+	if ok, _ := h.Verify(betterAuthVectors[1].hash, "fianc\u00e9-IX-p\u00e4ssword"); !ok {
 		t.Error("NFKC-equivalent password did not match")
 	}
 }

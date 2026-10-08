@@ -66,13 +66,13 @@ func TestWriteRecordsInvalidationsForTheRequest(t *testing.T) {
 	failing := New(App{Store: invStore{commitErr: boom}, Events: pub})
 	_ = failing.write(ctx, func(_ Tx, ch *Changes) error { ch.Environment("org-a", "not-committed"); return nil })
 
-	if got, want := rec.Topics("org-a"), []string{"/api/environments/env1", "/api/projects"}; !reflect.DeepEqual(got, want) {
+	if got, want := rec.Topics("org-a"), []string{"/api/environments/env1", "/api/nodes/", "/api/projects"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("org-a topics = %v, want %v", got, want)
 	}
 	if got, want := rec.Topics("org-b"), []string{"/api/organization"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("org-b topics = %v, want %v", got, want)
 	}
-	if got, want := rec.Topics(""), []string{"/api/environments/env1", "/api/organization", "/api/projects"}; !reflect.DeepEqual(got, want) {
+	if got, want := rec.Topics(""), []string{"/api/environments/env1", "/api/nodes/", "/api/organization", "/api/projects"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("all topics = %v, want %v", got, want)
 	}
 	if got := rec.Topics("org-c"); len(got) != 0 {

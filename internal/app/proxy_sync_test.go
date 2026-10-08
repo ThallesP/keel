@@ -77,7 +77,7 @@ func TestProxySyncLoadsAndRecordsStatuses(t *testing.T) {
 	if api[0].Status != (domain.EndpointStatus{State: domain.EndpointLive, At: 7_000}) || pg[0].Status.State != domain.EndpointLive {
 		t.Fatalf("statuses: %+v %+v", api, pg)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 
@@ -284,7 +284,7 @@ func TestProxyCertReport(t *testing.T) {
 	if got := e.endpoints(igAPI)[0].Status; got != want {
 		t.Fatalf("got %+v", got)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 	if e.endpoints("other")[0].Status.State == domain.EndpointFailed {
@@ -297,7 +297,7 @@ func TestProxyCertReport(t *testing.T) {
 	if got := e.endpoints("other")[0].Status.Error; got != "Could not get a certificate" {
 		t.Fatalf("no error text: %q", got)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org-b /api/environments/env-b"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org-b /api/environments/env-b", "org-b /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 
@@ -439,7 +439,7 @@ func TestProxyRecover(t *testing.T) {
 	if eps[1].Domain != "app.example.com" || eps[1].Status.State != domain.EndpointLive {
 		t.Fatalf("custom domain: %+v", eps[1])
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 	if !e.jobs.Pending("proxy:sync") {

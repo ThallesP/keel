@@ -146,6 +146,12 @@ type actorKey struct{}
 // requests are exempt. A session renewed on the way gets its cookie re-sent.
 func (s *Server) withActor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if machineRoute(r.URL.Path) {
+			// Agents, keel-proxy and traced services carry their own bearer (worker token,
+			// ingest key), never a session: no lookup, no cookie, no CSRF.
+			next.ServeHTTP(w, r)
+			return
+		}
 		token := SessionToken(r)
 		viaCookie := authViaCookie(r)
 		if viaCookie && !authSafeMethod(r.Method) {
@@ -273,4 +279,14 @@ func writeProblem(w http.ResponseWriter, p *api.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)
 	_ = jsonEncode(w, p)
+}
+
+// machineRoute: paths called by machines with their own credentials, not by people.
+func machineRoute(path string) bool {
+	for _, p := range []string{"/worker/", "/agent/", "/proxy/", "/otlp/"} {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }

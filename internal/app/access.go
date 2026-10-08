@@ -80,7 +80,8 @@ func requireEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) 
 		return EnvScope{}, err
 	}
 	if !ok {
-		return EnvScope{}, domain.NotFound(domain.MsgEnvironmentNotFound)
+		// PROJECT_NOT_FOUND: what the CLI branches on (cli-install.md C1).
+		return EnvScope{}, domain.E(domain.CodeProjectNotFound, domain.MsgEnvironmentNotFound)
 	}
 	return scope, nil
 }

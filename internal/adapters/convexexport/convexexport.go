@@ -25,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -82,6 +83,7 @@ func tables(src string) (map[string][]doc, error) {
 			rel, _ := filepath.Rel(src, p)
 			return add(filepath.ToSlash(rel), f)
 		})
+		sortByCreation(out)
 		return out, err
 	}
 	z, err := zip.OpenReader(src)
@@ -103,7 +105,20 @@ func tables(src string) (map[string][]doc, error) {
 			return nil, err
 		}
 	}
+	sortByCreation(out)
 	return out, nil
+}
+
+// sortByCreation orders every table by _creationTime: Keel orders variables (the container's
+// env order), projects and environments by insertion, as Convex did by creation.
+func sortByCreation(t map[string][]doc) {
+	for _, docs := range t {
+		sort.SliceStable(docs, func(i, j int) bool {
+			a, _ := num(docs[i], "_creationTime")
+			b, _ := num(docs[j], "_creationTime")
+			return a < b
+		})
+	}
 }
 
 // Value helpers: Convex numbers are JSON numbers (float64); optional fields may be absent or null.

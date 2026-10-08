@@ -33,7 +33,7 @@ func TestIngressExposeServiceDefaults(t *testing.T) {
 	if len(stored) != 1 || stored[0].Domain != want.Domain || stored[0].PinnedPort {
 		t.Fatalf("stored %+v", stored)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 	if !e.jobs.Pending("proxy:sync") {
@@ -353,7 +353,7 @@ func TestIngressFollowPort(t *testing.T) {
 	if eps[1].Port != 9000 || eps[1].Status.State != domain.EndpointLive {
 		t.Fatalf("pinned endpoint moved: %+v", eps[1])
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env"}) {
+	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 	// Nothing to move: no write.

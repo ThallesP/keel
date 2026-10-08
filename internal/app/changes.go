@@ -38,9 +38,12 @@ func (c *Changes) Project(org, projectID string) {
 	c.Add(org, "/api/projects")
 }
 
-// Environment: the canvas, summary, deployments and anything else under /api/environments/<id>.
+// Environment: the canvas, summary, deployments and anything else under /api/environments/<id>,
+// plus every node-scoped query (/api/nodes/...): a change to the environment can show in any of
+// its nodes' views (web-data.md §10.2). Changes carry no node list, so this covers the
+// organization's node views; only the few mounted ones refetch.
 func (c *Changes) Environment(org, environmentID string) {
-	c.Add(org, "/api/environments/"+environmentID)
+	c.Add(org, "/api/environments/"+environmentID, "/api/nodes/")
 }
 
 // Node: the node's own endpoints (/api/nodes/<id>/...) and its environment's canvas.

@@ -426,6 +426,59 @@ func TestShutdown(t *testing.T) {
 	h.rt.Publish("org-a", []string{"/api/projects"}) // no-op, no panic
 }
 
+// The transport re-sends a renewed session's cookie on whatever request renewed it; when that is
+// the WebSocket upgrade, the 101 response must carry it (centrifuge writes the handshake itself).
+func TestHandshakeCarriesRenewedCookie(t *testing.T) {
+	rt, err := New(Config{Authenticate: authenticate, Window: -1, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renew := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "Bearer alice" {
+				http.SetCookie(w, &http.Cookie{Name: "keel_session", Value: "tok", Path: "/", MaxAge: 604800, HttpOnly: true})
+				w.Header().Add("Set-Cookie", "evil=1\r\nX-Injected: yes")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	srv := httptest.NewServer(renew(rt.Handler()))
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = rt.Shutdown(ctx)
+		srv.Close()
+	})
+	h := &harness{t: t, rt: rt, srv: srv}
+
+	c, resp, err := h.dial("alice", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.Header.Values("Set-Cookie")
+	if len(got) != 2 || got[0] != "keel_session=tok; Path=/; Max-Age=604800; HttpOnly" || got[1] != "evil=1  X-Injected: yes" {
+		t.Fatalf("handshake Set-Cookie = %q", got)
+	}
+	if resp.Header.Get("X-Injected") != "" {
+		t.Fatal("a header value split the handshake response")
+	}
+	// The connection works as usual after the rewritten handshake.
+	if m := c.connect(); m.Connect == nil || len(m.Connect.Subs) != 1 {
+		t.Fatalf("connect: %+v", m)
+	}
+	rt.Publish("org-a", []string{"/api/projects"})
+	invalidation(t, c.next(), "org:org-a")
+
+	// No cookie set: the handshake is centrifuge's own.
+	_, resp, err = h.dial("bob", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := resp.Header.Values("Set-Cookie"); len(v) != 0 {
+		t.Fatalf("unexpected Set-Cookie %q", v)
+	}
+}
+
 func TestNewRequiresAuthenticate(t *testing.T) {
 	if _, err := New(Config{}); err == nil {
 		t.Fatal("New without Authenticate succeeded")

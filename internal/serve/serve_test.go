@@ -109,13 +109,19 @@ func TestServeOn(t *testing.T) {
 	if resp, body = get("/api/meta"); resp.StatusCode != 200 || !strings.Contains(body, `"version":"1.2.3"`) {
 		t.Fatalf("/api/meta: %d %s", resp.StatusCode, body)
 	}
-	for _, path := range []string{"/", "/p/acme"} { // SPA fallback
-		if resp, body = get(path); resp.StatusCode != 200 || !strings.Contains(body, "<title>Keel</title>") {
-			t.Fatalf("%s: %d %s", path, resp.StatusCode, body)
+	// SPA fallback, never cached (an upgrade changes the assets index.html names); directories
+	// are client routes too, never listings.
+	for _, path := range []string{"/", "/index.html", "/p/acme", "/assets", "/assets/"} {
+		resp, body = get(path)
+		if resp.StatusCode != 200 || !strings.Contains(body, "<title>Keel</title>") || resp.Header.Get("Cache-Control") != "no-cache" {
+			t.Fatalf("%s: %d %v %s", path, resp.StatusCode, resp.Header, body)
 		}
 	}
-	if resp, _ = get("/assets/app.js"); !strings.Contains(resp.Header.Get("Cache-Control"), "immutable") {
-		t.Fatalf("/assets: %v", resp.Header)
+	if resp, body = get("/assets/app.js"); resp.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" || body != "console.log(1)" {
+		t.Fatalf("/assets: %v %s", resp.Header, body)
+	}
+	if resp, body = get("/version"); resp.StatusCode != 200 || body != "1.2.3\n" || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		t.Fatalf("/version: %d %v %q", resp.StatusCode, resp.Header, body)
 	}
 
 	// The adapter ran with the jobs scheduler and the realtime publisher already in place.
@@ -184,6 +190,82 @@ func TestServeOn(t *testing.T) {
 		t.Fatalf("reopen database: %v", err)
 	}
 	store.Close()
+}
+
+// A job still running at shutdown (an apply pulling an image) is cancelled before the deadline
+// and can still write its outcome: the database closes only after it returned. The whole
+// shutdown stays inside the budget, which fits `docker stop`'s default 10 s.
+func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
+	if ShutdownTimeout+realtimeCloseTimeout >= 10*time.Second {
+		t.Fatalf("shutdown budget %v + %v does not fit docker stop's default 10 s", ShutdownTimeout, realtimeCloseTimeout)
+	}
+	savedTimeout, savedGrace := ShutdownTimeout, jobsCancelGrace
+	ShutdownTimeout, jobsCancelGrace = 400*time.Millisecond, 200*time.Millisecond
+	fake := &fakeAdapter{}
+	saved := adapters
+	adapters = []adapter{{"fake", fake.build}}
+	t.Cleanup(func() { adapters, ShutdownTimeout, jobsCancelGrace = saved, savedTimeout, savedGrace })
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := app.Config{Version: "dev", DataDir: t.TempDir()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- serveOn(ctx, ln, cfg, Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}()
+	waitUntil(t, "adapter built", func() bool {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		return fake.app != nil
+	})
+	fake.mu.Lock()
+	a := fake.app
+	fake.mu.Unlock()
+
+	started, wrote := make(chan struct{}), make(chan error, 1)
+	a.Jobs.After("apply", 0, func(ctx context.Context) {
+		close(started)
+		<-ctx.Done() // a long Docker call, cancelled by the shutdown
+		time.Sleep(50 * time.Millisecond)
+		wrote <- a.Store.Write(context.WithoutCancel(ctx), func(app.Tx) error { return nil })
+	})
+	<-started
+	begin := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serveOn: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveOn did not return")
+	}
+	if took := time.Since(begin); took > ShutdownTimeout+realtimeCloseTimeout {
+		t.Fatalf("shutdown took %v", took)
+	}
+	select {
+	case err := <-wrote:
+		if err != nil {
+			t.Fatalf("the cancelled job could not record its outcome: %v", err)
+		}
+	default:
+		t.Fatal("serveOn returned before the cancelled job finished")
+	}
+}
+
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 func TestWireAdaptersReleasesOnFailure(t *testing.T) {

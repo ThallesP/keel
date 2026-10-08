@@ -33,8 +33,19 @@ type Options struct {
 	Web     fs.FS // the embedded dashboard, nil in dev builds
 }
 
-// ShutdownTimeout bounds the whole graceful shutdown (compose gives the container 30 s).
-const ShutdownTimeout = 20 * time.Second
+// The graceful shutdown's budget. It has to end before the container runtime's SIGKILL: `docker
+// stop` waits 10 s by default and deploy/compose.yml's stop_grace_period is 15 s, so the whole
+// ordered sequence (HTTP, recovery pass, jobs, sockets, adapters, database) fits in about 9 s.
+// Variables so tests can shorten them.
+var (
+	// ShutdownTimeout bounds stopping HTTP, the recovery pass and the jobs.
+	ShutdownTimeout = 8 * time.Second
+	// jobsCancelGrace: jobs still running this long before the deadline get their context
+	// cancelled, and the rest of the budget to record that outcome while the database is open.
+	jobsCancelGrace = time.Second
+	// realtimeCloseTimeout: closing the WebSockets, after the jobs (which may still publish).
+	realtimeCloseTimeout = time.Second
+)
 
 // Env reads a variable with a default.
 func Env(key, def string) string {
@@ -76,9 +87,10 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 // serveOn runs the control plane on ln until ctx is done. Start-up order: database, jobs,
-// realtime, external adapters, HTTP, then the recovery pass in the background. Shutdown order:
-// stop accepting HTTP (in-flight requests finish), wait for the recovery pass, stop jobs (running
-// ones finish), close WebSockets, release adapters, close the database.
+// realtime, external adapters, HTTP, then the recovery pass in the background. Shutdown order,
+// all inside ShutdownTimeout (+ realtimeCloseTimeout): stop accepting HTTP (in-flight requests
+// finish), wait for the recovery pass, stop jobs (running ones finish, or are cancelled shortly
+// before the deadline and waited for), close WebSockets, release adapters, close the database.
 func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options, log *slog.Logger) (err error) {
 	defer ln.Close()
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -140,7 +152,8 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	}
 
 	log.Info("keel serve: shutting down")
-	shutdown, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+	deadline := time.Now().Add(ShutdownTimeout)
+	shutdown, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 	cancelRecover() // winds down while HTTP drains
 	// 1. Stop accepting; in-flight requests finish (WebSockets are hijacked: realtime closes them).
@@ -153,11 +166,17 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	case <-shutdown.Done():
 		log.Error("keel serve: recovery pass still running at shutdown")
 	}
-	// 3. Jobs: pending ones are dropped (the next start's recovery pass redoes what matters),
-	// running ones get the rest of the shutdown budget.
-	if err := sched.Stop(shutdown); err != nil {
-		log.Error("keel serve: jobs still running at shutdown", "err", err)
+	// 3. Jobs: pending ones are dropped (the next start's recovery pass redoes what matters).
+	// Running ones may finish until shortly before the deadline; then their context is cancelled
+	// and they get the remaining moment to record that, before the database closes under them.
+	jobsCtx, cancelJobs := context.WithDeadline(shutdown, deadline.Add(-jobsCancelGrace))
+	if err := sched.Stop(jobsCtx); err != nil {
+		log.Error("keel serve: jobs still running at shutdown, cancelled", "err", err)
+		if err := sched.Wait(shutdown); err != nil {
+			log.Error("keel serve: cancelled jobs did not return in time", "err", err)
+		}
 	}
+	cancelJobs()
 	// 4. WebSockets: clients reconnect to the next process and refetch everything.
 	shutdownRealtime(rt, log)
 	// 5. Adapters, then 6. the database (deferred above, in that order).
@@ -185,7 +204,7 @@ func stopJobs(s *jobs.Scheduler, log *slog.Logger) {
 }
 
 func shutdownRealtime(rt *realtime.Server, log *slog.Logger) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), realtimeCloseTimeout)
 	defer cancel()
 	if err := rt.Shutdown(ctx); err != nil {
 		log.Error("keel serve: realtime shutdown", "err", err)

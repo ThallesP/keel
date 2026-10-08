@@ -124,6 +124,14 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 - `Changes` helpers name the topics so handlers never spell paths: `ch.Projects(org)`,
   `ch.Environment(org, envID)` (canvas, summary, deployments of it), `ch.Node(org, nodeID)`,
   `ch.Organization(org)` (members, invitations, sink).
+- Delivery (`internal/adapters/realtime`): publishes to one organization are merged for 100 ms,
+  topics deduped and sorted. Close codes the client must honour: `4501` "signed out" (terminal:
+  the session is gone, show sign-in), `4001` "membership changed" (reconnect: the new connection
+  joins the user's current organization), centrifuge's `3001` shutdown and `3004` server error
+  (reconnect). A signed-in user without an organization is connected with no subscription.
+- Read-your-writes: a non-GET `/api/*` response carries `Keel-Invalidate: <topic>,<topic>`, the
+  topics its committed writes published for the caller's organization (web-data.md §9.3). The
+  fetch client invalidates those before resolving the mutation; the socket message follows.
 
 ## Dashboard
 

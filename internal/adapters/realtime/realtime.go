@@ -19,15 +19,19 @@
 package realtime
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/centrifugal/centrifuge"
@@ -159,8 +163,67 @@ func (s *Server) Handler() http.Handler {
 		}
 		actor, err := s.auth(r)
 		ctx := context.WithValue(r.Context(), connKey{}, conn{actor: actor, err: err})
-		ws.ServeHTTP(w, r.WithContext(ctx))
+		ws.ServeHTTP(cookieCarrier{w}, r.WithContext(ctx))
 	})
+}
+
+// cookieCarrier makes the 101 handshake response carry the Set-Cookie headers set on w before the
+// upgrade. The transport re-sends a session's cookie on whichever request renewed the session,
+// and a WebSocket reconnect is often the first request of the day; but centrifuge writes the
+// handshake itself on the hijacked connection, from its own (empty) header list, so without this
+// the renewed cookie would be dropped and the browser's copy would expire under a live session.
+type cookieCarrier struct{ http.ResponseWriter }
+
+func (c cookieCarrier) Unwrap() http.ResponseWriter { return c.ResponseWriter }
+
+func (c cookieCarrier) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := c.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	nc, brw, err := h.Hijack()
+	if err != nil || len(c.Header().Values("Set-Cookie")) == 0 {
+		return nc, brw, err
+	}
+	var extra []byte
+	for _, v := range c.Header().Values("Set-Cookie") {
+		extra = append(extra, "Set-Cookie: "...)
+		for i := 0; i < len(v); i++ {
+			if b := v[i]; b > 31 && b != 127 {
+				extra = append(extra, b)
+			} else {
+				extra = append(extra, ' ') // no response splitting
+			}
+		}
+		extra = append(extra, "\r\n"...)
+	}
+	return &handshakeConn{Conn: nc, extra: extra}, brw, nil
+}
+
+// handshakeConn inserts extra header lines into the first thing written to it, the handshake
+// response, before the blank line that ends its headers. Later writes pass through.
+type handshakeConn struct {
+	net.Conn
+	extra []byte
+	done  atomic.Bool
+}
+
+func (c *handshakeConn) Write(p []byte) (int, error) {
+	if c.done.Swap(true) {
+		return c.Conn.Write(p)
+	}
+	end := bytes.Index(p, []byte("\r\n\r\n"))
+	if end < 0 || !bytes.HasPrefix(p, []byte("HTTP/1.1 101 ")) {
+		return c.Conn.Write(p)
+	}
+	out := make([]byte, 0, len(p)+len(c.extra))
+	out = append(out, p[:end+2]...)
+	out = append(out, c.extra...)
+	out = append(out, p[end+2:]...)
+	if _, err := c.Conn.Write(out); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // originAllowed: browsers always send Origin on a WebSocket handshake; it must name the host the

@@ -225,6 +225,51 @@ func TestStopDeadlineCancelsJobContext(t *testing.T) {
 	}
 }
 
+// After Stop gives up and cancels, Wait lets the cancelled jobs finish what they do on
+// cancellation (serve closes the database only after that).
+func TestWaitAfterStopDeadline(t *testing.T) {
+	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	started := make(chan struct{})
+	var recorded atomic.Bool
+	s.After("apply", 0, func(ctx context.Context) {
+		close(started)
+		<-ctx.Done()
+		time.Sleep(30 * time.Millisecond) // writes its outcome
+		recorded.Store(true)
+	})
+	<-started
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := s.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop = %v, want deadline exceeded", err)
+	}
+	if recorded.Load() {
+		t.Fatal("Stop waited past its deadline")
+	}
+	wctx, wcancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer wcancel()
+	if err := s.Wait(wctx); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if !recorded.Load() {
+		t.Fatal("Wait returned before the cancelled job finished")
+	}
+
+	// Wait honours its own deadline too.
+	s2 := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	defer func() { _ = s2.Stop(context.Background()) }() // runs after release is closed
+	release := make(chan struct{})
+	defer close(release)
+	running := make(chan struct{})
+	s2.After("stuck", 0, func(context.Context) { close(running); <-release })
+	<-running
+	short, scancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer scancel()
+	if err := s2.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Wait = %v, want deadline exceeded", err)
+	}
+}
+
 func TestStopEndsEveryLoopsAfterCurrentRun(t *testing.T) {
 	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
 	started := make(chan struct{}, 1)

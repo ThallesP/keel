@@ -158,7 +158,8 @@ func (s *Scheduler) Pending(key string) bool {
 
 // Stop drops pending After jobs, ends Every loops and waits for running jobs. Running jobs get
 // until ctx is done to return on their own; then their context is cancelled and Stop returns
-// ctx.Err() without waiting further. Later After/Every calls are ignored. Safe to call twice.
+// ctx.Err() without waiting further (Wait waits for them to return). Later After/Every calls
+// are ignored. Safe to call twice.
 func (s *Scheduler) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	if !s.stopped {
@@ -175,6 +176,15 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
+	err := s.Wait(ctx)
+	s.cancel()
+	return err
+}
+
+// Wait blocks until no job is running or ctx is done (then it returns ctx.Err()). Call it after
+// Stop: after a Stop that gave up, it lets the jobs whose context was just cancelled record their
+// outcome before the caller closes what they write to (the database).
+func (s *Scheduler) Wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
@@ -182,10 +192,8 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 	}()
 	select {
 	case <-done:
-		s.cancel()
 		return nil
 	case <-ctx.Done():
-		s.cancel()
 		return ctx.Err()
 	}
 }

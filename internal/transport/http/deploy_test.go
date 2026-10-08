@@ -207,7 +207,7 @@ func TestDeploymentRoutes(t *testing.T) {
 	if code, body, _ := call(member, "POST", "/api/environments/env/deployments", `{}`); code != 409 || body["code"] != "DEPLOYMENT_RUNNING" || body["detail"] != "A deployment is already running" {
 		t.Fatalf("second ship: %d %v", code, body)
 	}
-	if code, body, _ := call(outsider, "POST", "/api/environments/env/deployments", `{"only":["node1"],"refresh":true}`); code != 404 || body["detail"] != "Environment not found" {
+	if code, body, _ := call(outsider, "POST", "/api/environments/env/deployments", `{"only":["node1"],"refresh":true}`); code != 404 || body["code"] != "PROJECT_NOT_FOUND" || body["detail"] != "Environment not found" {
 		t.Fatalf("outsider ship: %d %v", code, body)
 	}
 	if code, body, _ := call(signedOut, "POST", "/api/environments/env/deployments", `{}`); code != 401 || body["code"] != "NOT_AUTHENTICATED" {

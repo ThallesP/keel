@@ -129,8 +129,11 @@ func TestOrganizationIsolation(t *testing.T) {
 			t.Errorf("%+v ListNodeDeployments: %v %v", actor, ds, err)
 		}
 	}
-	if _, err := w.app.ShipEnvironment(ctx, w.outsider, "env", app.ShipOptions{Only: []string{a.ID}}); codeAndMessage(err) != "NOT_FOUND: Environment not found" {
+	if _, err := w.app.ShipEnvironment(ctx, w.outsider, "env", app.ShipOptions{Only: []string{a.ID}}); codeAndMessage(err) != "PROJECT_NOT_FOUND: Environment not found" {
 		t.Errorf("outsider ship: %v", codeAndMessage(err))
+	}
+	if _, err := w.app.ShipEnvironment(ctx, w.member, "nope", app.ShipOptions{}); codeAndMessage(err) != "PROJECT_NOT_FOUND: Environment not found" {
+		t.Errorf("missing environment: %v", codeAndMessage(err))
 	}
 	if _, err := w.app.ShipEnvironment(ctx, domain.Actor{}, "env", app.ShipOptions{}); domain.CodeOf(err) != domain.CodeNotAuthenticated {
 		t.Errorf("signed-out ship: %v", codeAndMessage(err))

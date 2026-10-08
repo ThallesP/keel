@@ -47,13 +47,15 @@ func (a *App) scheduleApply(req applyRequest) {
 	}
 }
 
-// drainApplies runs the node's queued applies one after the other until none is left.
+// drainApplies runs the node's queued applies one after the other until none is left. When the
+// job's context ends (serve is stopping) the rest of the queue is dropped: their steps are still
+// pending, so the next start's recovery pass queues them again.
 func (a *App) drainApplies(ctx context.Context, nodeID string) {
 	rt := a.deployRuntime()
 	for {
 		rt.mu.Lock()
 		q := rt.applies[nodeID]
-		if q == nil || len(q.queued) == 0 {
+		if q == nil || len(q.queued) == 0 || ctx.Err() != nil {
 			delete(rt.applies, nodeID)
 			rt.mu.Unlock()
 			return
@@ -81,12 +83,16 @@ type deployApplyInput struct {
 	desired domain.Desired
 	env     []string
 	oneShot bool
+	// applied: the deployment's step for this node already has appliedAt, i.e. another apply of
+	// the same (deployment, node) reached Swarm. Only a duplicate can see that: the start-up
+	// recovery pass re-queuing a step that a deployment shipped while it was reading.
+	applied bool
 }
 
-func (a *App) loadApplyInput(ctx context.Context, nodeID string) (*deployApplyInput, error) {
+func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*deployApplyInput, error) {
 	var in *deployApplyInput
 	err := a.read(ctx, func(tx Tx) error {
-		n, err := tx.Node(nodeID)
+		n, err := tx.Node(req.nodeID)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
@@ -104,6 +110,21 @@ func (a *App) loadApplyInput(ctx context.Context, nodeID string) (*deployApplyIn
 			return err
 		}
 		in = &deployApplyInput{name: n.Name, desired: *n.Desired, env: deployEnvList(env), oneShot: n.OneShot}
+		if req.deploymentID == "" {
+			return nil
+		}
+		d, err := tx.Deployment(req.deploymentID)
+		if errors.Is(err, ErrNoRow) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		for _, s := range d.Steps {
+			if s.NodeID == req.nodeID && s.AppliedAt != nil {
+				in.applied = true
+			}
+		}
 		return nil
 	})
 	return in, err
@@ -152,6 +173,13 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	id := req.nodeID
 	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
 	fail := func(err error) {
+		if parent.Err() != nil {
+			// serve is stopping and the scheduler cancelled its jobs: this is not the apply's
+			// failure. Leave the step pending/running without appliedAt; the next start's
+			// recovery pass queues the apply again (swarm-worker.md §18 (c)).
+			a.Log.Warn("apply interrupted by shutdown", "node", id, "deployment", req.deploymentID, "err", err)
+			return
+		}
 		text := deployErrorText(err)
 		a.setApplyError(record, id, text)
 		step(stepFailed, "error: "+text)
@@ -161,13 +189,16 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 
-	in, err := a.loadApplyInput(ctx, id)
+	in, err := a.loadApplyInput(ctx, req)
 	if err != nil {
 		fail(err)
 		return
 	}
 	if in == nil {
 		return // deleted before we ran; the node delete's reconcile fails the step
+	}
+	if in.applied {
+		return // a duplicate of an apply that already reached Swarm for this deployment
 	}
 	if in.desired.Revision > req.revision {
 		a.applySuperseded(record, req, in.desired.Revision)

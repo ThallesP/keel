@@ -31,6 +31,16 @@ type fakeJobs struct {
 	clock   *int64
 	pending []*fakeJob
 	seq     int
+	// ctx is what jobs run with (context.Background() when nil); a cancelled one is serve
+	// stopping its scheduler.
+	ctx context.Context
+}
+
+func (j *fakeJobs) jobCtx() context.Context {
+	if j.ctx == nil {
+		return context.Background()
+	}
+	return j.ctx
 }
 
 func (j *fakeJobs) After(key string, delay time.Duration, fn func(context.Context)) {
@@ -79,7 +89,7 @@ func (j *fakeJobs) advance(d time.Duration) {
 		if p.due > *j.clock {
 			*j.clock = p.due
 		}
-		p.fn(context.Background())
+		p.fn(j.jobCtx())
 	}
 }
 
@@ -89,7 +99,7 @@ func (j *fakeJobs) runOne(t *testing.T, prefix string) {
 	for i, p := range j.pending {
 		if strings.HasPrefix(p.key, prefix) && p.due <= *j.clock {
 			j.pending = append(j.pending[:i], j.pending[i+1:]...)
-			p.fn(context.Background())
+			p.fn(j.jobCtx())
 			return
 		}
 	}
@@ -367,6 +377,7 @@ func (w *world) newApp(cfg app.Config) *app.App {
 // is gone.
 func (w *world) restart(cfg app.Config) {
 	w.jobs.pending = nil
+	w.jobs.ctx = nil
 	w.app = w.newApp(cfg)
 }
 

@@ -11,19 +11,32 @@ import (
 var (
 	canvasJoin = joinOrFound
 	canvasShip = (*App).beginDeployment
-	// canvasAfterRemove runs after a node delete commits (docs/go/spec/projects.md §10 step 7).
-	canvasAfterRemove = func(a *App, n domain.Node) {
-		if len(n.Endpoints) > 0 {
-			a.ScheduleProxySync()
-		}
-		if n.Desired != nil {
-			a.ScheduleRemoveService(n.ID)
-			// Cancels the pending observe and settles a running deployment that waits on the node
-			// ("<label>: node deleted") instead of letting it time out after 5 minutes.
-			a.ScheduleObserve(n.ID)
-		}
+	// canvasSchedulers are the jobs a node delete kicks after commit.
+	canvasSchedulers = func(a *App) CanvasSchedulers {
+		return CanvasSchedulers{ProxySync: a.ScheduleProxySync, RemoveService: a.ScheduleRemoveService, Observe: a.ScheduleObserve}
 	}
 )
+
+// CanvasSchedulers: ScheduleProxySync (ingress), ScheduleRemoveService and ScheduleObserve (deploy).
+type CanvasSchedulers struct {
+	ProxySync     func()
+	RemoveService func(nodeID string)
+	Observe       func(nodeID string)
+}
+
+// canvasAfterRemove runs after a node delete commits (docs/go/spec/projects.md §10 step 7).
+func canvasAfterRemove(a *App, n domain.Node) {
+	s := canvasSchedulers(a)
+	if len(n.Endpoints) > 0 {
+		s.ProxySync()
+	}
+	if n.Desired != nil {
+		s.RemoveService(n.ID)
+		// Cancels the pending observe and settles a running deployment that waits on the node
+		// ("<label>: node deleted") instead of letting it time out after 5 minutes.
+		s.Observe(n.ID)
+	}
+}
 
 // canvasTouch records that the environment changed in a way every node sub-resource can show:
 // its canvas, summary and deployments (/api/environments/<env>) and each node's views

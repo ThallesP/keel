@@ -5,7 +5,7 @@ Keel from the terminal, for agents first and people too. A thin client over the 
 ## Build
 
 ```bash
-go build -o bin/keel ./cmd/keel                        # the whole binary: CLI, serve, proxy, agent
+go build -o bin/keel ./cmd/keel                        # the whole binary: CLI, serve, proxy (Linux only), agent
 go build -tags keel_noproxy -o bin/keel ./cmd/keel     # leaves the embedded Caddy edge out (laptops, agents)
 ```
 

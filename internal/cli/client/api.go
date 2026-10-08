@@ -227,8 +227,13 @@ func (c *Client) StartDeployment(ctx context.Context, environmentID string, only
 	return out.ID, nil
 }
 
-// Deployment is nil when the id is unknown (or not the caller's).
+// Deployment is nil when the id is unknown (or not the caller's). The id is whatever the user
+// typed: one that can't be a path segment ("", ".", "..") would reach another route, and no
+// deployment has it.
 func (c *Client) Deployment(ctx context.Context, id string) (*Deployment, error) {
+	if id == "" || id == "." || id == ".." {
+		return nil, nil
+	}
 	var out api.DeploymentEnvelope
 	if err := c.call(ctx, http.MethodGet, apiPath("/api/deployments/%s", id), nil, nil, &out); err != nil {
 		return nil, err

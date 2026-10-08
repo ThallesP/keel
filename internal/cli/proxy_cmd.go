@@ -1,4 +1,4 @@
-//go:build !keel_noproxy
+//go:build linux && !keel_noproxy
 
 package cli
 
@@ -15,7 +15,9 @@ import (
 // container. Owner: the ingress area (docs/go/spec/proxy-ingress.md §7, §12.4 option 1).
 //
 // Caddy roughly quadruples the binary; a CLI-only build (laptops, agents) can leave the edge out
-// with `-tags keel_noproxy`.
+// with `-tags keel_noproxy`. Linux only: its listeners live in the host's network namespace
+// (setns), and leaving it out elsewhere keeps `go build ./cmd/keel` working on macOS and Windows,
+// where the CLI runs.
 func init() {
 	Extra = append(Extra, proxyCommand)
 }

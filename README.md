@@ -158,7 +158,7 @@ docs/         design docs: canvas, workers, networking, volumes, logs, agents; g
 install.sh    the installer
 ```
 
-`apps/cli`, `apps/proxy`, `apps/worker` and `packages/backend` are the Convex-era code the binary replaces; they go away once the port lands.
+`apps/proxy`, `apps/worker` and `packages/backend` are the Convex-era code the binary replaces; they go away once the port lands. The CLI already moved in: `internal/cli` (contract in [`docs/cli.md`](docs/cli.md)).
 
 [`ci.yml`](.github/workflows/ci.yml) runs the Go checks and the web typecheck and build, then runs `install.sh` end to end on a fresh runner: twice, then once more over a Convex-era data volume. It runs on every pull request, and as the first job of [`images.yml`](.github/workflows/images.yml), which builds the image on every push to `main` (`:latest`, `:sha-<short>`) and on `v*` tags and publishes it only when `ci.yml` passed.
 

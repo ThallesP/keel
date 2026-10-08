@@ -162,6 +162,13 @@ func TestDeployments(t *testing.T) {
 	if d, err := c.Deployment(ctx, "nope/.."); d != nil || err != nil {
 		t.Errorf("unknown id: %+v, %v", d, err)
 	}
+	// Not a path segment: /api/deployments/.. is another route (NOT_FOUND), not "no such
+	// deployment". Unknown without asking (the fake fails any request it has no route for).
+	for _, id := range []string{"", ".", ".."} {
+		if d, err := c.Deployment(ctx, id); d != nil || err != nil {
+			t.Errorf("id %q: %+v, %v", id, d, err)
+		}
+	}
 	if d, err := c.LatestDeployment(ctx, "env1"); d != nil || err != nil {
 		t.Errorf("never deployed: %+v, %v", d, err)
 	}

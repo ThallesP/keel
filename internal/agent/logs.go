@@ -59,6 +59,10 @@ type Shipper struct {
 	followers map[string]*follower
 	// Containers read to EOF after they exited; nothing left to fetch until they are removed.
 	finished map[string]bool
+	// starts counts follower starts; startedAt is the count at a container's last start, so a
+	// reconcile can tell containers that started while its list was in flight.
+	starts    uint64
+	startedAt map[string]uint64
 	// One queue per sink key, drained in order so a slow sink never fans out into parallel
 	// retries; equal sinks of several projects share one.
 	queues      map[string]*queue
@@ -96,7 +100,7 @@ func NewShipper(docker Docker, state *State, log *Logger, newSink SinkFactory, r
 		followRetry: 3 * time.Second, refreshEvery: 5 * time.Second, now: time.Now,
 		routes: map[string]route{}, sinkByService: map[string]Sink{}, sinceByService: map[string]string{},
 		readSince: map[string]string{}, followers: map[string]*follower{}, finished: map[string]bool{},
-		queues: map[string]*queue{},
+		startedAt: map[string]uint64{}, queues: map[string]*queue{},
 	}
 	s.followCtx, s.stopFollowing = context.WithCancel(context.Background())
 	s.sendCtx, s.cancelSends = context.WithCancel(context.Background())
@@ -179,7 +183,14 @@ func (s *Shipper) ApplyConfig(sinks []SinkRoute) bool {
 // ReconcileFollowers re-scans the containers: follows running ones routed to a sink, finishes
 // reading exited ones a restart left undelivered (they have a resume point and were not read to
 // EOF yet), stops the rest, and forgets the resume points of containers Docker no longer has.
+//
+// A container that a `start` event began following while the list was in flight is not in the
+// list: it is left alone until the next reconcile (the worker stopped it and forgot its resume
+// points, so it was not read until the next poll and then re-read from the sink's connect time).
 func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
+	s.mu.Lock()
+	listed := s.starts
+	s.mu.Unlock()
 	containers, err := s.docker.ListSwarmContainers(ctx)
 	if err != nil {
 		return err
@@ -187,6 +198,11 @@ func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	known := make(map[string]bool, len(containers))
+	for id, seq := range s.startedAt {
+		if seq > listed {
+			known[id] = true // younger than the list
+		}
+	}
 	for _, c := range containers {
 		known[c.ID] = true
 		serviceID, ok := serviceIDOf(c.Labels)
@@ -215,6 +231,11 @@ func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
 	for id := range s.finished {
 		if !known[id] {
 			delete(s.finished, id)
+		}
+	}
+	for id := range s.startedAt {
+		if !known[id] {
+			delete(s.startedAt, id)
 		}
 	}
 	return nil
@@ -271,6 +292,8 @@ func (s *Shipper) startLocked(c Container) {
 	ctx, cancel := context.WithCancel(s.followCtx)
 	f := &follower{cancel: cancel}
 	s.followers[c.ID] = f
+	s.starts++
+	s.startedAt[c.ID] = s.starts
 	s.followersWG.Add(1)
 	go func() {
 		defer s.followersWG.Done()
@@ -296,6 +319,7 @@ func (s *Shipper) stopLocked(id string, forget bool) {
 	}
 	delete(s.finished, id)
 	delete(s.readSince, id)
+	delete(s.startedAt, id)
 	s.state.Forget(id)
 }
 

@@ -343,6 +343,57 @@ func TestShipperReconcileFollowers(t *testing.T) {
 	}
 }
 
+// A container that starts while the reconcile's container list is in flight is not in that list.
+// Its follower (started by the `start` event) must survive the reconcile with its resume points:
+// stopping it and forgetting them meant no reading until the next poll, then re-reading the whole
+// log from the sink's connect time (duplicates).
+func TestShipperReconcileKeepsContainersStartedDuringTheList(t *testing.T) {
+	d := newFakeDocker()
+	old := task('o', "n1", "1", "running")
+	young := task('y', "n1", "2", "running")
+	gone := task('g', "n1", "3", "exited")
+	d.setContainers(old)
+	d.script(young.ID, logScript{data: stamped("2024-01-01T00:00:07Z first line")})
+	ss := newSinkSet()
+	s, state, _ := newTestShipper(t, d, ss)
+	state.Checkpoint([]resumePoint{{gone.ID, "1.000000001"}})
+	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA, Since: ms(1704067200000)}})
+	d.afterList = func() {
+		d.mu.Lock()
+		d.afterList = nil
+		d.mu.Unlock()
+		s.OnContainerEvent("start", young.ID, young.Labels)
+		waitFor(t, func() bool { v, _ := state.LogsSince(young.ID); return v == "1704067207.000000001" })
+	}
+	reconcile(t, s)
+
+	if f := s.following(); !slices.Equal(f, []string{old.ID, young.ID}) {
+		t.Fatalf("following %v, want the container that started during the list kept", f)
+	}
+	if v, _ := state.LogsSince(young.ID); v != "1704067207.000000001" {
+		t.Fatalf("its delivered resume point was forgotten: %q", v)
+	}
+	if s.lastRead(young.ID) != "1704067207.000000001" {
+		t.Fatal("its in-process resume point was forgotten")
+	}
+	if _, ok := state.LogsSince(gone.ID); ok {
+		t.Fatal("a container that was gone before the list kept its resume point")
+	}
+
+	// Next poll: it is listed now, nothing is read twice.
+	d.setContainers(old, young)
+	reconcile(t, s)
+	if got := d.callsFor(young.ID); len(got) != 1 {
+		t.Fatalf("re-read %v", got)
+	}
+	// And once it is really gone, it is forgotten as usual.
+	d.setContainers(old)
+	reconcile(t, s)
+	if _, ok := state.LogsSince(young.ID); ok || slices.Contains(s.following(), young.ID) {
+		t.Fatal("a removed container was kept")
+	}
+}
+
 func TestShipperContainerEvents(t *testing.T) {
 	d := newFakeDocker()
 	ss := newSinkSet()

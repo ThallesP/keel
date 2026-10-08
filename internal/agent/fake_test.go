@@ -16,6 +16,9 @@ type fakeDocker struct {
 	infoErr    error
 	containers []Container
 	listErr    error
+	// afterList runs inside ListSwarmContainers after the answer was taken: what happens on the
+	// node while the list is in flight.
+	afterList func()
 	// logs scripts each ContainerLogs call of a container, in order (the last repeats).
 	logs     map[string][]logScript
 	logCalls []logCall
@@ -52,8 +55,12 @@ func (d *fakeDocker) Info(context.Context) (NodeInfo, error) { return d.info, d.
 
 func (d *fakeDocker) ListSwarmContainers(context.Context) ([]Container, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	return slices.Clone(d.containers), d.listErr
+	out, err, hook := slices.Clone(d.containers), d.listErr, d.afterList
+	d.mu.Unlock()
+	if hook != nil {
+		hook() // the daemon answered; the list is on its way back
+	}
+	return out, err
 }
 
 func (d *fakeDocker) setContainers(cs ...Container) {

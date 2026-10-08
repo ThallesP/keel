@@ -37,6 +37,11 @@ type Config struct {
 	AxiomAuthURL    string // KEEL_AXIOM_AUTH_URL override (tests)
 	AxiomAPIURL     string // KEEL_AXIOM_API_URL override (tests)
 	AllowLocalSinks bool   // KEEL_ALLOW_LOCAL_SINKS
+	DataDir         string // KEEL_DATA_DIR
+	// The per-node agent as a Swarm global service (replaces scripts/deploy-worker.sh). Empty
+	// AgentImage = serve does not manage it.
+	AgentImage      string // KEEL_AGENT_IMAGE
+	AgentControlURL string // KEEL_AGENT_CONTROL_URL: how agents reach serve (tailnet URL)
 }
 
 // New fills defaults: a no-op publisher, the wall clock, slog.Default.

@@ -47,6 +47,9 @@ func ConfigFromEnv(version string) app.Config {
 		AxiomAuthURL:    Env("KEEL_AXIOM_AUTH_URL", ""),
 		AxiomAPIURL:     Env("KEEL_AXIOM_API_URL", ""),
 		AllowLocalSinks: Env("KEEL_ALLOW_LOCAL_SINKS", "") == "1",
+		DataDir:         Env("KEEL_DATA_DIR", "/data"),
+		AgentImage:      Env("KEEL_AGENT_IMAGE", ""),
+		AgentControlURL: strings.TrimRight(Env("KEEL_AGENT_CONTROL_URL", ""), "/"),
 	}
 }
 
@@ -56,7 +59,7 @@ func Run(ctx context.Context, opts Options) error {
 	slog.SetDefault(log)
 	cfg := ConfigFromEnv(opts.Version)
 
-	dataDir := Env("KEEL_DATA_DIR", "/data")
+	dataDir := cfg.DataDir
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
 	}

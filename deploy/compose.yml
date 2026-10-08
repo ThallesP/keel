@@ -1,72 +1,78 @@
 # Keel control plane. Written to /opt/keel/compose.yml by install.sh and run as
 #   docker compose -p keel --env-file /opt/keel/.env -f /opt/keel/compose.yml up -d
-# Workers (user services, keel-worker) are Swarm services, not part of this file.
-# Convex and the dashboard bind KEEL_ADDR (the tailnet IP) only. The one public listener is
-# `proxy`, and only for what someone exposed (docs/networking.md).
+# One image, ghcr.io/thallesp/keel, two containers: `keel serve` (API, dashboard, SQLite, Swarm
+# driver) and `keel proxy` (the public edge). The per-node agent (`keel agent`, the global
+# service keel-agent) and user services are Swarm services that `keel serve` manages; they are
+# not part of this file.
+# `keel` binds KEEL_ADDR (the tailnet IP) only. The one public listener is `proxy`, and only for
+# what someone exposed (docs/networking.md).
 
 name: keel
 
 services:
-  backend:
-    # Pinned: backend upgrades can migrate the database. Bump deliberately.
-    image: ghcr.io/get-convex/convex-backend:5c7cb5bc7db457290f1769f95f1d1340912f7fd7
+  keel:
+    image: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel:${KEEL_VERSION:-latest}
+    command: ["serve"]
     restart: unless-stopped
-    stop_signal: SIGINT
-    stop_grace_period: 10s
+    stop_grace_period: 15s
     ports:
-      - "${KEEL_ADDR:?}:3210:3210"
-      - "${KEEL_ADDR:?}:3211:3211"
+      # Dashboard, API, WebSocket, and the routes agents (/worker), the edge (/proxy) and traced
+      # services (/otlp) call.
+      - "${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}:8080"
     volumes:
-      - convex-data:/convex/data
-      # "use node" actions (convex/swarm.ts) drive Swarm through the manager's socket.
-      # Root-equivalent; see docs/workers.md, "How Convex reaches Docker".
+      - keel-data:/data # keel.db (SQLite, WAL)
+      # The Swarm driver: services, the keel-agent global service, logs. Root-equivalent; see
+      # docs/workers.md. The edge never gets this socket.
       - /var/run/docker.sock:/var/run/docker.sock
-      # keel-proxy's admin socket (convex/proxy.ts). Shared through this volume only.
+      # keel-proxy's admin socket. Shared through this volume only.
       - proxy-admin:/run/keel-proxy
     environment:
-      INSTANCE_NAME: keel
-      INSTANCE_SECRET: ${INSTANCE_SECRET:?}
-      CONVEX_CLOUD_ORIGIN: http://${KEEL_ADDR}:3210
-      CONVEX_SITE_ORIGIN: http://${KEEL_ADDR}:3211
-      DISABLE_METRICS_ENDPOINT: "true"
+      KEEL_SITE_URL: ${KEEL_SITE_URL:?}
+      KEEL_WORKER_TOKEN: ${KEEL_WORKER_TOKEN:?}
+      KEEL_PUBLIC_IP: ${KEEL_PUBLIC_IP:-}
+      KEEL_ACME_EMAIL: ${KEEL_ACME_EMAIL:-}
+      KEEL_ACME_CA: ${KEEL_ACME_CA:-}
+      # What containers and agents dial: the tailnet address, never the site URL (which may be a
+      # name only browsers resolve). The SDK appends /v1/traces.
+      KEEL_OTLP_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}/otlp
+      # Where keel-proxy POSTs certificate reports. It dials from the host network namespace.
+      KEEL_PROXY_REPORT_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}/proxy/events
+      # serve creates and updates the keel-agent global service from the image it runs itself.
+      KEEL_AGENT_IMAGE: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel:${KEEL_VERSION:-latest}
+      KEEL_AGENT_CONTROL_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}
+    # No depends_on: proxy. The dashboard stays up when the edge is down; the proxy resumes its
+    # last config by itself, and serve re-syncs it.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/meta"]
       interval: 5s
       start_period: 10s
 
-  web:
-    image: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel-web:${KEEL_VERSION:-latest}
-    restart: unless-stopped
-    ports:
-      - "${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}:80"
-    environment:
-      KEEL_CONVEX_URL: http://${KEEL_ADDR}:3210
-      KEEL_CONVEX_SITE_URL: http://${KEEL_ADDR}:3211
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
-      interval: 5s
-      start_period: 5s
-
-  # Public edge: Caddy + caddy-l4 + apps/proxy. Configured by Convex through the admin socket;
-  # HTTPS on 80/443 and every exposed TCP/UDP port. It sits on the Swarm overlay to dial
-  # svc-<id>:<port>, and opens its listeners in the host's network namespace (CAP_SYS_ADMIN for
-  # setns, the host's netns file below), so a new port needs no restart. No `ports:` on purpose.
-  # It parses internet traffic, so it keeps only those two capabilities (NET_BIND_SERVICE: 80
-  # and 443 in the host namespace) and cannot gain more.
+  # Public edge: `keel proxy` (Caddy + caddy-l4 + the keel modules). Configured by serve through
+  # the admin socket; HTTPS on 80/443 and every exposed TCP/UDP port. It sits on the Swarm overlay
+  # to dial svc-<id>:<port>, and opens its listeners in the host's network namespace
+  # (CAP_SYS_ADMIN for setns, the host's netns file below), so a new port needs no restart. No
+  # `ports:` on purpose. It parses internet traffic, so it keeps only those two capabilities
+  # (NET_BIND_SERVICE: 80 and 443 in the host namespace), cannot gain more, and never gets the
+  # Docker socket. Same binary as serve, separate container on purpose (docs/go/ARCHITECTURE.md).
   proxy:
-    image: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel-proxy:${KEEL_VERSION:-latest}
+    image: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel:${KEEL_VERSION:-latest}
+    command: ["proxy"]
     restart: unless-stopped
     cap_drop: [ALL]
     cap_add: [SYS_ADMIN, NET_BIND_SERVICE]
     security_opt: ["no-new-privileges:true"]
+    environment:
+      # Caddy's storage and autosave stay where the caddy-based keel-proxy image kept them, so an
+      # upgrade keeps its certificates, ACME accounts and last config.
+      XDG_DATA_HOME: /data
+      XDG_CONFIG_HOME: /config
+      KEEL_PROXY_REPORT_URL: http://${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}/proxy/events
+      KEEL_WORKER_TOKEN: ${KEEL_WORKER_TOKEN:?}
     volumes:
       - /proc/1/ns/net:/run/hostns/net:ro
       - proxy-admin:/run/keel-proxy
       - proxy-data:/data # certificates and ACME accounts
-      - proxy-config:/config # the last config Convex pushed (`caddy run --resume`)
+      - proxy-config:/config # the last config serve pushed (resumed on restart)
     networks: [keel]
     healthcheck:
       test: ["CMD", "test", "-S", "/run/keel-proxy/admin.sock"]
@@ -78,8 +84,10 @@ networks:
   keel:
     external: true
 
+# keel_convex-data (the Convex-era control plane's data) is not declared here: an upgrade leaves
+# it in place, untouched, for `keel import-convex`.
 volumes:
-  convex-data:
+  keel-data:
   proxy-admin:
   proxy-data:
   proxy-config:

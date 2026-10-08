@@ -3,15 +3,13 @@
 # Tailnet-only (`tailscale serve`, not funnel). Idempotent: re-run after a node rename or on a
 # new box; the serve config itself survives reboots. See docs/networking.md, "Dashboard over HTTPS".
 #
-#   https://<node>          -> web (vite, 127.0.0.1:3001)
-#   https://<node>:8443     -> Convex API + sync websocket (127.0.0.1:3210)
-#   https://<node>:10000    -> Convex HTTP actions, i.e. auth (127.0.0.1:3211)
+#   https://<node>  -> Vite (127.0.0.1:3001), which proxies /api, /worker, /otlp, /proxy and
+#                      /config.js to `keel serve` (127.0.0.1:3400)
 #
-# Convex has to be https too, or the browser blocks it as mixed content. The ports are the three
-# Funnel allows, so going public later is `tailscale funnel` on the same ports, same URLs.
+# One origin for the dashboard and the API, so nothing else needs a certificate. `keel serve` has
+# to know the URL people open (device-login links, Secure cookies): start it with the
+# KEEL_SITE_URL this script prints.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-command -v bunx >/dev/null || PATH="$HOME/.bun/bin:$PATH"
 
 status=$(tailscale status --json)
 host=$(jq -r '.Self.DNSName | rtrimstr(".")' <<<"$status")
@@ -21,15 +19,6 @@ jq -e '.Self.CapMap | has("https")' <<<"$status" >/dev/null || {
 }
 
 sudo tailscale serve --bg --https=443 http://127.0.0.1:3001
-sudo tailscale serve --bg --https=8443 http://127.0.0.1:3210
-sudo tailscale serve --bg --https=10000 http://127.0.0.1:3211
-
-env=apps/web/.env
-touch "$env"
-sed -i '/^VITE_CONVEX_URL=/d; /^VITE_CONVEX_SITE_URL=/d' "$env"
-printf 'VITE_CONVEX_URL=https://%s:8443\nVITE_CONVEX_SITE_URL=https://%s:10000\n' "$host" "$host" >>"$env"
-
-# better-auth trusts exactly one origin (convex/auth.ts).
-(cd packages/backend && bunx convex env set SITE_URL "https://$host")
 
 echo "https://$host"
+echo "Start keel serve with KEEL_SITE_URL=https://$host" >&2

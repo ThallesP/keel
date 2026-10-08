@@ -47,12 +47,6 @@ func markReferrersDirty(tx Tx, ch *Changes, org string, node domain.Node) error 
 	panic("markReferrersDirty: implemented by the canvas area")
 }
 
-// withTracing adds the OTEL_* variables to env when the node's tracing switch is on
-// (docs/go/spec/observability.md). Called by: deploy (apply). Owner: observability.
-func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[string]string, error) {
-	panic("withTracing: implemented by the observability area")
-}
-
 // followPort moves every unpinned endpoint of the node to port (docs/go/spec/proxy-ingress.md).
 // Returns true when one moved (the caller then calls ScheduleProxySync after commit).
 // Called by: deploy (apply). Owner: ingress.
@@ -88,6 +82,5 @@ func (a *App) Recover(ctx context.Context) {
 	}
 }
 
-func (a *App) recoverDeploy(ctx context.Context)        {} // owner: deploy (replace)
-func (a *App) recoverIngress(ctx context.Context)       {} // owner: ingress (replace)
-func (a *App) recoverObservability(ctx context.Context) {} // owner: observability (replace)
+func (a *App) recoverDeploy(ctx context.Context)  {} // owner: deploy (replace)
+func (a *App) recoverIngress(ctx context.Context) {} // owner: ingress (replace)

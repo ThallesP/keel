@@ -70,6 +70,42 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 	stop()
 }
 
+// The last pushed config no longer loads after a restart: here its listener names an address
+// this host does not have (192.0.2.1, TEST-NET-1: what a DHCP change does to a real one). The
+// edge comes up with its admin endpoint alone instead of exiting (a crash loop would keep the
+// socket down for good), and the control plane's next push is served.
+func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
+	dir := t.TempDir()
+	oldAutosave := caddy.ConfigAutosavePath
+	caddy.ConfigAutosavePath = filepath.Join(dir, "autosave.json")
+	t.Cleanup(func() { caddy.ConfigAutosavePath = oldAutosave })
+	sock := filepath.Join(dir, "admin.sock")
+	stale := fmt.Sprintf(`{"admin":{"listen":"unix/%s|0600"},"apps":{"layer4":{"servers":{"tcp-5432":{"listen":["tcp/192.0.2.1:5432"],"routes":[]}}}}}`, sock)
+	if err := os.WriteFile(caddy.ConfigAutosavePath, []byte(stale), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := startEdge(t, Options{Socket: sock, Resume: true})
+	client := keelcaddy.New(sock, "")
+	upstream := echoServer(t)
+	port := freePort(t)
+	apps := fmt.Sprintf(`{"layer4":{"servers":{"tcp-%d":{"listen":["tcp/127.0.0.1:%d"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["%s"]}]}]}]}}}}`,
+		port, port, upstream)
+	// The socket is briefly up during the failed load too; a push landing then fails (the control
+	// plane's next sync retries it), so retry here the same way.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		err := client.LoadApps(context.Background(), []byte(apps))
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal(err)
+		}
+	}
+	echoThrough(t, port)
+	stop()
+}
+
 func startEdge(t *testing.T, opts Options) (stop func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())

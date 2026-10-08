@@ -68,7 +68,21 @@ func Run(ctx context.Context, opts Options) error {
 		log.Info("resuming from last configuration", zap.String("autosave_file", caddy.ConfigAutosavePath))
 	}
 	if err := caddy.Load(config, true); err != nil {
-		return fmt.Errorf("loading initial config: %w", err)
+		if !resumed {
+			return fmt.Errorf("loading initial config: %w", err)
+		}
+		// The last pushed config no longer loads here: a host address went away (DHCP), or
+		// another process took an exposed port. Exiting would crash-loop with the admin socket
+		// down for good, so the control plane could never push one that loads. Serve the admin
+		// endpoint alone instead (it replaces the autosave); the next sync rebuilds from the
+		// current host addresses and blames the listener that cannot bind.
+		log.Error("the last configuration no longer loads; starting with the admin endpoint only", zap.Error(err))
+		if config, err = startConfig(opts); err != nil {
+			return err
+		}
+		if err := caddy.Load(config, true); err != nil {
+			return fmt.Errorf("loading initial config: %w", err)
+		}
 	}
 	log.Info("keel proxy serving", zap.String("admin", socket))
 	<-ctx.Done()
@@ -86,8 +100,7 @@ func prepareACME() {
 	certmagic.DefaultACME.Agreed = true
 }
 
-// initialConfig: the autosave when resuming and it exists, else the base config with the admin
-// socket at opts.Socket.
+// initialConfig: the autosave when resuming and it exists, else startConfig.
 func initialConfig(opts Options) (config []byte, resumed bool, err error) {
 	if opts.Resume {
 		config, err = os.ReadFile(caddy.ConfigAutosavePath)
@@ -98,12 +111,16 @@ func initialConfig(opts Options) (config []byte, resumed bool, err error) {
 			return nil, false, err
 		}
 	}
-	if opts.ConfigFile != "" {
-		config, err = os.ReadFile(opts.ConfigFile)
-		return config, false, err
-	}
-	config, err = baseWithSocket(opts.Socket)
+	config, err = startConfig(opts)
 	return config, false, err
+}
+
+// startConfig: opts.ConfigFile, else the base config with the admin socket at opts.Socket.
+func startConfig(opts Options) ([]byte, error) {
+	if opts.ConfigFile != "" {
+		return os.ReadFile(opts.ConfigFile)
+	}
+	return baseWithSocket(opts.Socket)
 }
 
 // baseWithSocket is the built-in base config with the admin endpoint on socket (mode 0600).

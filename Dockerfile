@@ -17,6 +17,7 @@ ARG VERSION=dev
 # Node is there for the CLIs whose shebang wants it (turbo, vite); bun installs and runs scripts.
 FROM node:24-slim AS prune
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+ENV TURBO_TELEMETRY_DISABLED=1
 WORKDIR /app
 COPY . .
 # Only the web app and the workspace packages it depends on, whatever they are at the time:

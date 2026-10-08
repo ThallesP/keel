@@ -1,0 +1,5239 @@
+{
+  "components": {
+    "schemas": {
+      "AcceptedInvitation": {
+        "additionalProperties": false,
+        "properties": {
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          }
+        },
+        "required": [
+          "organization"
+        ],
+        "type": "object"
+      },
+      "AuthSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "type": "object"
+      },
+      "AxiomOrgChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AxiomSinkResult": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "org"
+        ],
+        "type": "object"
+      },
+      "BeginAxiomSignInRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "redirectUri": {
+            "description": "\u003cdashboard origin\u003e/axiom/callback",
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirectUri"
+        ],
+        "type": "object"
+      },
+      "BeginAxiomSignInResult": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "ChooseAxiomOrgRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "orgId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "orgId"
+        ],
+        "type": "object"
+      },
+      "CompleteAxiomSignInRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "code"
+        ],
+        "type": "object"
+      },
+      "CompleteAxiomSignInResult": {
+        "additionalProperties": false,
+        "properties": {
+          "choose": {
+            "type": "boolean"
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "choose"
+        ],
+        "type": "object"
+      },
+      "ConnectAxiomRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset": {
+            "description": "Logs dataset",
+            "type": "string"
+          },
+          "domain": {
+            "description": "api.axiom.co or api.eu.axiom.co",
+            "type": "string"
+          },
+          "token": {
+            "description": "API token with ingest and query on the datasets",
+            "type": "string"
+          },
+          "traces": {
+            "description": "Traces dataset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "dataset",
+          "token"
+        ],
+        "type": "object"
+      },
+      "ConnectAxiomResult": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "traces": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "dataset",
+          "traces"
+        ],
+        "type": "object"
+      },
+      "ControlPlane": {
+        "additionalProperties": false,
+        "properties": {
+          "publicIp": {
+            "description": "KEEL_PUBLIC_IP, null when this install does not know it",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "publicIp"
+        ],
+        "type": "object"
+      },
+      "CreateInvitationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "description": "owner, admin or member (default)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "CreateNodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "deploy": {
+            "description": "Ship it right away (skipped when a deployment is already running)",
+            "type": "boolean"
+          },
+          "engine": {
+            "description": "Databases and caches: picks image and port",
+            "enum": [
+              "postgres",
+              "mysql",
+              "mongo",
+              "redis"
+            ],
+            "type": "string"
+          },
+          "image": {
+            "description": "Services only",
+            "examples": [
+              "nginx:alpine"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Omitted or empty: named after the engine or image, made unique",
+            "type": "string"
+          },
+          "port": {
+            "description": "Container port, 1–65535",
+            "format": "double",
+            "type": "number"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position",
+            "description": "Omitted: right of the rightmost top-level node"
+          },
+          "replicas": {
+            "description": "0–20, default 1",
+            "format": "double",
+            "type": "number"
+          },
+          "type": {
+            "enum": [
+              "service",
+              "database",
+              "cache",
+              "volume",
+              "group"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "1–60 characters after trimming; the slug is derived from it",
+            "examples": [
+              "Acme API"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreatedInvitation": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "unix ms",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "CreatedNode": {
+        "additionalProperties": false,
+        "properties": {
+          "deploymentId": {
+            "description": "Set when deploy started one",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "DefaultProject": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "examples": [
+              "acme-support"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "type": "object"
+      },
+      "DeleteVariableRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "DeployLogLine": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "text"
+        ],
+        "type": "object"
+      },
+      "DeployStep": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedAt": {
+            "description": "When Swarm took the new spec",
+            "format": "int64",
+            "type": "integer"
+          },
+          "finishedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Node name at ship time",
+            "type": "string"
+          },
+          "nodeId": {
+            "description": "Absent on the final health checks step",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "done",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "status"
+        ],
+        "type": "object"
+      },
+      "Deployment": {
+        "additionalProperties": false,
+        "properties": {
+          "environmentId": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "log": {
+            "description": "The last 500 lines, oldest first",
+            "items": {
+              "$ref": "#/components/schemas/DeployLogLine"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "message": {
+            "examples": [
+              "ship api, postgres"
+            ],
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "steps": {
+            "description": "One per shipped node in canvas order, then health checks",
+            "items": {
+              "$ref": "#/components/schemas/DeployStep"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "environmentId",
+          "message",
+          "status",
+          "startedAt",
+          "steps",
+          "log"
+        ],
+        "type": "object"
+      },
+      "DeploymentEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "deployment": {
+            "description": "null when there is none or it is not yours",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Deployment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "deployment"
+        ],
+        "type": "object"
+      },
+      "DeviceCode": {
+        "additionalProperties": false,
+        "properties": {
+          "device_code": {
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds",
+            "examples": [
+              1800
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "interval": {
+            "description": "Minimum seconds between polls",
+            "examples": [
+              5
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_code": {
+            "examples": [
+              "ABCDEFGH"
+            ],
+            "type": "string"
+          },
+          "verification_uri": {
+            "type": "string"
+          },
+          "verification_uri_complete": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "verification_uri_complete",
+          "expires_in",
+          "interval"
+        ],
+        "type": "object"
+      },
+      "DeviceCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "examples": [
+              "keel-cli"
+            ],
+            "type": "string"
+          },
+          "scope": {
+            "description": "Unused",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id"
+        ],
+        "type": "object"
+      },
+      "DeviceDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "userCode": {
+            "examples": [
+              "ABCD-EFGH"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "userCode"
+        ],
+        "type": "object"
+      },
+      "DeviceError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "description": "authorization_pending, slow_down, expired_token, access_denied, invalid_grant, invalid_client, invalid_request, unauthorized, unsupported_grant_type, server_error",
+            "examples": [
+              "authorization_pending"
+            ],
+            "type": "string"
+          },
+          "error_description": {
+            "examples": [
+              "Authorization pending"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "error_description"
+        ],
+        "type": "object"
+      },
+      "DeviceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "denied"
+            ],
+            "type": "string"
+          },
+          "user_code": {
+            "description": "As given",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_code",
+          "status"
+        ],
+        "type": "object"
+      },
+      "DeviceToken": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds until the session expires",
+            "format": "int64",
+            "type": "integer"
+          },
+          "token_type": {
+            "examples": [
+              "Bearer"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+        ],
+        "type": "object"
+      },
+      "DeviceTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "examples": [
+              "keel-cli"
+            ],
+            "type": "string"
+          },
+          "device_code": {
+            "type": "string"
+          },
+          "grant_type": {
+            "examples": [
+              "urn:ietf:params:oauth:grant-type:device_code"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_type",
+          "device_code",
+          "client_id"
+        ],
+        "type": "object"
+      },
+      "DuplicatedNode": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "The copy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "EndpointView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "https://\u003cdomain\u003e, or \u003cip\u003e:\u003cpublicPort\u003e",
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "port": {
+            "description": "Container port the proxy dials",
+            "format": "int64",
+            "type": "integer"
+          },
+          "protocol": {
+            "enum": [
+              "http",
+              "tcp",
+              "udp"
+            ],
+            "type": "string"
+          },
+          "publicPort": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "starting",
+              "live",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol",
+          "port",
+          "address",
+          "state"
+        ],
+        "type": "object"
+      },
+      "EnvironmentLogLine": {
+        "additionalProperties": false,
+        "properties": {
+          "serviceId": {
+            "description": "Node id",
+            "type": "string"
+          },
+          "stream": {
+            "enum": [
+              "stdout",
+              "stderr"
+            ],
+            "type": "string"
+          },
+          "task": {
+            "description": "Swarm task id; empty when unknown",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "time": {
+            "description": "Epoch ms, fractional; 0 when the line had no stamp",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "serviceId",
+          "time",
+          "text",
+          "stream",
+          "task"
+        ],
+        "type": "object"
+      },
+      "EnvironmentLogs": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentLogLine"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "enum": [
+              "docker",
+              "axiom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "lines"
+        ],
+        "type": "object"
+      },
+      "EnvironmentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Derived status per node (groups excluded, volumes count as pending); zero counts are absent",
+            "type": "object"
+          },
+          "pendingChanges": {
+            "description": "Deployable nodes with a staged change",
+            "format": "int64",
+            "type": "integer"
+          },
+          "servers": {
+            "description": "Ready Swarm nodes, install-wide",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pendingChanges",
+          "counts",
+          "servers"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "EnvironmentSummaryResult": {
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/EnvironmentSummary",
+            "description": "null when the environment is missing or not the caller's"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "examples": [
+              "body.name"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "type": "object"
+      },
+      "ExposeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "description": "http only: your own hostname, pointed at the control plane's public IP. Default: an sslip.io name",
+            "type": "string"
+          },
+          "port": {
+            "description": "Container port the proxy dials. Default: the node's port",
+            "format": "double",
+            "type": "number"
+          },
+          "protocol": {
+            "description": "Default: http for a service, tcp for a database or cache",
+            "enum": [
+              "http",
+              "tcp",
+              "udp"
+            ],
+            "type": "string"
+          },
+          "publicPort": {
+            "description": "tcp/udp only: port on the control plane. Default: the container port when free, else the first free from 20000",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "Invitation": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "email": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inviterId": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "canceled",
+              "rejected"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "status",
+          "inviterId",
+          "expiresAt",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "InvitationLookup": {
+        "additionalProperties": false,
+        "properties": {
+          "invitation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicInvitation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "invitation"
+        ],
+        "type": "object"
+      },
+      "Invitations": {
+        "additionalProperties": false,
+        "properties": {
+          "invitations": {
+            "items": {
+              "$ref": "#/components/schemas/Invitation"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "invitations"
+        ],
+        "type": "object"
+      },
+      "LocalTracingEnv": {
+        "additionalProperties": false,
+        "properties": {
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "env",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "LogReplica": {
+        "additionalProperties": false,
+        "properties": {
+          "slot": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "slot",
+          "state"
+        ],
+        "type": "object"
+      },
+      "LogSinkEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "sink": {
+            "$ref": "#/components/schemas/LogSinkView",
+            "description": "null when the organization has no sink (Docker default)"
+          }
+        },
+        "required": [
+          "sink"
+        ],
+        "type": "object"
+      },
+      "LogSinkView": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "axiom"
+            ],
+            "type": "string"
+          },
+          "org": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tokenHint": {
+            "description": "… and the token's last 4 characters",
+            "type": "string"
+          },
+          "traces": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "domain",
+          "dataset",
+          "traces",
+          "org",
+          "tokenHint"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "LogTail": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceLogLine"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "replicas": {
+            "items": {
+              "$ref": "#/components/schemas/LogReplica"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "enum": [
+              "docker",
+              "axiom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "lines",
+          "replicas"
+        ],
+        "type": "object"
+      },
+      "Me": {
+        "additionalProperties": false,
+        "properties": {
+          "organization": {
+            "description": "null until the account is in the install's organization",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Organization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "organization"
+        ],
+        "type": "object"
+      },
+      "Member": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "description": "When they joined (unix ms)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "email",
+          "name",
+          "role",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "Members": {
+        "additionalProperties": false,
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "type": "object"
+      },
+      "Meta": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "examples": [
+              "keel"
+            ],
+            "type": "string"
+          },
+          "siteUrl": {
+            "description": "Dashboard URL as users open it",
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "siteUrl"
+        ],
+        "type": "object"
+      },
+      "NodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "description": "Groups",
+            "format": "double",
+            "type": "number"
+          },
+          "sizeGb": {
+            "description": "Volumes",
+            "format": "double",
+            "type": "number"
+          },
+          "width": {
+            "description": "Groups",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "NodeDeploy": {
+        "additionalProperties": false,
+        "properties": {
+          "startedAt": {
+            "description": "When the current revision shipped (unix ms)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "step": {
+            "enum": [
+              "pulling image",
+              "rolling out",
+              "starting"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "startedAt"
+        ],
+        "type": "object"
+      },
+      "NodeList": {
+        "additionalProperties": false,
+        "properties": {
+          "nodes": {
+            "description": "In creation order",
+            "items": {
+              "$ref": "#/components/schemas/NodeView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "nodes"
+        ],
+        "type": "object"
+      },
+      "NodeView": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/NodeConfig"
+          },
+          "deploy": {
+            "$ref": "#/components/schemas/NodeDeploy",
+            "description": "Only while deploying"
+          },
+          "deployedRevision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "dirty": {
+            "description": "Has a staged change (the CLI's staged)",
+            "type": "boolean"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "description": "When a one-shot run finished (done)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parentId": {
+            "description": "The group it is in; position is then relative to it",
+            "type": "string"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "public": {
+            "description": "Has at least one endpoint",
+            "type": "boolean"
+          },
+          "publicUrl": {
+            "description": "The first http endpoint's address",
+            "type": "string"
+          },
+          "replicas": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "revision": {
+            "description": "0 = never shipped",
+            "format": "int64",
+            "type": "integer"
+          },
+          "running": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "done",
+              "deploying",
+              "stopping",
+              "error",
+              "stopped",
+              "pending"
+            ],
+            "type": "string"
+          },
+          "stoppedAt": {
+            "description": "When the stop shipped (stopping, stopped)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "service",
+              "database",
+              "cache",
+              "volume",
+              "group"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "position",
+          "config",
+          "dirty",
+          "status",
+          "replicas",
+          "running",
+          "revision",
+          "public",
+          "endpoints"
+        ],
+        "type": "object"
+      },
+      "Organization": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "examples": [
+              "Default"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "type": "string"
+          },
+          "slug": {
+            "examples": [
+              "default"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "role"
+        ],
+        "type": "object"
+      },
+      "PendingAxiomOrgs": {
+        "additionalProperties": false,
+        "properties": {
+          "orgs": {
+            "description": "null when no sign-in waits for an org pick",
+            "items": {
+              "$ref": "#/components/schemas/AxiomOrgChoice"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "orgs"
+        ],
+        "type": "object"
+      },
+      "Position": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "format": "double",
+            "type": "number"
+          },
+          "y": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
+      "Problem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Stable error code",
+            "examples": [
+              "SERVICE_NOT_FOUND"
+            ],
+            "type": "string"
+          },
+          "detail": {
+            "description": "The human sentence to show",
+            "examples": [
+              "Node not found"
+            ],
+            "type": "string"
+          },
+          "errors": {
+            "description": "Validation details",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "HTTP status code",
+            "examples": [
+              404
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Short summary of the problem type",
+            "examples": [
+              "Not Found"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI reference identifying the problem type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "ProjectBySlug": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectHome",
+            "description": "null when missing or not in the caller's organization"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "type": "object"
+      },
+      "ProjectEnvironment": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "isProduction": {
+            "type": "boolean"
+          },
+          "name": {
+            "examples": [
+              "production"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isProduction"
+        ],
+        "type": "object"
+      },
+      "ProjectEnvironmentRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "examples": [
+              "production"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ProjectHome": {
+        "additionalProperties": false,
+        "properties": {
+          "environment": {
+            "$ref": "#/components/schemas/ProjectEnvironmentRef"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "environment"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "ProjectList": {
+        "additionalProperties": false,
+        "properties": {
+          "projects": {
+            "description": "In creation order",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "environments": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectEnvironment"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "examples": [
+              "Acme API"
+            ],
+            "type": "string"
+          },
+          "slug": {
+            "examples": [
+              "acme-api"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "environments"
+        ],
+        "type": "object"
+      },
+      "PublicInvitation": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "organization": {
+            "description": "The organization's name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "organization"
+        ],
+        "type": "object"
+      },
+      "ReferenceKey": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "provided": {
+            "description": "Computed (DATABASE_URL, REDIS_URL, URL, HOST, PORT), not a row",
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "secret",
+          "provided"
+        ],
+        "type": "object"
+      },
+      "ReferenceSource": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "keys": {
+            "description": "Provided keys first (URL key, HOST, PORT), then the node's rows",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceKey"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "service",
+              "database",
+              "cache"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "name",
+          "type",
+          "keys"
+        ],
+        "type": "object"
+      },
+      "ReferenceSourceList": {
+        "additionalProperties": false,
+        "properties": {
+          "sources": {
+            "description": "Every other deployable node of the environment, in creation order",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSource"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "ServiceLogLine": {
+        "additionalProperties": false,
+        "properties": {
+          "stream": {
+            "enum": [
+              "stdout",
+              "stderr"
+            ],
+            "type": "string"
+          },
+          "task": {
+            "description": "Swarm task id; empty when unknown",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "time": {
+            "description": "Epoch ms, fractional; 0 when the line had no stamp",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "text",
+          "stream",
+          "task"
+        ],
+        "type": "object"
+      },
+      "SetTracingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "SetVariableRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "UPPER_SNAKE_CASE",
+            "examples": [
+              "DATABASE_URL"
+            ],
+            "type": "string"
+          },
+          "previousKey": {
+            "description": "Rename that row to key instead of upserting; references follow",
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "value": {
+            "description": "At most 4096 characters",
+            "examples": [
+              "${{ postgres.DATABASE_URL }}"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "ShipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "only": {
+            "description": "Node ids to deploy; absent = every node with staged changes",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "refresh": {
+            "description": "Pull the images again (Redeploy, Retry)",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ShipResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "SignInRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "SignUpOpen": {
+        "additionalProperties": false,
+        "properties": {
+          "open": {
+            "description": "True until the first account exists; later sign-ups need an invitation",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "open"
+        ],
+        "type": "object"
+      },
+      "SignUpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "invitationId": {
+            "description": "The id from an invite link; required once the first account exists",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "description": "8 to 128 characters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SignedIn": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "token",
+          "user"
+        ],
+        "type": "object"
+      },
+      "Span": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "duration": {
+            "format": "double",
+            "type": "number"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/SpanEvent"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "kind": {
+            "description": "server, client, internal, producer, consumer or empty",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Empty for a root span",
+            "type": "string"
+          },
+          "resource": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "scope": {
+            "description": "scope.name",
+            "type": "string"
+          },
+          "service": {
+            "description": "service.name",
+            "type": "string"
+          },
+          "spanId": {
+            "type": "string"
+          },
+          "start": {
+            "format": "double",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "error",
+              "unset"
+            ],
+            "type": "string"
+          },
+          "statusMessage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spanId",
+          "parentId",
+          "name",
+          "service",
+          "kind",
+          "start",
+          "duration",
+          "status",
+          "statusMessage",
+          "scope",
+          "attributes",
+          "resource",
+          "events"
+        ],
+        "type": "object"
+      },
+      "SpanEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "time": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "name",
+          "attributes"
+        ],
+        "type": "object"
+      },
+      "StartedNode": {
+        "additionalProperties": false,
+        "properties": {
+          "deploymentId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deploymentId"
+        ],
+        "type": "object"
+      },
+      "StoppedNode": {
+        "additionalProperties": false,
+        "properties": {
+          "deploymentId": {
+            "description": "null when it already was at 0 replicas",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "deploymentId"
+        ],
+        "type": "object"
+      },
+      "Trace": {
+        "additionalProperties": false,
+        "properties": {
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/EnvironmentLogLine"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "enum": [
+              "axiom"
+            ],
+            "type": "string"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "traceId",
+          "spans",
+          "logs"
+        ],
+        "type": "object"
+      },
+      "TraceBucket": {
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "format": "double",
+            "type": "number"
+          },
+          "p50": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p95": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p99": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "requests": {
+            "format": "double",
+            "type": "number"
+          },
+          "time": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "requests",
+          "errors",
+          "p50",
+          "p95",
+          "p99"
+        ],
+        "type": "object"
+      },
+      "TraceOverview": {
+        "additionalProperties": false,
+        "properties": {
+          "bucketMs": {
+            "format": "double",
+            "type": "number"
+          },
+          "buckets": {
+            "description": "Every bucket, oldest first, empty ones included",
+            "items": {
+              "$ref": "#/components/schemas/TraceBucket"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "from": {
+            "format": "double",
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "axiom"
+            ],
+            "type": "string"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/TraceStats"
+          },
+          "to": {
+            "format": "double",
+            "type": "number"
+          },
+          "traces": {
+            "description": "Newest first, at most 100",
+            "items": {
+              "$ref": "#/components/schemas/TraceSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "from",
+          "to",
+          "bucketMs",
+          "stats",
+          "buckets",
+          "traces"
+        ],
+        "type": "object"
+      },
+      "TraceStats": {
+        "additionalProperties": false,
+        "properties": {
+          "errors": {
+            "format": "double",
+            "type": "number"
+          },
+          "p50": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p95": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "p99": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "requests": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "requests",
+          "errors",
+          "p50",
+          "p95",
+          "p99"
+        ],
+        "type": "object"
+      },
+      "TraceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "duration": {
+            "format": "double",
+            "type": "number"
+          },
+          "error": {
+            "type": "boolean"
+          },
+          "errors": {
+            "format": "double",
+            "type": "number"
+          },
+          "httpStatus": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "local": {
+            "description": "Sent by keel run (deployment.environment.name=local)",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "spans": {
+            "format": "double",
+            "type": "number"
+          },
+          "start": {
+            "format": "double",
+            "type": "number"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "traceId",
+          "name",
+          "service",
+          "kind",
+          "start",
+          "duration",
+          "httpStatus",
+          "spans",
+          "errors",
+          "error",
+          "local"
+        ],
+        "type": "object"
+      },
+      "TracingEnvVar": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "overridden": {
+            "description": "The service's own variables replace this one",
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "secret",
+          "overridden"
+        ],
+        "type": "object"
+      },
+      "TracingEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "tracing": {
+            "$ref": "#/components/schemas/TracingView",
+            "description": "null when the node is not a service the caller can see"
+          }
+        },
+        "required": [
+          "tracing"
+        ],
+        "type": "object"
+      },
+      "TracingPrompt": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "TracingView": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "env": {
+            "items": {
+              "$ref": "#/components/schemas/TracingEnvVar"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "traces": {
+            "enum": [
+              "off",
+              "old",
+              "on"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "traces",
+          "env"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "UnexposeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "protocol": {
+            "enum": [
+              "http",
+              "tcp",
+              "udp"
+            ],
+            "type": "string"
+          },
+          "publicPort": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateNodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/NodeConfig",
+            "description": "Volume size, group box; omitted fields keep their value"
+          },
+          "image": {
+            "description": "Runtime change (staged)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Rename; references to the node follow",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "A group's id, or \"\" for the top level; the node keeps its place unless position is given",
+            "type": "string"
+          },
+          "port": {
+            "description": "Runtime change (staged)",
+            "format": "double",
+            "type": "number"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position",
+            "description": "With parentId: the position inside the new parent"
+          },
+          "replicas": {
+            "description": "Runtime change (staged)",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "User": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "examples": [
+              "ci@example.com"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "type": "object"
+      },
+      "VariableList": {
+        "additionalProperties": false,
+        "properties": {
+          "variables": {
+            "description": "In row (creation) order: the container Env order",
+            "items": {
+              "$ref": "#/components/schemas/VariableView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "variables"
+        ],
+        "type": "object"
+      },
+      "VariablePart": {
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "$ref": "#/components/schemas/VariableRef"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "VariableRef": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "boolean"
+          },
+          "node": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "missing"
+        ],
+        "type": "object"
+      },
+      "VariableView": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/VariablePart"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "resolved": {
+            "description": "References expanded: what the container gets",
+            "type": "string"
+          },
+          "resolvedSecret": {
+            "description": "A referenced value is secret: mask resolved",
+            "type": "boolean"
+          },
+          "secret": {
+            "description": "The row's own flag: mask value",
+            "type": "boolean"
+          },
+          "value": {
+            "description": "As typed; may contain ${{ node.KEY }} references",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "resolved",
+          "secret",
+          "resolvedSecret",
+          "parts"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "session": {
+        "in": "cookie",
+        "name": "keel_session",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Keel control plane API. Errors are application/problem+json with a stable `code`.",
+    "title": "Keel",
+    "version": "dev"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/device": {
+      "get": {
+        "description": "While signed in, an unclaimed pending code is bound to you: only you can then approve or deny it.",
+        "operationId": "claimDeviceCode",
+        "parameters": [
+          {
+            "description": "The code keel login printed (dashes are ignored)",
+            "explode": false,
+            "in": "query",
+            "name": "user_code",
+            "required": true,
+            "schema": {
+              "description": "The code keel login printed (dashes are ignored)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          }
+        },
+        "security": [],
+        "summary": "Look a keel login code up; signed in, also claim it",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/device/approve": {
+      "post": {
+        "operationId": "approveDevice",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccess"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          }
+        },
+        "summary": "Approve a keel login you claimed",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/device/code": {
+      "post": {
+        "operationId": "createDeviceCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCode"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          }
+        },
+        "security": [],
+        "summary": "Start a keel login: a code and the link a person approves",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/device/deny": {
+      "post": {
+        "operationId": "denyDevice",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccess"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          }
+        },
+        "summary": "Deny a keel login you claimed",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/device/token": {
+      "post": {
+        "description": "Errors are RFC 8628 bodies: authorization_pending, slow_down (poll at most every `interval` seconds), expired_token, access_denied, invalid_grant.",
+        "operationId": "pollDeviceToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceToken"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Pragma": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceError"
+                }
+              }
+            },
+            "description": "RFC 8628 error: {error, error_description}"
+          }
+        },
+        "security": [],
+        "summary": "Poll a keel login; once approved, the session token (handed out once)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sign-in": {
+      "post": {
+        "description": "Sets the keel_session cookie and returns the same session as `token`. At most 10 tries per client and email in 5 minutes (429 RATE_LIMITED, Retry-After).",
+        "operationId": "signIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign in with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sign-out": {
+      "post": {
+        "operationId": "signOut",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccess"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Sign out: delete the presented session and clear the cookie",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sign-up": {
+      "post": {
+        "description": "The first account founds the install's organization. Later ones need `invitationId` from an invite link for the same email. Sets the keel_session cookie and returns the same session as `token`.",
+        "operationId": "signUp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Create an account and sign in",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sign-up-open": {
+      "get": {
+        "operationId": "getSignUpOpen",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignUpOpen"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Whether sign-up is open (no account exists yet)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/control-plane": {
+      "get": {
+        "operationId": "getControlPlane",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlPlane"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The control plane's public address",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/api/deployments/{id}": {
+      "get": {
+        "operationId": "getDeployment",
+        "parameters": [
+          {
+            "description": "Deployment id (any string: a malformed one is null, not an error)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Deployment id (any string: a malformed one is null, not an error)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "One deployment",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/api/environments/{id}/deployments": {
+      "post": {
+        "description": "Without `only`, ships every node with staged changes. With `only`, deploys exactly those nodes (`refresh` pulls their images again). One deployment runs per environment at a time.",
+        "operationId": "shipEnvironment",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShipRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Ship, redeploy or retry",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/api/environments/{id}/deployments/latest": {
+      "get": {
+        "operationId": "getLatestDeployment",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The environment's newest deployment",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/api/environments/{id}/logs": {
+      "get": {
+        "operationId": "listEnvironmentLogs",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only lines in this range (default: the last 30 days)",
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "description": "Only lines in this range (default: the last 30 days)",
+              "enum": [
+                "15m",
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only lines containing this (case-insensitive; first 200 characters)",
+            "explode": false,
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "description": "Only lines containing this (case-insensitive; first 200 characters)",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Newest lines, 1–1000 (clamped)",
+            "explode": false,
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "default": 300,
+              "description": "Newest lines, 1–1000 (clamped)",
+              "format": "double",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentLogs"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Newest lines across the environment's services (Axiom only)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/environments/{id}/logs/around": {
+      "get": {
+        "operationId": "listLogsAround",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Epoch ms",
+            "explode": false,
+            "in": "query",
+            "name": "at",
+            "required": true,
+            "schema": {
+              "description": "Epoch ms",
+              "format": "double",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EnvironmentLogLine"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Every service's lines within 30 s of a moment (Axiom only)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/environments/{id}/nodes": {
+      "get": {
+        "operationId": "listNodes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The canvas: every node of the environment",
+        "tags": [
+          "canvas"
+        ]
+      },
+      "post": {
+        "operationId": "createNode",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedNode"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Add a service, database, cache, volume or group",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/environments/{id}/summary": {
+      "get": {
+        "operationId": "getEnvironmentSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentSummaryResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Staged changes, status counts and servers",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/environments/{id}/traces": {
+      "get": {
+        "operationId": "getTraceOverview",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "required": true,
+            "schema": {
+              "enum": [
+                "15m",
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only requests whose root span name or service contains this",
+            "explode": false,
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "description": "Only requests whose root span name or service contains this",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only this service's requests",
+            "explode": false,
+            "in": "query",
+            "name": "nodeId",
+            "schema": {
+              "description": "Only this service's requests",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceOverview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Request rate, errors, latency and the latest requests over a range",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/environments/{id}/traces/around": {
+      "get": {
+        "operationId": "listTracesAround",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Epoch ms",
+            "explode": false,
+            "in": "query",
+            "name": "at",
+            "required": true,
+            "schema": {
+              "description": "Epoch ms",
+              "format": "double",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TraceSummary"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Requests that started within 30 s of a moment",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/environments/{id}/traces/{traceId}": {
+      "get": {
+        "operationId": "getTrace",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "traceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "A moment inside the trace (epoch ms): its root's start or a line's time",
+            "explode": false,
+            "in": "query",
+            "name": "at",
+            "schema": {
+              "description": "A moment inside the trace (epoch ms): its root's start or a line's time",
+              "format": "double",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Every span of one trace and the environment's lines that name it",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/invitations/{id}": {
+      "get": {
+        "description": "Public: the id is the secret in the link. `invitation` is null when the link is unknown, used or expired.",
+        "operationId": "getInvitation",
+        "parameters": [
+          {
+            "description": "Invitation id (the secret in the invite link)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Invitation id (the secret in the invite link)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationLookup"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "What an invite link is for",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/invitations/{id}/accept": {
+      "post": {
+        "operationId": "acceptInvitation",
+        "parameters": [
+          {
+            "description": "Invitation id (the secret in the invite link)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Invitation id (the secret in the invite link)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedInvitation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Join the invitation's organization as the signed-in account (same email)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/me": {
+      "get": {
+        "description": "200 with `user: null` when signed out.",
+        "operationId": "getMe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "Who is signed in, and their organization",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/meta": {
+      "get": {
+        "operationId": "getMeta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meta"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [],
+        "summary": "What this install is",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/nodes/{id}": {
+      "delete": {
+        "operationId": "deleteNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a node and its variables (204 also when already gone)",
+        "tags": [
+          "canvas"
+        ]
+      },
+      "patch": {
+        "operationId": "updateNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Rename, change the runtime (image, port, replicas), config, or group",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/deployments": {
+      "get": {
+        "description": "Of the environment's 50 newest deployments, those that shipped this node, at most 20, newest first.",
+        "operationId": "listNodeDeployments",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Deployment"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The node's recent deployments",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/api/nodes/{id}/duplicate": {
+      "post": {
+        "operationId": "duplicateNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatedNode"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Copy a node with its variables",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/expose": {
+      "post": {
+        "description": "Immediate, not gated by Ship. Exposing what is already exposed returns the existing endpoint; the same domain (http) or public port (tcp/udp) gets the new container port.",
+        "operationId": "exposeNode",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExposeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndpointView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Open a way in from the internet",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/api/nodes/{id}/logs": {
+      "get": {
+        "operationId": "tailNodeLogs",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Lines, 1–1000 (clamped)",
+            "explode": false,
+            "in": "query",
+            "name": "tail",
+            "schema": {
+              "default": 200,
+              "description": "Lines, 1–1000 (clamped)",
+              "format": "double",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogTail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Last lines of a service (its organization's sink, else Docker)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/nodes/{id}/position": {
+      "put": {
+        "operationId": "moveNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Position"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Canvas position (relative to the node's group)",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/start": {
+      "post": {
+        "operationId": "startNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedNode"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Deploy a never-shipped node, or start a stopped one",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/stop": {
+      "post": {
+        "operationId": "stopNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoppedNode"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Scale to 0 and ship that",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/tracing": {
+      "get": {
+        "operationId": "getNodeTracing",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TracingEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "A service's tracing switch and the OTEL_* variables it gets (key masked)",
+        "tags": [
+          "observability"
+        ]
+      },
+      "put": {
+        "operationId": "setNodeTracing",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTracingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Turn tracing on or off for a service (staged until the next ship)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/nodes/{id}/tracing/local-env": {
+      "post": {
+        "operationId": "getLocalTracingEnv",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalTracingEnv"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Tracing variables for `keel run` (may create the environment's ingest key)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/nodes/{id}/unexpose": {
+      "post": {
+        "description": "No selector closes every endpoint (Make private). An unknown endpoint is not an error.",
+        "operationId": "unexposeNode",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnexposeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Close one endpoint, or every one",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/api/nodes/{id}/variables": {
+      "get": {
+        "operationId": "listVariables",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariableList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "A node's variables with references expanded",
+        "tags": [
+          "canvas"
+        ]
+      },
+      "post": {
+        "operationId": "setVariable",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVariableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Set (upsert) a variable, or rename one with previousKey",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/variables/delete": {
+      "post": {
+        "operationId": "deleteVariable",
+        "parameters": [
+          {
+            "description": "Node id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Node id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteVariableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a variable (no-op when missing)",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/nodes/{id}/variables/referenceable": {
+      "get": {
+        "operationId": "listReferenceableVariables",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceSourceList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "What the node's variables can reference",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/organization/axiom/callback": {
+      "post": {
+        "operationId": "completeAxiomSignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteAxiomSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteAxiomSignInResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Finish Sign in with Axiom with what /axiom/callback received (single use)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/axiom/choose": {
+      "post": {
+        "operationId": "chooseAxiomOrg",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChooseAxiomOrgRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AxiomSinkResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Pick the Axiom org of a pending sign-in",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/axiom/pending": {
+      "delete": {
+        "operationId": "cancelAxiomSignIn",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Drop a pending org pick",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/axiom/pending-orgs": {
+      "get": {
+        "operationId": "listPendingAxiomOrgs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingAxiomOrgs"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Orgs to pick from after a sign-in that saw several",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/axiom/sign-in": {
+      "post": {
+        "operationId": "beginAxiomSignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeginAxiomSignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeginAxiomSignInResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Start Sign in with Axiom: the authorize URL to send the browser to",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/invitations": {
+      "get": {
+        "operationId": "listInvitations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitations"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Pending invitations of your organization",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "The invite link is `\u003cdashboard origin\u003e/invite/\u003cid\u003e`; it works once, for that email, for a week. Inviting the same email again cancels the previous link. Nothing is mailed.",
+        "operationId": "createInvitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedInvitation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Invite someone by email (owners and admins)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/organization/invitations/{id}": {
+      "delete": {
+        "operationId": "cancelInvitation",
+        "parameters": [
+          {
+            "description": "Invitation id (the secret in the invite link)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Invitation id (the secret in the invite link)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Cancel a pending invitation (owners and admins)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/organization/log-sink": {
+      "delete": {
+        "operationId": "disconnectLogSink",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Back to the Docker default for every project",
+        "tags": [
+          "observability"
+        ]
+      },
+      "get": {
+        "operationId": "getLogSink",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogSinkEnvelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The organization's log sink (never the token)",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/log-sink/axiom": {
+      "post": {
+        "operationId": "connectAxiom",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectAxiomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectAxiomResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Connect a pasted Axiom API token as the organization's sink",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/organization/members": {
+      "get": {
+        "operationId": "listMembers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Members"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Members of your organization",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Projects of the caller's organization",
+        "tags": [
+          "canvas"
+        ]
+      },
+      "post": {
+        "operationId": "createProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create a project with its production environment (founds the organization on a fresh install)",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/projects/by-slug/{slug}": {
+      "get": {
+        "operationId": "getProjectBySlug",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectBySlug"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "A project and the environment its canvas opens on",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/projects/default": {
+      "post": {
+        "operationId": "ensureDefaultProject",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultProject"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The project the dashboard opens first (created on first use)",
+        "tags": [
+          "canvas"
+        ]
+      }
+    },
+    "/api/tracing/prompt": {
+      "get": {
+        "operationId": "getTracingPrompt",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "nodeId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environmentId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TracingPrompt"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The agent prompt that sets up OpenTelemetry in a repo",
+        "tags": [
+          "observability"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "session": []
+    },
+    {
+      "bearer": []
+    }
+  ]
+}

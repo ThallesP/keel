@@ -1,5 +1,4 @@
-import type { Attribute } from "@my-better-t-app/backend/convex/traces";
-
+import type { Attribute } from "@/api/types";
 import { stripAnsi } from "@/lib/ansi";
 
 // Log ↔ trace correlation, read side. Container lines carry no trace context of their own, but an

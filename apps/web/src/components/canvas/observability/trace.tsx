@@ -1,15 +1,19 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { Attribute, Span, Trace } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction } from "convex/react";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
+import { type Trace as WireTrace, useGetTrace } from "@/api/gen";
+import {
+  type Attribute,
+  type ProjectLine,
+  type Span as WireSpan,
+  type SpanEvent as WireSpanEvent,
+  asTrace,
+} from "@/api/types";
 import { AnsiText } from "@/lib/ansi";
+import { errorMessage } from "@/lib/api";
 
 import { useEnvironment } from "../environment";
-import { errorMessage } from "../errors";
 import { formatDuration, formatLogTime, formatTimestamp } from "../format";
 import { SectionLabel } from "../primitives";
 import { type ServiceLabel, useServices } from "./chrome";
@@ -22,6 +26,31 @@ import { lineFields, traceRef } from "./correlate";
  * row's details (attributes, events, resource; or the line and its fields) are on the right.
  * Error spans get the danger tone plus a dot, never colour alone.
  */
+
+// The wire's lists may be null (Go nil slices); the view reads them as empty lists.
+type SpanEvent = Omit<WireSpanEvent, "attributes"> & { attributes: Attribute[] };
+type Span = Omit<WireSpan, "attributes" | "resource" | "events"> & {
+  attributes: Attribute[];
+  resource: Attribute[];
+  events: SpanEvent[];
+};
+type Trace = { traceId: string; spans: Span[]; logs: ProjectLine[] };
+
+/** `GET /api/environments/{id}/traces/{traceId}` as the view reads it (a query `select`). */
+function toTrace(wire: WireTrace): Trace {
+  // asTrace: attributes typed as [key, value] pairs.
+  const spans = asTrace(wire)?.spans ?? [];
+  return {
+    traceId: wire.traceId,
+    logs: wire.logs ?? [],
+    spans: spans.map((span) => ({
+      ...span,
+      attributes: span.attributes ?? [],
+      resource: span.resource ?? [],
+      events: (span.events ?? []).map((e) => ({ ...e, attributes: e.attributes ?? [] })),
+    })),
+  };
+}
 
 type Item =
   | { kind: "span"; key: string; time: number; span: Span }
@@ -97,20 +126,14 @@ export function TraceDetail({
   onBack: () => void;
 }) {
   const { environmentId } = useEnvironment();
-  const get = useAction(api.traces.get);
-  const [trace, setTrace] = useState<Trace | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Once per (environment, trace, at): a finished trace does not change.
+  const lookup = useGetTrace(
+    { path: { id: environmentId, traceId }, query: at === undefined ? undefined : { at } },
+    { query: { staleTime: Infinity, meta: { realtime: false }, select: toTrace } },
+  );
+  const trace = lookup.data ?? null;
+  const error = lookup.error ? errorMessage(lookup.error) : null;
   const [selected, setSelected] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    get({ environmentId, traceId, at })
-      .then((t) => !cancelled && setTrace(t))
-      .catch((err) => !cancelled && setError(errorMessage(err)));
-    return () => {
-      cancelled = true;
-    };
-  }, [environmentId, traceId, at, get]);
 
   const rows = useMemo(() => (trace ? tree(trace.spans, trace.logs) : []), [trace]);
 

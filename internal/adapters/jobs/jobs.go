@@ -32,10 +32,10 @@ type Scheduler struct {
 
 	mu      sync.Mutex
 	stopped bool
-	pending map[string]*time.Timer // keyed After jobs waiting for their timer
+	pending map[string]*time.Timer   // keyed After jobs waiting for their timer
 	anon    map[*time.Timer]struct{} // After jobs with an empty key waiting for their timer
-	running map[string]bool        // Every jobs currently running, by name
-	wg      sync.WaitGroup         // running After jobs and Every loops
+	running map[string]bool          // Every jobs currently running, by name
+	wg      sync.WaitGroup           // running After jobs and Every loops
 }
 
 var _ app.Jobs = (*Scheduler)(nil)

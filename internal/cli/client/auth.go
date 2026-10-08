@@ -142,6 +142,14 @@ func (c *Client) Me(ctx context.Context) (*User, *Organization, error) {
 	}
 	var me api.Me
 	if err := c.call(ctx, http.MethodGet, "/api/me", nil, nil, &me); err != nil {
+		if output.CodeOf(err) == output.CodeServer {
+			// Not an answer from Keel's API (an HTML page, a 404 without a problem): KEEL_URL, or
+			// a saved install, may point at a Convex-era install or at something else. Say so, as
+			// keel login would; a Keel install that failed keeps its own error.
+			if _, derr := Discover(ctx, c.URL); output.CodeOf(derr) == output.CodeDiscoveryFailed {
+				return nil, nil, derr
+			}
+		}
 		return nil, nil, err
 	}
 	if me.User == nil {

@@ -136,6 +136,46 @@ func TestMe(t *testing.T) {
 	}
 }
 
+// KEEL_URL (or a saved install) that is not Keel's API: the session check says what it is, as
+// keel login would, instead of a SERVER_ERROR with an HTML page in it.
+func TestMeNotKeel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mux  map[string]string // path → 200 body; anything else 404
+		code string
+		msg  string
+	}{
+		// Convex era: nginx answers every path with index.html, /config.js names Convex URLs.
+		{"older keel", map[string]string{
+			"/api/me":    `<!doctype html><html></html>`,
+			"/api/meta":  `<!doctype html><html></html>`,
+			"/config.js": `window.__KEEL__ = {"convexUrl":"http://100.64.0.1:3210","convexSiteUrl":"http://100.64.0.1:3211"};`,
+		}, output.CodeDiscoveryFailed, "runs an older Keel"},
+		{"something else", map[string]string{}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
+		// Keel itself failing keeps its own error.
+		{"keel failing", map[string]string{
+			"/api/me":   `{"user":`,
+			"/api/meta": `{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`,
+		}, output.CodeServer, "unexpected response from GET /api/me"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, ok := tc.mux[r.URL.Path]
+				if !ok {
+					http.NotFound(w, r)
+					return
+				}
+				w.Write([]byte(body))
+			}))
+			defer srv.Close()
+			_, _, err := New(srv.URL, "tok").Me(context.Background())
+			if output.CodeOf(err) != tc.code || err == nil || !strings.Contains(err.Error(), tc.msg) {
+				t.Errorf("err = %v, want %s %q", err, tc.code, tc.msg)
+			}
+		})
+	}
+}
+
 func TestDiscover(t *testing.T) {
 	for _, tc := range []struct {
 		name string

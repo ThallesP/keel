@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -211,6 +213,37 @@ func TestMobyReadOnly(t *testing.T) {
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		if readOnly(httptest.NewRequest(m, "/containers/c1", nil)) == nil {
 			t.Errorf("%s allowed", m)
+		}
+	}
+}
+
+// The constructor the agent runs with (DOCKER_SOCKET) installs the read-only guard itself.
+func TestNewMobyDockerIsReadOnly(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "d.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skipf("unix socket: %v", err)
+	}
+	api := &dockerAPI{}
+	srv := httptest.NewUnstartedServer(api)
+	srv.Listener = ln
+	srv.Start()
+	defer srv.Close()
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1") // DOCKER_SOCKET wins over DOCKER_HOST
+	d, err := NewMobyDocker(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if info, err := d.Info(context.Background()); err != nil || info.NodeID != "swarm-node-1" {
+		t.Fatalf("info over the socket = %+v, %v", info, err)
+	}
+	if _, err := d.cli.ContainerRemove(context.Background(), "c1", client.ContainerRemoveOptions{}); err == nil || !strings.Contains(err.Error(), "read-only") {
+		t.Fatalf("remove = %v, want refused", err)
+	}
+	for _, r := range api.requests() {
+		if !strings.HasPrefix(r, "GET ") && !strings.HasPrefix(r, "HEAD /_ping") {
+			t.Fatalf("the daemon saw %s", r)
 		}
 	}
 }

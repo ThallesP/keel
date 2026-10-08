@@ -18,21 +18,6 @@ func joinOrFound(tx Tx, actor domain.Actor, now int64) (domain.Actor, error) {
 	panic("joinOrFound: implemented by the auth area")
 }
 
-// ShipOptions are beginDeployment's options (docs/go/spec/projects.md §7.1).
-type ShipOptions struct {
-	Only    []string // nil = every dirty deployable node; non-nil (even empty) = exactly these
-	Refresh bool     // pull the image again
-	Verb    string   // message word override ("start", "stop"); "" derives ship/deploy/redeploy
-}
-
-// beginDeployment starts a deployment of the environment inside the caller's write transaction
-// and registers the applies + timeout with ch.AfterCommit. Errors: DEPLOYMENT_RUNNING,
-// NOTHING_TO_SHIP. Called by: canvas (nodes create{deploy}/start/stop), deploy (Ship).
-// Owner: deploy.
-func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error) {
-	panic("beginDeployment: implemented by the deploy area")
-}
-
 // computeEnv is the node's container environment: its variables with ${{ node.KEY }} references
 // expanded (docs/go/spec/projects.md §5.4). Called by: deploy (apply), observability (`keel run`).
 // Owner: canvas.
@@ -66,18 +51,6 @@ func (a *App) ScheduleProxySync() {
 	panic("ScheduleProxySync: implemented by the ingress area")
 }
 
-// ScheduleObserve observes one node's Swarm service soon, debounced per node (500 ms default,
-// docs/go/spec/projects.md §8.6). Called by: canvas (node delete), deploy. Owner: deploy.
-func (a *App) ScheduleObserve(nodeID string) {
-	panic("ScheduleObserve: implemented by the deploy area")
-}
-
-// ScheduleRemoveService removes the node's Swarm service (svc-<id>) soon; a missing service is
-// fine. Called by: canvas (node delete). Owner: deploy.
-func (a *App) ScheduleRemoveService(nodeID string) {
-	panic("ScheduleRemoveService: implemented by the deploy area")
-}
-
 // Recover is the start-up pass that replaces durable scheduling: observe everything, re-arm
 // deployment timeouts, proxy sync, data migrations. serve calls it once. Each area adds its part
 // in its own file as a function named recover<Area>(ctx) and calls it from here.
@@ -88,6 +61,5 @@ func (a *App) Recover(ctx context.Context) {
 	}
 }
 
-func (a *App) recoverDeploy(ctx context.Context)        {} // owner: deploy (replace)
 func (a *App) recoverIngress(ctx context.Context)       {} // owner: ingress (replace)
 func (a *App) recoverObservability(ctx context.Context) {} // owner: observability (replace)

@@ -238,8 +238,8 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 		return domain.Trace{}, domain.Invalid(msgNotATraceID)
 	}
 	id := strings.ToLower(traceID)
-	if math.IsNaN(at) {
-		at = 0
+	if math.IsNaN(at) || math.IsInf(at, 0) {
+		at = 0 // unknown
 	}
 	scope, err := a.traceScope(ctx, actor, environmentID)
 	if err != nil {
@@ -292,6 +292,9 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 // TracesAround is the requests that started within 30 s either side of at, newest first: the
 // traces near a log line. Empty without a traces dataset.
 func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentID string, at float64) ([]domain.TraceSummary, error) {
+	if err := validMoment(at); err != nil {
+		return nil, err
+	}
 	scope, err := a.traceScope(ctx, actor, environmentID)
 	if err != nil {
 		return nil, err

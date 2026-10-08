@@ -79,9 +79,20 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 
 const aroundMs = 30_000
 
+// validMoment: `at` must be a finite epoch ms (a JSON number never is NaN; a query string can be).
+func validMoment(at float64) error {
+	if math.IsNaN(at) || math.IsInf(at, 0) {
+		return domain.Invalid("at: not a time")
+	}
+	return nil
+}
+
 // LogsAround is every service's lines within 30 s either side of at, oldest first: the context
 // of a log line that names no trace. Axiom only.
 func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID string, at float64) ([]domain.EnvironmentLogLine, error) {
+	if err := validMoment(at); err != nil {
+		return nil, err
+	}
 	scope, err := a.envSinkScope(ctx, actor, environmentID)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,793 @@
+package app_test
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/ThallesP/keel/internal/adapters/password"
+	"github.com/ThallesP/keel/internal/adapters/sqlite"
+	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
+)
+
+// ── Fixture ───────────────────────────────────────────────────────────────────────────────
+
+type authRecorder struct {
+	mu     sync.Mutex
+	topics map[string]map[string]bool
+}
+
+func (r *authRecorder) Publish(org string, topics []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.topics == nil {
+		r.topics = map[string]map[string]bool{}
+	}
+	if r.topics[org] == nil {
+		r.topics[org] = map[string]bool{}
+	}
+	for _, t := range topics {
+		r.topics[org][t] = true
+	}
+}
+
+// take returns and forgets the topics published for org.
+func (r *authRecorder) take(org string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for t := range r.topics[org] {
+		out = append(out, t)
+	}
+	delete(r.topics, org)
+	sort.Strings(out)
+	return out
+}
+
+type authFixture struct {
+	t      *testing.T
+	ctx    context.Context
+	app    *app.App
+	store  *sqlite.Store
+	events *authRecorder
+	now    int64
+	hasher *password.Hasher
+}
+
+const authT0 = int64(1_800_000_000_000)
+
+func authSetup(t *testing.T) *authFixture {
+	t.Helper()
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	f := &authFixture{t: t, ctx: context.Background(), store: store, events: &authRecorder{}, now: authT0,
+		hasher: &password.Hasher{Params: password.Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}}}
+	f.app = app.New(app.App{
+		Store: store, Events: f.events, Passwords: f.hasher,
+		Config: app.Config{SiteURL: "http://keel.test"},
+		Now:    func() int64 { return f.now },
+	})
+	return f
+}
+
+var authClient = app.ClientInfo{IP: "100.64.0.9", UserAgent: "test"}
+
+func (f *authFixture) signUp(email, invitationID string) app.SignedIn {
+	f.t.Helper()
+	out, err := f.app.SignUp(f.ctx, app.SignUpInput{Email: email, Password: "correct-horse-battery", Name: "N " + email,
+		InvitationID: invitationID, Client: authClient})
+	if err != nil {
+		f.t.Fatalf("sign up %s: %v", email, err)
+	}
+	return out
+}
+
+func (f *authFixture) actor(token string) domain.Actor {
+	f.t.Helper()
+	a, err := f.app.ResolveSession(f.ctx, token)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return a
+}
+
+func (f *authFixture) exec(q string, args ...any) {
+	f.t.Helper()
+	if _, err := f.store.DB().Exec(q, args...); err != nil {
+		f.t.Fatalf("%s: %v", q, err)
+	}
+}
+
+// legacyUser inserts an account the way the Convex import would: no membership.
+func (f *authFixture) legacyUser(id, email, hash string) {
+	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Legacy', ?, 1, 1)`, id, email, hash)
+}
+
+func (f *authFixture) hash(pw string) string {
+	h, err := f.hasher.Hash(pw)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return h
+}
+
+func authWant(t *testing.T, err error, code, msg string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("no error, want %s %q", code, msg)
+	}
+	var de *domain.Error
+	if !errors.As(err, &de) {
+		t.Fatalf("error %v (%T), want %s %q", err, err, code, msg)
+	}
+	if de.Code != code || de.Message != msg {
+		t.Fatalf("got %s %q, want %s %q", de.Code, de.Message, code, msg)
+	}
+}
+
+func authWantRefusal(t *testing.T, err error, status int, code, desc string) {
+	t.Helper()
+	var r *domain.DeviceRefusal
+	if !errors.As(err, &r) {
+		t.Fatalf("error %v (%T), want refusal %d %s", err, err, status, code)
+	}
+	if r.Status != status || r.Code != code || r.Description != desc {
+		t.Fatalf("got %d %s %q, want %d %s %q", r.Status, r.Code, r.Description, status, code, desc)
+	}
+}
+
+// ── Accounts ──────────────────────────────────────────────────────────────────────────────
+
+func TestAuthSignUpFoundsThenInvites(t *testing.T) {
+	f := authSetup(t)
+	open, err := f.app.SignUpOpen(f.ctx)
+	if err != nil || !open {
+		t.Fatalf("sign-up open on a fresh install: %v %v", open, err)
+	}
+
+	// Validation comes first, in Better Auth's order.
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "not-an-email", Password: "correct-horse-battery"})
+	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: "short"})
+	authWant(t, err, domain.CodeInvalidInput, "Password too short")
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: strings.Repeat("x", 129)})
+	authWant(t, err, domain.CodeInvalidInput, "Password too long")
+
+	// The first account founds the organization and owns it (eagerly, in the same transaction).
+	owner := f.signUp(" Founder@Example.com ", "")
+	if owner.User.Email != "founder@example.com" || len(owner.Token) < 50 {
+		t.Fatalf("first account: %+v", owner)
+	}
+	if owner.Session.ExpiresAt != authT0+domain.SessionTTL || owner.Session.IP != authClient.IP {
+		t.Fatalf("session: %+v", owner.Session)
+	}
+	oa := f.actor(owner.Token)
+	if oa.UserID != owner.User.ID || oa.OrganizationID == "" || oa.Role != domain.RoleOwner {
+		t.Fatalf("owner actor: %+v", oa)
+	}
+	me, err := f.app.GetMe(f.ctx, oa)
+	if err != nil || me.User == nil || me.Organization == nil {
+		t.Fatalf("me: %+v %v", me, err)
+	}
+	if *me.Organization != (app.MyOrganization{ID: oa.OrganizationID, Name: "Default", Slug: "default", Role: "owner"}) {
+		t.Fatalf("organization: %+v", *me.Organization)
+	}
+	if got := f.events.take(oa.OrganizationID); strings.Join(got, ",") != "/api/me,/api/organization" {
+		t.Fatalf("founding published %v", got)
+	}
+	if open, _ := f.app.SignUpOpen(f.ctx); open {
+		t.Fatal("sign-up still open after the first account")
+	}
+
+	// Closed now: a taken email is refused before the invite rule, then the invite rule.
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "FOUNDER@example.com", Password: "correct-horse-battery"})
+	authWant(t, err, domain.CodeConflict, "User already exists. Use another email.")
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "second@example.com", Password: "correct-horse-battery"})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "second@example.com", Password: "correct-horse-battery", InvitationID: "nope"})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+
+	inv, err := f.app.CreateInvitation(f.ctx, oa, "  Second@Example.com ", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Email != "second@example.com" || inv.Role != "member" || inv.ExpiresAt != authT0+domain.InvitationTTL || len(inv.ID) != 26 {
+		t.Fatalf("invitation: %+v", inv)
+	}
+	if got := f.events.take(oa.OrganizationID); strings.Join(got, ",") != "/api/organization" {
+		t.Fatalf("invite published %v", got)
+	}
+	pub, err := f.app.GetInvitation(f.ctx, inv.ID)
+	if err != nil || pub == nil || *pub != (app.PublicInvitation{Email: "second@example.com", Organization: "Default"}) {
+		t.Fatalf("public invitation: %+v %v", pub, err)
+	}
+
+	// Another email cannot use it.
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "third@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+
+	// Its email joins with its role and spends it.
+	f.now += 1000
+	second := f.signUp("SECOND@example.com", inv.ID)
+	sa := f.actor(second.Token)
+	if sa.OrganizationID != oa.OrganizationID || sa.Role != domain.RoleMember {
+		t.Fatalf("invited actor: %+v", sa)
+	}
+	if got := f.events.take(oa.OrganizationID); strings.Join(got, ",") != "/api/me,/api/organization" {
+		t.Fatalf("join published %v", got)
+	}
+	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub != nil {
+		t.Fatalf("spent invitation still shows: %+v", pub)
+	}
+	members, err := f.app.ListMembers(f.ctx, sa)
+	if err != nil || len(members) != 2 || members[0].Email != "founder@example.com" || members[0].Role != "owner" ||
+		members[1].Email != "second@example.com" || members[1].Role != "member" {
+		t.Fatalf("members: %+v %v", members, err)
+	}
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "again@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+}
+
+func TestAuthSignUpWithExpiredInvitation(t *testing.T) {
+	f := authSetup(t)
+	oa := f.actor(f.signUp("owner@example.com", "").Token)
+	inv, err := f.app.CreateInvitation(f.ctx, oa, "late@example.com", "member")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now += domain.InvitationTTL // expiresAt == now: still stands
+	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub == nil {
+		t.Fatal("invitation should stand until its last millisecond")
+	}
+	f.now++
+	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub != nil {
+		t.Fatal("expired invitation still shows")
+	}
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "late@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	if invs, _ := f.app.ListInvitations(f.ctx, oa); len(invs) != 0 {
+		t.Fatalf("expired invitation listed: %+v", invs)
+	}
+}
+
+func TestAuthSignIn(t *testing.T) {
+	f := authSetup(t)
+	f.signUp("ci@example.com", "")
+
+	_, err := f.app.SignIn(f.ctx, "nope", "x", authClient)
+	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	for _, c := range []struct{ email, pw string }{
+		{"ci@example.com", "wrong-password"},
+		{"nobody@example.com", "correct-horse-battery"},
+		{"ci@example.com", ""},
+	} {
+		_, err := f.app.SignIn(f.ctx, c.email, c.pw, authClient)
+		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+	}
+	out, err := f.app.SignIn(f.ctx, "CI@Example.com", "correct-horse-battery", authClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := f.actor(out.Token)
+	if a.Email != "ci@example.com" || a.OrganizationID == "" {
+		t.Fatalf("signed-in actor: %+v", a)
+	}
+}
+
+// An account imported from Better Auth signs in with its scrypt hash, which is then replaced by
+// argon2id.
+func TestAuthSignInRehashesBetterAuthHash(t *testing.T) {
+	f := authSetup(t)
+	const scryptHash = "0123456789abcdef0123456789abcdef:68b228eae069737062c56fbe239acdc9517ba0c0ed53447e2697faa281de7aab26e6e87571f29175a258c42d8a9fde39d6cd344c160472b76897c7bcfe0a1f53"
+	f.legacyUser("legacyuser", "legacy@example.com", scryptHash)
+
+	if _, err := f.app.SignIn(f.ctx, "legacy@example.com", "wrong", authClient); err == nil {
+		t.Fatal("wrong password signed in")
+	}
+	out, err := f.app.SignIn(f.ctx, "legacy@example.com", "correct-horse-battery", authClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.User.ID != "legacyuser" {
+		t.Fatalf("user: %+v", out.User)
+	}
+	var stored string
+	if err := f.store.DB().QueryRow(`SELECT password_hash FROM users WHERE id = 'legacyuser'`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stored, "$argon2id$") {
+		t.Fatalf("not rehashed: %s", stored)
+	}
+	if _, err := f.app.SignIn(f.ctx, "legacy@example.com", "correct-horse-battery", authClient); err != nil {
+		t.Fatalf("sign in after rehash: %v", err)
+	}
+	// A legacy account has no membership: signed in, but no organization.
+	me, _ := f.app.GetMe(f.ctx, f.actor(out.Token))
+	if me.User == nil || me.Organization != nil {
+		t.Fatalf("legacy me: %+v", me)
+	}
+}
+
+func TestAuthSignInLimiter(t *testing.T) {
+	f := authSetup(t)
+	f.signUp("ci@example.com", "")
+	for i := 0; i < app.SignInAttempts; i++ {
+		_, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient)
+		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+		f.now += 1000
+	}
+	_, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
+	var limited *domain.RateLimitError
+	if !errors.As(err, &limited) {
+		t.Fatalf("11th try: %v", err)
+	}
+	// The window opened at T0 and the 11th try is at T0+10s: 290 s left.
+	if limited.RetryAfterSeconds != 290 {
+		t.Fatalf("retry after %d", limited.RetryAfterSeconds)
+	}
+	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+
+	// Per client and email: another address, or another account, is not limited.
+	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", app.ClientInfo{IP: "100.64.0.10"}); err != nil {
+		t.Fatalf("other IP: %v", err)
+	}
+	_, err = f.app.SignIn(f.ctx, "other@example.com", "x-password", authClient)
+	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+
+	// After the window it works again, and a success clears the count.
+	f.now = authT0 + app.SignInWindow.Milliseconds()
+	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient); err != nil {
+		t.Fatalf("after the window: %v", err)
+	}
+	for i := 0; i < app.SignInAttempts; i++ {
+		if _, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient); errors.As(err, &limited) {
+			t.Fatalf("limited after a success reset, try %d", i)
+		}
+	}
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────────────────────
+
+func TestAuthSessionLifetime(t *testing.T) {
+	f := authSetup(t)
+	s := f.signUp("ci@example.com", "")
+
+	for _, tok := range []string{"", "unknown"} {
+		if a := f.actor(tok); a.SignedIn() {
+			t.Fatalf("token %q resolved to %+v", tok, a)
+		}
+	}
+	a := f.actor(s.Token)
+	if a.SessionRenewed || a.SessionExpiresAt != authT0+domain.SessionTTL {
+		t.Fatalf("fresh session: %+v", a)
+	}
+	// A legacy Better Auth "<token>.<signature>" value is the same session.
+	if b := f.actor(s.Token + ".c2lnbmF0dXJl"); b.SessionID != a.SessionID {
+		t.Fatal("signed form of the token did not resolve")
+	}
+
+	// Under a day after the last renewal: nothing moves.
+	f.now = authT0 + domain.SessionUpdateAge - 1
+	if a := f.actor(s.Token); a.SessionRenewed {
+		t.Fatal("renewed too early")
+	}
+	// A day later: pushed out to 7 days from now.
+	f.now = authT0 + domain.SessionUpdateAge
+	a = f.actor(s.Token)
+	if !a.SessionRenewed || a.SessionExpiresAt != f.now+domain.SessionTTL {
+		t.Fatalf("renewal: %+v", a)
+	}
+	if a := f.actor(s.Token); a.SessionRenewed {
+		t.Fatal("renewed twice in a row")
+	}
+
+	// Unused past its expiry: signed out, and the row is gone.
+	f.now += domain.SessionTTL
+	if a := f.actor(s.Token); a.SignedIn() {
+		t.Fatalf("expired session resolved: %+v", a)
+	}
+	var n int
+	_ = f.store.DB().QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d sessions left", n)
+	}
+
+	// Sign-out deletes the presented session only.
+	one, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, _ := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
+	if err := f.app.SignOut(f.ctx, f.actor(one.Token)); err != nil {
+		t.Fatal(err)
+	}
+	if f.actor(one.Token).SignedIn() || !f.actor(two.Token).SignedIn() {
+		t.Fatal("sign-out deleted the wrong session")
+	}
+	if err := f.app.SignOut(f.ctx, domain.Actor{}); err != nil {
+		t.Fatalf("signed-out sign-out: %v", err)
+	}
+	// Tokens are stored hashed.
+	var stored string
+	_ = f.store.DB().QueryRow(`SELECT token_hash FROM sessions`).Scan(&stored)
+	if stored == two.Token || stored != domain.HashSessionToken(two.Token) {
+		t.Fatalf("stored token %q", stored)
+	}
+}
+
+// ── Organization ──────────────────────────────────────────────────────────────────────────
+
+func TestAuthInvitationRules(t *testing.T) {
+	f := authSetup(t)
+	owner := f.actor(f.signUp("owner@example.com", "").Token)
+	org := owner.OrganizationID
+
+	inv, err := f.app.CreateInvitation(f.ctx, owner, "admin@example.com", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := f.actor(f.signUp("admin@example.com", inv.ID).Token)
+	inv, _ = f.app.CreateInvitation(f.ctx, owner, "member@example.com", "")
+	member := f.actor(f.signUp("member@example.com", inv.ID).Token)
+	if admin.Role != "admin" || member.Role != "member" {
+		t.Fatalf("roles: %s %s", admin.Role, member.Role)
+	}
+
+	_, err = f.app.CreateInvitation(f.ctx, member, "x@example.com", "")
+	authWant(t, err, domain.CodeForbidden, "You are not allowed to invite users to this organization")
+	_, err = f.app.CreateInvitation(f.ctx, admin, "x@example.com", "owner")
+	authWant(t, err, domain.CodeForbidden, "You are not allowed to invite a user with this role")
+	_, err = f.app.CreateInvitation(f.ctx, owner, "x@example.com", "root")
+	authWant(t, err, domain.CodeInvalidInput, "Role not found: root")
+	_, err = f.app.CreateInvitation(f.ctx, owner, "x@", "")
+	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	_, err = f.app.CreateInvitation(f.ctx, owner, "MEMBER@example.com", "")
+	authWant(t, err, domain.CodeConflict, "User is already a member of this organization")
+	_, err = f.app.CreateInvitation(f.ctx, domain.Actor{}, "x@example.com", "")
+	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+
+	// Admins invite; inviting again cancels the previous link.
+	first, err := f.app.CreateInvitation(f.ctx, admin, "x@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := f.app.CreateInvitation(f.ctx, owner, "X@example.com", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub, _ := f.app.GetInvitation(f.ctx, first.ID); pub != nil {
+		t.Fatal("re-invite left the first link standing")
+	}
+	invs, err := f.app.ListInvitations(f.ctx, member) // any member may list
+	if err != nil || len(invs) != 1 || invs[0].ID != second.ID || invs[0].Role != "admin" || invs[0].InviterID != owner.UserID {
+		t.Fatalf("list: %+v %v", invs, err)
+	}
+
+	// Cancelling is for owners and admins.
+	err = f.app.CancelInvitation(f.ctx, member, second.ID)
+	authWant(t, err, domain.CodeForbidden, "You are not allowed to cancel this invitation")
+	err = f.app.CancelInvitation(f.ctx, owner, "unknown")
+	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	f.events.take(org)
+	if err := f.app.CancelInvitation(f.ctx, admin, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.events.take(org); strings.Join(got, ",") != "/api/organization" {
+		t.Fatalf("cancel published %v", got)
+	}
+	if invs, _ := f.app.ListInvitations(f.ctx, owner); len(invs) != 0 {
+		t.Fatalf("cancelled invitation listed: %+v", invs)
+	}
+	if err := f.app.CancelInvitation(f.ctx, owner, second.ID); err != nil {
+		t.Fatalf("cancelling twice: %v", err)
+	}
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "x@example.com", Password: "correct-horse-battery", InvitationID: second.ID})
+	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+}
+
+func TestAuthInvitationLimit(t *testing.T) {
+	f := authSetup(t)
+	owner := f.actor(f.signUp("owner@example.com", "").Token)
+	for i := 0; i < domain.InvitationLimit; i++ {
+		if _, err := f.app.CreateInvitation(f.ctx, owner, "u"+strings.Repeat("x", i%7)+string(rune('a'+i%26))+string(rune('a'+i/26))+"@example.com", ""); err != nil {
+			t.Fatalf("invitation %d: %v", i, err)
+		}
+	}
+	_, err := f.app.CreateInvitation(f.ctx, owner, "one-more@example.com", "")
+	authWant(t, err, domain.CodeForbidden, "Invitation limit reached")
+	// Re-inviting someone already invited cancels first, so it fits.
+	if _, err := f.app.CreateInvitation(f.ctx, owner, "uaa@example.com", ""); err != nil {
+		t.Fatalf("re-invite at the limit: %v", err)
+	}
+	// Expired ones do not count.
+	f.now += domain.InvitationTTL + 1
+	if _, err := f.app.CreateInvitation(f.ctx, owner, "one-more@example.com", ""); err != nil {
+		t.Fatalf("after expiry: %v", err)
+	}
+}
+
+// Accounts without a membership (imported from before organizations) join through an invite
+// link while signed in: Better Auth's accept-invitation always failed here (email verification
+// gate); the Go port accepts.
+func TestAuthAcceptInvitation(t *testing.T) {
+	f := authSetup(t)
+	owner := f.actor(f.signUp("owner@example.com", "").Token)
+	f.legacyUser("legacy1", "legacy@example.com", f.hash("legacy-password"))
+	f.legacyUser("legacy2", "other@example.com", f.hash("legacy-password"))
+	signIn := func(email string) domain.Actor {
+		out, err := f.app.SignIn(f.ctx, email, "legacy-password", authClient)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.actor(out.Token)
+	}
+	legacy, other := signIn("legacy@example.com"), signIn("other@example.com")
+
+	inv, err := f.app.CreateInvitation(f.ctx, owner, "Legacy@Example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.app.AcceptInvitation(f.ctx, domain.Actor{}, inv.ID)
+	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	_, err = f.app.AcceptInvitation(f.ctx, legacy, "unknown")
+	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	_, err = f.app.AcceptInvitation(f.ctx, other, inv.ID)
+	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
+	_, err = f.app.AcceptInvitation(f.ctx, owner, inv.ID)
+	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
+
+	f.events.take(owner.OrganizationID)
+	org, err := f.app.AcceptInvitation(f.ctx, legacy, inv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if org != (app.MyOrganization{ID: owner.OrganizationID, Name: "Default", Slug: "default", Role: "member"}) {
+		t.Fatalf("accepted: %+v", org)
+	}
+	if got := f.events.take(owner.OrganizationID); strings.Join(got, ",") != "/api/me,/api/organization" {
+		t.Fatalf("accept published %v", got)
+	}
+	_, err = f.app.AcceptInvitation(f.ctx, legacy, inv.ID)
+	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+
+	// One membership per account.
+	again, _ := f.app.CreateInvitation(f.ctx, owner, "other@example.com", "")
+	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org2', 'Second', 'second', 1)`)
+	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('m2', 'org2', 'legacy2', 'owner', 1)`)
+	other = signIn("other@example.com")
+	_, err = f.app.AcceptInvitation(f.ctx, other, again.ID)
+	authWant(t, err, domain.CodeConflict, "You're already in an organization")
+}
+
+func TestAuthJoinOrFound(t *testing.T) {
+	f := authSetup(t)
+	_, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{})
+	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+
+	// An install imported without an organization: the first one to need it founds it.
+	f.legacyUser("u1", "one@example.com", "")
+	f.legacyUser("u2", "two@example.com", "")
+	one, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1", Email: "one@example.com"})
+	if err != nil || one.OrganizationID == "" || one.Role != domain.RoleOwner {
+		t.Fatalf("founder: %+v %v", one, err)
+	}
+	me, _ := f.app.GetMe(f.ctx, one)
+	if me.Organization == nil || me.Organization.Name != "Default" || me.Organization.Slug != "default" {
+		t.Fatalf("founded: %+v", me.Organization)
+	}
+	// Again: the same membership, nothing new.
+	again, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1"})
+	if err != nil || again.OrganizationID != one.OrganizationID {
+		t.Fatalf("second call: %+v %v", again, err)
+	}
+	// Someone else without a membership: the organization exists, so they need an invitation.
+	_, err = app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u2"})
+	authWant(t, err, domain.CodeNoOrganization, "You're not in an organization yet. Ask a member for an invite link.")
+	var n int
+	_ = f.store.DB().QueryRow(`SELECT COUNT(*) FROM organizations`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("%d organizations", n)
+	}
+}
+
+// A member of another organization cannot see or change this organization's members,
+// invitations or device logins: foreign is the same as missing.
+func TestAuthForeignOrganizationIsMissing(t *testing.T) {
+	f := authSetup(t)
+	owner := f.actor(f.signUp("owner@example.com", "").Token)
+	inv, err := f.app.CreateInvitation(f.ctx, owner, "guest@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A second organization (not possible through the API today; one per install).
+	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('orgb', 'Other', 'other', 1)`)
+	f.legacyUser("ub", "b@example.com", f.hash("b-password-123"))
+	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('mb', 'orgb', 'ub', 'owner', 1)`)
+	out, err := f.app.SignIn(f.ctx, "b@example.com", "b-password-123", authClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := f.actor(out.Token)
+	if b.OrganizationID != "orgb" {
+		t.Fatalf("b: %+v", b)
+	}
+
+	if invs, err := f.app.ListInvitations(f.ctx, b); err != nil || len(invs) != 0 {
+		t.Fatalf("b sees invitations: %+v %v", invs, err)
+	}
+	if ms, err := f.app.ListMembers(f.ctx, b); err != nil || len(ms) != 1 || ms[0].UserID != "ub" {
+		t.Fatalf("b sees members: %+v %v", ms, err)
+	}
+	err = f.app.CancelInvitation(f.ctx, b, inv.ID)
+	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub == nil {
+		t.Fatal("b's cancel touched the invitation")
+	}
+	me, _ := f.app.GetMe(f.ctx, b)
+	if me.Organization == nil || me.Organization.ID != "orgb" {
+		t.Fatalf("b's me: %+v", me.Organization)
+	}
+
+	// A login link claimed by the owner cannot be decided by b.
+	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.app.ClaimDeviceCode(f.ctx, owner, start.UserCode); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := f.app.ClaimDeviceCode(f.ctx, b, start.UserCode); v.Status != domain.DevicePending {
+		t.Fatalf("status %s", v.Status)
+	}
+	err = f.app.DecideDeviceLogin(f.ctx, b, start.UserCode, true)
+	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to approve this device authorization")
+
+	// Signed out or without an organization: nothing.
+	_, err = f.app.ListMembers(f.ctx, domain.Actor{})
+	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	f.legacyUser("loner", "loner@example.com", "")
+	_, err = f.app.ListInvitations(f.ctx, domain.Actor{UserID: "loner"})
+	authWant(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
+}
+
+// ── Device login ──────────────────────────────────────────────────────────────────────────
+
+func TestAuthDeviceLogin(t *testing.T) {
+	f := authSetup(t)
+	alice := f.actor(f.signUp("alice@example.com", "").Token)
+	poll := func(code string) (app.DeviceToken, error) {
+		return f.app.PollDeviceLogin(f.ctx, domain.DeviceGrantType, code, "keel-cli", app.ClientInfo{UserAgent: "keel-cli/test"})
+	}
+
+	_, err := f.app.StartDeviceLogin(f.ctx, "someone-else")
+	authWantRefusal(t, err, 400, "invalid_client", "Invalid client ID")
+
+	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(start.DeviceCode) != 40 || len(start.UserCode) != 8 || start.ExpiresIn != 1800 || start.Interval != 5 ||
+		start.VerificationURI != "http://keel.test/device" ||
+		start.VerificationURIComplete != "http://keel.test/device?user_code="+start.UserCode {
+		t.Fatalf("start: %+v", start)
+	}
+	pretty := start.UserCode[:4] + "-" + start.UserCode[4:]
+
+	_, err = f.app.PollDeviceLogin(f.ctx, "password", start.DeviceCode, "keel-cli", app.ClientInfo{})
+	authWantRefusal(t, err, 400, "unsupported_grant_type", "Unsupported grant type")
+	_, err = f.app.PollDeviceLogin(f.ctx, domain.DeviceGrantType, start.DeviceCode, "other", app.ClientInfo{})
+	authWantRefusal(t, err, 400, "invalid_grant", "Invalid client ID")
+	_, err = poll("not-a-code")
+	authWantRefusal(t, err, 400, "invalid_grant", "Invalid device code")
+	_, err = poll(start.DeviceCode)
+	authWantRefusal(t, err, 400, "authorization_pending", "Authorization pending")
+	f.now += 4_999
+	_, err = poll(start.DeviceCode)
+	authWantRefusal(t, err, 400, "slow_down", "Polling too frequently")
+	f.now += 1 // 5 s after the last counted poll (a slow_down does not count)
+	_, err = poll(start.DeviceCode)
+	authWantRefusal(t, err, 400, "authorization_pending", "Authorization pending")
+
+	// Deciding needs a claim first, and a session.
+	err = f.app.DecideDeviceLogin(f.ctx, domain.Actor{}, pretty, true)
+	authWantRefusal(t, err, 401, "unauthorized", "Authentication required")
+	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
+	authWantRefusal(t, err, 400, "invalid_request", domain.MsgDeviceNotClaimed)
+	err = f.app.DecideDeviceLogin(f.ctx, alice, "ZZZZ-ZZZZ", true)
+	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+
+	// Looking it up signed out shows it without claiming it.
+	v, err := f.app.ClaimDeviceCode(f.ctx, domain.Actor{}, pretty)
+	if err != nil || v.UserCode != pretty || v.Status != domain.DevicePending {
+		t.Fatalf("anonymous lookup: %+v %v", v, err)
+	}
+	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
+	authWantRefusal(t, err, 400, "invalid_request", domain.MsgDeviceNotClaimed)
+	_, err = f.app.ClaimDeviceCode(f.ctx, alice, "nope")
+	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+
+	// Alice claims it; the next signed-in viewer does not take it over.
+	if _, err := f.app.ClaimDeviceCode(f.ctx, alice, pretty); err != nil {
+		t.Fatal(err)
+	}
+	inv, _ := f.app.CreateInvitation(f.ctx, alice, "bob@example.com", "")
+	bob := f.actor(f.signUp("bob@example.com", inv.ID).Token)
+	if _, err := f.app.ClaimDeviceCode(f.ctx, bob, start.UserCode); err != nil {
+		t.Fatal(err)
+	}
+	err = f.app.DecideDeviceLogin(f.ctx, bob, start.UserCode, false)
+	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to deny this device authorization")
+
+	if err := f.app.DecideDeviceLogin(f.ctx, alice, pretty, true); err != nil {
+		t.Fatal(err)
+	}
+	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, false)
+	authWantRefusal(t, err, 400, "invalid_request", "Device code already processed")
+	if v, _ := f.app.ClaimDeviceCode(f.ctx, alice, start.UserCode); v.Status != domain.DeviceApproved {
+		t.Fatalf("status after approval: %s", v.Status)
+	}
+
+	// The CLI's next poll gets a session for Alice, once.
+	f.now += 5_000
+	tok, err := poll(start.DeviceCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.ExpiresIn != domain.SessionTTL/1000 {
+		t.Fatalf("expires_in %d", tok.ExpiresIn)
+	}
+	if a := f.actor(tok.AccessToken); a.UserID != alice.UserID || a.OrganizationID != alice.OrganizationID {
+		t.Fatalf("CLI session: %+v", a)
+	}
+	f.now += 5_000
+	_, err = poll(start.DeviceCode)
+	authWantRefusal(t, err, 400, "invalid_grant", "Invalid device code")
+	_, err = f.app.ClaimDeviceCode(f.ctx, alice, pretty)
+	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+}
+
+func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
+	f := authSetup(t)
+	alice := f.actor(f.signUp("alice@example.com", "").Token)
+	poll := func(code string) error {
+		_, err := f.app.PollDeviceLogin(f.ctx, domain.DeviceGrantType, code, "keel-cli", app.ClientInfo{})
+		return err
+	}
+
+	denied, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	if _, err := f.app.ClaimDeviceCode(f.ctx, alice, denied.UserCode); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.app.DecideDeviceLogin(f.ctx, alice, denied.UserCode, false); err != nil {
+		t.Fatal(err)
+	}
+	authWantRefusal(t, poll(denied.DeviceCode), 400, "access_denied", "Access denied")
+	f.now += 5_000
+	authWantRefusal(t, poll(denied.DeviceCode), 400, "invalid_grant", "Invalid device code")
+
+	expired, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	f.now += domain.DeviceCodeTTL + 1
+	_, err := f.app.ClaimDeviceCode(f.ctx, alice, expired.UserCode)
+	authWantRefusal(t, err, 400, "expired_token", "User code has expired")
+	err = f.app.DecideDeviceLogin(f.ctx, alice, expired.UserCode, true)
+	authWantRefusal(t, err, 400, "expired_token", "User code has expired")
+	authWantRefusal(t, poll(expired.DeviceCode), 400, "expired_token", "Device code has expired")
+	authWantRefusal(t, poll(expired.DeviceCode), 400, "invalid_grant", "Invalid device code")
+
+	// A new link sweeps expired ones that nobody polled.
+	stale, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	f.now += domain.DeviceCodeTTL + 1
+	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.app.ClaimDeviceCode(f.ctx, alice, stale.UserCode)
+	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+}

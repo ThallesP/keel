@@ -119,9 +119,10 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 	if err != nil {
 		return err
 	}
+	// Also when fn panics: a job recovers and goes on, and the one write connection must come back.
+	defer sqlTx.Rollback() // after Commit: ErrTxDone, ignored
 	t := &tx{ctx: ctx, q: db.New(sqlTx), sql: sqlTx}
 	if err := fn(t); err != nil {
-		sqlTx.Rollback()
 		return err
 	}
 	return sqlTx.Commit()

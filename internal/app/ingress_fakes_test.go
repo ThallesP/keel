@@ -49,6 +49,26 @@ func (j *igJobs) Pending(key string) bool {
 	return ok
 }
 
+// RunOne runs the pending job with this key (it may schedule itself again).
+func (j *igJobs) RunOne(t *testing.T, key string) {
+	t.Helper()
+	j.mu.Lock()
+	fn, ok := j.pending[key]
+	if !ok {
+		j.mu.Unlock()
+		t.Fatalf("no pending job %q", key)
+	}
+	delete(j.pending, key)
+	for i, k := range j.order {
+		if k == key {
+			j.order = append(j.order[:i], j.order[i+1:]...)
+			break
+		}
+	}
+	j.mu.Unlock()
+	fn(context.Background())
+}
+
 // Run runs pending jobs (and the ones they schedule) until none is left.
 func (j *igJobs) Run(t *testing.T) {
 	t.Helper()

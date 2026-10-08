@@ -243,7 +243,7 @@ func (s *Server) registerAuth(h huma.API) {
 		Summary: "Start a keel login: a code and the link a person approves", Security: authPublic,
 		Responses: authDeviceResponses(h, "400"),
 	}, func(ctx context.Context, in *authDeviceCodeInput) (*authDeviceCodeOutput, error) {
-		d, err := s.app.StartDeviceLogin(ctx, in.Body.ClientID)
+		d, err := s.app.StartDeviceLogin(ctx, in.Body.ClientID, authClientOf(ctx))
 		if err != nil {
 			return nil, err
 		}

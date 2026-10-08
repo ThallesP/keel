@@ -67,6 +67,10 @@ func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec
 					{Type: mount.TypeVolume, Source: agentStateVolume, Target: agentStateDir},
 				},
 				StopGracePeriod: &grace,
+				// The agent reads the socket (uid 0 owns it) and writes its own state volume: it
+				// needs no capability and must not gain any.
+				CapabilityDrop: []string{"ALL"},
+				Privileges:     &swarm.Privileges{NoNewPrivileges: true},
 			},
 			RestartPolicy: &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionAny, Delay: &restartDelay},
 			Networks:      []swarm.NetworkAttachmentConfig{{Target: "host"}},

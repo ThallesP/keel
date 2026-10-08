@@ -129,12 +129,14 @@ func TestAgentSpec(t *testing.T) {
 				"Image": "ghcr.io/thallesp/keel:1.0@sha256:abc",
 				"Command": ["keel", "agent"],
 				"Env": ["KEEL_URL=http://100.64.0.1:8080"],
+				"Privileges": {"CredentialSpec": null, "SELinuxContext": null, "NoNewPrivileges": true},
 				"Mounts": [
 					{"Type": "bind", "Source": "/var/run/docker.sock", "Target": "/var/run/docker.sock", "ReadOnly": true},
 					{"Type": "volume", "Source": "keel-worker-state", "Target": "/var/lib/keel-worker"}
 				],
 				"StopGracePeriod": 10000000000,
-				"Secrets": [{"File": {"Name": "keel_worker_token", "UID": "0", "GID": "0", "Mode": 256}, "SecretID": "sec1", "SecretName": "`+agentSecretName("tok")+`"}]
+				"Secrets": [{"File": {"Name": "keel_worker_token", "UID": "0", "GID": "0", "Mode": 256}, "SecretID": "sec1", "SecretName": "`+agentSecretName("tok")+`"}],
+				"CapabilityDrop": ["ALL"]
 			},
 			"RestartPolicy": {"Condition": "any", "Delay": 2000000000},
 			"Networks": [{"Target": "host"}],

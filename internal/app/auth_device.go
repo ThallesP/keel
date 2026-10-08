@@ -34,9 +34,12 @@ type DeviceView struct {
 }
 
 // StartDeviceLogin makes a login link for the keel CLI.
-func (a *App) StartDeviceLogin(ctx context.Context, clientID string) (DeviceStart, error) {
+func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client ClientInfo) (DeviceStart, error) {
 	if r := domain.CheckDeviceClient(clientID); r != nil {
 		return DeviceStart{}, r
+	}
+	if err := a.limited(a.limits().deviceStart, client.IP); err != nil {
+		return DeviceStart{}, err
 	}
 	deviceCode := domain.NewDeviceCode()
 	var userCode string
@@ -78,6 +81,9 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string) (DeviceStar
 func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, clientID string, client ClientInfo) (DeviceToken, error) {
 	if grantType != domain.DeviceGrantType {
 		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "unsupported_grant_type", Description: domain.MsgDeviceGrantType}
+	}
+	if err := a.limited(a.limits().devicePoll, client.IP); err != nil {
+		return DeviceToken{}, err
 	}
 	var (
 		out     DeviceToken

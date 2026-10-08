@@ -22,6 +22,7 @@ var export = map[string]string{
 {"_id":"p2","_creationTime":21,"name":"Legacy","slug":"legacy","ownerId":"u1"}`,
 	"environments/documents.jsonl": `{"_id":"e1","_creationTime":22,"projectId":"p1","name":"production","isProduction":true}`,
 	"nodes/documents.jsonl": `{"_id":"child","_creationTime":30,"environmentId":"e1","type":"service","name":"api","parentId":"grp","position":{"x":1.5,"y":2},"config":{},"desired":{"image":"nginx:1","revision":2,"replicas":1,"port":80},"observed":{"revision":2,"running":1,"state":"ok","nodeIds":["sw1"],"at":40},"endpoints":[{"protocol":"http","port":80,"domain":"api.example.com","status":{"state":"live","at":41}}],"dirty":true,"shippedAt":35}
+{"_id":"traced","_creationTime":30.5,"environmentId":"e1","type":"service","name":"worker","position":{"x":0,"y":0},"config":{},"desired":{"image":"app:1","revision":3,"replicas":1,"tracing":true},"dirty":false}
 {"_id":"grp","_creationTime":31,"environmentId":"e1","type":"group","name":"g","position":{"x":0,"y":0},"config":{"width":400,"height":300}}`,
 	"variables/documents.jsonl":    `{"_id":"v1","_creationTime":32,"nodeId":"child","key":"PORT","value":"80","secret":false}`,
 	"deployments/documents.jsonl":  `{"_id":"d1","_creationTime":33,"environmentId":"e1","message":"ship api","status":"success","startedAt":34,"finishedAt":36,"steps":[{"nodeId":"child","label":"api","status":"done","startedAt":34,"appliedAt":35,"finishedAt":36},{"label":"health checks","status":"done"}],"log":[{"at":35,"nodeId":"child","text":"pulled nginx:1 in 1.0s"}]}`,
@@ -60,11 +61,16 @@ func TestImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Warnings) > 0 {
+	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], "worker") {
 		t.Fatalf("warnings: %v", rep.Warnings)
 	}
+	var tracedDirty int
+	store.DB().QueryRow(`SELECT dirty FROM nodes WHERE id='traced'`).Scan(&tracedDirty)
+	if tracedDirty != 1 {
+		t.Errorf("a traced service is staged after import, dirty=%d", tracedDirty)
+	}
 	want := map[string]int{"users": 1, "organizations": 1, "members": 1, "sessions": 1, "projects": 2,
-		"environments": 1, "nodes": 2, "endpoints": 1, "variables": 1, "deployments": 1,
+		"environments": 1, "nodes": 3, "endpoints": 1, "variables": 1, "deployments": 1,
 		"deployment_steps": 2, "deployment_log": 1, "log_sinks": 1, "otlp_keys": 1}
 	for k, v := range want {
 		if rep.Imported[k] != v {
@@ -103,5 +109,29 @@ func TestImport(t *testing.T) {
 	// A second import into the same database refuses.
 	if _, err := Import(ctx, store.DB(), writeZip(t)); err == nil || !strings.Contains(err.Error(), "already has an organization") {
 		t.Errorf("second import: %v", err)
+	}
+}
+
+// An install nobody signed up on exports empty tables: that is an empty import, not an error.
+func TestImportEmptyInstall(t *testing.T) {
+	dir := t.TempDir()
+	for _, table := range []string{"projects", "nodes", "_components/betterAuth/user"} {
+		if err := os.MkdirAll(filepath.Join(dir, table), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, table, "documents.jsonl"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := Import(context.Background(), store.DB(), dir); err != nil {
+		t.Fatalf("empty install: %v", err)
+	}
+	if _, err := Import(context.Background(), store.DB(), t.TempDir()); err == nil {
+		t.Fatal("a directory with no Keel tables imports")
 	}
 }

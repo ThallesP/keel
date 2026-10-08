@@ -23,6 +23,10 @@ import (
 const (
 	proxySyncKey    = "proxy:sync"
 	proxyResyncName = "proxy:resync"
+	proxyStartupKey = "proxy:startup"
+	// proxyStartupAttempts: how often the start-up pass looks for keel-proxy's admin socket
+	// (1, 2, 4, 8, then 10 s apart: about a minute) before syncing anyway.
+	proxyStartupAttempts = 8
 	// ProxyResyncInterval: retry what failed for a passing reason (proxy restarting, a port
 	// freed), pick up a changed host address, correct a status that lost a race.
 	ProxyResyncInterval = 2 * time.Minute
@@ -441,7 +445,9 @@ func (a *App) recoverIngress(ctx context.Context) {
 			a.Log.Info("default domains moved to the current public IP", "ip", ip, "domainsMoved", moved)
 		}
 	}
-	a.ScheduleProxySync()
+	if a.Jobs != nil {
+		a.Jobs.After(proxyStartupKey, 0, a.startupProxySync(0))
+	}
 	if a.Jobs != nil && a.ingress().resyncArmed.CompareAndSwap(false, true) {
 		a.Jobs.Every(proxyResyncName, ProxyResyncInterval, a.ResyncProxy)
 	}
@@ -513,4 +519,31 @@ func (a *App) ResyncProxy(ctx context.Context) {
 	if exposed || a.ingress().failed.Load() {
 		a.ScheduleProxySync()
 	}
+}
+
+// startupProxySync is the start-up sync. After a host reboot or an install.sh re-run, serve and
+// keel-proxy restart together and the edge keeps serving its autosaved config while it comes up.
+// A sync that found no admin socket would mark every endpoint failed until the 2-minute resync,
+// so while something is exposed it first waits (with backoff, about a minute) for the proxy to
+// answer, then syncs; still down by then, the sync reports it, which is the truth.
+func (a *App) startupProxySync(attempt int) func(context.Context) {
+	return func(ctx context.Context) {
+		if a.Proxy != nil && attempt < proxyStartupAttempts && a.anyEndpoint(ctx) {
+			if _, err := a.Proxy.HostAddrs(ctx); err != nil {
+				delay := min(time.Second<<attempt, 10*time.Second)
+				a.Jobs.After(proxyStartupKey, delay, a.startupProxySync(attempt+1))
+				return
+			}
+		}
+		a.ScheduleProxySync()
+	}
+}
+
+func (a *App) anyEndpoint(ctx context.Context) bool {
+	var any bool
+	err := a.read(ctx, func(tx Tx) (err error) {
+		any, err = tx.IngressAnyEndpoint()
+		return err
+	})
+	return err == nil && any
 }

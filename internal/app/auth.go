@@ -197,6 +197,9 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 	if a.Passwords == nil {
 		return SignedIn{}, errPasswordsMissing
 	}
+	if err := a.limited(a.limits().perIP, in.Client.IP); err != nil {
+		return SignedIn{}, err
+	}
 	email = domain.NormalizeUserEmail(email)
 	// Refuse early, before paying for a hash; the write checks again.
 	err := a.read(ctx, func(tx Tx) error {
@@ -296,10 +299,13 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 		return SignedIn{}, errPasswordsMissing
 	}
 	email = domain.NormalizeUserEmail(email)
+	if err := a.limited(a.limits().perIP, client.IP); err != nil {
+		return SignedIn{}, err
+	}
 	key := client.IP + "\x00" + email
 	limiter := a.signInAttempts()
-	if wait := limiter.take(key, a.Now()); wait > 0 {
-		return SignedIn{}, &domain.RateLimitError{RetryAfterSeconds: (wait + 999) / 1000}
+	if err := a.limited(limiter, key); err != nil {
+		return SignedIn{}, err
 	}
 	var cred Credentials
 	found := false

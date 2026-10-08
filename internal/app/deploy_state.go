@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -31,7 +32,18 @@ type pendingScan struct {
 
 type applyQueue struct {
 	queued []applyRequest
+	// running is the apply in flight: a newer revision queued behind it cancels it (a stalled
+	// pull must not hold the retry back; that apply would back off as superseded anyway).
+	running *runningApply
 }
+
+type runningApply struct {
+	revision int
+	cancel   context.CancelCauseFunc
+}
+
+// errApplySuperseded is the cause of an apply cancelled because a newer revision was queued.
+var errApplySuperseded = errors.New("superseded by a newer revision")
 
 var deployRuntimes sync.Map // *App → *deployRuntime
 

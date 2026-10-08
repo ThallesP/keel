@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -637,7 +638,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	}
 
 	// A login link claimed by the owner cannot be decided by b.
-	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -667,10 +668,10 @@ func TestAuthDeviceLogin(t *testing.T) {
 		return f.app.PollDeviceLogin(f.ctx, domain.DeviceGrantType, code, "keel-cli", app.ClientInfo{UserAgent: "keel-cli/test"})
 	}
 
-	_, err := f.app.StartDeviceLogin(f.ctx, "someone-else")
+	_, err := f.app.StartDeviceLogin(f.ctx, "someone-else", app.ClientInfo{})
 	authWantRefusal(t, err, 400, "invalid_client", "Invalid client ID")
 
-	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,7 +763,7 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 		return err
 	}
 
-	denied, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	denied, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	if _, err := f.app.ClaimDeviceCode(f.ctx, alice, denied.UserCode); err != nil {
 		t.Fatal(err)
 	}
@@ -773,7 +774,7 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	f.now += 5_000
 	authWantRefusal(t, poll(denied.DeviceCode), 400, "invalid_grant", "Invalid device code")
 
-	expired, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	expired, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	f.now += domain.DeviceCodeTTL + 1
 	_, err := f.app.ClaimDeviceCode(f.ctx, alice, expired.UserCode)
 	authWantRefusal(t, err, 400, "expired_token", "User code has expired")
@@ -784,9 +785,9 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 
 	// A new link does not sweep a code that just expired: its poller (keel login --wait) and its
 	// /device tab still hear "expired", as with Better Auth, which never swept.
-	stale, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	stale, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	f.now += domain.DeviceCodeTTL + 1
-	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli"); err != nil {
+	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, stale.UserCode)
@@ -794,11 +795,46 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	authWantRefusal(t, poll(stale.DeviceCode), 400, "expired_token", "Device code has expired")
 
 	// Long-expired codes nobody polled are swept by the next new link.
-	forgotten, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli")
+	forgotten, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	f.now += domain.DeviceCodeTTL + domain.DeviceCodeKeep + 1
-	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli"); err != nil {
+	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, forgotten.UserCode)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+}
+
+// One address gets AuthPerIP sign-ins and sign-ups a minute whatever the email (spraying one
+// password across accounts), and DeviceStartPerIP device codes.
+func TestAuthPerIPLimits(t *testing.T) {
+	f := authSetup(t)
+	spray := app.ClientInfo{IP: "100.64.0.66"}
+	for i := 0; i < app.AuthPerIP; i++ {
+		_, err := f.app.SignIn(f.ctx, fmt.Sprintf("victim%d@example.com", i), "Summer2026!", spray)
+		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+	}
+	_, err := f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
+	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	// Sign-up shares the budget; another address does not.
+	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: spray})
+	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	if _, err := f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: app.ClientInfo{IP: "100.64.0.67"}}); err != nil {
+		t.Fatalf("other address: %v", err)
+	}
+	// The window passes.
+	f.now += app.AuthPerIPWindow.Milliseconds()
+	_, err = f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
+	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+
+	for i := 0; i < app.DeviceStartPerIP; i++ {
+		if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", spray); err != nil {
+			t.Fatalf("device code %d: %v", i, err)
+		}
+	}
+	_, err = f.app.StartDeviceLogin(f.ctx, "keel-cli", spray)
+	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+
+	// A 1 MiB address is refused before it reaches the regex or a limiter key.
+	_, err = f.app.SignIn(f.ctx, strings.Repeat("a", 1<<20)+"@example.com", "x", app.ClientInfo{IP: "100.64.0.68"})
+	authWant(t, err, domain.CodeInvalidInput, domain.MsgInvalidEmail)
 }

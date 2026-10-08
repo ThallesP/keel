@@ -126,10 +126,12 @@ export function TraceDetail({
   onBack: () => void;
 }) {
   const { environmentId } = useEnvironment();
-  // Once per (environment, trace, at): a finished trace does not change.
+  // Once per open: no refetch while the view is open, and nothing kept after it closes (gcTime 0).
+  // A trace opened before the SDK's batch exporter flushed (about 5 s) would otherwise show its
+  // partial answer on every reopen for minutes, where the old view asked again on each open.
   const lookup = useGetTrace(
     { path: { id: environmentId, traceId }, query: at === undefined ? undefined : { at } },
-    { query: { staleTime: Infinity, meta: { realtime: false }, select: toTrace } },
+    { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false }, select: toTrace } },
   );
   const trace = lookup.data ?? null;
   const error = lookup.error ? errorMessage(lookup.error) : null;

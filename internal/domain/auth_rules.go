@@ -37,7 +37,10 @@ const (
 var userEmailRE = regexp.MustCompile(`^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$`)
 
 // ValidUserEmail: the address Better Auth would accept.
-func ValidUserEmail(email string) bool { return userEmailRE.MatchString(email) }
+// ValidUserEmail: at most 254 characters (RFC 5321's path limit), checked before the regex.
+func ValidUserEmail(email string) bool {
+	return len(email) <= 254 && userEmailRE.MatchString(email)
+}
 
 // NormalizeUserEmail is how emails are stored and compared: trimmed, lower-cased.
 func NormalizeUserEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }

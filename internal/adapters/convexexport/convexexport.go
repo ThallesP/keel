@@ -51,6 +51,9 @@ func tables(src string) (map[string][]doc, error) {
 	out := map[string][]doc{}
 	add := func(name string, r io.Reader) error {
 		table := path.Base(path.Dir(name))
+		if _, ok := out[table]; !ok {
+			out[table] = []doc{} // an empty table still says what the export is
+		}
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 1<<20), 64<<20)
 		for sc.Scan() {
@@ -190,9 +193,13 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(t["projects"]) == 0 && len(t["user"]) == 0 {
+	_, hasProjects := t["projects"]
+	_, hasUsers := t["user"]
+	if !hasProjects && !hasUsers {
 		return nil, fmt.Errorf("%s has no Keel tables (projects, user): is it a Convex export of a Keel install?", src)
 	}
+	// An install nobody signed up on exports its tables empty: that imports as nothing, so the
+	// upgrade goes through and the first sign-up founds the organization as on a fresh install.
 	var orgs int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations`).Scan(&orgs); err != nil {
 		return nil, err
@@ -339,12 +346,20 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 
 	// Nodes: parents after children would violate the foreign key, so insert without parents first.
 	parents := map[string]string{}
+	var traced []string
 	for _, n := range t["nodes"] {
 		pos, cfg, des, obs := obj(n, "position"), obj(n, "config"), obj(n, "desired"), obj(n, "observed")
 		var dImg, dRev, dRep, dPort any
 		var dTrace int64
 		if des != nil {
 			dImg, dRev, dRep, dPort, dTrace = s(des, "image"), i64(des, "revision"), i64(des, "replicas"), ni64(des, "port"), b(des, "tracing")
+		}
+		dirty := b(n, "dirty")
+		if dTrace == 1 && i64(des, "revision") > 0 {
+			// Deployed with OTEL_EXPORTER_OTLP_ENDPOINT=<CONVEX_SITE_URL>/otlp (port 3211), which no
+			// longer listens: stage it so "Ship · N changes" re-applies the new endpoint.
+			dirty = 1
+			traced = append(traced, s(n, "name"))
 		}
 		var oRev, oRun, oComp, oFin, oState, oIDs, oErr, oAt any
 		if obs != nil {
@@ -369,7 +384,7 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 			nf(cfg, "sizeGb"), nf(cfg, "width"), nf(cfg, "height"),
 			dImg, dRev, dRep, dPort, dTrace,
 			oRev, oRun, oComp, oFin, oState, oIDs, oErr, oAt,
-			ni64(n, "deployedRevision"), b(n, "dirty"), ni64(n, "shippedAt"), ns(n, "applyError"), b(n, "oneShot"), created(n)) {
+			ni64(n, "deployedRevision"), dirty, ni64(n, "shippedAt"), ns(n, "applyError"), b(n, "oneShot"), created(n)) {
 			continue
 		}
 		if n["public"] != nil || n["ingress"] != nil {
@@ -386,6 +401,9 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 				fmt.Sprintf("%s-%d", s(n, "_id"), i), s(n, "_id"), i, s(e, "protocol"), i64(e, "port"), b(e, "pinnedPort"),
 				ns(e, "domain"), ni64(e, "publicPort"), state, ns(st, "error"), i64(st, "at"))
 		}
+	}
+	if len(traced) > 0 {
+		r.warn("ship these traced services once to point them at the new OTLP endpoint (they are staged): %s", strings.Join(traced, ", "))
 	}
 	for id, pid := range parents {
 		if _, err := tx.ExecContext(ctx, `UPDATE nodes SET parent_id = ? WHERE id = ? AND EXISTS (SELECT 1 FROM nodes WHERE id = ?)`, pid, id, pid); err != nil {

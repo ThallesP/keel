@@ -442,7 +442,7 @@ func TestProxyRecover(t *testing.T) {
 	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
-	if !e.jobs.Pending("proxy:sync") {
+	if !e.jobs.Pending("proxy:startup") {
 		t.Fatal("no sync at start")
 	}
 	if e.jobs.every["proxy:resync"] != 2*time.Minute {
@@ -478,5 +478,29 @@ func TestProxyRecoverKeepsDomainsUnique(t *testing.T) {
 	}
 	if got := e.endpoints(igPG)[0]; got.Domain != "web-i8r0ew.203-0-113-7.sslip.io" || got.Status.State != domain.EndpointStarting {
 		t.Fatalf("web: %+v", got)
+	}
+}
+
+// After a reboot keel-proxy comes up after serve: the start-up sync waits for its admin socket
+// instead of marking every endpoint failed until the 2-minute resync.
+func TestProxyStartupWaitsForTheProxy(t *testing.T) {
+	e := newIngressEnv(t)
+	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
+	live := domain.EndpointStatus{State: domain.EndpointLive, At: 1}
+	e.setEndpoints(igAPI, domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api-16w41g.203-0-113-7.sslip.io", Status: live})
+	e.proxy.addrsErr = errors.New("keel-proxy is not running (no admin socket at /run/keel-proxy/admin.sock)")
+	e.app.RecoverIngressForTest(e.ctx)
+	// The first few looks find no proxy: nothing is synced, nothing marked failed.
+	for i := 0; i < 3; i++ {
+		e.jobs.RunOne(t, "proxy:startup")
+	}
+	if e.jobs.Pending("proxy:sync") || e.endpoints(igAPI)[0].Status.State != domain.EndpointLive {
+		t.Fatalf("synced while the proxy was down: %+v", e.endpoints(igAPI))
+	}
+	// The proxy answers: the next look syncs.
+	e.proxy.addrsErr = nil
+	e.jobs.RunOne(t, "proxy:startup")
+	if !e.jobs.Pending("proxy:sync") {
+		t.Fatal("no sync once the proxy answered")
 	}
 }

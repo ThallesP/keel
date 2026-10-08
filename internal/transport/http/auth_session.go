@@ -32,6 +32,11 @@ func authViaCookie(r *http.Request) bool {
 	return err == nil && c.Value != ""
 }
 
+// authViaBearer: the request authenticates with Authorization: Bearer (CLI, CI, agents).
+func authViaBearer(r *http.Request) bool {
+	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
+}
+
 // authSafeMethod: methods that never change anything.
 func authSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions

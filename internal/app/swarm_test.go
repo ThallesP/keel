@@ -64,7 +64,9 @@ func TestApplyQueueSerializesPerNode(t *testing.T) {
 	}
 	callers.Wait()
 	jobs.wg.Wait()
-	if store.peak != 1 || store.read != 50 {
+	// At least one read per apply (none lost); an apply a newer revision cancels re-reads the
+	// revision for its log line, so there can be more.
+	if store.peak != 1 || store.read < 50 {
 		t.Fatalf("peak %d reads %d", store.peak, store.read)
 	}
 	rt := a.deployRuntime()

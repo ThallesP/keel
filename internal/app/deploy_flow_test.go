@@ -663,3 +663,33 @@ func TestUpdateSettlesWithoutEvents(t *testing.T) {
 		t.Fatalf("kept polling after completion: %d → %d", n, len(w.swarm.observed))
 	}
 }
+
+// A pull that stalls must not hold the node's retry back: queueing a newer revision cancels the
+// running apply, which backs off as superseded without marking the node errored.
+func TestStalledPullYieldsToNewerRevision(t *testing.T) {
+	w := newWorld(t)
+	a := w.addNode("api", image("slow:1"))
+	d1 := w.ship(app.ShipOptions{})
+	var d2 string
+	w.swarm.onPull = func(img string) {
+		if d2 == "" {
+			// The deployment timed out meanwhile; the user retries while the pull still hangs.
+			w.failRunning(d1)
+			d2 = w.ship(app.ShipOptions{Only: []string{a.ID}, Refresh: true})
+		}
+	}
+	w.swarm.pullBlocksUntilCancelled = true
+	w.jobs.run()
+	if got := logTexts(w.deployment(d1)); got[len(got)-1] != "superseded by revision 2" {
+		t.Fatalf("d1 log: %q", got)
+	}
+	if n := w.node(a.ID); n.ApplyError != "" {
+		t.Fatalf("superseded apply marked the node: %q", n.ApplyError)
+	}
+	if len(w.swarm.creates) != 1 || w.swarm.creates[0].Revision != 2 {
+		t.Fatalf("creates: %+v", w.swarm.creates)
+	}
+	if s := w.deployment(d2).Steps[0]; s.AppliedAt == nil {
+		t.Fatalf("d2 step: %+v", s)
+	}
+}

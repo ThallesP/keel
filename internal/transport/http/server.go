@@ -154,7 +154,13 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 		}
 		token := SessionToken(r)
 		viaCookie := authViaCookie(r)
-		if viaCookie && !authSafeMethod(r.Method) {
+		// A browser write is checked whether or not it carries the cookie: a cross-origin page can
+		// POST JSON as a CORS simple request (no-cors, no Content-Type) to sign-up or sign-in.
+		// Browsers always send Origin on such a request; the CLI, curl and agents send none and
+		// authenticate with a bearer, so they are unaffected.
+		browserWrite := !authSafeMethod(r.Method) && !authViaBearer(r) &&
+			(viaCookie || r.Header.Get("Origin") != "" || r.Header.Get("Referer") != "")
+		if browserWrite {
 			if msg := s.authCSRFRefusal(r); msg != "" {
 				authForbidden(w, msg)
 				return
@@ -164,10 +170,13 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 		if token != "" && s.app != nil && s.app.Store != nil {
 			a, err := s.app.ResolveSession(r.Context(), token)
 			if err != nil {
+				// Not "signed out": the dashboard would drop its cache and the CLI its saved token.
 				s.log.Error("resolve session", "err", err)
-			} else {
-				actor = a
+				writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
+					Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
+				return
 			}
+			actor = a
 		}
 		if viaCookie && actor.SessionRenewed {
 			c := s.authSessionCookie(token, actor.SessionExpiresAt)

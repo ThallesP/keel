@@ -132,11 +132,13 @@ type fakeService struct {
 }
 
 type fakeSwarm struct {
-	cached   map[string]bool
-	pullErr  map[string]error
-	onPull   func(image string)
-	onCreate func(spec app.ServiceSpec)
-	services map[string]*fakeService
+	cached  map[string]bool
+	pullErr map[string]error
+	onPull  func(image string)
+	// pullBlocksUntilCancelled makes the next pull hang until its context ends (a stalled pull).
+	pullBlocksUntilCancelled bool
+	onCreate                 func(spec app.ServiceSpec)
+	services                 map[string]*fakeService
 	// tasks overrides what observation sees for a node; by default every replica of the current
 	// spec runs.
 	tasks          map[string][]app.SwarmTask
@@ -178,6 +180,11 @@ func (f *fakeSwarm) PullImage(ctx context.Context, image string) error {
 	f.pulls = append(f.pulls, image)
 	if f.onPull != nil {
 		f.onPull(image)
+	}
+	if f.pullBlocksUntilCancelled {
+		f.pullBlocksUntilCancelled = false
+		<-ctx.Done()
+		return ctx.Err()
 	}
 	if err := f.pullErr[image]; err != nil {
 		return err
@@ -505,4 +512,12 @@ func codeAndMessage(err error) string {
 		return "<nil>"
 	}
 	return "untyped: " + err.Error()
+}
+
+// failRunning marks a running deployment failed, as its timeout would, so a new ship is allowed.
+func (w *world) failRunning(id string) {
+	w.t.Helper()
+	if _, err := w.store.DB().Exec(`UPDATE deployments SET status = 'failed', finished_at = ? WHERE id = ?`, *w.clock, id); err != nil {
+		w.t.Fatal(err)
+	}
 }

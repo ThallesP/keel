@@ -40,6 +40,9 @@ func (a *App) scheduleApply(req applyRequest) {
 		rt.applies[req.nodeID] = q
 	}
 	q.queued = append(q.queued, req)
+	if q.running != nil && q.running.revision < req.revision {
+		q.running.cancel(errApplySuperseded)
+	}
 	key := fmt.Sprintf("apply:%s:%d", req.nodeID, rt.next())
 	rt.mu.Unlock()
 	if start {
@@ -62,8 +65,16 @@ func (a *App) drainApplies(ctx context.Context, nodeID string) {
 		}
 		req := q.queued[0]
 		q.queued = q.queued[1:]
+		applyCtx, cancel := context.WithCancelCause(ctx)
+		q.running = &runningApply{revision: req.revision, cancel: cancel}
 		rt.mu.Unlock()
-		a.safeApply(ctx, req)
+		a.safeApply(applyCtx, req)
+		cancel(nil)
+		rt.mu.Lock()
+		if q.running != nil && q.running.revision == req.revision {
+			q.running = nil
+		}
+		rt.mu.Unlock()
 	}
 }
 
@@ -177,6 +188,15 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	id := req.nodeID
 	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
 	fail := func(err error) {
+		if errors.Is(context.Cause(parent), errApplySuperseded) {
+			// A newer revision was queued behind this apply: it does the work. No applyError.
+			rev, _, rerr := a.wantedRevision(record, id)
+			if rerr != nil || rev <= req.revision {
+				rev = req.revision + 1
+			}
+			a.applySuperseded(record, req, rev)
+			return
+		}
 		if parent.Err() != nil {
 			// serve is stopping and the scheduler cancelled its jobs: this is not the apply's
 			// failure. Leave the step pending/running without appliedAt; the next start's

@@ -34,7 +34,8 @@ export function LogContext({
   const { environmentId } = useEnvironment();
   const services = useServices();
   // Once per (environment, at): what was around a moment does not change.
-  const once = { query: { staleTime: Infinity, meta: { realtime: false } } };
+  // Once per open, nothing kept after close: lines still arriving show on the next open.
+  const once = { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false } } };
   const request = { path: { id: environmentId }, query: { at } };
   const linesAround = useListLogsAround(request, once);
   const requestsAround = useListTracesAround(request, once);

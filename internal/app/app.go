@@ -27,8 +27,8 @@ type App struct {
 
 	// Auth area (ports_auth.go): password hashing (adapters/password), and the in-memory sign-in
 	// limiter, made on first use (auth_limit.go).
-	Passwords Passwords
-	signIns   *authAttempts
+	Passwords  Passwords
+	authLimits *authLimiters
 }
 
 // Config is the environment serve was started with (docs/go/ARCHITECTURE.md, "Env").

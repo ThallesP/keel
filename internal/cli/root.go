@@ -127,13 +127,20 @@ func (a *app) root() *cobra.Command {
 	flags.StringVar(&a.instanceFlag, "instance", "", "Keel install to use, by name (KEEL_INSTANCE)")
 	flags.StringVarP(&a.projectFlag, "project", "p", "", "project slug (KEEL_PROJECT); default: linked or only project")
 
-	root.AddCommand(
+	root.AddGroup(
+		&cobra.Group{ID: "cli", Title: "Commands:"},
+		&cobra.Group{ID: "server", Title: "Running Keel (on its servers):"},
+	)
+	for _, cmd := range []*cobra.Command{
 		a.loginCmd(), a.logoutCmd(), a.whoamiCmd(), a.tokenCmd(),
 		a.statusCmd(), a.projectCmd(), a.linkCmd(), a.unlinkCmd(),
 		a.serviceCmd(), a.logsCmd(), a.varCmd(), a.runCmd(),
 		a.tracesCmd(), a.tracingCmd(),
 		a.shipCmd(), a.redeployCmd(), a.deploymentCmd(),
-	)
+	} {
+		cmd.GroupID = "cli"
+		root.AddCommand(cmd)
+	}
 	server := serverCommands()
 	for _, mk := range Extra {
 		server = append(server, mk())
@@ -146,7 +153,6 @@ func (a *app) root() *cobra.Command {
 		cmd.GroupID = "server"
 		root.AddCommand(cmd)
 	}
-	root.AddGroup(&cobra.Group{ID: "server", Title: "Running Keel (on its servers):"})
 	return root
 }
 

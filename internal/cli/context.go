@@ -257,7 +257,7 @@ func findService(services []client.Service, name string) (*client.Service, error
 	return nil, output.Errorf(output.CodeServiceNotFound, fix, "No service %q", name)
 }
 
-// normalizeURL keeps scheme and host: the dashboard origin, which is what better-auth trusts.
+// normalizeURL keeps scheme and host: the dashboard origin, which is also the API's.
 func normalizeURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {

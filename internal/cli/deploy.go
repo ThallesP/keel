@@ -14,8 +14,8 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// Deployments settle within the server's 5-minute timeout (deployments.ts); this only guards a
-// control plane that stopped answering.
+// Deployments settle within the server's 5-minute timeout (one still running then fails); this
+// only guards a control plane that stopped answering.
 const defaultWait = 10 * time.Minute
 
 type waitFlags struct {

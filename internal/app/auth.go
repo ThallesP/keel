@@ -98,6 +98,8 @@ func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, e
 	if domain.SessionExpired(s.ExpiresAt, now) {
 		if err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthDeleteSession(s.ID) }); err != nil {
 			a.Log.Warn("delete expired session", "err", err)
+		} else if a.Conns != nil {
+			a.Conns.DisconnectSession(s.ID)
 		}
 		return domain.Actor{}, nil
 	}
@@ -354,7 +356,11 @@ func (a *App) SignOut(ctx context.Context, actor domain.Actor) error {
 	if actor.SessionID == "" {
 		return nil
 	}
-	return a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthDeleteSession(actor.SessionID) })
+	err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthDeleteSession(actor.SessionID) })
+	if err == nil && a.Conns != nil {
+		a.Conns.DisconnectSession(actor.SessionID)
+	}
+	return err
 }
 
 // GetMe is the caller and their organization (convex auth.getCurrentUser + organizations.current).

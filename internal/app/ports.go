@@ -51,6 +51,15 @@ type CoreTx interface {
 	SetSetting(key, value string) error
 }
 
+// Connections are the dashboards' open WebSockets (adapters/realtime). nil = none to close.
+type Connections interface {
+	// DisconnectSession closes every socket opened with the session (sign-out, expiry).
+	DisconnectSession(sessionID string)
+	// DisconnectUser asks every socket of the user to reconnect (membership changed: the server
+	// subscribes the new connection to the new organization's channel).
+	DisconnectUser(userID string)
+}
+
 // Publisher pushes invalidation topics to an organization's connected dashboards.
 type Publisher interface {
 	Publish(organizationID string, topics []string)

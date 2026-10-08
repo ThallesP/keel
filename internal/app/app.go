@@ -12,6 +12,7 @@ import (
 type App struct {
 	Store  Store
 	Events Publisher
+	Conns  Connections
 	Jobs   Jobs
 	Config Config
 	Log    *slog.Logger

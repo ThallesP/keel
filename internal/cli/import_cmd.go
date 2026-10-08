@@ -10,6 +10,7 @@ import (
 
 	"github.com/ThallesP/keel/internal/adapters/convexexport"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
+	"github.com/ThallesP/keel/internal/domain"
 	"github.com/ThallesP/keel/internal/serve"
 )
 
@@ -34,6 +35,7 @@ no organization yet. Stop keel serve first.`,
 					return err
 				}
 				defer store.Close()
+				convexexport.HashToken = domain.HashSessionToken // CLI logins survive the move
 				rep, err := convexexport.Import(cmd.Context(), store.DB(), args[0])
 				if err != nil {
 					return err

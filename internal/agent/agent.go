@@ -67,7 +67,7 @@ func configFrom(getenv func(string) string, secretPath string, isDir func(string
 		URL:          strings.TrimRight(getenv("KEEL_URL"), "/"),
 		StatePath:    getenv("KEEL_STATE"),
 		ConfigPoll:   defaultConfigPoll,
-		DockerSocket: orDefault(getenv("DOCKER_SOCKET"), defaultSocket),
+		DockerSocket: dockerSocket(getenv),
 	}
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (Convex site URL, e.g. https://x.convex.site)")
@@ -227,4 +227,16 @@ func waitAtMost(wg *sync.WaitGroup, d time.Duration) {
 	case <-done:
 	case <-time.After(d):
 	}
+}
+
+// dockerSocket: DOCKER_SOCKET (the worker's variable), else DOCKER_HOST through the client's own
+// environment handling (""), else /var/run/docker.sock.
+func dockerSocket(getenv func(string) string) string {
+	if s := getenv("DOCKER_SOCKET"); s != "" {
+		return s
+	}
+	if getenv("DOCKER_HOST") != "" {
+		return ""
+	}
+	return defaultSocket
 }

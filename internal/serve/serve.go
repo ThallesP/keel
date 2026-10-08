@@ -111,9 +111,7 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 		return fmt.Errorf("realtime: %w", err)
 	}
 	a.Events = rt
-	// TODO(integration, auth): sign-out must close the session's sockets and a membership change
-	// must move the user's sockets to the new organization channel. rt.DisconnectSession(id) and
-	// rt.DisconnectUser(id) do that; set them here on the port the auth area declares for it.
+	a.Conns = rt // sign-out closes a session's sockets; a membership change moves them
 
 	closers, err := wireAdapters(a, log)
 	if err != nil {

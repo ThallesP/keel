@@ -71,6 +71,10 @@ func (a *App) safeApply(ctx context.Context, req applyRequest) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.Log.Error("apply panicked", "node", req.nodeID, "panic", r, "stack", string(debug.Stack()))
+			// Fail the step now rather than leave it pending until the 5-minute timeout.
+			record := context.WithoutCancel(ctx)
+			a.setApplyError(record, req.nodeID, "internal error")
+			a.writeStep(record, req.deploymentID, req.nodeID, stepFailed, "error: internal error")
 		}
 	}()
 	a.apply(ctx, req)

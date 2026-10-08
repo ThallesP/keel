@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/ThallesP/keel/internal/adapters/axiom"
+	"github.com/ThallesP/keel/internal/adapters/caddy"
+	"github.com/ThallesP/keel/internal/adapters/password"
+	"github.com/ThallesP/keel/internal/adapters/swarm"
 	"github.com/ThallesP/keel/internal/app"
 )
 
@@ -20,6 +24,7 @@ type adapter struct {
 
 // adapters is every external adapter serve constructs, in order. Tests replace it.
 var adapters = []adapter{
+	{"passwords", wirePasswords},
 	{"swarm", wireSwarm},
 	{"proxy", wireProxy},
 	{"axiom", wireAxiom},
@@ -28,40 +33,34 @@ var adapters = []adapter{
 // wireSwarm sets a.Swarm and a.Logs: the Docker client of the manager (adapters/swarm), which
 // implements both app.Swarm (deploy area: apply, observe, nodes, the keel-agent service) and
 // app.LogReader (observability area: `docker service logs`). DOCKER_HOST selects the socket.
-//
-// TODO(integration): construct it once the deploy and observability areas have merged:
-//
-//	s, err := swarm.New()
-//	if err != nil {
-//		return nil, err
-//	}
-//	a.Swarm, a.Logs = s, s
-//	return s.Close, nil
 func wireSwarm(a *app.App, log *slog.Logger) (func() error, error) {
-	return nil, nil
+	s, err := swarm.New()
+	if err != nil {
+		return nil, err
+	}
+	a.Swarm, a.Logs = s, s
+	return s.Close, nil
 }
 
 // wireProxy sets a.Proxy: keel-proxy's admin API over its unix socket (adapters/caddy; the edge
 // stays its own container, proxy-ingress.md §12.4 option 1). The socket path is
 // KEEL_PROXY_SOCKET (default /run/keel-proxy/admin.sock); KEEL_PROXY_REPORT_URL is where the
 // proxy posts certificate events (POST /proxy/events).
-//
-// TODO(integration): construct it once the ingress area has merged, e.g.
-//
-//	a.Proxy = caddy.New(Env("KEEL_PROXY_SOCKET", "/run/keel-proxy/admin.sock"), log)
-//	return nil, nil
 func wireProxy(a *app.App, log *slog.Logger) (func() error, error) {
+	a.Proxy = caddy.New(Env("KEEL_PROXY_SOCKET", caddy.DefaultSocket), Env("KEEL_PROXY_REPORT_URL", ""))
 	return nil, nil
 }
 
 // wireAxiom sets a.Axiom: Axiom's OAuth, dataset, query and ingest APIs (adapters/axiom), with
 // a.Config.AxiomAuthURL / AxiomAPIURL as overrides (tests) and AllowLocalSinks.
-//
-// TODO(integration): construct it once the observability area has merged, e.g.
-//
-//	a.Axiom = axiom.New(axiom.Config{AuthURL: a.Config.AxiomAuthURL, APIURL: a.Config.AxiomAPIURL}, log)
-//	return nil, nil
 func wireAxiom(a *app.App, log *slog.Logger) (func() error, error) {
+	a.Axiom = axiom.New()
+	return nil, nil
+}
+
+// wirePasswords sets a.Passwords: argon2id for new hashes, Better Auth's scrypt for imported ones.
+func wirePasswords(a *app.App, _ *slog.Logger) (func() error, error) {
+	a.Passwords = password.New()
 	return nil, nil
 }
 

@@ -265,5 +265,8 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 		out = MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: role}
 		return nil
 	})
+	if err == nil && a.Conns != nil {
+		a.Conns.DisconnectUser(actor.UserID) // reconnect onto the new organization's channel
+	}
 	return out, err
 }

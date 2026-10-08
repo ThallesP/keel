@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 // Matches the Logs tab: there is no push, so following is polling the tail. A poll that hangs is
@@ -63,7 +63,7 @@ object per line: {"service","time","stream","task","text"}.`,
 			if !follow {
 				a.out.Result(struct {
 					Service string `json:"service"`
-					*keel.Tail
+					*client.Tail
 				}{svc.Name, tail}, func(w io.Writer) {
 					if len(tail.Lines) == 0 {
 						fmt.Fprintf(a.out.Err, "No log lines for %s yet\n", svc.Name)
@@ -76,12 +76,12 @@ object per line: {"service","time","stream","task","text"}.`,
 			}
 
 			seen := newLineSet()
-			emit := func(ls []keel.LogLine) {
+			emit := func(ls []client.LogLine) {
 				for _, l := range ls {
 					if seen.add(l) {
 						a.out.Event(struct {
 							Service string `json:"service"`
-							keel.LogLine
+							client.LogLine
 						}{svc.Name, l}, logLine(l))
 					}
 				}
@@ -121,12 +121,12 @@ object per line: {"service","time","stream","task","text"}.`,
 	return cmd
 }
 
-func logLine(l keel.LogLine) string {
+func logLine(l client.LogLine) string {
 	return l.Time.Local().Format("2006-01-02 15:04:05") + "  " + l.Text
 }
 
-func sortLines(ls []keel.LogLine) {
-	slices.SortStableFunc(ls, func(a, b keel.LogLine) int { return a.Time.Compare(b.Time.Time) })
+func sortLines(ls []client.LogLine) {
+	slices.SortStableFunc(ls, func(a, b client.LogLine) int { return a.Time.Compare(b.Time.Time) })
 }
 
 // lineSet remembers what --follow printed. Each poll returns an overlapping tail; a line is new
@@ -138,7 +138,7 @@ type lineSet struct {
 
 func newLineSet() *lineSet { return &lineSet{at: map[string]bool{}} }
 
-func (s *lineSet) add(l keel.LogLine) bool {
+func (s *lineSet) add(l client.LogLine) bool {
 	key := l.Task + "\x00" + l.Stream + "\x00" + l.Text
 	switch {
 	case l.Time.Before(s.last):

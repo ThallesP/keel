@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 func (a *app) tracingCmd() *cobra.Command {
@@ -83,7 +83,7 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 			a.out.Result(struct {
 				Service string `json:"service"`
 				Staged  bool   `json:"staged"`
-				*keel.Tracing
+				*client.Tracing
 			}{svc.Name, svc.Staged, tracing}, func(w io.Writer) {
 				state := "off"
 				if tracing.Enabled {
@@ -169,7 +169,7 @@ with traces (TRACES_OFF otherwise).`,
 }
 
 // tracingOf resolves a service and reads its tracing.
-func (a *app) tracingOf(cmd *cobra.Command, name string) (*keel.Service, *keel.Tracing, error) {
+func (a *app) tracingOf(cmd *cobra.Command, name string) (*client.Service, *client.Tracing, error) {
 	ctx := cmd.Context()
 	s, err := a.connect(ctx)
 	if err != nil {

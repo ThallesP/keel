@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ThallesP/keel/apps/cli/internal/config"
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/config"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 // session is a signed-in command's target: which install, as whom, and the API to it.
@@ -20,7 +20,10 @@ type session struct {
 	cfg  *config.Config
 	name string
 	inst *config.Instance
-	api  *keel.API
+	api  *client.Client
+	// Who the session is, from GET /api/me when connecting.
+	user *client.User
+	org  *client.Organization
 }
 
 func (a *app) loadConfig() (*config.Config, error) {
@@ -42,30 +45,16 @@ func saveConfig(cfg *config.Config) error {
 
 // target picks the install: KEEL_URL, else --instance / KEEL_INSTANCE, else the directory's link,
 // else the current instance, else the only one. KEEL_TOKEN overrides the stored token.
-func (a *app) target(ctx context.Context, cfg *config.Config) (string, *config.Instance, error) {
+// KEEL_CONVEX_URL and KEEL_CONVEX_SITE_URL, which went with KEEL_URL in the Convex era, are
+// ignored: the dashboard URL is the API's.
+func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 	token := os.Getenv("KEEL_TOKEN")
 	if raw := os.Getenv("KEEL_URL"); raw != "" {
 		webURL, err := normalizeURL(raw)
 		if err != nil {
 			return "", nil, output.Errorf(output.CodeUsage, "KEEL_URL=https://<dashboard-host>", "KEEL_URL: %v", err)
 		}
-		inst := &config.Instance{
-			URL:           webURL,
-			ConvexURL:     os.Getenv("KEEL_CONVEX_URL"),
-			ConvexSiteURL: os.Getenv("KEEL_CONVEX_SITE_URL"),
-			Token:         token,
-		}
-		for _, known := range cfg.Instances {
-			if known.URL == webURL && inst.ConvexURL == "" {
-				inst.ConvexURL, inst.ConvexSiteURL = known.ConvexURL, known.ConvexSiteURL
-			}
-		}
-		if inst.ConvexURL == "" || inst.ConvexSiteURL == "" {
-			if inst.ConvexURL, inst.ConvexSiteURL, err = keel.Discover(ctx, webURL); err != nil {
-				return "", nil, err
-			}
-		}
-		return hostOf(webURL), inst, nil
+		return hostOf(webURL), &config.Instance{URL: webURL, Token: token}, nil
 	}
 
 	name := a.instanceFlag
@@ -102,23 +91,31 @@ func (a *app) target(ctx context.Context, cfg *config.Config) (string, *config.I
 	return name, inst, nil
 }
 
+// connect is a signed-in command's start: the install, a pending login finished, and the
+// session checked (GET /api/me), so a dead one fails as NOT_AUTHENTICATED before anything else.
 func (a *app) connect(ctx context.Context) (*session, error) {
 	cfg, err := a.loadConfig()
 	if err != nil {
 		return nil, err
 	}
-	name, inst, err := a.target(ctx, cfg)
+	name, inst, err := a.target(cfg)
 	if err != nil {
 		return nil, err
 	}
 	if err := a.finishLogin(ctx, cfg, name, inst); err != nil {
 		return nil, err
 	}
-	api, err := keel.Connect(ctx, inst)
+	return dial(ctx, cfg, name, inst)
+}
+
+// dial checks inst's session and returns the session to it.
+func dial(ctx context.Context, cfg *config.Config, name string, inst *config.Instance) (*session, error) {
+	c := client.New(inst.URL, inst.Token)
+	user, org, err := c.Me(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &session{cfg: cfg, name: name, inst: inst, api: api}, nil
+	return &session{cfg: cfg, name: name, inst: inst, api: c, user: user, org: org}, nil
 }
 
 // finishLogin completes the login keel login left pending, once someone approved it in the
@@ -133,7 +130,8 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 		return output.Errorf(output.CodeNotAuthenticated, "keel login "+inst.URL,
 			"The login link expired before anyone approved it")
 	}
-	token, slowDown, err := keel.PollLogin(ctx, inst)
+	c := client.New(inst.URL, "")
+	token, slowDown, err := c.PollLogin(ctx, p.DeviceCode)
 	if slowDown {
 		// An earlier run polled moments ago; wait out the interval for a real answer.
 		select {
@@ -141,7 +139,7 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 			return output.Errorf(output.CodeCancelled, "", "Cancelled")
 		case <-time.After(time.Duration(p.Interval) * time.Second):
 		}
-		token, _, err = keel.PollLogin(ctx, inst)
+		token, _, err = c.PollLogin(ctx, p.DeviceCode)
 	}
 	if err != nil {
 		fresh, ferr := config.Load()
@@ -195,7 +193,7 @@ func (a *app) projectSlug(s *session) string {
 
 // project resolves the target project and its environment (production for now; environments
 // beyond production arrive with a flag).
-func (a *app) project(ctx context.Context, s *session) (*keel.Project, *keel.Environment, error) {
+func (a *app) project(ctx context.Context, s *session) (*client.Project, *client.Environment, error) {
 	projects, err := s.api.Projects(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -211,7 +209,7 @@ func (a *app) project(ctx context.Context, s *session) (*keel.Project, *keel.Env
 	return p, &p.Environments[0], nil
 }
 
-func pickProject(projects []keel.Project, slug string) (*keel.Project, error) {
+func pickProject(projects []client.Project, slug string) (*client.Project, error) {
 	if len(projects) == 0 {
 		return nil, output.Errorf(output.CodeNoProjects, "keel project create <name> --link", "No projects yet")
 	}
@@ -235,7 +233,7 @@ func pickProject(projects []keel.Project, slug string) (*keel.Project, error) {
 }
 
 // service finds a service of the environment by name (or id) and returns the full list with it.
-func (s *session) service(ctx context.Context, environmentID, name string) (*keel.Service, []keel.Service, error) {
+func (s *session) service(ctx context.Context, environmentID, name string) (*client.Service, []client.Service, error) {
 	services, err := s.api.Services(ctx, environmentID)
 	if err != nil {
 		return nil, nil, err
@@ -244,7 +242,7 @@ func (s *session) service(ctx context.Context, environmentID, name string) (*kee
 	return found, services, err
 }
 
-func findService(services []keel.Service, name string) (*keel.Service, error) {
+func findService(services []client.Service, name string) (*client.Service, error) {
 	names := make([]string, len(services))
 	for i := range services {
 		if services[i].Name == name || services[i].ID == name {

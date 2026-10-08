@@ -22,14 +22,14 @@ type Config struct {
 	path string
 }
 
-// Instance is one Keel install.
+// Instance is one Keel install. Files from the Convex era also hold "convexUrl" and
+// "convexSiteUrl": they still load (and are dropped on the next save); dashboard and API now share
+// URL.
 type Instance struct {
-	// Dashboard URL. Also the Origin better-auth trusts for sign-in.
-	URL           string `json:"url"`
-	ConvexURL     string `json:"convexUrl"`
-	ConvexSiteURL string `json:"convexSiteUrl"`
-	Email         string `json:"email,omitempty"`
-	// Better-auth session token. Exchanged for a short-lived Convex JWT on every run.
+	// Dashboard URL, which is also the API's origin.
+	URL   string `json:"url"`
+	Email string `json:"email,omitempty"`
+	// Session token, the bearer of every API call.
 	Token string `json:"token,omitempty"`
 	// A keel login waiting for someone to approve it in the dashboard. The first run that finds
 	// it approved swaps it for Token.

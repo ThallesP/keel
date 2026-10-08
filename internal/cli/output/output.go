@@ -43,9 +43,11 @@ const (
 	CodeConfig               = "CONFIG_ERROR"
 	CodeTimeout              = "TIMEOUT"
 	CodeCancelled            = "CANCELLED"
-	CodeConflict             = "CONFLICT"    // e.g. a domain or public port another service uses
-	CodeUnavailable          = "UNAVAILABLE" // the server can't do it yet (e.g. public IP unknown)
-	CodeForbidden            = "FORBIDDEN"   // signed in, but not allowed (role, origin)
+	CodeConflict             = "CONFLICT"     // e.g. a domain or public port another service uses
+	CodeUnavailable          = "UNAVAILABLE"  // the server can't do it yet (e.g. public IP unknown)
+	CodeForbidden            = "FORBIDDEN"    // signed in, but not allowed (role, origin)
+	CodeNotFound             = "NOT_FOUND"    // something other than a project, service, variable or deployment
+	CodeRateLimited          = "RATE_LIMITED" // too many attempts: retry later (fix says when)
 )
 
 // Exit codes: 0 ok, 1 error, 2 usage, 4 needs login (as gh), 130 interrupted.

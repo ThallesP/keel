@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/config"
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/config"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 type projectRef struct {
@@ -18,7 +18,7 @@ type projectRef struct {
 	Name string `json:"name"`
 }
 
-func refOf(p *keel.Project) projectRef { return projectRef{p.ID, p.Slug, p.Name} }
+func refOf(p *client.Project) projectRef { return projectRef{p.ID, p.Slug, p.Name} }
 
 func (a *app) projectCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -45,7 +45,7 @@ func (a *app) projectCmd() *cobra.Command {
 				slug = projects[0].Slug
 			}
 			type row struct {
-				keel.Project
+				client.Project
 				Current bool `json:"current"`
 			}
 			rows := make([]row, len(projects))
@@ -106,7 +106,7 @@ also links this directory to it, as keel link does.`,
 			// The dashboard has no project switcher yet: this is the way in for a person.
 			canvas := s.inst.URL + "/p/" + p.Slug
 			a.out.Result(struct {
-				Project keel.Project `json:"project"`
+				Project client.Project `json:"project"`
 				// Its canvas in the dashboard.
 				URL string `json:"url"`
 				// The directory now linked to it, with --link.
@@ -231,14 +231,14 @@ func (a *app) statusCmd() *cobra.Command {
 				latest.Log = nil
 			}
 			a.out.Result(struct {
-				Instance         string           `json:"instance"`
-				URL              string           `json:"url"`
-				Project          projectRef       `json:"project"`
-				Environment      keel.Environment `json:"environment"`
-				PendingChanges   keel.Int         `json:"pendingChanges"`
-				Servers          keel.Int         `json:"servers"`
-				Services         []keel.Service   `json:"services"`
-				LatestDeployment *keel.Deployment `json:"latestDeployment"`
+				Instance         string             `json:"instance"`
+				URL              string             `json:"url"`
+				Project          projectRef         `json:"project"`
+				Environment      client.Environment `json:"environment"`
+				PendingChanges   int                `json:"pendingChanges"`
+				Servers          int                `json:"servers"`
+				Services         []client.Service   `json:"services"`
+				LatestDeployment *client.Deployment `json:"latestDeployment"`
 			}{s.name, s.inst.URL, refOf(p), *env, summary.PendingChanges, summary.Servers, services, latest},
 				func(w io.Writer) {
 					t := table(w)
@@ -246,7 +246,7 @@ func (a *app) statusCmd() *cobra.Command {
 					fmt.Fprintf(t, "Instance\t%s  %s\n", s.name, s.inst.URL)
 					fmt.Fprintf(t, "Servers\t%d\n", summary.Servers)
 					if n := summary.PendingChanges; n > 0 {
-						fmt.Fprintf(t, "Staged\t%d %s → keel ship\n", n, plural(int(n), "service", "services"))
+						fmt.Fprintf(t, "Staged\t%d %s → keel ship\n", n, plural(n, "service", "services"))
 					} else {
 						fmt.Fprintf(t, "Staged\tnothing\n")
 					}

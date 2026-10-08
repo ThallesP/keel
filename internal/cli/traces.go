@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
+	"github.com/ThallesP/keel/internal/cli/client"
 )
 
 // The ranges traces:overview takes (convex/timeRange.ts).
@@ -57,7 +57,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 			a.out.Result(struct {
 				Service string `json:"service,omitempty"`
 				Since   string `json:"since"`
-				*keel.Traces
+				*client.Traces
 			}{name, since, traces}, func(w io.Writer) {
 				of := "this project"
 				if name != "" {
@@ -91,7 +91,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 	return cmd
 }
 
-func requestStatus(r keel.TraceSummary) string {
+func requestStatus(r client.TraceSummary) string {
 	switch {
 	case r.HTTPStatus != nil:
 		return strconv.Itoa(int(*r.HTTPStatus))

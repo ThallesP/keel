@@ -421,8 +421,8 @@ type WorkerSinkEntry struct {
 func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSinkEntry, error) {
 	out := []WorkerSinkEntry{}
 	err := a.read(ctx, func(tx Tx) error {
-		any, err := tx.AnyLogSink()
-		if err != nil || !any {
+		hasSink, err := tx.AnyLogSink()
+		if err != nil || !hasSink {
 			return err
 		}
 		projects, err := tx.WorkerSinkProjects()

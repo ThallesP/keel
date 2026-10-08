@@ -36,8 +36,8 @@ const axiomPendingTTL = 10 * time.Minute
 // ConvexError(err.message), which the CLI maps to INVALID_INPUT). Domain errors pass through.
 func obsInvalid(err error) error {
 	var de *domain.Error
-	if errors.As(err, &de) {
-		return err
+	if errors.As(err, &de) || errors.Is(err, context.Canceled) {
+		return err // a gone caller stays a cancellation
 	}
 	return obsErr(domain.CodeInvalidInput, err.Error())
 }

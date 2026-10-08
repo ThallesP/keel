@@ -81,6 +81,27 @@ func TestRecoverDoesNotApplyTwice(t *testing.T) {
 	}
 }
 
+// TestDockerCallsHaveDeadlines: every Docker call a job makes is bounded (apply by its own
+// deadline, scans and removals by a shorter one), so a hung daemon cannot pile up scans.
+func TestDockerCallsHaveDeadlines(t *testing.T) {
+	w := newWorld(t)
+	a := w.addNode("api")
+	w.ship(app.ShipOptions{})
+	w.jobs.advance(time.Second) // apply, then its scan
+	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, true)
+	w.jobs.run() // full sweep + server count
+	w.deleteNode(a.ID)
+	w.app.ScheduleRemoveService(a.ID)
+	w.app.Recover(ctx)
+	w.jobs.advance(time.Second)
+	if len(w.swarm.creates) != 1 || len(w.swarm.removed) != 1 || w.swarm.tunnelSweeps != 1 {
+		t.Fatalf("calls missing: creates %d removed %d tunnels %d", len(w.swarm.creates), len(w.swarm.removed), w.swarm.tunnelSweeps)
+	}
+	if len(w.swarm.undated) != 0 {
+		t.Fatalf("Docker calls without a deadline: %v", w.swarm.undated)
+	}
+}
+
 // TestDeploymentLogKeepsLast500: a deployment keeps its last 500 log lines (MAX_LOG), oldest
 // first.
 func TestDeploymentLogKeepsLast500(t *testing.T) {

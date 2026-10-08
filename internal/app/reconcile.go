@@ -304,6 +304,8 @@ func (a *App) removeLegacyTunnels(ctx context.Context) {
 	if a.noSwarm("remove legacy tunnels") {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	defer cancel()
 	n, err := a.Swarm.RemoveLegacyTunnels(ctx)
 	if err != nil {
 		a.Log.Error("remove legacy tunnels", "err", err)

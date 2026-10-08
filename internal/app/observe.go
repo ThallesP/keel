@@ -228,7 +228,9 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 	if a.noSwarm("observeNode") {
 		return
 	}
-	svc, tasks, err := a.Swarm.ObserveService(ctx, id)
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	svc, tasks, err := a.Swarm.ObserveService(dctx, id)
+	cancel()
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
 		return
@@ -278,7 +280,9 @@ func (a *App) observeAll(ctx context.Context) {
 		return
 	}
 	if len(nodes) > 0 {
-		services, tasks, err := a.Swarm.ObserveServices(ctx)
+		dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+		services, tasks, err := a.Swarm.ObserveServices(dctx)
+		cancel()
 		if err != nil {
 			a.Log.Error("observe (full sweep)", "err", err)
 			return
@@ -317,7 +321,9 @@ func (a *App) observeServers(ctx context.Context) {
 	if a.noSwarm("observeServers") {
 		return
 	}
-	ready, total, err := a.Swarm.Servers(ctx)
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	ready, total, err := a.Swarm.Servers(dctx)
+	cancel()
 	if err != nil {
 		a.Log.Error("observeServers", "err", err)
 		return

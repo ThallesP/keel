@@ -151,6 +151,14 @@ type fakeSwarm struct {
 	agents         []app.AgentSpec
 	tunnelSweeps   int
 	versions       uint64
+	// undated: Docker calls made without a context deadline.
+	undated []string
+}
+
+func (f *fakeSwarm) call(ctx context.Context, name string) {
+	if _, ok := ctx.Deadline(); !ok {
+		f.undated = append(f.undated, name)
+	}
 }
 
 func newFakeSwarm() *fakeSwarm {
@@ -160,11 +168,13 @@ func newFakeSwarm() *fakeSwarm {
 	}
 }
 
-func (f *fakeSwarm) ImageCached(_ context.Context, image string) (bool, error) {
+func (f *fakeSwarm) ImageCached(ctx context.Context, image string) (bool, error) {
+	f.call(ctx, "ImageCached")
 	return f.cached[image], nil
 }
 
-func (f *fakeSwarm) PullImage(_ context.Context, image string) error {
+func (f *fakeSwarm) PullImage(ctx context.Context, image string) error {
+	f.call(ctx, "PullImage")
 	f.pulls = append(f.pulls, image)
 	if f.onPull != nil {
 		f.onPull(image)
@@ -176,14 +186,16 @@ func (f *fakeSwarm) PullImage(_ context.Context, image string) error {
 	return nil
 }
 
-func (f *fakeSwarm) ServiceVersion(_ context.Context, id string) (uint64, bool, error) {
+func (f *fakeSwarm) ServiceVersion(ctx context.Context, id string) (uint64, bool, error) {
+	f.call(ctx, "ServiceVersion")
 	if s := f.services[id]; s != nil {
 		return s.version, true, nil
 	}
 	return 0, false, nil
 }
 
-func (f *fakeSwarm) CreateService(_ context.Context, spec app.ServiceSpec) error {
+func (f *fakeSwarm) CreateService(ctx context.Context, spec app.ServiceSpec) error {
+	f.call(ctx, "CreateService")
 	if f.services[spec.NodeID] != nil {
 		return errors.New("name conflicts with an existing object")
 	}
@@ -196,7 +208,8 @@ func (f *fakeSwarm) CreateService(_ context.Context, spec app.ServiceSpec) error
 	return nil
 }
 
-func (f *fakeSwarm) UpdateService(_ context.Context, version uint64, spec app.ServiceSpec) error {
+func (f *fakeSwarm) UpdateService(ctx context.Context, version uint64, spec app.ServiceSpec) error {
+	f.call(ctx, "UpdateService")
 	if f.updateFailures > 0 {
 		f.updateFailures--
 		return errors.New("Error response from daemon: rpc error: update out of sequence")
@@ -214,7 +227,8 @@ func (f *fakeSwarm) UpdateService(_ context.Context, version uint64, spec app.Se
 	return nil
 }
 
-func (f *fakeSwarm) RemoveService(_ context.Context, id string) error {
+func (f *fakeSwarm) RemoveService(ctx context.Context, id string) error {
+	f.call(ctx, "RemoveService")
 	delete(f.services, id)
 	f.removed = append(f.removed, id)
 	return nil
@@ -239,13 +253,15 @@ func (f *fakeSwarm) view(id string) (*app.SwarmService, []app.SwarmTask) {
 	return &app.SwarmService{Name: "svc-" + id, Labels: labels, UpdateState: f.updateState[id]}, tasks
 }
 
-func (f *fakeSwarm) ObserveService(_ context.Context, id string) (*app.SwarmService, []app.SwarmTask, error) {
+func (f *fakeSwarm) ObserveService(ctx context.Context, id string) (*app.SwarmService, []app.SwarmTask, error) {
+	f.call(ctx, "ObserveService")
 	f.observed = append(f.observed, id)
 	s, tasks := f.view(id)
 	return s, tasks, nil
 }
 
-func (f *fakeSwarm) ObserveServices(context.Context) ([]app.SwarmService, []app.SwarmTask, error) {
+func (f *fakeSwarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []app.SwarmTask, error) {
+	f.call(ctx, "ObserveServices")
 	f.observed = append(f.observed, "*")
 	ids := map[string]bool{}
 	for id := range f.services {
@@ -272,14 +288,18 @@ func (f *fakeSwarm) ObserveServices(context.Context) ([]app.SwarmService, []app.
 	return services, tasks, nil
 }
 
-func (f *fakeSwarm) Servers(context.Context) (int, int, error) { return f.ready, f.total, nil }
+func (f *fakeSwarm) Servers(ctx context.Context) (int, int, error) {
+	f.call(ctx, "Servers")
+	return f.ready, f.total, nil
+}
 
 func (f *fakeSwarm) EnsureAgent(_ context.Context, spec app.AgentSpec) error {
 	f.agents = append(f.agents, spec)
 	return nil
 }
 
-func (f *fakeSwarm) RemoveLegacyTunnels(context.Context) (int, error) {
+func (f *fakeSwarm) RemoveLegacyTunnels(ctx context.Context) (int, error) {
+	f.call(ctx, "RemoveLegacyTunnels")
 	f.tunnelSweeps++
 	return 0, nil
 }

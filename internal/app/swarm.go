@@ -389,9 +389,11 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 	rt.mu.Unlock()
 	a.Jobs.After("remove:"+nodeID, 0, func(ctx context.Context) {
 		if !a.noSwarm("remove service") {
-			if err := a.Swarm.RemoveService(ctx, nodeID); err != nil {
+			dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+			if err := a.Swarm.RemoveService(dctx, nodeID); err != nil {
 				a.Log.Error("remove service", "node", nodeID, "err", err)
 			}
+			cancel()
 		}
 		a.reconcileRunning(ctx, "")
 	})

@@ -62,11 +62,15 @@ var (
 
 // Timings (projects.md §12).
 const (
-	deployTimeout         = 5 * time.Minute // DEPLOY_TIMEOUT_MS
-	observeDebounce       = 500 * time.Millisecond
-	observeSettleDelay    = 2 * time.Second  // SETTLE_MS
-	observeSettleMax      = 2                // SETTLE_MAX
-	applyDeadline         = 15 * time.Minute // a pull can take minutes (postgres:16 took 224 s)
+	deployTimeout      = 5 * time.Minute // DEPLOY_TIMEOUT_MS
+	observeDebounce    = 500 * time.Millisecond
+	observeSettleDelay = 2 * time.Second  // SETTLE_MS
+	observeSettleMax   = 2                // SETTLE_MAX
+	applyDeadline      = 15 * time.Minute // a pull can take minutes (postgres:16 took 224 s)
+	// dockerCallDeadline bounds the Docker calls of scans and removals (Convex capped every action
+	// at 10 min). Without it a hung daemon would pile up one goroutine per event-driven scan, since
+	// a scan frees its node's slot when it starts.
+	dockerCallDeadline    = time.Minute
 	recentDeploymentsScan = 50
 	nodeDeploymentsMax    = 20
 )

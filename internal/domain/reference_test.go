@@ -13,7 +13,7 @@ func TestEncodeURIComponent(t *testing.T) {
 		"A-z_0.9!": "A-z_0.9!",
 		// Expected values are node's encodeURIComponent output.
 		"a b!~*'()$&+,/:;=?@#%é€😀_-.\t": "a%20b!~*'()%24%26%2B%2C%2F%3A%3B%3D%3F%40%23%25%C3%A9%E2%82%AC%F0%9F%98%80_-.%09",
-		"p@ss/w#rd":                      "p%40ss%2Fw%23rd",
+		"p@ss/w#rd":                     "p%40ss%2Fw%23rd",
 	}
 	for in, want := range cases {
 		if got := EncodeURIComponent(in); got != want {

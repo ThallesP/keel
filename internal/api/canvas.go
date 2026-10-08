@@ -225,7 +225,7 @@ type VariableRef struct {
 
 // VariablePart is literal text or a reference: exactly one of text / ref is present.
 type VariablePart struct {
-	Text *string     `json:"text,omitempty"`
+	Text *string      `json:"text,omitempty"`
 	Ref  *VariableRef `json:"ref,omitempty"`
 }
 

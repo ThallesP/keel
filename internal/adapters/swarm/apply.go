@@ -66,6 +66,24 @@ func (s *Swarm) RemoveService(ctx context.Context, nodeID string) error {
 	return s.removeService(ctx, serviceName(nodeID))
 }
 
+// legacyTunnelLabel marks the cloudflared services of the Quick Tunnel era (removed 2026-10-06).
+const legacyTunnelLabel = "keel.ingress"
+
+// RemoveLegacyTunnels: GET /services?filters={"label":["keel.ingress"]}, then DELETE each (404
+// ignored). A no-op once they are gone (proxy-ingress.md §5.8).
+func (s *Swarm) RemoveLegacyTunnels(ctx context.Context) (int, error) {
+	res, err := s.cli.ServiceList(ctx, client.ServiceListOptions{Filters: make(client.Filters).Add("label", legacyTunnelLabel)})
+	if err != nil {
+		return 0, err
+	}
+	for _, svc := range res.Items {
+		if err := s.removeService(ctx, svc.ID); err != nil {
+			return 0, err
+		}
+	}
+	return len(res.Items), nil
+}
+
 func (s *Swarm) removeService(ctx context.Context, nameOrID string) error {
 	_, err := s.cli.ServiceRemove(ctx, nameOrID, client.ServiceRemoveOptions{})
 	if cerrdefs.IsNotFound(err) {

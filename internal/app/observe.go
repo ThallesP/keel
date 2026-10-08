@@ -225,6 +225,9 @@ func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
 // observeNode scans one node, records what Swarm reports, settles its environment's running
 // deployment, and re-checks (at most twice, 2 s apart) while a task is mid-transition.
 func (a *App) observeNode(ctx context.Context, id string, settle int) {
+	if a.noSwarm("observeNode") {
+		return
+	}
 	svc, tasks, err := a.Swarm.ObserveService(ctx, id)
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
@@ -257,6 +260,9 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 // observeAll is the full sweep (swarm.ts observe): every shipped node from one listing of
 // services and tasks, one reconcile, then the server count. Run at start and on agent resync.
 func (a *App) observeAll(ctx context.Context) {
+	if a.noSwarm("observe (full sweep)") {
+		return
+	}
 	var nodes []domain.Node
 	err := a.read(ctx, func(tx Tx) error {
 		all, err := tx.AllNodes()
@@ -308,6 +314,9 @@ func (a *App) observeAll(ctx context.Context) {
 // observeServers counts ready Swarm nodes into the cluster row (environments.setServers). Every
 // organization's summaries refetch only when the count changed.
 func (a *App) observeServers(ctx context.Context) {
+	if a.noSwarm("observeServers") {
+		return
+	}
 	ready, total, err := a.Swarm.Servers(ctx)
 	if err != nil {
 		a.Log.Error("observeServers", "err", err)

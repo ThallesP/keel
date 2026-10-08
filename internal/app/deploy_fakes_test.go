@@ -139,6 +139,7 @@ type fakeSwarm struct {
 	observed       []string
 	ready, total   int
 	agents         []app.AgentSpec
+	tunnelSweeps   int
 	versions       uint64
 }
 
@@ -266,6 +267,11 @@ func (f *fakeSwarm) Servers(context.Context) (int, int, error) { return f.ready,
 func (f *fakeSwarm) EnsureAgent(_ context.Context, spec app.AgentSpec) error {
 	f.agents = append(f.agents, spec)
 	return nil
+}
+
+func (f *fakeSwarm) RemoveLegacyTunnels(context.Context) (int, error) {
+	f.tunnelSweeps++
+	return 0, nil
 }
 
 // ── Publisher ──────────────────────────────────────────────────────────────────────────────

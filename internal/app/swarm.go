@@ -143,15 +143,22 @@ func deployEnvList(env map[string]string) []string {
 	return out
 }
 
-func (a *App) apply(ctx context.Context, req applyRequest) {
-	ctx, cancel := context.WithTimeout(ctx, applyDeadline)
+func (a *App) apply(parent context.Context, req applyRequest) {
+	// Docker calls get a deadline (a pull can take minutes); the outcome is recorded even when
+	// the deadline is what ended them.
+	ctx, cancel := context.WithTimeout(parent, applyDeadline)
 	defer cancel()
+	record := context.WithoutCancel(parent)
 	id := req.nodeID
-	step := func(change stepChange, text string) { a.writeStep(ctx, req.deploymentID, id, change, text) }
+	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
 	fail := func(err error) {
 		text := deployErrorText(err)
-		a.setApplyError(ctx, id, text)
+		a.setApplyError(record, id, text)
 		step(stepFailed, "error: "+text)
+	}
+	if a.noSwarm("apply") {
+		fail(errors.New("no Swarm driver configured"))
+		return
 	}
 
 	in, err := a.loadApplyInput(ctx, id)
@@ -163,7 +170,7 @@ func (a *App) apply(ctx context.Context, req applyRequest) {
 		return // deleted before we ran; the node delete's reconcile fails the step
 	}
 	if in.desired.Revision > req.revision {
-		a.applySuperseded(ctx, req, in.desired.Revision)
+		a.applySuperseded(record, req, in.desired.Revision)
 		return
 	}
 	image := in.desired.Image
@@ -201,7 +208,7 @@ func (a *App) apply(ctx context.Context, req applyRequest) {
 		return
 	}
 	if rev > req.revision {
-		a.applySuperseded(ctx, req, rev)
+		a.applySuperseded(record, req, rev)
 		return
 	}
 
@@ -236,7 +243,7 @@ func (a *App) apply(ctx context.Context, req applyRequest) {
 		text = "service created · " + strconv.Itoa(in.desired.Replicas) + " replica(s)"
 	}
 	moved := false
-	err = a.write(ctx, func(tx Tx, ch *Changes) error {
+	err = a.write(record, func(tx Tx, ch *Changes) error {
 		if req.deploymentID != "" {
 			if err := a.patchStep(tx, ch, req.deploymentID, id, stepApplied, text); err != nil {
 				return err
@@ -281,7 +288,7 @@ func (a *App) apply(ctx context.Context, req applyRequest) {
 	}
 	// Docker events drive observation from here; this scan lands after stepApplied even if the
 	// event burst of the create already went by. It coalesces with any scan they scheduled.
-	a.scheduleObserveFor(ctx, id, observeDebounce, 0)
+	a.scheduleObserveFor(record, id, observeDebounce, 0)
 }
 
 // applySuperseded: the node was shipped again since this apply was scheduled; the apply queued
@@ -350,8 +357,10 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 	delete(rt.observe, nodeID)
 	rt.mu.Unlock()
 	a.Jobs.After("remove:"+nodeID, 0, func(ctx context.Context) {
-		if err := a.Swarm.RemoveService(ctx, nodeID); err != nil {
-			a.Log.Error("remove service", "node", nodeID, "err", err)
+		if !a.noSwarm("remove service") {
+			if err := a.Swarm.RemoveService(ctx, nodeID); err != nil {
+				a.Log.Error("remove service", "node", nodeID, "err", err)
+			}
 		}
 		a.reconcileRunning(ctx, "")
 	})

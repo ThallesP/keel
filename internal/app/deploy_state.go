@@ -64,10 +64,9 @@ var (
 const (
 	deployTimeout         = 5 * time.Minute // DEPLOY_TIMEOUT_MS
 	observeDebounce       = 500 * time.Millisecond
-	observeSettleDelay    = 2 * time.Second // SETTLE_MS
-	observeSettleMax      = 2               // SETTLE_MAX
-	deployLogMax          = 500             // MAX_LOG
-	applyDeadline         = 15 * time.Minute
+	observeSettleDelay    = 2 * time.Second  // SETTLE_MS
+	observeSettleMax      = 2                // SETTLE_MAX
+	applyDeadline         = 15 * time.Minute // a pull can take minutes (postgres:16 took 224 s)
 	recentDeploymentsScan = 50
 	nodeDeploymentsMax    = 20
 )

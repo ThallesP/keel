@@ -65,6 +65,9 @@ type Swarm interface {
 	Servers(ctx context.Context) (ready, total int, err error)
 	// EnsureAgent creates or updates the keel-agent global service (`keel agent` on every node).
 	EnsureAgent(ctx context.Context, spec AgentSpec) error
+	// RemoveLegacyTunnels deletes every service labelled keel.ingress (the Cloudflare Quick
+	// Tunnel era's cloudflared services) and returns how many there were.
+	RemoveLegacyTunnels(ctx context.Context) (int, error)
 }
 
 // ServiceSpec is what apply asks Swarm to run for a node. The adapter turns it into the Swarm

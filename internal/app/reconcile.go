@@ -247,9 +247,11 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 // recoverDeploy is the deploy part of the start-up pass that replaces Convex's durable
 // scheduler (swarm-worker.md §18): a full sweep; every running deployment's timeout re-armed at
 // max(now, startedAt + 5 min); applies that never reached Swarm re-queued (the in-memory jobs
-// died with the previous process); and, when KEEL_AGENT_IMAGE is set, the keel-agent service.
+// died with the previous process); the Quick Tunnel era's cloudflared services removed
+// (migrations.run step 4); and, when KEEL_AGENT_IMAGE is set, the keel-agent service.
 func (a *App) recoverDeploy(ctx context.Context) {
 	a.Jobs.After("observe:all", 0, a.observeAll)
+	a.Jobs.After("swarm:legacy-tunnels", 0, a.removeLegacyTunnels)
 
 	var running []domain.Deployment
 	var redos []applyRequest
@@ -298,9 +300,34 @@ func (a *App) recoverDeploy(ctx context.Context) {
 	}
 }
 
+func (a *App) removeLegacyTunnels(ctx context.Context) {
+	if a.noSwarm("remove legacy tunnels") {
+		return
+	}
+	n, err := a.Swarm.RemoveLegacyTunnels(ctx)
+	if err != nil {
+		a.Log.Error("remove legacy tunnels", "err", err)
+	} else if n > 0 {
+		a.Log.Info("removed legacy tunnel services", "count", n)
+	}
+}
+
+// noSwarm reports (and logs) a serve started without a Swarm driver: jobs that need Docker
+// skip instead of crashing the process.
+func (a *App) noSwarm(what string) bool {
+	if a.Swarm != nil {
+		return false
+	}
+	a.Log.Error(what + ": no Swarm driver configured")
+	return true
+}
+
 // ensureAgent creates or updates the keel-agent global service (replaces
 // scripts/deploy-worker.sh). Agents reach serve at KEEL_AGENT_CONTROL_URL, else KEEL_SITE_URL.
 func (a *App) ensureAgent(ctx context.Context) {
+	if a.noSwarm("keel-agent") {
+		return
+	}
 	url := a.Config.AgentControlURL
 	if url == "" {
 		url = a.Config.SiteURL

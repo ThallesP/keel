@@ -180,6 +180,29 @@ func TestDockerObserve(t *testing.T) {
 	}
 }
 
+func TestDockerRemoveLegacyTunnels(t *testing.T) {
+	s, f := newDockerSwarm(t, map[string]func(http.ResponseWriter, *http.Request){
+		"GET /services":       jsonReply(`[{"ID":"t1","Spec":{"Name":"ingress-a"}},{"ID":"t2","Spec":{"Name":"ingress-b"}}]`),
+		"DELETE /services/t1": func(w http.ResponseWriter, _ *http.Request) {},
+	})
+	n, err := s.RemoveLegacyTunnels(context.Background())
+	if err != nil || n != 2 {
+		t.Fatalf("%d %v", n, err)
+	}
+	var deleted []string
+	for _, c := range f.calls {
+		if c.method == "GET" && !strings.Contains(c.query, "keel.ingress") {
+			t.Fatalf("filter: %s", c.query)
+		}
+		if c.method == "DELETE" {
+			deleted = append(deleted, c.path)
+		}
+	}
+	if strings.Join(deleted, " ") != "/services/t1 /services/t2" { // t2 is already gone: 404 is fine
+		t.Fatalf("deleted: %v", deleted)
+	}
+}
+
 func TestDockerEnsureAgent(t *testing.T) {
 	ctx := context.Background()
 	var mu sync.Mutex

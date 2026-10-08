@@ -66,3 +66,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
+
+// The JS workspace lives in the same tree: never walk its dependencies for ./... patterns.
+ignore node_modules

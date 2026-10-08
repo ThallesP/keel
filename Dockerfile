@@ -7,15 +7,15 @@
 #
 #   docker build -t keel --build-arg VERSION=1.2.3 .
 #
-# Stages: web (bun builds apps/web/dist) -> go (embeds it, -tags embedweb) -> runtime. The web and
-# Go stages run on the build platform and the Go stage cross-compiles (pure Go, CGO off), so a
-# multi-platform build never emulates bun or the Go compiler.
+# Stages: web (bun builds apps/web/dist) -> go (embeds it, -tags embedweb) -> runtime. Plain
+# Dockerfile features only (no cache mounts, no $BUILDPLATFORM), so it builds with BuildKit and
+# with the legacy builder alike; release images are built natively per architecture.
 
 ARG VERSION=dev
 
 # -- 1. Dashboard ------------------------------------------------------------------------------
 # Node is there for the CLIs whose shebang wants it (turbo, vite); bun installs and runs scripts.
-FROM --platform=$BUILDPLATFORM node:24-slim AS prune
+FROM node:24-slim AS prune
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY . .
@@ -23,7 +23,7 @@ COPY . .
 # out/json = package.json files + pruned lockfile, out/full = their sources.
 RUN bun x turbo@2.10.12 prune web --docker
 
-FROM --platform=$BUILDPLATFORM node:24-slim AS web
+FROM node:24-slim AS web
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY --from=prune /app/out/json/ .
@@ -38,20 +38,18 @@ RUN cd apps/web \
     && test -f dist/index.html
 
 # -- 2. Binary ---------------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27 AS go
+FROM golang:1.27 AS go
 WORKDIR /src
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+RUN go mod download
 COPY . .
 COPY --from=web /app/apps/web/dist ./apps/web/dist
 ARG VERSION
-ARG TARGETOS
-ARG TARGETARCH
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags embedweb -trimpath \
+RUN go build -tags embedweb -trimpath \
       -ldflags "-s -w -X github.com/ThallesP/keel/internal/cli.Version=${VERSION}" \
-      -o /out/keel ./cmd/keel
+      -o /out/keel ./cmd/keel \
+    && /out/keel --help > /dev/null
 
 # -- 3. Runtime --------------------------------------------------------------------------------
 FROM alpine:3.22

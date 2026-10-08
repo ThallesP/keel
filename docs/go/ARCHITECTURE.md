@@ -141,11 +141,11 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 | ------------------------------------- | ------------------------------------------------------------------------------ |
 | `KEEL_LISTEN` (`:8080`)               | HTTP listen address (compose publishes it on the tailnet IP)                   |
 | `KEEL_DATA_DIR` (`/data`)             | SQLite file and other state                                                    |
-| `KEEL_SITE_URL`                       | Dashboard URL as users open it (device-login links, Secure cookies on https)   |
+| `KEEL_SITE_URL` (fallback `SITE_URL`) | Dashboard URL as users open it (device-login links, Secure cookies, OTLP/report base) |
 | `KEEL_WORKER_TOKEN`                   | Bearer for agent and proxy routes                                              |
 | `KEEL_PUBLIC_IP`, `KEEL_ACME_CA`, `KEEL_ACME_EMAIL` | Ingress, as before (docs/networking.md)                          |
 | `KEEL_OTLP_URL`                       | OTLP relay URL injected into traced services                                   |
-| `KEEL_PROXY_ADMIN` (`/run/keel-proxy/admin.sock`) | keel-proxy admin socket                                            |
+| `KEEL_PROXY_SOCKET` (`/run/keel-proxy/admin.sock`) | keel-proxy admin socket (the edge stays its own container)        |
 | `DOCKER_HOST`                         | Docker socket (default `unix:///var/run/docker.sock`)                          |
 | `KEEL_AXIOM_AUTH_URL`, `KEEL_AXIOM_API_URL`, `KEEL_ALLOW_LOCAL_SINKS` | Axiom overrides for tests, as before            |
 
@@ -185,3 +185,24 @@ merged. Rules that keep the merge mechanical:
   committed on your branch.
 
 Toolchain: `export PATH=$HOME/.local/go/bin:$HOME/go/bin:$PATH` (Go 1.27 via GOTOOLCHAIN=auto).
+
+## Resolved API decisions
+
+Where the specs disagree (critic addenda W1, C1, C2), this table wins.
+
+| Topic | Decision |
+| --- | --- |
+| Error body | `application/problem+json` with `code` from the CLI vocabulary (`domain.Code*`); `INVALID_INPUT` is 422. Never lowercase codes. The CLI uses `code` as is and computes only `fix`. `CONFLICT` and `UNAVAILABLE` join the CLI's code list (codes are only added). |
+| Null reads | A read that returned `null` in Convex (missing, foreign, malformed id, signed out where the Convex query returned null) returns **200** with a named envelope field set to `null`: `{summary}`, `{deployment}`, `{tracing}`, `{project}`, `{invitation}`. Never 404 for those. Writes on missing things fail with the spec's error. |
+| Session | `GET /api/me` → `{user: {id,email,name} \| null, organization: {id,name,slug,role} \| null}`, 200 even when signed out. It backs the dashboard's `useSession()` and `keel whoami`. Topic `/api/me` (membership changes). |
+| Accounts | `GET /api/auth/sign-up-open` → `{open}`; `POST /api/auth/sign-up {email,password,name,invitationId?}`; `POST /api/auth/sign-in {email,password}`; `POST /api/auth/sign-out`. Sign-up and sign-in set the cookie and also return `{token}` (CI and the CLI use it). `ci.yml` moves to these paths in this PR. |
+| Device login | Paths stay under `/api/auth/device`: `POST .../code {client_id}` → RFC 8628 body; `POST .../token {grant_type, device_code, client_id}` → `{access_token, token_type, expires_in}` or 400 `{error: authorization_pending\|slow_down\|expired_token\|access_denied, error_description}` (RFC shape, not a problem); `GET /api/auth/device?user_code=` (signed in; shows and binds the code); `POST .../approve {userCode}`; `POST .../deny {userCode}`. |
+| Organization | `GET /api/organization/members`; `GET/POST /api/organization/invitations` (`POST {email, role?}` → `{id,email,role,expiresAt}`); `DELETE /api/organization/invitations/{id}`; public `GET /api/invitations/{id}` → `{invitation: {email, organization} \| null}`. |
+| Projects | `GET /api/projects`; `POST /api/projects {name}`; `POST /api/projects/default` → `{slug}`; `GET /api/projects/by-slug/{slug}` → `{project \| null}`. |
+| Canvas | `GET /api/environments/{id}/nodes` → `{nodes: NodeView[]}`; `GET /api/environments/{id}/summary` → `{summary \| null}`; `POST /api/environments/{id}/nodes`; `PATCH /api/nodes/{id}` (rename, desired, config, parent); `PUT /api/nodes/{id}/position {x,y}` (one per node); `POST /api/nodes/{id}/duplicate`, `/start`, `/stop`; `DELETE /api/nodes/{id}`. |
+| Variables | Key in the body, never in the path: `GET /api/nodes/{id}/variables`; `POST /api/nodes/{id}/variables {key, value, secret, previousKey?}`; `POST /api/nodes/{id}/variables/delete {key}` (no-op when missing, as Convex). The key is validated in the handler so a bad key gets `Key: UPPER_SNAKE_CASE only`. |
+| Deployments | `POST /api/environments/{id}/deployments {only?, refresh?}` (Ship / redeploy / retry) → `{id}`; `GET /api/environments/{id}/deployments/latest` → `{deployment \| null}`; `GET /api/deployments/{id}` → `{deployment \| null}`; `GET /api/nodes/{id}/deployments`. JSON uses `id`, never `_id`. |
+| Ingress | `POST /api/nodes/{id}/expose {protocol?, domain?, port?, publicPort?}` → `EndpointView`; `POST /api/nodes/{id}/unexpose {protocol?, domain?, publicPort?}` (no selector = all); `GET /api/control-plane` → `{publicIp: string \| null}` (signed in). |
+| Traces | One route: `GET /api/environments/{id}/traces?range=&search=&nodeId=`. |
+| Env names | `KEEL_SITE_URL` (fallback `SITE_URL`); `BETTER_AUTH_SECRET` is gone (cookies are opaque random tokens, not signed); `KEEL_LISTEN` `:8080`; `KEEL_DATA_DIR` `/data`; `KEEL_PROXY_SOCKET` and `KEEL_PROXY_REPORT_URL` stay (the edge is a separate container, proxy-ingress.md §12.4 option 1); `DOCKER_HOST`. Agent env names are unchanged. |
+| IDs on import | Imported Convex ids are kept verbatim (they appear in `svc-<id>`, labels, sslip hashes, OTel attributes). New rows get `domain.NewID()`. |

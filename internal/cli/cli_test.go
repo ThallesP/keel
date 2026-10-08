@@ -7,16 +7,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 func TestPickProject(t *testing.T) {
-	one := []keel.Project{{ID: "p1", Slug: "api"}}
-	two := append(one, keel.Project{ID: "p2", Slug: "web"})
+	one := []client.Project{{ID: "p1", Slug: "api"}}
+	two := append(one, client.Project{ID: "p2", Slug: "web"})
 	for _, tc := range []struct {
 		name     string
-		projects []keel.Project
+		projects []client.Project
 		slug     string
 		want     string // slug, or error code
 	}{
@@ -62,7 +62,7 @@ func TestUsageBeforeConnecting(t *testing.T) {
 		"tracing enable --json":                                            output.CodeUsage,
 		"tracing prompt --json":                                            output.CodeNotAuthenticated,
 	} {
-		root := (&app{}).root("test")
+		root := (&app{}).root()
 		root.SetArgs(strings.Fields(args))
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
@@ -75,14 +75,19 @@ func TestUsageBeforeConnecting(t *testing.T) {
 
 func TestRunEnv(t *testing.T) {
 	shell := []string{"HOME=/home/me", "LOG_LEVEL=warn"}
-	vars := []keel.Variable{
+	vars := []client.Variable{
 		{Key: "LOG_LEVEL", Resolved: "debug"},
 		{Key: "STRIPE_KEY", Resolved: "sk_test"},
+		// A service imported from a Convex-era install keeps its 32-character id.
 		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7ped1zs8ededv:5432/app"},
+		// A service created since: 20 characters (domain.NewID).
+		{Key: "REDIS_URL", Resolved: "redis://:pw@svc-k3b7q2mx9wd4tz8hn5ra:6379"},
+		// Not an overlay host: too short to be an id.
+		{Key: "UPSTREAM", Resolved: "http://svc-api:8080"},
 		{Key: "OTEL_SERVICE_NAME", Resolved: "api-custom"},
 	}
 	tracing := map[string]string{"OTEL_SERVICE_NAME": "api", "OTEL_TRACES_EXPORTER": "otlp"}
-	env, skipped := runEnv(shell, vars, tracing, "https://keel.test:3211/otlp")
+	env, skipped := runEnv(shell, vars, tracing, "https://keel.test/otlp")
 	got := map[string]string{}
 	for _, kv := range env {
 		k, v, _ := strings.Cut(kv, "=")
@@ -93,14 +98,17 @@ func TestRunEnv(t *testing.T) {
 		"STRIPE_KEY":                  "sk_test",    // the service's variable
 		"OTEL_SERVICE_NAME":           "api-custom", // the service's own wins over tracing, as deployed
 		"OTEL_TRACES_EXPORTER":        "otlp",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "https://keel.test:3211/otlp",
+		"OTEL_EXPORTER_OTLP_ENDPOINT": "https://keel.test/otlp",
+		"UPSTREAM":                    "http://svc-api:8080",
 	} {
 		if got[k] != want {
 			t.Errorf("%s = %q, want %q", k, got[k], want)
 		}
 	}
-	if _, ok := got["DATABASE_URL"]; ok || len(skipped) != 1 || skipped[0] != "DATABASE_URL" {
-		t.Errorf("cluster-only DATABASE_URL: env has it %v, skipped %v", ok, skipped)
+	_, hasDB := got["DATABASE_URL"]
+	_, hasRedis := got["REDIS_URL"]
+	if hasDB || hasRedis || !slices.Equal(skipped, []string{"DATABASE_URL", "REDIS_URL"}) {
+		t.Errorf("cluster-only DATABASE_URL, REDIS_URL: env has them %v %v, skipped %v", hasDB, hasRedis, skipped)
 	}
 	if env, _ := runEnv(shell, nil, nil, "x"); len(env) != len(shell) {
 		t.Errorf("no tracing: %v", env)
@@ -119,7 +127,7 @@ func TestRunEnv(t *testing.T) {
 }
 
 func TestFindService(t *testing.T) {
-	services := []keel.Service{{ID: "n1", Name: "api"}, {ID: "n2", Name: "postgres"}}
+	services := []client.Service{{ID: "n1", Name: "api"}, {ID: "n2", Name: "postgres"}}
 	if s, err := findService(services, "postgres"); err != nil || s.ID != "n2" {
 		t.Errorf("by name: %v, %v", s, err)
 	}
@@ -148,12 +156,12 @@ func TestNormalizeURL(t *testing.T) {
 }
 
 func TestLineSetSkipsWhatWasPrinted(t *testing.T) {
-	at := func(sec int, text string) keel.LogLine {
-		return keel.LogLine{Time: keel.Time{Time: time.Unix(int64(sec), 0)}, Text: text}
+	at := func(sec int, text string) client.LogLine {
+		return client.LogLine{Time: client.Time{Time: time.Unix(int64(sec), 0)}, Text: text}
 	}
 	s := newLineSet()
 	var printed []string
-	for _, poll := range [][]keel.LogLine{
+	for _, poll := range [][]client.LogLine{
 		{at(1, "a"), at(2, "b")},
 		{at(1, "a"), at(2, "b"), at(2, "c"), at(3, "d")}, // overlapping tail, a new line at 2s
 		{at(3, "d"), at(3, "d")},                         // nothing new

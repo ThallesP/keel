@@ -22,9 +22,9 @@ Differentiator: UI/UX and deploy DX.
 
 ## CLI
 
-- The CLI is the same binary (`internal/cli`), for agents first (Railway CLI is the benchmark). Thin client over Keel's HTTP API (`/api`, session token as bearer); it finds an install through the dashboard URL (`/api/meta`), so keep that response's shape.
+- The CLI is the same binary (`internal/cli`: one file per noun; `internal/cli/client` is its HTTP client), for agents first (Railway CLI is the benchmark). Thin client over Keel's HTTP API (`/api`, `openapi.json`, session token as bearer, device login for `keel login`); it finds an install through the dashboard URL (`/api/meta`), so keep that response's shape.
 - Its output contract (JSON envelope like `install.sh`, error codes, exit codes) is in `docs/cli.md`. Fields and codes are only ever added.
-- Error codes come from the server: every API error is `application/problem+json` with a `code` from the CLI's vocabulary (`domain.Code*`); the CLI uses it as is and only computes the `fix`. Messages stay the Convex-era strings verbatim.
+- Error codes come from the server: every API error is `application/problem+json` with a `code` from the CLI's vocabulary (`domain.Code*`); the CLI uses it as is and only computes the `fix` (`withFix` in `internal/cli/client/client.go`). A new domain code is a new CLI code: add it to `internal/cli/output` and `docs/cli.md`. Messages stay the Convex-era strings verbatim.
 
 ## Design docs
 

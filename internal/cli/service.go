@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 func (a *app) serviceCmd() *cobra.Command {
@@ -35,7 +35,7 @@ func (a *app) serviceCmd() *cobra.Command {
 				return err
 			}
 			a.out.Result(struct {
-				Services []keel.Service `json:"services"`
+				Services []client.Service `json:"services"`
 			}{services}, func(w io.Writer) { servicesTable(w, services) })
 			return nil
 		},
@@ -81,8 +81,8 @@ a-z, 0-9 and -, up to 40, unique in the project; a taken one fails with NAME_TAK
 				return err
 			}
 			a.out.Result(struct {
-				Project projectRef   `json:"project"`
-				Service keel.Service `json:"service"`
+				Project projectRef     `json:"project"`
+				Service client.Service `json:"service"`
 			}{refOf(p), *svc}, func(w io.Writer) {
 				fmt.Fprintf(w, "Staged %s (%s) in %s\n", svc.Name, svc.Image, p.Slug)
 				fmt.Fprintf(w, "Next: keel var set %s KEY=VALUE, then keel ship %s\n", svc.Name, svc.Name)

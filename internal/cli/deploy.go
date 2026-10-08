@@ -10,12 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
-	"github.com/ThallesP/keel/apps/cli/internal/output"
+	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// Deployments settle within the server's 5-minute timeout (deployments.ts); this only guards a
-// control plane that stopped answering.
+// Deployments settle within the server's 5-minute timeout (one still running then fails); this
+// only guards a control plane that stopped answering.
 const defaultWait = 10 * time.Minute
 
 type waitFlags struct {
@@ -105,7 +105,7 @@ func (a *app) deploy(cmd *cobra.Command, names []string, refresh bool, wait wait
 
 // await polls a deployment until it settles, streaming its log to stderr. Success prints the
 // deployment; failure is a DEPLOYMENT_FAILED error that carries it.
-func (a *app) await(ctx context.Context, s *session, id string, services []keel.Service, timeout time.Duration) error {
+func (a *app) await(ctx context.Context, s *session, id string, services []client.Service, timeout time.Duration) error {
 	names := map[string]string{}
 	for _, svc := range services {
 		names[svc.ID] = svc.Name
@@ -184,9 +184,9 @@ func stoppedWaiting(ctx context.Context, id string) error {
 	return output.Errorf(output.CodeCancelled, fix, "Stopped waiting; the deployment keeps going on the server")
 }
 
-func (a *app) printDeployment(d *keel.Deployment, human func(io.Writer)) {
+func (a *app) printDeployment(d *client.Deployment, human func(io.Writer)) {
 	a.out.Result(struct {
-		Deployment *keel.Deployment `json:"deployment"`
+		Deployment *client.Deployment `json:"deployment"`
 	}{d}, human)
 }
 
@@ -228,8 +228,8 @@ func (a *app) deploymentListCmd() *cobra.Command {
 				ds[i].Log = nil
 			}
 			a.out.Result(struct {
-				Service     string            `json:"service"`
-				Deployments []keel.Deployment `json:"deployments"`
+				Service     string              `json:"service"`
+				Deployments []client.Deployment `json:"deployments"`
 			}{svc.Name, ds}, func(w io.Writer) {
 				if len(ds) == 0 {
 					fmt.Fprintf(w, "%s was never deployed\n", svc.Name)
@@ -260,8 +260,8 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var d *keel.Deployment
-			var services []keel.Service
+			var d *client.Deployment
+			var services []client.Service
 			if len(args) == 1 {
 				d, err = s.api.Deployment(ctx, args[0])
 			} else {

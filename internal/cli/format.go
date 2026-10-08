@@ -6,14 +6,14 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/ThallesP/keel/apps/cli/internal/keel"
+	"github.com/ThallesP/keel/internal/cli/client"
 )
 
 func table(w io.Writer) *tabwriter.Writer {
 	return tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 }
 
-func servicesTable(w io.Writer, services []keel.Service) {
+func servicesTable(w io.Writer, services []client.Service) {
 	if len(services) == 0 {
 		fmt.Fprintln(w, "No services yet")
 		return
@@ -46,7 +46,7 @@ func ago(t time.Time) string {
 	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 }
 
-func duration(d *keel.Deployment) string {
+func duration(d *client.Deployment) string {
 	if d.FinishedAt == nil {
 		return "-"
 	}

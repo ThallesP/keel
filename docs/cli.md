@@ -1,14 +1,15 @@
 # keel CLI
 
-Keel from the terminal, for agents first and people too. A thin client over the same public Convex functions the dashboard calls; no API of its own.
+Keel from the terminal, for agents first and people too. A thin client over the same HTTP API the dashboard calls (`/api`, described by `openapi.json`); no API of its own.
 
 ## Build
 
 ```bash
-cd apps/cli && go build -o bin/keel ./cmd/keel
+go build -o bin/keel ./cmd/keel                        # the whole binary: CLI, serve, proxy (Linux only), agent
+go build -tags keel_noproxy -o bin/keel ./cmd/keel     # leaves the embedded Caddy edge out (laptops, agents)
 ```
 
-Go 1.27. Its own module, outside bun and turbo; CI runs `gofmt`, `go vet` and `go test` (`ci.yml`, job `cli`), and the install job logs in with it against a fresh install, approving the link with curl.
+Go 1.27. The CLI verbs are the `keel` binary that also runs the control plane (`keel serve`), its edge (`keel proxy`) and the node agent (`keel agent`); one module at the repo root. CI runs `gofmt`, `go vet` and `go test` (`ci.yml`, job `go`), and the install job logs in with it against a fresh install, approving the link with curl.
 
 ## Use
 
@@ -29,7 +30,7 @@ keel tracing enable api && keel redeploy api    # deployed api gets the OTEL_* v
 
 | Command                                                         | What it does                                                                                                                                                                                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login [dashboard-url] [--wait\|--no-wait]`                     | Sign in by approving a link in the dashboard; reads the Convex URLs from its `/config.js`                                                                                                                                                                                                                                                                                                                     |
+| `login [dashboard-url] [--wait\|--no-wait]`                     | Sign in by approving a link in the dashboard; checks the URL is a Keel install at `/api/meta`                                                                                                                                                                                                                                                                                                                 |
 | `logout`                                                        | Revoke the session and forget the install                                                                                                                                                                                                                                                                                                                                                                     |
 | `whoami`                                                        | Account, organization, install                                                                                                                                                                                                                                                                                                                                                                                |
 | `token`                                                         | Print the session token, for `KEEL_TOKEN`                                                                                                                                                                                                                                                                                                                                                                     |
@@ -62,22 +63,22 @@ What agents rely on. Fields and codes are only ever added.
 
 - **stdout is results only.** Text or a table, or with `--json` / `KEEL_JSON=1` exactly one JSON object: `{"ok":true,...}`. `logs --follow --json` prints one object per line instead, and `run` leaves stdout to the command it runs. Progress and warnings go to stderr.
 - **Errors** are `{"ok":false,"code":"…","error":"…","fix":"…"}` on stdout in JSON mode, and `error:` / `fix:` lines on stderr always, the same shape as `install.sh`. `fix` is the next command to run. A failed deployment adds `"deployment"`.
-- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `NAME_TAKEN` (project slug or service name in use), `TRACES_OFF` (no Axiom sink, or one from before traces), `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`.
+- **Codes:** `USAGE`, `NOT_AUTHENTICATED`, `AUTHORIZATION_PENDING`, `NO_ORGANIZATION`, `NO_PROJECTS`, `PROJECT_REQUIRED`, `PROJECT_NOT_FOUND`, `SERVICE_NOT_FOUND`, `VARIABLE_NOT_FOUND`, `DEPLOYMENT_NOT_FOUND`, `DEPLOYMENT_RUNNING`, `DEPLOYMENT_FAILED`, `NOTHING_TO_SHIP`, `NAME_TAKEN` (project slug or service name in use), `TRACES_OFF` (no Axiom sink, or one from before traces), `INVALID_INPUT`, `DISCOVERY_FAILED`, `NETWORK_ERROR`, `SERVER_ERROR`, `CONFIG_ERROR`, `TIMEOUT`, `CANCELLED`, `CONFLICT` (a domain or public port another service uses), `UNAVAILABLE` (the install can't do it yet), `FORBIDDEN` (signed in, not allowed), `NOT_FOUND` (anything else that isn't there), `RATE_LIMITED` (too many attempts; `fix` says when to retry). Errors from the server carry their code as is: the API's codes are this vocabulary, and the CLI only adds `fix`.
 - **Exit codes:** 0 ok, 1 error, 2 usage, 4 not logged in (or the login awaits approval), 130 interrupted (`logs -f` exits 0 on Ctrl-C). `run` exits with its command's code (128 + signal when it was killed).
 - **No prompts without a terminal.** Missing input is a `USAGE` error naming the flag.
 - **Times** are RFC 3339 in UTC.
 
 ## Auth and context
 
-`keel login` uses better-auth's device authorization (RFC 8628, the `deviceAuthorization` plugin in `convex/auth.ts`). It prints a link to the dashboard's `/device` page with a code (`ABCD-EFGH`, valid 30 minutes). Whoever opens it, signed in, sees the code and approves or denies; approving gives the CLI a session as their account. No password ever reaches the CLI.
+`keel login <dashboard-url>` first checks the URL is a Keel install (`GET /api/meta`; an install from before the Go control plane gets `DISCOVERY_FAILED` with the upgrade command). Then it uses device authorization (RFC 8628: `POST /api/auth/device/code`, then `POST /api/auth/device/token` until approved). It prints a link to the dashboard's `/device` page with a code (`ABCD-EFGH`, valid 30 minutes). Whoever opens it, signed in, sees the code and approves or denies; approving gives the CLI a session as their account. No password ever reaches the CLI.
 
 - **With a terminal** it waits for the approval (Ctrl-C stops waiting; the link stays valid).
 - **Without one, or with `--json` / `--no-wait`**, it returns at once: `{"ok":true,"status":"pending","approvalUrl":"…","code":"ABCD-EFGH","expiresAt":"…","next":"…"}`. The agent sends `approvalUrl` to its human and carries on. The first command after the approval finishes the login and runs; before it, commands fail with `AUTHORIZATION_PENDING` (exit 4) and the link in `fix`. `keel login --wait` blocks until approved instead.
 - **Re-running** `keel login` while the link is valid prints the same link; when already logged in it prints `"status":"loggedIn"` and changes nothing. `keel logout` first to switch accounts.
 
-The session token is saved in `~/.config/keel/config.json` (0600; `KEEL_CONFIG_DIR` moves it), along with a pending login's device code. Each run exchanges the token for a 15-minute Convex JWT at `/api/auth/convex/token`. Sessions last 7 days and renew while used.
+The session token comes straight from the device token poll, handed out once, and is saved in `~/.config/keel/config.json` (0600; `KEEL_CONFIG_DIR` moves it), along with a pending login's device code. Every API call sends it as `Authorization: Bearer <token>`; each signed-in command first checks it with `GET /api/me` (a session the install no longer knows is `NOT_AUTHENTICATED`, "Session expired or signed out"; a URL that doesn't answer as Keel's API, such as `KEEL_URL` pointing at an older install, is `DISCOVERY_FAILED` as in `keel login`). `keel logout` revokes it with `POST /api/auth/sign-out`. Sessions last 7 days and renew while used. Config files from the Convex-era CLI still load (their Convex URLs are ignored), and sessions imported with the install (`keel import-convex`) keep working.
 
-Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). A dev server's `/config.js` is empty: pass `--convex-url` / `--convex-site-url` to `login`, or set `KEEL_CONVEX_URL` / `KEEL_CONVEX_SITE_URL`.
+Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). Dashboard and API share one origin, so the dashboard URL is all the CLI needs, a dev one too (Vite proxies `/api` to `keel serve`). `--convex-url` / `--convex-site-url` and `KEEL_CONVEX_URL` / `KEEL_CONVEX_SITE_URL` are still accepted and ignored.
 
 - **Install:** `KEEL_URL`, else `--instance` / `KEEL_INSTANCE`, else the directory's link, else the last login.
 - **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`; none at all is `NO_PROJECTS`. On a fresh install the first account founds the organization with its first `keel project create`, if it never opened the dashboard's home page.
@@ -87,20 +88,25 @@ Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel t
 ## Layout
 
 ```
-cmd/keel/          main: signals, version
-internal/output/   the contract above: printer, error codes, exit codes
-internal/config/   config.json: installs and directory links
-internal/convex/   Convex HTTP API client (/api/query|mutation|action)
-internal/keel/     discovery, sign-in, typed calls; maps Convex errors to codes
-internal/cli/      one file per noun; commands resolve the target, call, print
+cmd/keel/                 main: signals, then cli.Execute
+internal/cli/             root.go: global flags, error funnel, exit codes, the server subcommands
+                          (serve, openapi; proxy, agent, import-convex through Extra);
+                          one file per noun; commands resolve the target, call, print
+internal/cli/output/      the contract above: printer, error codes, exit codes
+internal/cli/config/      config.json: installs and directory links
+internal/cli/client/      the HTTP API client: discovery (/api/meta), device login, typed calls
+                          over internal/api's wire types; the CLI's printed types; problem
+                          codes passed through, fixes added (withFix)
 ```
 
-A new command: add the Convex call to `internal/keel/api.go` (its types are the JSON the CLI prints), then a cobra command in `internal/cli` that ends in `a.out.Result(v, human)`. Server errors the CLI should branch on get a code in `translate`.
+The version is `cli.Version` (`-ldflags "-X github.com/ThallesP/keel/internal/cli.Version=1.2.3"`); requests carry `User-Agent: keel-cli/<version>`.
+
+A new command: add the API call to `internal/cli/client/api.go` (decode into `internal/api` types; return the CLI's types from `types.go`, whose JSON is what the CLI prints), then a cobra command in `internal/cli` that ends in `a.out.Result(v, human)`. A new server error code needs nothing here unless it deserves a `fix` (`withFix` in `client/client.go`); a code agents branch on is listed above.
 
 ## Next
 
-- Scoped API tokens for CI (better-auth `apiKey`), instead of a full session in `KEEL_TOKEN`.
-- `stop` / `start`, `expose` (https domain or tcp/udp port through keel-proxy; `nodes.expose` takes the same options as the dashboard); `database create` / `cache create` with `--engine`.
+- Scoped API tokens for CI, instead of a full session in `KEEL_TOKEN`.
+- `stop` / `start`, `expose` (https domain or tcp/udp port through keel-proxy; `POST /api/nodes/{id}/expose` takes the same options as the dashboard); `database create` / `cache create` with `--engine`.
 - `var set --stdin` so secrets stay out of argv.
 - `node list`, `--environment` once there is more than production.
 - `keel mcp` and an `llms.txt` generated from the command tree.

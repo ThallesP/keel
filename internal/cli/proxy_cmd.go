@@ -1,3 +1,5 @@
+//go:build !keel_noproxy
+
 package cli
 
 import (
@@ -11,6 +13,9 @@ import (
 
 // `keel proxy`: the public edge (embedded Caddy + caddy-l4 + Keel's modules), in its own
 // container. Owner: the ingress area (docs/go/spec/proxy-ingress.md §7, §12.4 option 1).
+//
+// Caddy roughly quadruples the binary; a CLI-only build (laptops, agents) can leave the edge out
+// with `-tags keel_noproxy`.
 func init() {
 	Extra = append(Extra, proxyCommand)
 }

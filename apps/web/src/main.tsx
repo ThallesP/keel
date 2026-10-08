@@ -1,29 +1,33 @@
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { ConvexReactClient } from "convex/react";
 import ReactDOM from "react-dom/client";
 
-import { authClient } from "@/lib/auth-client";
-import { config } from "@/lib/config";
+import { setupApiClient } from "@/lib/api";
+import { createQueryClient } from "@/lib/query";
+import { RealtimeProvider } from "@/lib/realtime";
 
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
-const convex = new ConvexReactClient(config.convexUrl);
+
+// Dashboard, API and WebSocket share this origin (keel serve; Vite proxies them in dev), so there
+// is nothing to configure at runtime: the client calls relative `/api/...` with the session cookie.
+const queryClient = createQueryClient();
+setupApiClient(queryClient);
 
 const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   scrollRestoration: true,
   defaultPendingComponent: () => <Loader />,
-  context: {},
+  context: { queryClient },
   Wrap: function WrapComponent({ children }: { children: React.ReactNode }) {
     return (
-      <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-        {children}
-      </ConvexBetterAuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <RealtimeProvider>{children}</RealtimeProvider>
+      </QueryClientProvider>
     );
   },
 });

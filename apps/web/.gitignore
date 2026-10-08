@@ -61,3 +61,4 @@ dev-dist
 
 !.env.schema
 /src/env.ts
+/src/api/gen/

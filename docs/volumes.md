@@ -1,6 +1,6 @@
 # Volumes — persistent data on Swarm
 
-> How Keel keeps user data alive when nodes die, and how it moves data between nodes. Decided 2026-09-13. Depends on [`workers.md`](./workers.md) (Swarm as reconciler, Convex as control plane). Read this before touching anything that mounts a volume, schedules a backup, or moves a service between servers.
+> How Keel keeps user data alive when nodes die, and how it moves data between nodes. Decided 2026-09-13. Depends on [`workers.md`](./workers.md) (Swarm as reconciler, `keel serve` as control plane; Convex when this was decided). Read this before touching anything that mounts a volume, schedules a backup, or moves a service between servers.
 
 ## Decision
 
@@ -61,12 +61,12 @@ Never restic a live Postgres data dir. Torn writes. If a `generic` volume looks 
 
 - **Another node in the cluster.** `restic/rest-server` as a Swarm service pinned to node B, storage in a local volume on B, reachable over the `keel` overlay. Zero external accounts. Default for the multi-node homelab user. Uses the mesh we already have.
 - **S3-compatible.** B2, R2, Hetzner Object Storage, a NAS running MinIO or Garage. Default for the single-node user.
-- restic repo password is generated per volume, stored in Convex, shown once. Lose it, lose the backups. Say so in the UI.
+- restic repo password is generated per volume, stored in the control plane's SQLite database, shown once. Lose it, lose the backups. Say so in the UI.
 
 ### Mechanics
 
-- Backup and restore are Swarm jobs: `Mode: { ReplicatedJob: { MaxConcurrent: 1, TotalCompletions: 1 } }`, placement pinned to the node, volume mounted `ro` for backup, `rw` for restore, image `keel/dataplane`. Runs, exits 0, task state goes `complete`. `observe` sees it. No always-on sidecar. Fits "Convex is the loop, Swarm is the hands".
-- Convex cron drives the schedule. Each run inserts a `backups` row and schedules the job.
+- Backup and restore are Swarm jobs: `Mode: { ReplicatedJob: { MaxConcurrent: 1, TotalCompletions: 1 } }`, placement pinned to the node, volume mounted `ro` for backup, `rw` for restore, image `keel/dataplane`. Runs, exits 0, task state goes `complete`. `observe` sees it. No always-on sidecar. Fits "`keel serve` is the loop, Swarm is the hands".
+- A `Jobs.Every` job in `keel serve` drives the schedule (in memory, armed by the start-up `Recover` pass like the keel-proxy resync). Each run inserts a `backups` row and schedules the job.
 - Restore-to-other-node: create the volume on B → run the restore job pinned to B → patch `volumes.nodeId` → `apply` the service with the new pin. The old volume on A, if A ever returns, is an orphan. See cleanup below.
 - Usage: the manager cannot inspect worker volumes. The backup job reports `du -sb`. Canvas shows `3.2 GB used · as of last backup`. Good enough for v1.
 - "Test restore" button (later): restore the latest snapshot onto a scratch volume on another node, run the service healthcheck against it, report. Backups are only real if restored. Cheap DX win nobody in this class offers.
@@ -89,7 +89,9 @@ Move a volume, and the service pinned to it, from node A to node B.
 
 Downtime is the final pass plus container boot. The warm loop makes the final pass tiny. Skip the loop for small volumes; one warm pass is enough under a few GB.
 
-### Steps as a Convex workflow
+### Steps as a control-plane workflow
+
+There is no durable workflow engine in `keel serve` yet: jobs are in memory and die with the process ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Use cases"). So each step must be recorded in the `migrations` row before it runs, and the start-up `Recover` pass must resume or abort a migration from its `step`. `awaitEvent` below means: wait until observe (`internal/app/observe.go`) records that state (it was the Convex workflow primitive).
 
 ```
 migrateVolume(volumeId, toNodeId)
@@ -128,9 +130,9 @@ Abort at any step before 7: replicas back to 1 on A, delete the partial volume o
 
 ### Swarm gotchas
 
-- `observe` currently filters on the `keel.service` label. Jobs carry `keel.job` instead, with a separate branch that tracks `Status.State === "complete" | "failed"` and writes `jobs.observed`.
+- `observe` currently filters on the `keel.service` label (`ObserveService` / `ObserveServices` in `internal/adapters/swarm/observe.go`). Jobs carry `keel.job` instead, with a separate branch that tracks `Status.State === "complete" | "failed"` and writes `jobs.observed`.
 - Jobs get `RestartPolicy.Condition: "on-failure", MaxAttempts: 3`. rsync is idempotent, a retry resumes. `Delay` 5s.
-- The manager cannot `docker volume rm` on a worker. Cleanup runs a job on the node that bind-mounts `/var/run/docker.sock` and removes the volume by name. Same trick gives a real `du` for `observed.usedBytes`. Every such job is labeled and uses our image. Never expose this from a public action, same rule as `workers.md`.
+- The manager cannot `docker volume rm` on a worker. Cleanup runs a job on the node that bind-mounts `/var/run/docker.sock` and removes the volume by name. Same trick gives a real `du` for `observed.usedBytes`. Every such job is labeled and uses our image. Never expose this from an API route, same rule as `workers.md`.
 - Job tasks join the overlay like any other task. The src service needs `EndpointSpec.Mode: "dnsrr"` so the job resolves `mig-<id>-src` to the task IP, not a VIP. VIP works too, dnsrr is one less moving part.
 - `TotalCompletions: 1` and `MaxConcurrent: 1`. Two rsyncs into the same target is a race.
 
@@ -139,6 +141,8 @@ Abort at any step before 7: replicas back to 1 on A, delete the partial volume o
 A writer must stop for a consistent final pass. True zero needs a Postgres streaming replica promoted on B, or a Fly-style lazy block clone. Both are later, both are kind-specific. 30s is Railway's bar. Match it. Coolify and Dokploy have nothing.
 
 ## Schema
+
+Written in the Convex validators it was designed in. In Go it lands as a new migration in `internal/adapters/sqlite/migrations/`, nested objects as columns or child tables ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Data").
 
 ```ts
 volumes: defineTable({
@@ -200,7 +204,7 @@ orphans: defineTable({                          // volumes left behind on a node
   volumeName: v.string(),
   volumeId: v.id("volumes"),
   reason: v.union(v.literal("migrated"), v.literal("restored")),
-  wipeAfter: v.number(),                       // default now + 7d. Cron wipes when past and node is ready.
+  wipeAfter: v.number(),                       // default now + 7d. A Jobs.Every job wipes when past and node is ready.
 }).index("by_node", ["nodeId"]),
 
 jobs: defineTable({                             // one-shot Swarm jobs. Backup, restore, migrate passes, cleanup.
@@ -216,30 +220,33 @@ jobs: defineTable({                             // one-shot Swarm jobs. Backup, 
 }).index("by_ref", ["refId"]),
 ```
 
-`services.desired` gains:
+`domain.Desired` (`internal/domain/node.go`, the `desired_*` columns of `nodes`) gains:
 
 ```ts
 volumes: v.array(v.object({ volumeId: v.id("volumes"), mountPath: v.string() })),
 stopGraceSeconds: v.optional(v.number()),
 ```
 
-`apply` derives the placement constraint from the first volume's `nodeId` and forces `replicas ≤ 1` and `Order: "stop-first"` when `volumes` is non-empty. It does not trust `desired.pinNodeId` for stateful services.
+`apply` (`internal/app/swarm.go`, through `app.ServiceSpec`) derives the placement constraint from the first volume's `nodeId` and forces `replicas ≤ 1` and `Order: "stop-first"` when `volumes` is non-empty. It does not trust `desired.pinNodeId` for stateful services.
 
-Mount spec in `toSpec`:
+Mount spec in `toSpec` (`internal/adapters/swarm/service.go`):
 
-```ts
-Mounts: s.volumes.map((m) => ({
-  Type: "volume",
-  Source: `vol-${m.volumeId}`,
-  Target: m.mountPath,
-  VolumeOptions: { Labels: { "keel.volume": m.volumeId } },
-})),
-StopGracePeriod: (s.stopGraceSeconds ?? 10) * 1_000_000_000,
+```go
+// in swarm.ContainerSpec
+for _, m := range s.Volumes {
+	mounts = append(mounts, mount.Mount{
+		Type:          mount.TypeVolume,
+		Source:        "vol-" + m.VolumeID,
+		Target:        m.MountPath,
+		VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{"keel.volume": m.VolumeID}},
+	})
+}
+grace := time.Duration(cmp.Or(s.StopGraceSeconds, 10)) * time.Second // StopGracePeriod: &grace
 ```
 
 ## The dataplane image
 
-One image, `keel/dataplane`, used by every job: rsync, restic, `pg_dump`/`pg_restore`, `mysqldump`, `mongodump`, coreutils. Alpine base. Entrypoint takes a subcommand: `backup`, `restore`, `rsync-src`, `rsync-pull`, `rsync-verify`, `du`, `volume-rm`. Arguments come from env, secrets from `/run/secrets`. Never from a public action.
+One image, `keel/dataplane`, used by every job: rsync, restic, `pg_dump`/`pg_restore`, `mysqldump`, `mongodump`, coreutils. Alpine base. Entrypoint takes a subcommand: `backup`, `restore`, `rsync-src`, `rsync-pull`, `rsync-verify`, `du`, `volume-rm`. Arguments come from env, secrets from `/run/secrets`. Never from an API route.
 
 Migration and disaster recovery share code: restore-to-other-node is the migration flow with restic in place of rsync at step 5, and no source service.
 

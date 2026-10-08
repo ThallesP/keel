@@ -23,6 +23,9 @@ func (a *App) FollowPortForTest(ctx context.Context, nodeID string, port int) (b
 	return moved, err
 }
 
+// RecoverIngressForTest runs only the ingress part of Recover.
+func (a *App) RecoverIngressForTest(ctx context.Context) { a.recoverIngress(ctx) }
+
 // HoldProxySyncForTest takes the sync lock as a running sync would; call the result to release.
 func (a *App) HoldProxySyncForTest() func() {
 	st := a.ingress()

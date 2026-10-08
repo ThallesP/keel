@@ -1,6 +1,6 @@
 // Package api holds the wire types of Keel's HTTP API: request and response bodies and the error
 // shape. The server (transport/http) and the CLI (cli) both use them, so a field means the same
-// thing on both ends. Stdlib only. JSON names are camelCase; times are unix milliseconds.
+// thing on both ends. Imports only stdlib and domain (for small view constructors). JSON names are camelCase; times are unix milliseconds.
 package api
 
 // Problem is every error response: RFC 9457 problem details plus `code`, the stable code callers

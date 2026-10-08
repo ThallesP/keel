@@ -72,6 +72,12 @@ func (a *App) ScheduleObserve(nodeID string) {
 	panic("ScheduleObserve: implemented by the deploy area")
 }
 
+// ScheduleRemoveService removes the node's Swarm service (svc-<id>) soon; a missing service is
+// fine. Called by: canvas (node delete). Owner: deploy.
+func (a *App) ScheduleRemoveService(nodeID string) {
+	panic("ScheduleRemoveService: implemented by the deploy area")
+}
+
 // Recover is the start-up pass that replaces durable scheduling: observe everything, re-arm
 // deployment timeouts, proxy sync, data migrations. serve calls it once. Each area adds its part
 // in its own file as a function named recover<Area>(ctx) and calls it from here.

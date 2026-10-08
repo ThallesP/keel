@@ -39,6 +39,10 @@ func serverCommands() []*cobra.Command {
 	return []*cobra.Command{serveCmd, openapiCmd}
 }
 
+// Extra registers more top-level commands (keel proxy, keel agent, the CLI verbs). Areas add to it
+// from init() in their own file, so root.go never needs editing.
+var Extra []func() *cobra.Command
+
 // Root is the keel command.
 func Root() *cobra.Command {
 	root := &cobra.Command{
@@ -48,6 +52,9 @@ func Root() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.AddCommand(serverCommands()...)
+	for _, mk := range Extra {
+		root.AddCommand(mk())
+	}
 	return root
 }
 

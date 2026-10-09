@@ -42,7 +42,7 @@ function toTrace(wire: WireTrace): Trace {
   const spans = asTrace(wire)?.spans ?? [];
   return {
     traceId: wire.traceId,
-    logs: wire.logs ?? [],
+    logs: wire.logs,
     spans: spans.map((span) => ({
       ...span,
       attributes: span.attributes ?? [],

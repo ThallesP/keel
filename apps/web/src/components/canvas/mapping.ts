@@ -40,7 +40,7 @@ function runtime(n: NodeView): RuntimeData {
     stoppedAt: n.stoppedAt,
     finishedAt: n.finishedAt,
     public: n.public,
-    endpoints: n.endpoints ?? [],
+    endpoints: n.endpoints,
   };
 }
 
@@ -64,7 +64,7 @@ export function toCanvasNode(n: NodeView): CanvasNode {
       return {
         ...base,
         type: "service",
-        data: { ...runtime(n), http: bestHttp(n.endpoints ?? []) },
+        data: { ...runtime(n), http: bestHttp(n.endpoints) },
       };
     case "database":
       return {
@@ -102,7 +102,7 @@ export function toCanvasNodes(nodes: NodeView[]): CanvasNode[] {
 }
 
 export function toDeployment(d: ApiDeployment): Deployment {
-  const steps = d.steps ?? [];
+  const { steps } = d;
   const nameOf = new Map(steps.map((s) => [s.nodeId, s.label]));
   const multi = steps.filter((s) => s.nodeId).length > 1;
   return {
@@ -119,7 +119,7 @@ export function toDeployment(d: ApiDeployment): Deployment {
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
     })),
-    log: (d.log ?? []).map((l) => {
+    log: d.log.map((l) => {
       const who = multi && l.nodeId ? `${nameOf.get(l.nodeId) ?? "?"}  ` : "";
       return `${formatClock(l.at - d.startedAt)}  ${who}${l.text}`;
     }),

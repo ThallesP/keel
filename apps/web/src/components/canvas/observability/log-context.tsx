@@ -46,7 +46,7 @@ export function LogContext({
     () =>
       linesAround.data === undefined || requestsAround.data === undefined
         ? null
-        : { lines: linesAround.data ?? [], requests: requestsAround.data ?? [] },
+        : { lines: linesAround.data, requests: requestsAround.data },
     [linesAround.data, requestsAround.data],
   );
 

@@ -32,7 +32,7 @@ function ShipButton() {
   // is a plain Ship again, which takes every node with pending changes.
   const retry = useMemo(() => {
     if (deployment?.status !== "failed" || !nodeList) return [];
-    const alive = new Set((nodeList.nodes ?? []).map((n) => n.id));
+    const alive = new Set(nodeList.nodes.map((n) => n.id));
     return deployment.steps
       .filter((s) => s.status === "failed" && alive.has(s.nodeId))
       .map((s) => s.nodeId);

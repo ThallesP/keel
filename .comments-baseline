@@ -15,7 +15,6 @@
 1 apps/web/src/components/canvas/bottom-panel/step-icon.tsx
 4 apps/web/src/components/canvas/bottom-panel/tabs/deployments.tsx
 7 apps/web/src/components/canvas/bottom-panel/tabs/logs.tsx
-15 apps/web/src/components/canvas/bottom-panel/tabs/networking.tsx
 4 apps/web/src/components/canvas/bottom-panel/tabs/settings.tsx
 6 apps/web/src/components/canvas/bottom-panel/tabs/tracing.tsx
 13 apps/web/src/components/canvas/bottom-panel/tabs/variables.tsx
@@ -38,7 +37,7 @@
 23 apps/web/src/components/canvas/observability/charts.tsx
 10 apps/web/src/components/canvas/observability/chrome.tsx
 12 apps/web/src/components/canvas/observability/correlate.ts
-30 apps/web/src/components/canvas/observability/explorer.tsx
+29 apps/web/src/components/canvas/observability/explorer.tsx
 17 apps/web/src/components/canvas/observability/lamp.tsx
 10 apps/web/src/components/canvas/observability/log-context.tsx
 6 apps/web/src/components/canvas/observability/page.tsx

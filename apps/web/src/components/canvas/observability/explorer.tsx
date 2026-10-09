@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { useGetTraceOverview, useListEnvironmentLogs } from "@/api/gen";
-import type { ProjectLine, TimeRange, TraceBucket, TraceOverview, TraceSummary } from "@/api/types";
+import type { ProjectLine, TimeRange, TraceOverview } from "@/api/types";
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";
 
@@ -161,23 +161,11 @@ function Segmented<T extends string>({
   );
 }
 
-/** The request numbers, the wire's null lists (Go nil slices) read as empty ones. */
-type Numbers = Omit<TraceOverview, "buckets" | "traces"> & {
-  buckets: TraceBucket[];
-  traces: TraceSummary[];
-};
-
-const toNumbers = (o: TraceOverview): Numbers => ({
-  ...o,
-  buckets: o.buckets ?? [],
-  traces: o.traces ?? [],
-});
-
 /** `search`: the filter this answer is for, which can lag the field while the next one loads. */
 type StreamData = {
   search: string;
   lines: ProjectLine[];
-  overview: Numbers | null;
+  overview: TraceOverview | null;
 };
 
 /**
@@ -207,7 +195,7 @@ function useStream(
   );
   const numbers = useGetTraceOverview(
     { path, query: { range, search } },
-    { query: { ...polled, enabled: active && withTraces, select: toNumbers } },
+    { query: { ...polled, enabled: active && withTraces } },
   );
 
   const settled = (q: { data: unknown; isError: boolean }) => q.data !== undefined || q.isError;
@@ -331,13 +319,11 @@ function Overview({
         <section className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between px-5">
             <SectionLabel>Events</SectionLabel>
-            {data && (
-              <span className="text-2xs text-faint">
-                {counts(events)} · newest first · every row opens its trace or context
-              </span>
-            )}
+            <span className="text-2xs text-faint">
+              {counts(events)} · newest first · every row opens its trace or context
+            </span>
           </div>
-          {data === null ? null : events.length === 0 ? (
+          {events.length === 0 ? (
             <p className="px-5 text-xs text-faint">
               {filter
                 ? `Nothing matches “${filter}” in the last ${long}.`

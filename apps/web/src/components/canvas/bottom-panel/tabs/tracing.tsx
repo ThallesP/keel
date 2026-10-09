@@ -76,7 +76,7 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
         </div>
       </div>
       {enabled &&
-        (tracing.env ?? []).map((v) => (
+        tracing.env.map((v) => (
           <div
             key={v.key}
             className="flex h-8 items-center gap-2 border-t border-line/60 px-5 font-mono text-xs"

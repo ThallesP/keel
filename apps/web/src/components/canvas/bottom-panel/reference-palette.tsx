@@ -25,7 +25,7 @@ function pages(
   const keysOf = (source: ReferenceSource): PalettePage => ({
     title: source.name,
     placeholder: "Which variable?",
-    items: (source.keys ?? []).map((k) => ({
+    items: source.keys.map((k) => ({
       id: k.key,
       label: k.key,
       hint: [k.provided ? "generated" : "variable", k.secret && "secret"]
@@ -60,7 +60,7 @@ function pages(
             label: s.name,
             hint: s.image ?? s.type,
             // Typing a key (`DATABASE_URL`) narrows to the nodes that have it.
-            keywords: (s.keys ?? []).map((k) => k.key.toLowerCase()),
+            keywords: s.keys.map((k) => k.key.toLowerCase()),
             icon: <NodeTypeIcon type={s.type} />,
             onSelect: () => keysOf(s),
           })),

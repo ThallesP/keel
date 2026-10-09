@@ -41,6 +41,7 @@ type Server struct {
 const SessionCookie = "keel_session"
 
 func init() {
+	huma.DefaultArrayNullable = false
 	// Every error the API writes is an api.Problem, so the OpenAPI document (and the dashboard's
 	// generated types) describe exactly that shape.
 	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
@@ -72,6 +73,7 @@ func Config(version string) huma.Config {
 	c.SchemasPath = "/api/schemas"
 	// No `$schema` link in response bodies: it would leak into the dashboard's generated types.
 	c.CreateHooks = nil
+	c.Formats = map[string]huma.Format{"application/json": jsonFormat, "json": jsonFormat}
 	c.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		"session": {Type: "apiKey", In: "cookie", Name: SessionCookie},
 		"bearer":  {Type: "http", Scheme: "bearer"},

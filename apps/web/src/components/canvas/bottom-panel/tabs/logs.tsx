@@ -87,7 +87,7 @@ function LogBody({ node, data, error, raw, following }: BodyProps) {
       </p>
     );
   }
-  const lines = data.lines ?? [];
+  const { lines } = data;
   if (lines.length === 0) return <p className="text-xs text-faint">No log output.</p>;
   const tagged = (replicas?.length ?? 0) > 1 || lines.some((l) => l.task !== "");
   return (

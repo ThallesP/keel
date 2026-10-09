@@ -22,7 +22,7 @@ export function useSyncedGraph() {
 
   useEffect(() => {
     if (!data) return;
-    const views = overlay.apply(data.nodes ?? []);
+    const views = overlay.apply(data.nodes);
     // Nodes this client just created: select them (and only them) once, as they arrive.
     const select = overlay.takeArrivals(views);
     setNodes((prev) => {

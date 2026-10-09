@@ -427,10 +427,7 @@
             "items": {
               "$ref": "#/components/schemas/DeployLogLine"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "message": {
             "examples": [
@@ -458,10 +455,7 @@
             "items": {
               "$ref": "#/components/schemas/DeployStep"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -773,10 +767,7 @@
             "items": {
               "$ref": "#/components/schemas/EnvironmentLogLine"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "source": {
             "enum": [
@@ -952,10 +943,7 @@
             "items": {
               "$ref": "#/components/schemas/Invitation"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1074,19 +1062,13 @@
             "items": {
               "$ref": "#/components/schemas/ServiceLogLine"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "replicas": {
             "items": {
               "$ref": "#/components/schemas/LogReplica"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "source": {
             "enum": [
@@ -1180,10 +1162,7 @@
             "items": {
               "$ref": "#/components/schemas/Member"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1267,10 +1246,7 @@
             "items": {
               "$ref": "#/components/schemas/NodeView"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1300,10 +1276,7 @@
             "items": {
               "$ref": "#/components/schemas/EndpointView"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "error": {
             "type": "string"
@@ -1492,10 +1465,7 @@
             "items": {
               "$ref": "#/components/schemas/ErrorDetail"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "status": {
             "description": "HTTP status code",
@@ -1613,10 +1583,7 @@
             "items": {
               "$ref": "#/components/schemas/ProjectSummary"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1631,10 +1598,7 @@
             "items": {
               "$ref": "#/components/schemas/ProjectEnvironment"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -1709,10 +1673,7 @@
             "items": {
               "$ref": "#/components/schemas/ReferenceKey"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "name": {
             "type": "string"
@@ -1745,10 +1706,7 @@
             "items": {
               "$ref": "#/components/schemas/ReferenceSource"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -1839,10 +1797,7 @@
             "items": {
               "type": "string"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "refresh": {
             "description": "Pull the images again (Redeploy, Retry)",
@@ -1943,15 +1898,9 @@
               },
               "maxItems": 2,
               "minItems": 2,
-              "type": [
-                "array",
-                "null"
-              ]
+              "type": "array"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "duration": {
             "format": "double",
@@ -1961,10 +1910,7 @@
             "items": {
               "$ref": "#/components/schemas/SpanEvent"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "kind": {
             "description": "server, client, internal, producer, consumer or empty",
@@ -1984,15 +1930,9 @@
               },
               "maxItems": 2,
               "minItems": 2,
-              "type": [
-                "array",
-                "null"
-              ]
+              "type": "array"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "scope": {
             "description": "scope.name",
@@ -2048,15 +1988,9 @@
               },
               "maxItems": 2,
               "minItems": 2,
-              "type": [
-                "array",
-                "null"
-              ]
+              "type": "array"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "name": {
             "type": "string"
@@ -2108,10 +2042,7 @@
             "items": {
               "$ref": "#/components/schemas/EnvironmentLogLine"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "source": {
             "enum": [
@@ -2123,10 +2054,7 @@
             "items": {
               "$ref": "#/components/schemas/Span"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "traceId": {
             "type": "string"
@@ -2199,10 +2127,7 @@
             "items": {
               "$ref": "#/components/schemas/TraceBucket"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "from": {
             "format": "double",
@@ -2226,10 +2151,7 @@
             "items": {
               "$ref": "#/components/schemas/TraceSummary"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -2406,10 +2328,7 @@
             "items": {
               "$ref": "#/components/schemas/TracingEnvVar"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "traces": {
             "enum": [
@@ -2518,10 +2437,7 @@
             "items": {
               "$ref": "#/components/schemas/VariableView"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [
@@ -2573,10 +2489,7 @@
             "items": {
               "$ref": "#/components/schemas/VariablePart"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           },
           "resolved": {
             "description": "References expanded: what the container gets",
@@ -3364,10 +3277,7 @@
                   "items": {
                     "$ref": "#/components/schemas/EnvironmentLogLine"
                   },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "type": "array"
                 }
               }
             },
@@ -3636,10 +3546,7 @@
                   "items": {
                     "$ref": "#/components/schemas/TraceSummary"
                   },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "type": "array"
                 }
               }
             },
@@ -3977,10 +3884,7 @@
                   "items": {
                     "$ref": "#/components/schemas/Deployment"
                   },
-                  "type": [
-                    "array",
-                    "null"
-                  ]
+                  "type": "array"
                 }
               }
             },

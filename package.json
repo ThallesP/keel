@@ -30,7 +30,7 @@
     "dev:web": "turbo run dev -F web --",
     "env:generate": "varlock codegen --path ./apps/web/",
     "postinstall": "varlock codegen --path ./apps/web/",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint --type-aware && oxfmt --write"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -40,6 +40,7 @@
     "@types/node": "catalog:",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2003",
     "turbo": "^2.10.12",
     "typescript": "catalog:",
     "varlock": "catalog:"

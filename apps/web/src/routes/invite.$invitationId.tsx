@@ -52,7 +52,7 @@ function Accept({
       {matches ? (
         <>
           <p className="mb-6 text-xs text-muted-foreground">
-            You are signed in as {user?.email}. Join to see its projects.
+            You are signed in as {user.email}. Join to see its projects.
           </p>
           <Button className="w-full" disabled={busy} onClick={() => void join()}>
             {busy ? "Joining…" : "Join"}

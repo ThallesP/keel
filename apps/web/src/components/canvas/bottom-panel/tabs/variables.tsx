@@ -234,7 +234,7 @@ function Row({
 }) {
   const [revealed, setRevealed] = useState(false);
   const jumpTo = useJumpTo();
-  const parts = variable.parts ?? [];
+  const { parts } = variable;
   const hasRef = parts.some((p) => p.ref);
   const maskable = variable.secret || variable.resolvedSecret;
 
@@ -308,13 +308,11 @@ function Row({
 function suggestionsFor(node: InfraNode, variables: VariableView[], sources: ReferenceSource[]) {
   if (node.type !== "service") return [];
   const used = new Set(
-    variables.flatMap((v) => (v.parts ?? []).flatMap((p) => (p.ref?.nodeId ? [p.ref.nodeId] : []))),
+    variables.flatMap((v) => v.parts.flatMap((p) => (p.ref?.nodeId ? [p.ref.nodeId] : []))),
   );
   const keys = new Set(variables.map((v) => v.key));
   return sources.flatMap((source) => {
-    const offered = (source.keys ?? []).find(
-      (k) => k.provided && k.key !== "HOST" && k.key !== "PORT",
-    );
+    const offered = source.keys.find((k) => k.provided && k.key !== "HOST" && k.key !== "PORT");
     if (!offered || used.has(source.nodeId)) return [];
     const as = defaultKey(source.name, offered.key);
     return keys.has(as) ? [] : [{ source, key: offered.key, as }];

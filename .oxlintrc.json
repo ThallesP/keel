@@ -25,7 +25,8 @@
     ],
     "react/set-state-in-effect": "error",
     "react/no-deriving-state-in-effects": "error",
-    "react/exhaustive-deps": "error"
+    "react/exhaustive-deps": "error",
+    "typescript/no-unnecessary-condition": "error"
   },
   "env": {
     "builtin": true

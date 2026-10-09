@@ -2,14 +2,28 @@ package http
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"io/fs"
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
-func jsonEncode(w io.Writer, v any) error { return json.NewEncoder(w).Encode(v) }
+var wireJSON = jsonv2.JoinOptions(json.DefaultOptionsV1(), jsonv2.FormatNilSliceAsNull(false), jsontext.EscapeForHTML(false))
+
+func jsonEncode(w io.Writer, v any) error {
+	if err := jsonv2.MarshalWrite(w, v, wireJSON); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
+var jsonFormat = huma.Format{Marshal: jsonEncode, Unmarshal: json.Unmarshal}
 
 // spa serves files from web and falls back to index.html for client routes, with nginx's old
 // rules (docs/go/spec/web-data.md §2.2): /assets/* (content-hashed names) immutable for a year;

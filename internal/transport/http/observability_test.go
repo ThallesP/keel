@@ -167,7 +167,7 @@ func TestObservabilityRoutes(t *testing.T) {
 	if r := h.do(t, "", "GET", "/api/organization/log-sink", ""); r.body != `{"sink":null}` {
 		t.Fatalf("signed out: %s", r.body)
 	}
-	if r := h.do(t, "member", "GET", "/api/organization/axiom/pending-orgs", ""); r.body != `{"orgs":null}` {
+	if r := h.do(t, "member", "GET", "/api/organization/axiom/pending-orgs", ""); r.body != `{"orgs":[]}` {
 		t.Fatalf("pending: %s", r.body)
 	}
 

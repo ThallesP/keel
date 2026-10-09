@@ -410,7 +410,7 @@ Same two checks/errors as `recent`, then `axiomLines(sink, serviceIds, { n: 500,
 Result types (`traceProviders/types.ts`, all times epoch ms and durations ms, fractional):
 
 ```
-Attribute    = [key: string, value: string]             // JSON 2-element array; lists sorted by key
+Attribute    = { key: string, value: string }           // lists sorted by key
 SpanEvent    = { time, name, attributes: Attribute[] }
 Span         = { spanId, parentId /* "" for root */, name, service /* service.name */,
                  kind /* server|client|internal|producer|consumer|"" */, start, duration,
@@ -1020,5 +1020,5 @@ The worker config is polled (30 s, plus an early fetch on an unrouted `svc-*` co
 3. **Sink rows**: import `logSinks` with `connected_at = _creationTime`; otherwise every node re-reads every container from the import time (duplicates) or skips lines.
 4. **Agent state file** (`state.json`) format must be read by the Go agent on first start (`logsSince` keyed by full container id, `"<s>.<9 digit ns>"`), or log shipping duplicates from the connect time.
 5. **Error strings** in §16 are an API contract for the CLI and the web.
-6. **JSON numbers**: times and durations must stay JSON numbers (fractional allowed); `Attribute` stays a 2-element array; `httpStatus`/percentiles use `null`, not omission; `traces`/`org` in `logSinks.get` use `null`.
+6. **JSON numbers**: times and durations must stay JSON numbers (fractional allowed); `Attribute` stays a `{ key, value }` object; `httpStatus`/percentiles use `null`, not omission; `traces`/`org` in `logSinks.get` use `null`.
 7. **No timeouts today** on control-plane Axiom calls (only Convex's action limit). Adding them is fine; map relay timeouts to `503`.

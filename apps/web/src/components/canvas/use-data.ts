@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 
-import { useGetEnvironmentSummary, useGetLatestDeployment } from "@/api/gen";
-import type { EnvironmentSummary } from "@/api/types";
+import {
+  type EnvironmentSummary,
+  useGetEnvironmentSummary,
+  useGetLatestDeployment,
+} from "@/api/gen";
 
 import { useEnvironment } from "./environment";
 import { toDeployment } from "./mapping";
@@ -11,7 +14,7 @@ import type { Deployment } from "./types";
  * Ship-button + status-bar numbers for the current environment (undefined while loading, null
  * when the environment is not the caller's).
  */
-export function useSummary(): EnvironmentSummary | null | undefined {
+export function useSummary(): EnvironmentSummary | undefined {
   const { environmentId } = useEnvironment();
   const { data } = useGetEnvironmentSummary({ path: { id: environmentId } });
   return data?.summary;

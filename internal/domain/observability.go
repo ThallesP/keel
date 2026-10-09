@@ -168,8 +168,10 @@ type EnvironmentLogs struct {
 
 // ── Trace read model (traceProviders/types.ts) ───────────────────────────────────────────────
 
-// Attribute is a [key, value] pair; lists are sorted by key.
-type Attribute [2]string
+type Attribute struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
 
 type SpanEvent struct {
 	Time       float64     `json:"time"`

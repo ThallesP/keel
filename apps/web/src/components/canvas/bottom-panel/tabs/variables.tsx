@@ -10,8 +10,9 @@ import {
   useListReferenceableVariablesSuspense,
   useListVariablesSuspense,
   useSetVariable,
+  type VariableRef,
+  type VariableView,
 } from "@/api/gen";
-import type { VariableRef, VariableView } from "@/api/types";
 import { succeeded } from "@/lib/panel-write";
 
 import { Kbd } from "../../primitives";

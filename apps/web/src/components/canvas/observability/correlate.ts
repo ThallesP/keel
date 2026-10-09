@@ -1,4 +1,4 @@
-import type { Attribute } from "@/api/types";
+import type { Attribute } from "@/api/gen";
 import { stripAnsi } from "@/lib/ansi";
 
 // Log ↔ trace correlation, read side. Container lines carry no trace context of their own, but an
@@ -52,9 +52,10 @@ export function lineFields(text: string): Attribute[] {
       // Not JSON after all; try logfmt.
     }
   }
-  const pairs = [...trimmed.matchAll(LOGFMT)].map(
-    ([, key, value]) => [key!, value!.replace(/^"(.*)"$/s, "$1")] as Attribute,
-  );
+  const pairs = [...trimmed.matchAll(LOGFMT)].map(([, key, value]) => ({
+    key: key!,
+    value: value!.replace(/^"(.*)"$/s, "$1"),
+  }));
   return pairs.length >= 2 ? pairs : [];
 }
 
@@ -62,6 +63,6 @@ function flatten(out: Attribute[], key: string, value: unknown) {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     for (const [k, v] of Object.entries(value)) flatten(out, key ? `${key}.${k}` : k, v);
   } else if (key) {
-    out.push([key, typeof value === "string" ? value : JSON.stringify(value)]);
+    out.push({ key, value: typeof value === "string" ? value : JSON.stringify(value) });
   }
 }

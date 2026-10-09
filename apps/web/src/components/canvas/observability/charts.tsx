@@ -1,7 +1,7 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import type { TraceBucket, TraceStats } from "@/api/types";
+import type { TraceBucket, TraceStats } from "@/api/gen";
 
 import { formatCount, formatDuration } from "../format";
 

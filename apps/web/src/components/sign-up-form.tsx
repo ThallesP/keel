@@ -5,7 +5,7 @@ import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import z from "zod";
 
-import type { PublicInvitation } from "@/api/types";
+import type { PublicInvitation } from "@/api/gen";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/session";
 

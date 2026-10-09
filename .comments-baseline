@@ -1,7 +1,6 @@
 6 apps/web/embed.go
 3 apps/web/embed_dev.go
 12 apps/web/kubb.config.ts
-51 apps/web/src/api/types.ts
 5 apps/web/src/components/auth-forms.tsx
 14 apps/web/src/components/auth/plate.tsx
 6 apps/web/src/components/auth/shell.tsx
@@ -35,14 +34,14 @@
 1 apps/web/src/components/canvas/not-wired.ts
 18 apps/web/src/components/canvas/observability/axiom-gate.tsx
 23 apps/web/src/components/canvas/observability/charts.tsx
-10 apps/web/src/components/canvas/observability/chrome.tsx
+9 apps/web/src/components/canvas/observability/chrome.tsx
 12 apps/web/src/components/canvas/observability/correlate.ts
 29 apps/web/src/components/canvas/observability/explorer.tsx
 17 apps/web/src/components/canvas/observability/lamp.tsx
 10 apps/web/src/components/canvas/observability/log-context.tsx
 6 apps/web/src/components/canvas/observability/page.tsx
 12 apps/web/src/components/canvas/observability/stream.tsx
-27 apps/web/src/components/canvas/observability/trace.tsx
+24 apps/web/src/components/canvas/observability/trace.tsx
 5 apps/web/src/components/canvas/primitives.tsx
 7 apps/web/src/components/canvas/project-switcher.tsx
 4 apps/web/src/components/canvas/rail.tsx
@@ -258,7 +257,7 @@
 28 internal/domain/ingress.go
 2 internal/domain/ingress_test.go
 16 internal/domain/node.go
-50 internal/domain/observability.go
+49 internal/domain/observability.go
 2 internal/domain/observability_test.go
 1 internal/domain/project.go
 39 internal/domain/reference.go

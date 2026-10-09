@@ -1,12 +1,17 @@
 import type { Node } from "@xyflow/react";
 
-import type * as Api from "@/api/types";
+import type {
+  Deployment as ApiDeployment,
+  DeployStep as ApiDeployStep,
+  EndpointView,
+  NodeView,
+} from "@/api/gen";
 
 /**
  * `healthy | done | deploying | stopping | error | stopped | pending`, as the API derives it
  * (`internal/domain/status.go`). `done`: one-shot image exited 0.
  */
-export type NodeStatus = Api.NodeStatus;
+export type NodeStatus = NodeView["status"];
 
 /** Live runtime fields shared by everything Swarm runs (service, database, cache). */
 export type RuntimeData = {
@@ -37,7 +42,7 @@ export type RuntimeData = {
  * (`https://<domain>` or `<public IP>:<publicPort>`), `state` (http `starting`: loaded, waiting
  * for its certificate) and `error`.
  */
-export type Endpoint = Api.EndpointView;
+export type Endpoint = EndpointView;
 
 export type ServiceData = RuntimeData & {
   /** The first https endpoint, shown as the card's subtitle. */
@@ -80,7 +85,7 @@ export type RuntimeNode = Exclude<InfraNode, VolumeNode>;
 
 export type PanelTab = "deployments" | "variables" | "logs" | "settings";
 
-export type DeployStepStatus = Api.DeployStepStatus;
+export type DeployStepStatus = ApiDeployStep["status"];
 
 export type DeployStep = {
   /** Empty string for the final "health checks" step. */
@@ -96,7 +101,7 @@ export type Deployment = {
   id: string;
   sha?: string;
   message: string;
-  status: Api.DeploymentStatus;
+  status: ApiDeployment["status"];
   startedAt: number;
   finishedAt?: number;
   steps: DeployStep[];

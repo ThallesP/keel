@@ -459,7 +459,7 @@ type Replica = { task: string; slot: number; state: string };
 type Tail = { source: "docker" | "axiom"; lines: LogLine[]; replicas: Replica[] };       // logs.tail
 type ProjectLine = LogLine & { serviceId: string };                                       // node id
 type ProjectTail = { source: "docker" | "axiom"; lines: ProjectLine[] };                  // logs.recent
-type Attribute = [key: string, value: string];                                            // sorted by key
+type Attribute = { key: string; value: string };                                          // sorted by key
 type SpanEvent = { time: number; name: string; attributes: Attribute[] };
 type Span = { spanId: string; parentId: string /* "" for root */; name: string; service: string;
   kind: string; start: number; duration: number; status: "ok" | "error" | "unset";
@@ -475,10 +475,8 @@ type TimeRange = "15m" | "1h" | "24h" | "7d";
 ```
 
 Times and durations are **fractional** ms (sub-ms spans); keep them `float64` on the wire.
-`Attribute` is a 2-tuple; in OpenAPI 3.1 declare it with `prefixItems` (two strings,
-`minItems`/`maxItems` 2). If Kubb does not emit a tuple type from that, keep a hand-written
-`type Attribute = [string, string]` in the web and cast at the hook boundary; do not change the
-wire shape (the CLI prints these too).
+`Attribute` is a `{ key, value }` object, not a `[key, value]` tuple: OpenAPI can only describe
+a tuple as `string[][]`, and an object keeps the generated type true with no cast.
 
 Explorer constants the API must honour: `LINES = 300` lines per poll and `REQUESTS = 100` traces
 per overview (`traceProviders/axiom LIST`); `mergeEvents` treats a list of that full length as
@@ -848,7 +846,7 @@ Every import of `@my-better-t-app/backend` and of Convex types, with the target 
 | `ProjectLine` | `convex/logs` | `observability/explorer.tsx:3`, `log-context.tsx:2`, `stream.tsx:1`, `trace.tsx:2` | `ProjectLine` (consider `EnvironmentLogLine`; keep fields) |
 | `TimeRange`, `TraceOverview` | `convex/traces` | `observability/explorer.tsx:4` | `TimeRange` (enum `15m \| 1h \| 24h \| 7d`), `TraceOverview` |
 | `TraceSummary` | `convex/traces` | `log-context.tsx:3`, `stream.tsx:2` | `TraceSummary` |
-| `Attribute`, `Span`, `Trace` | `convex/traces` | `trace.tsx:3` (`Attribute` also `correlate.ts:1`) | `Attribute` (tuple, see 5.8), `Span`, `Trace` |
+| `Attribute`, `Span`, `Trace` | `convex/traces` | `trace.tsx:3` (`Attribute` also `correlate.ts:1`) | `Attribute` (`{ key, value }`, see 5.8), `Span`, `Trace` |
 | `TraceBucket`, `TraceStats` | `convex/traces` | `observability/charts.tsx:1` | `TraceBucket`, `TraceStats` |
 | `ConvexError` | `convex/values` | `canvas/errors.ts:1` | `ApiError` from `api/client.ts` |
 

@@ -10,9 +10,6 @@ import { useEnvironment } from "../environment";
 
 export const route = getRouteApi("/_auth/p/$projectId");
 
-/** What `GET /api/organization/log-sink` returns for an Axiom sink; never the token. */
-export type { Sink } from "@/api/types";
-
 export function SearchField({
   value,
   onChange,

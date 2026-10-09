@@ -1,8 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import { useMemo } from "react";
 
-import { useListLogsAround, useListTracesAround } from "@/api/gen";
-import type { ProjectLine, TraceSummary } from "@/api/types";
+import {
+  type EnvironmentLogLine,
+  type TraceSummary,
+  useListLogsAround,
+  useListTracesAround,
+} from "@/api/gen";
 import { stripAnsi } from "@/lib/ansi";
 import { errorMessage } from "@/lib/api";
 
@@ -27,7 +31,7 @@ export function LogContext({
 }: {
   at: number;
   /** The line it was opened from; from a link, the first line at `at` stands in. */
-  focus?: ProjectLine;
+  focus?: EnvironmentLogLine;
   onBack: () => void;
   onOpen: (event: StreamEvent) => void;
 }) {

@@ -2,8 +2,14 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { useGetTraceOverview, useListEnvironmentLogs } from "@/api/gen";
-import type { ProjectLine, TimeRange, TraceOverview } from "@/api/types";
+import {
+  type EnvironmentLogLine,
+  type GetTraceOverviewQuery,
+  type LogSinkView,
+  type TraceOverview,
+  useGetTraceOverview,
+  useListEnvironmentLogs,
+} from "@/api/gen";
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";
 
@@ -14,7 +20,7 @@ import { PageHeader, SectionLabel } from "../primitives";
 import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
 import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
-import { route, SearchField, type Sink } from "./chrome";
+import { route, SearchField } from "./chrome";
 import { StreamEmpty, StreamError } from "./lamp";
 import { LogContext } from "./log-context";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
@@ -27,6 +33,9 @@ import { TraceDetail } from "./trace";
  * the trace waterfall with its log lines inline (`&trace=<id>`); any other line as the lines
  * around it plus the requests of that minute (`&around=<ms>`).
  */
+
+type TimeRange = GetTraceOverviewQuery["range"];
+type Sink = NonNullable<LogSinkView>;
 
 const RANGES: { id: TimeRange; label: string; long: string }[] = [
   { id: "15m", label: "15m", long: "15 minutes" },
@@ -48,7 +57,7 @@ const LINES = 300;
 const REQUESTS = 100;
 
 /** What a row was opened from: when, and the line itself if it was one. */
-export type Opened = { at: number; line?: ProjectLine };
+export type Opened = { at: number; line?: EnvironmentLogLine };
 
 export function Explorer({ sink }: { sink: Sink }) {
   const { trace, around } = route.useSearch();
@@ -164,7 +173,7 @@ function Segmented<T extends string>({
 /** `search`: the filter this answer is for, which can lag the field while the next one loads. */
 type StreamData = {
   search: string;
-  lines: ProjectLine[];
+  lines: EnvironmentLogLine[];
   overview: TraceOverview | null;
 };
 

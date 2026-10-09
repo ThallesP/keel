@@ -1,8 +1,7 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useMemo, useState } from "react";
 
-import { useTailNodeLogs } from "@/api/gen";
-import type { LogLine, LogTail, Replica } from "@/api/types";
+import { type LogReplica, type LogTail, type ServiceLogLine, useTailNodeLogs } from "@/api/gen";
 import { errorMessage } from "@/lib/api";
 
 import { formatLogTime } from "../../format";
@@ -44,7 +43,7 @@ const REPLICA_TONES = [
 ] as const;
 
 /** task id → `r<slot>` label. Tasks Swarm has already pruned fall back to a short id. */
-function replicaLabels(replicas: Replica[]) {
+function replicaLabels(replicas: LogReplica[]) {
   const bySlot = new Map<number, number>();
   const labels = new Map<string, { text: string; tone: string }>();
   for (const r of replicas) {
@@ -62,7 +61,7 @@ function ReplicaTag({ text, tone }: { text: string; tone: string }) {
   return <span className={cn("inline-block w-9 pr-3 text-right", tone)}>{text}</span>;
 }
 
-function rawText(l: LogLine) {
+function rawText(l: ServiceLogLine) {
   const stamp = l.time ? new Date(l.time).toISOString() : "";
   return `${stamp} ${l.task} [${l.stream}] ${l.text}`;
 }

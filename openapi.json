@@ -13,6 +13,22 @@
         ],
         "type": "object"
       },
+      "Attribute": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
       "AuthSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -1936,12 +1952,7 @@
         "properties": {
           "attributes": {
             "items": {
-              "items": {
-                "type": "string"
-              },
-              "maxItems": 2,
-              "minItems": 2,
-              "type": "array"
+              "$ref": "#/components/schemas/Attribute"
             },
             "type": "array"
           },
@@ -1968,12 +1979,7 @@
           },
           "resource": {
             "items": {
-              "items": {
-                "type": "string"
-              },
-              "maxItems": 2,
-              "minItems": 2,
-              "type": "array"
+              "$ref": "#/components/schemas/Attribute"
             },
             "type": "array"
           },
@@ -2026,12 +2032,7 @@
         "properties": {
           "attributes": {
             "items": {
-              "items": {
-                "type": "string"
-              },
-              "maxItems": 2,
-              "minItems": 2,
-              "type": "array"
+              "$ref": "#/components/schemas/Attribute"
             },
             "type": "array"
           },

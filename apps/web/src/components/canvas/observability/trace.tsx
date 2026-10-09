@@ -2,14 +2,7 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
-import { type Trace as WireTrace, useGetTrace } from "@/api/gen";
-import {
-  type Attribute,
-  type ProjectLine,
-  type Span as WireSpan,
-  type SpanEvent as WireSpanEvent,
-  asTrace,
-} from "@/api/types";
+import { type Attribute, type EnvironmentLogLine, type Span, useGetTrace } from "@/api/gen";
 import { AnsiText } from "@/lib/ansi";
 import { errorMessage } from "@/lib/api";
 
@@ -27,39 +20,14 @@ import { lineFields, traceRef } from "./correlate";
  * Error spans get the danger tone plus a dot, never colour alone.
  */
 
-// The wire's lists may be null (Go nil slices); the view reads them as empty lists.
-type SpanEvent = Omit<WireSpanEvent, "attributes"> & { attributes: Attribute[] };
-type Span = Omit<WireSpan, "attributes" | "resource" | "events"> & {
-  attributes: Attribute[];
-  resource: Attribute[];
-  events: SpanEvent[];
-};
-type Trace = { traceId: string; spans: Span[]; logs: ProjectLine[] };
-
-/** `GET /api/environments/{id}/traces/{traceId}` as the view reads it (a query `select`). */
-function toTrace(wire: WireTrace): Trace {
-  // asTrace: attributes typed as [key, value] pairs.
-  const spans = asTrace(wire)?.spans ?? [];
-  return {
-    traceId: wire.traceId,
-    logs: wire.logs,
-    spans: spans.map((span) => ({
-      ...span,
-      attributes: span.attributes ?? [],
-      resource: span.resource ?? [],
-      events: (span.events ?? []).map((e) => ({ ...e, attributes: e.attributes ?? [] })),
-    })),
-  };
-}
-
 type Item =
   | { kind: "span"; key: string; time: number; span: Span }
-  | { kind: "log"; key: string; time: number; line: ProjectLine };
+  | { kind: "log"; key: string; time: number; line: EnvironmentLogLine };
 
 type Row = { item: Item; depth: number };
 
 /** Depth-first under each root, children (spans and lines) by time. */
-function tree(spans: Span[], logs: ProjectLine[]): Row[] {
+function tree(spans: Span[], logs: EnvironmentLogLine[]): Row[] {
   const ids = new Set(spans.map((s) => s.spanId));
   const children = new Map<string, Item[]>();
   const roots: Item[] = [];
@@ -122,7 +90,7 @@ export function TraceDetail({
   /** A moment inside the trace, when known: narrows the lookup. */
   at?: number;
   /** The log line it was opened from: selected first. */
-  focus?: ProjectLine;
+  focus?: EnvironmentLogLine;
   onBack: () => void;
 }) {
   const { environmentId } = useEnvironment();
@@ -131,7 +99,7 @@ export function TraceDetail({
   // partial answer on every reopen for minutes, where the old view asked again on each open.
   const lookup = useGetTrace(
     { path: { id: environmentId, traceId }, query: at === undefined ? undefined : { at } },
-    { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false }, select: toTrace } },
+    { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false } } },
   );
   const trace = lookup.data ?? null;
   const error = lookup.error ? errorMessage(lookup.error) : null;
@@ -323,7 +291,7 @@ function SpanName({ span, service }: { span: Span; service: ServiceLabel }) {
   );
 }
 
-function LineName({ line, service }: { line: ProjectLine; service: ServiceLabel }) {
+function LineName({ line, service }: { line: EnvironmentLogLine; service: ServiceLabel }) {
   return (
     <>
       <span className="shrink-0 rounded-sm bg-surface-2 px-1 font-mono text-[10px] text-muted-foreground">
@@ -380,7 +348,15 @@ function SpanBar({ span, start, total }: { span: Span; start: number; total: num
 }
 
 /** A line is a moment: an 8px point on the timeline, ringed so it reads over a bar's end. */
-function LinePoint({ line, start, total }: { line: ProjectLine; start: number; total: number }) {
+function LinePoint({
+  line,
+  start,
+  total,
+}: {
+  line: EnvironmentLogLine;
+  start: number;
+  total: number;
+}) {
   return (
     <span
       className={cn(
@@ -404,12 +380,12 @@ function SpanDetail({ span, traceStart }: { span: Span; traceStart: number }) {
       </div>
       <Pairs
         pairs={[
-          ["duration", formatDuration(span.duration)],
-          ["starts at", `+${formatDuration(span.start - traceStart)}`],
-          ["status", status],
-          ["span", span.spanId],
-          ["parent", span.parentId || "—"],
-          ["scope", span.scope || "—"],
+          { key: "duration", value: formatDuration(span.duration) },
+          { key: "starts at", value: `+${formatDuration(span.start - traceStart)}` },
+          { key: "status", value: status },
+          { key: "span", value: span.spanId },
+          { key: "parent", value: span.parentId || "—" },
+          { key: "scope", value: span.scope || "—" },
         ]}
       />
       {span.statusMessage && (
@@ -443,14 +419,23 @@ function SpanDetail({ span, traceStart }: { span: Span; traceStart: number }) {
 }
 
 /** A log line: the whole text, when it was written, and its fields when it is structured. */
-export function LineDetail({ line, traceStart }: { line: ProjectLine; traceStart?: number }) {
+export function LineDetail({
+  line,
+  traceStart,
+}: {
+  line: EnvironmentLogLine;
+  traceStart?: number;
+}) {
   const services = useServices();
   const fields = lineFields(line.text);
-  const facts: Attribute[] = [["time", formatLogTime(line.time)]];
+  const facts: Attribute[] = [{ key: "time", value: formatLogTime(line.time) }];
   if (traceStart !== undefined) {
-    facts.push(["in trace", `+${formatDuration(Math.max(0, line.time - traceStart))}`]);
+    facts.push({
+      key: "in trace",
+      value: `+${formatDuration(Math.max(0, line.time - traceStart))}`,
+    });
   }
-  facts.push(["task", line.task || "—"]);
+  facts.push({ key: "task", value: line.task || "—" });
   return (
     <div className="flex flex-col gap-5 px-4 py-3">
       <div>
@@ -498,10 +483,10 @@ function Section({
 function Pairs({ pairs }: { pairs: Attribute[] }) {
   return (
     <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 font-mono text-2xs">
-      {pairs.map(([k, v], i) => (
-        <div key={`${k}:${i}`} className="contents">
-          <dt className="break-all text-faint">{k}</dt>
-          <dd className="break-all whitespace-pre-wrap text-ink">{v}</dd>
+      {pairs.map(({ key, value }, i) => (
+        <div key={`${key}:${i}`} className="contents">
+          <dt className="break-all text-faint">{key}</dt>
+          <dd className="break-all whitespace-pre-wrap text-ink">{value}</dd>
         </div>
       ))}
     </dl>

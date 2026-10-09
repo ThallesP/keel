@@ -1142,70 +1142,70 @@
             "statusMessage": "",
             "scope": "@opentelemetry/instrumentation-http",
             "attributes": [
-              [
-                "app.user.id",
-                "42"
-              ],
-              [
-                "app.user.ok",
-                "true"
-              ],
-              [
-                "app.user.tags",
-                "[\"a\",\"b\",null]"
-              ],
-              [
-                "big",
-                "1e+21"
-              ],
-              [
-                "http.request.method",
-                "GET"
-              ],
-              [
-                "http.response.status_code",
-                "200"
-              ],
-              [
-                "http.route",
-                "/users/:id"
-              ],
-              [
-                "tiny",
-                "1.5e-7"
-              ]
+              {
+                "key": "app.user.id",
+                "value": "42"
+              },
+              {
+                "key": "app.user.ok",
+                "value": "true"
+              },
+              {
+                "key": "app.user.tags",
+                "value": "[\"a\",\"b\",null]"
+              },
+              {
+                "key": "big",
+                "value": "1e+21"
+              },
+              {
+                "key": "http.request.method",
+                "value": "GET"
+              },
+              {
+                "key": "http.response.status_code",
+                "value": "200"
+              },
+              {
+                "key": "http.route",
+                "value": "/users/:id"
+              },
+              {
+                "key": "tiny",
+                "value": "1.5e-7"
+              }
             ],
             "resource": [
-              [
-                "deployment.environment.name",
-                "production"
-              ],
-              [
-                "keel.environment_id",
-                "env1"
-              ],
-              [
-                "keel.service_id",
-                "nodeapiaaaaaaaaaaaaa"
-              ],
-              [
-                "service.name",
-                "api"
-              ]
+              {
+                "key": "deployment.environment.name",
+                "value": "production"
+              },
+              {
+                "key": "keel.environment_id",
+                "value": "env1"
+              },
+              {
+                "key": "keel.service_id",
+                "value": "nodeapiaaaaaaaaaaaaa"
+              },
+              {
+                "key": "service.name",
+                "value": "api"
+              }
             ],
             "events": [
               {
                 "time": 1791460800500,
                 "name": "exception",
                 "attributes": [
-                  [
-                    "exception.stacktrace",
-                    "Error: x\n    at y (\"z\")"
-                  ],
-                  [
-                    "exception.type",
-                    "Error"
-                  ]
+                  {
+                    "key": "exception.stacktrace",
+                    "value": "Error: x\n    at y (\"z\")"
+                  },
+                  {
+                    "key": "exception.type",
+                    "value": "Error"
+                  }
                 ]
               },
               {
@@ -1237,32 +1237,32 @@
             "statusMessage": "boom",
             "scope": "",
             "attributes": [
-              [
-                "1",
-                "one"
-              ],
-              [
-                "2",
-                "two"
-              ],
-              [
-                "db.system",
-                "postgresql"
-              ],
-              [
-                "http.method",
-                "GET"
-              ],
-              [
-                "x",
-                "ex"
-              ]
+              {
+                "key": "1",
+                "value": "one"
+              },
+              {
+                "key": "2",
+                "value": "two"
+              },
+              {
+                "key": "db.system",
+                "value": "postgresql"
+              },
+              {
+                "key": "http.method",
+                "value": "GET"
+              },
+              {
+                "key": "x",
+                "value": "ex"
+              }
             ],
             "resource": [
-              [
-                "keel.service_id",
-                "nodeapiaaaaaaaaaaaaa"
-              ]
+              {
+                "key": "keel.service_id",
+                "value": "nodeapiaaaaaaaaaaaaa"
+              }
             ],
             "events": []
           }
@@ -1321,70 +1321,70 @@
             "statusMessage": "",
             "scope": "@opentelemetry/instrumentation-http",
             "attributes": [
-              [
-                "app.user.id",
-                "42"
-              ],
-              [
-                "app.user.ok",
-                "true"
-              ],
-              [
-                "app.user.tags",
-                "[\"a\",\"b\",null]"
-              ],
-              [
-                "big",
-                "1e+21"
-              ],
-              [
-                "http.request.method",
-                "GET"
-              ],
-              [
-                "http.response.status_code",
-                "200"
-              ],
-              [
-                "http.route",
-                "/users/:id"
-              ],
-              [
-                "tiny",
-                "1.5e-7"
-              ]
+              {
+                "key": "app.user.id",
+                "value": "42"
+              },
+              {
+                "key": "app.user.ok",
+                "value": "true"
+              },
+              {
+                "key": "app.user.tags",
+                "value": "[\"a\",\"b\",null]"
+              },
+              {
+                "key": "big",
+                "value": "1e+21"
+              },
+              {
+                "key": "http.request.method",
+                "value": "GET"
+              },
+              {
+                "key": "http.response.status_code",
+                "value": "200"
+              },
+              {
+                "key": "http.route",
+                "value": "/users/:id"
+              },
+              {
+                "key": "tiny",
+                "value": "1.5e-7"
+              }
             ],
             "resource": [
-              [
-                "deployment.environment.name",
-                "production"
-              ],
-              [
-                "keel.environment_id",
-                "env1"
-              ],
-              [
-                "keel.service_id",
-                "nodeapiaaaaaaaaaaaaa"
-              ],
-              [
-                "service.name",
-                "api"
-              ]
+              {
+                "key": "deployment.environment.name",
+                "value": "production"
+              },
+              {
+                "key": "keel.environment_id",
+                "value": "env1"
+              },
+              {
+                "key": "keel.service_id",
+                "value": "nodeapiaaaaaaaaaaaaa"
+              },
+              {
+                "key": "service.name",
+                "value": "api"
+              }
             ],
             "events": [
               {
                 "time": 1791460800500,
                 "name": "exception",
                 "attributes": [
-                  [
-                    "exception.stacktrace",
-                    "Error: x\n    at y (\"z\")"
-                  ],
-                  [
-                    "exception.type",
-                    "Error"
-                  ]
+                  {
+                    "key": "exception.stacktrace",
+                    "value": "Error: x\n    at y (\"z\")"
+                  },
+                  {
+                    "key": "exception.type",
+                    "value": "Error"
+                  }
                 ]
               },
               {
@@ -1547,70 +1547,70 @@
       "statusMessage": "",
       "scope": "@opentelemetry/instrumentation-http",
       "attributes": [
-        [
-          "app.user.id",
-          "42"
-        ],
-        [
-          "app.user.ok",
-          "true"
-        ],
-        [
-          "app.user.tags",
-          "[\"a\",\"b\",null]"
-        ],
-        [
-          "big",
-          "1e+21"
-        ],
-        [
-          "http.request.method",
-          "GET"
-        ],
-        [
-          "http.response.status_code",
-          "200"
-        ],
-        [
-          "http.route",
-          "/users/:id"
-        ],
-        [
-          "tiny",
-          "1.5e-7"
-        ]
+        {
+          "key": "app.user.id",
+          "value": "42"
+        },
+        {
+          "key": "app.user.ok",
+          "value": "true"
+        },
+        {
+          "key": "app.user.tags",
+          "value": "[\"a\",\"b\",null]"
+        },
+        {
+          "key": "big",
+          "value": "1e+21"
+        },
+        {
+          "key": "http.request.method",
+          "value": "GET"
+        },
+        {
+          "key": "http.response.status_code",
+          "value": "200"
+        },
+        {
+          "key": "http.route",
+          "value": "/users/:id"
+        },
+        {
+          "key": "tiny",
+          "value": "1.5e-7"
+        }
       ],
       "resource": [
-        [
-          "deployment.environment.name",
-          "production"
-        ],
-        [
-          "keel.environment_id",
-          "env1"
-        ],
-        [
-          "keel.service_id",
-          "nodeapiaaaaaaaaaaaaa"
-        ],
-        [
-          "service.name",
-          "api"
-        ]
+        {
+          "key": "deployment.environment.name",
+          "value": "production"
+        },
+        {
+          "key": "keel.environment_id",
+          "value": "env1"
+        },
+        {
+          "key": "keel.service_id",
+          "value": "nodeapiaaaaaaaaaaaaa"
+        },
+        {
+          "key": "service.name",
+          "value": "api"
+        }
       ],
       "events": [
         {
           "time": 1791460800500,
           "name": "exception",
           "attributes": [
-            [
-              "exception.stacktrace",
-              "Error: x\n    at y (\"z\")"
-            ],
-            [
-              "exception.type",
-              "Error"
-            ]
+            {
+              "key": "exception.stacktrace",
+              "value": "Error: x\n    at y (\"z\")"
+            },
+            {
+              "key": "exception.type",
+              "value": "Error"
+            }
           ]
         },
         {
@@ -1642,32 +1642,32 @@
       "statusMessage": "boom",
       "scope": "",
       "attributes": [
-        [
-          "1",
-          "one"
-        ],
-        [
-          "2",
-          "two"
-        ],
-        [
-          "db.system",
-          "postgresql"
-        ],
-        [
-          "http.method",
-          "PUT"
-        ],
-        [
-          "x",
-          "ex"
-        ]
+        {
+          "key": "1",
+          "value": "one"
+        },
+        {
+          "key": "2",
+          "value": "two"
+        },
+        {
+          "key": "db.system",
+          "value": "postgresql"
+        },
+        {
+          "key": "http.method",
+          "value": "PUT"
+        },
+        {
+          "key": "x",
+          "value": "ex"
+        }
       ],
       "resource": [
-        [
-          "keel.service_id",
-          "nodeapiaaaaaaaaaaaaa"
-        ]
+        {
+          "key": "keel.service_id",
+          "value": "nodeapiaaaaaaaaaaaaa"
+        }
       ],
       "events": []
     },
@@ -1683,30 +1683,30 @@
       "statusMessage": "",
       "scope": "nested-scope",
       "attributes": [
-        [
-          "_x",
-          "underscore"
-        ],
-        [
-          "a.b",
-          "dotted"
-        ],
-        [
-          "B",
-          "b"
-        ],
-        [
-          "e",
-          "e"
-        ],
-        [
-          "é",
-          "e-acute"
-        ],
-        [
-          "Z",
-          "z"
-        ]
+        {
+          "key": "_x",
+          "value": "underscore"
+        },
+        {
+          "key": "a.b",
+          "value": "dotted"
+        },
+        {
+          "key": "B",
+          "value": "b"
+        },
+        {
+          "key": "e",
+          "value": "e"
+        },
+        {
+          "key": "é",
+          "value": "e-acute"
+        },
+        {
+          "key": "Z",
+          "value": "z"
+        }
       ],
       "resource": [],
       "events": []

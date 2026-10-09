@@ -3,8 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useGetInvitation } from "@/api/gen";
-import type { PublicInvitation } from "@/api/types";
+import { type PublicInvitation, useGetInvitation } from "@/api/gen";
 import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
 import SignUpForm from "@/components/sign-up-form";

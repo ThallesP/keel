@@ -13,8 +13,9 @@ import {
   useStopNode,
   useUnexposeNode,
   useUpdateNode,
+  type NodeView,
+  type Position,
 } from "@/api/gen";
-import type { NodeView, Position } from "@/api/types";
 import { CanvasOverlay } from "@/lib/canvas-overlay";
 
 import { useEnvironment } from "./environment";

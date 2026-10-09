@@ -11,7 +11,7 @@
 // list contains them. Queuing one bumps the version, so the sync runs again with the list it
 // already has: the select works whether the list delivered the node before or after the write
 // resolved (read-your-writes refetches before it resolves).
-import type { NodeView, Position } from "@/api/types";
+import type { NodeView, Position } from "@/api/gen";
 
 export class CanvasOverlay {
   #seq = 0;

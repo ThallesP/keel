@@ -219,9 +219,9 @@ func flattenAttrs(out *attrMap, key string, v any) {
 func sortedSpanAttributes(m *attrMap) []domain.Attribute {
 	out := make([]domain.Attribute, len(m.keys))
 	for i, k := range m.keys {
-		out[i] = domain.Attribute{k, m.vals[k]}
+		out[i] = domain.Attribute{Key: k, Value: m.vals[k]}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return localeCompare(out[i][0], out[j][0]) < 0 })
+	sort.SliceStable(out, func(i, j int) bool { return localeCompare(out[i].Key, out[j].Key) < 0 })
 	return out
 }
 

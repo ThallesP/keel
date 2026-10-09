@@ -66,13 +66,14 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: bunx oxlint --type-aware
       - name: No new comments
         run: scripts/check-comments.sh
       - run: bun run check-types
         working-directory: packages/ui
       - run: bun run check-types
         working-directory: apps/web
+      - name: oxlint (type-aware, needs the generated client from check-types)
+        run: bunx oxlint --type-aware
       - run: bun run build
         working-directory: apps/web
 

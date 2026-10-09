@@ -343,17 +343,18 @@ function HoverBand({ x, i }: { x: Band; i: number }) {
 function XAxis({ x, buckets, bucketMs }: { x: Band; buckets: TraceBucket[]; bucketMs: number }) {
   const n = buckets.length;
   if (n === 0) return null;
-  const marks: [number, "start" | "middle" | "end"][] = [
-    [0, "start"],
-    [Math.floor(n / 2), "middle"],
-    [n - 1, "end"],
-  ];
+  const middle = Math.floor(n / 2);
+  const marks = [
+    { i: 0, anchor: "start", at: x.start(0) },
+    { i: middle, anchor: "middle", at: x.center(middle) },
+    { i: n - 1, anchor: "end", at: x.start(n - 1) + x.band },
+  ] as const;
   return (
     <g>
-      {marks.map(([i, anchor]) => (
+      {marks.map(({ i, anchor, at }) => (
         <text
           key={i}
-          x={anchor === "start" ? x.start(i) : anchor === "end" ? x.start(i) + x.band : x.center(i)}
+          x={at}
           y={BASE + 15}
           textAnchor={anchor}
           className="fill-faint font-mono text-2xs tabular-nums"

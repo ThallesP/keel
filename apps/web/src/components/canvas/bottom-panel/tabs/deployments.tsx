@@ -18,6 +18,11 @@ import { StepIcon } from "../step-icon";
 
 const isErrorLine = (text: string) => /error:|crash loop|timed out|node deleted/.test(text);
 
+function lineTone(text: string, last: boolean) {
+  if (isErrorLine(text)) return "danger";
+  return last ? "ink" : "muted";
+}
+
 type Pill = { label: string; tone: "success" | "primary" | "danger" | "muted" };
 
 const pillTone = {
@@ -212,7 +217,7 @@ function Detail({ d, now }: { d: Deployment; now: number }) {
         lines={d.log.map((text, i) => ({
           key: `${d.id}:${i}`,
           text,
-          tone: isErrorLine(text) ? "danger" : i === d.log.length - 1 ? "ink" : "muted",
+          tone: lineTone(text, i === d.log.length - 1),
         }))}
       />
     </PanelMain>

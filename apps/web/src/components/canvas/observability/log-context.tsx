@@ -89,33 +89,62 @@ export function LogContext({
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-auto py-2">
-          {error ? (
-            <p className="px-5 text-xs text-danger">{error}</p>
-          ) : data === null ? (
-            <p className="px-5 text-xs text-faint">Loading…</p>
-          ) : (
-            <EventStream events={events} onOpen={onOpen} focusKey={focused?.key} />
-          )}
+          <AroundLines
+            error={error}
+            loading={data === null}
+            events={events}
+            onOpen={onOpen}
+            focusKey={focused?.key}
+          />
         </div>
         <aside className="flex w-[360px] shrink-0 flex-col overflow-auto border-l border-line">
           {line && <LineDetail line={line} />}
           <section className="flex flex-col gap-2 px-4 py-3">
             <SectionLabel>Requests within 30s</SectionLabel>
-            {data === null ? null : data.requests.length === 0 ? (
-              <p className="text-2xs text-faint">No requests started in that minute.</p>
-            ) : (
-              <div className="-mx-4 flex flex-col">
-                {data.requests
-                  .slice()
-                  .sort((a, b) => a.start - b.start)
-                  .map((t) => (
-                    <RequestRow key={t.traceId} trace={t} onOpen={() => onOpen(requestEvent(t))} />
-                  ))}
-              </div>
-            )}
+            {data && <RequestsAround requests={data.requests} onOpen={onOpen} />}
           </section>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function AroundLines({
+  error,
+  loading,
+  events,
+  onOpen,
+  focusKey,
+}: {
+  error: string | null;
+  loading: boolean;
+  events: StreamEvent[];
+  onOpen: (event: StreamEvent) => void;
+  focusKey: string | undefined;
+}) {
+  if (error) return <p className="px-5 text-xs text-danger">{error}</p>;
+  if (loading) return <p className="px-5 text-xs text-faint">Loading…</p>;
+  return <EventStream events={events} onOpen={onOpen} focusKey={focusKey} />;
+}
+
+function RequestsAround({
+  requests,
+  onOpen,
+}: {
+  requests: TraceSummary[];
+  onOpen: (event: StreamEvent) => void;
+}) {
+  if (requests.length === 0) {
+    return <p className="text-2xs text-faint">No requests started in that minute.</p>;
+  }
+  return (
+    <div className="-mx-4 flex flex-col">
+      {requests
+        .slice()
+        .sort((a, b) => a.start - b.start)
+        .map((t) => (
+          <RequestRow key={t.traceId} trace={t} onOpen={() => onOpen(requestEvent(t))} />
+        ))}
     </div>
   );
 }

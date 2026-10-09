@@ -16,6 +16,14 @@ import { useLatestDeployment, useSummary } from "./use-data";
 import { useHotkey } from "./use-hotkey";
 import { useNow } from "./use-now";
 
+function shipLabel(failed: boolean, pendingChanges: number) {
+  if (failed) return "Retry";
+  if (pendingChanges > 0) {
+    return `Ship · ${pendingChanges} ${pendingChanges === 1 ? "change" : "changes"}`;
+  }
+  return "Ship";
+}
+
 function ShipButton() {
   const { environmentId } = useEnvironment();
   const summary = useSummary();
@@ -76,11 +84,7 @@ function ShipButton() {
           strokeLinejoin="round"
         />
       </svg>
-      {failed
-        ? "Retry"
-        : pendingChanges > 0
-          ? `Ship · ${pendingChanges} ${pendingChanges === 1 ? "change" : "changes"}`
-          : "Ship"}
+      {shipLabel(failed, pendingChanges)}
       <Kbd className="pl-0.5 text-white/70">⌘↵</Kbd>
     </button>
   );

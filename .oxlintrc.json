@@ -27,7 +27,8 @@
     "react/no-deriving-state-in-effects": "error",
     "react/exhaustive-deps": "error",
     "typescript/no-unnecessary-condition": "error",
-    "keel/no-in": "error"
+    "keel/no-in": "error",
+    "no-nested-ternary": "error"
   },
   "env": {
     "builtin": true

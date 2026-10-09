@@ -316,9 +316,12 @@ function SpanBar({ span, start, total }: { span: Span; start: number; total: num
   const left = ((span.start - start) / total) * 100;
   const width = (span.duration / total) * 100;
   const failed = span.status === "error";
-  // Duration label after the bar; near the right edge, inside a bar wide enough to hold it,
-  // else before the bar.
-  const place = left + width <= 80 ? "after" : width >= 20 ? "inside" : "before";
+  const labelStyle = {
+    after: { left: `calc(${left + width}% + 6px)` },
+    inside: { right: `calc(${100 - left - width}% + 6px)` },
+    before: { right: `calc(${100 - left}% + 6px)` },
+  };
+  const place = labelPlace(left, width);
   return (
     <>
       <span
@@ -333,18 +336,18 @@ function SpanBar({ span, start, total }: { span: Span; start: number; total: num
           "absolute top-1/2 -translate-y-1/2 font-mono text-2xs whitespace-nowrap tabular-nums",
           place === "inside" ? "text-white" : "text-muted-foreground",
         )}
-        style={
-          place === "after"
-            ? { left: `calc(${left + width}% + 6px)` }
-            : place === "inside"
-              ? { right: `calc(${100 - left - width}% + 6px)` }
-              : { right: `calc(${100 - left}% + 6px)` }
-        }
+        style={labelStyle[place]}
       >
         {formatDuration(span.duration)}
       </span>
     </>
   );
+}
+
+function labelPlace(left: number, width: number) {
+  if (left + width <= 80) return "after";
+  if (width >= 20) return "inside";
+  return "before";
 }
 
 /** A line is a moment: an 8px point on the timeline, ringed so it reads over a bar's end. */
@@ -369,7 +372,6 @@ function LinePoint({
 }
 
 function SpanDetail({ span, traceStart }: { span: Span; traceStart: number }) {
-  const status = span.status === "error" ? "error" : span.status === "ok" ? "ok" : "unset";
   return (
     <div className="flex flex-col gap-5 px-4 py-3">
       <div>
@@ -382,7 +384,7 @@ function SpanDetail({ span, traceStart }: { span: Span; traceStart: number }) {
         pairs={[
           { key: "duration", value: formatDuration(span.duration) },
           { key: "starts at", value: `+${formatDuration(span.start - traceStart)}` },
-          { key: "status", value: status },
+          { key: "status", value: span.status },
           { key: "span", value: span.spanId },
           { key: "parent", value: span.parentId || "—" },
           { key: "scope", value: span.scope || "—" },

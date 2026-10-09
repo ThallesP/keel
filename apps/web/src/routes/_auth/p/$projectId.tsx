@@ -19,17 +19,18 @@ type Search = {
   around?: number;
 };
 
-const OBSERVABILITY = new Set(["observability", "logs", "traces"]);
+const VIEWS = new Map<string, Search["view"]>([
+  ["observability", "observability"],
+  ["logs", "observability"],
+  ["traces", "observability"],
+  ["settings", "settings"],
+]);
 
 export const Route = createFileRoute("/_auth/p/$projectId")({
   component: ProjectPage,
   validateSearch: (search: Record<string, unknown>): Search => ({
     deployment: typeof search.deployment === "string" ? search.deployment : undefined,
-    view: OBSERVABILITY.has(String(search.view))
-      ? "observability"
-      : search.view === "settings"
-        ? "settings"
-        : undefined,
+    view: VIEWS.get(String(search.view)),
     trace: typeof search.trace === "string" ? search.trace : undefined,
     // The router parses `around=1790…` to a number.
     around:

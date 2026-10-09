@@ -41,7 +41,7 @@
 10 apps/web/src/components/canvas/observability/log-context.tsx
 6 apps/web/src/components/canvas/observability/page.tsx
 12 apps/web/src/components/canvas/observability/stream.tsx
-24 apps/web/src/components/canvas/observability/trace.tsx
+22 apps/web/src/components/canvas/observability/trace.tsx
 5 apps/web/src/components/canvas/primitives.tsx
 7 apps/web/src/components/canvas/project-switcher.tsx
 4 apps/web/src/components/canvas/rail.tsx

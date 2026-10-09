@@ -53,6 +53,7 @@ export default function SignUpForm({
       }),
     },
   });
+  const submitLabel = invitation ? "Join" : "Create account";
 
   return (
     <div>
@@ -150,7 +151,7 @@ export default function SignUpForm({
         >
           {({ canSubmit, isSubmitting }) => (
             <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Creating account…" : invitation ? "Join" : "Create account"}
+              {isSubmitting ? "Creating account…" : submitLabel}
             </Button>
           )}
         </form.Subscribe>

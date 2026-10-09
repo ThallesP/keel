@@ -67,6 +67,11 @@ function eventTime(ms: number) {
   return `${day}${formatLogTime(ms)}`;
 }
 
+function openTitle(e: StreamEvent) {
+  if (e.kind === "request") return "Open trace";
+  return e.ref ? "Open the trace this line names" : "Open the lines around this one";
+}
+
 export function EventStream({
   events,
   onOpen,
@@ -97,13 +102,7 @@ export function EventStream({
             ref={focused ? focusRef : undefined}
             type="button"
             onClick={() => onOpen(e)}
-            title={
-              e.kind === "request"
-                ? "Open trace"
-                : e.ref
-                  ? "Open the trace this line names"
-                  : "Open the lines around this one"
-            }
+            title={openTitle(e)}
             className={cn(
               "flex h-[22px] w-max min-w-full items-center pr-5 text-left",
               focused ? "bg-primary-soft" : "hover:bg-surface-2",

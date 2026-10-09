@@ -83,10 +83,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const everConnected = useRef(false);
 
   useEffect(() => {
-    if (!identity) {
-      setStatus("idle");
-      return;
-    }
+    if (!identity) return;
     let closed = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let batchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -135,7 +132,6 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       batchTimer ??= setTimeout(flush, BATCH_MS);
     });
 
-    setStatus("connecting");
     centrifuge.connect();
 
     return () => {
@@ -147,7 +143,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
   }, [identity, epoch, queryClient]);
 
-  const value = useMemo(() => ({ status, reconnect }), [status, reconnect]);
+  const value = useMemo(
+    () => ({ status: identity ? status : "idle", reconnect }),
+    [identity, status, reconnect],
+  );
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
 

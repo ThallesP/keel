@@ -13,6 +13,19 @@ Differentiator: UI/UX and deploy DX.
   - Tailscale for user containers and control-plane/worker comms.
   - Public traffic via `keel-proxy` (Caddy + caddy-l4, `apps/proxy`) on the control plane only, never a per-worker proxy: HTTPS on 80/443 with automatic certificates (sslip.io default domain or the user's own), raw TCP on any port but 80/443 and UDP on any port, all configured by Convex through the admin API. The user opens 80/443 and the TCP/UDP ports they expose. Cloudflare Quick Tunnel was dropped 2026-10-06, Tailscale Funnel 2026-10-01. See `docs/networking.md`.
 
+## Code rules
+
+Each rule names what enforces it. When an agent gets corrected for something new, add it here at the strongest level that works: impossible in code, then a check, then a test, then this table (the `/correct` skill).
+
+| Rule                                                                                                                                                                                                                                            | Enforced by                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| No comments in Go or TypeScript. Say it with a name, a type or a test; design reasons go in `docs/` or the commit message. Directives (`//go:`, `//nolint`, `@ts-expect-error`, lint-disable) are exempt. Existing comments are debt to remove. | `scripts/check-comments.sh` in CI: per-file counts in `.comments-baseline` only go down           |
+| Destructure objects: `const { sink } = data`, not `const sink = data.sink`.                                                                                                                                                                     | oxlint `prefer-destructuring`                                                                     |
+| Effects only sync with outside systems. Derive values during render, reset state by remounting, change state in event handlers.                                                                                                                 | oxlint `react/set-state-in-effect`, `react/no-deriving-state-in-effects`, `react/exhaustive-deps` |
+| A module-level constant earns its place: used in two or more places, or a regex or table built once. A value used once goes inline, where its key already names it (`refetchInterval: 3_000`).                                                  | review                                                                                            |
+| A file exports one component. A small component used only by that file may stay next to it; anything else gets its own file.                                                                                                                    | review                                                                                            |
+| Generated code is never edited and lives apart: `apps/web/src/api/gen` (Kubb, gitignored) and `internal/adapters/sqlite/db` (sqlc, `Code generated` header).                                                                                    | CI `openapi.json is current`; `bun run api:generate` on dev, build, check-types                   |
+
 ## Install and release
 
 - `install.sh` is the product's front door: one idempotent command, re-run = upgrade, `KEEL_JSON=1` for agents. Its contract (options, output, verification) is documented in `README.md`; keep the two in sync.

@@ -23,7 +23,7 @@ export function ObservabilityPage() {
       </div>
     );
   }
-  const sink = data.sink;
+  const { sink } = data;
   if (sink?.kind !== "axiom") {
     return (
       <div className="flex h-full flex-col bg-bg">

@@ -252,7 +252,7 @@ function Row({
           <>
             <span className="flex min-w-0 shrink-0 items-center gap-0.5 whitespace-pre">
               {parts.map((p, i) => {
-                const ref = p.ref;
+                const { ref } = p;
                 return ref ? (
                   <RefChip key={i} reference={ref} jump={() => ref.nodeId && jumpTo(ref.nodeId)} />
                 ) : (

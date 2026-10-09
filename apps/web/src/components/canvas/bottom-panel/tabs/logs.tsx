@@ -10,7 +10,6 @@ import type { InfraNode } from "../../types";
 import { FollowingBadge, LogStream } from "../log-stream";
 import { PanelMain } from "../panel-frame";
 
-const POLL_MS = 3000;
 const TAIL = 300;
 
 /**
@@ -24,7 +23,7 @@ function useServiceLogs(nodeId: string, enabled: boolean) {
     {
       query: {
         enabled,
-        refetchInterval: POLL_MS,
+        refetchInterval: 3_000,
         staleTime: 0,
         retry: false,
         meta: { realtime: false },

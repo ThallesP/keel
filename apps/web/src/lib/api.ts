@@ -45,7 +45,7 @@ export class ApiError extends Error {
     method?: string;
     url?: string;
   }) {
-    const body = init.body;
+    const { body } = init;
     const problem = isObject(body) ? (body as Partial<Problem> & Partial<DeviceError>) : undefined;
     const detail = str(problem?.detail) ?? str(problem?.error_description);
     const title = str(problem?.title) ?? (init.statusText?.trim() || undefined);

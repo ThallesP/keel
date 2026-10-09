@@ -1,11 +1,37 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react"
+  ],
   "categories": {
     "correctness": "error"
   },
-  "rules": {},
+  "rules": {
+    "prefer-destructuring": [
+      "error",
+      {
+        "VariableDeclarator": {
+          "array": false,
+          "object": true
+        },
+        "AssignmentExpression": {
+          "array": false,
+          "object": false
+        }
+      }
+    ],
+    "react/set-state-in-effect": "error",
+    "react/no-deriving-state-in-effects": "error",
+    "react/exhaustive-deps": "error"
+  },
   "env": {
     "builtin": true
-  }
+  },
+  "ignorePatterns": [
+    "**/src/api/gen/**",
+    "**/*.gen.ts"
+  ]
 }

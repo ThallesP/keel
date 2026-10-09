@@ -77,7 +77,7 @@ const stateText = { live: "live", starting: "getting a certificate…", failed: 
 
 function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoint }) {
   const actions = useCanvasActions();
-  const label = PROTOCOLS.find((p) => p.id === e.protocol)!.label;
+  const { label } = PROTOCOLS.find((p) => p.id === e.protocol)!;
   return (
     <div className="flex h-8 items-center gap-3 border-t border-line/60 px-5 font-mono text-xs">
       <span className="flex min-w-0 flex-1 items-center gap-3 pl-2">

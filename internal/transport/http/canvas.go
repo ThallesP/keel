@@ -279,15 +279,21 @@ func (s *Server) registerCanvas(h huma.API) {
 	op(h, operation("listReferenceableVariables", http.MethodGet, "/api/nodes/{id}/variables/referenceable",
 		"What the node's variables can reference"),
 		func(ctx context.Context, in *canvasIDInput) (*canvasSourceListOut, error) {
-			sources, err := s.app.ReferenceableVariables(ctx, ActorFrom(ctx), in.ID)
+			ref, err := s.app.ReferenceableVariables(ctx, ActorFrom(ctx), in.ID)
 			if err != nil {
 				return nil, err
 			}
-			out := &canvasSourceListOut{Body: api.ReferenceSourceList{Sources: make([]api.ReferenceSource, 0, len(sources))}}
-			for _, src := range sources {
+			out := &canvasSourceListOut{Body: api.ReferenceSourceList{
+				Sources:     make([]api.ReferenceSource, 0, len(ref.Sources)),
+				Suggestions: make([]api.ReferenceSuggestion, 0, len(ref.Suggestions)),
+			}}
+			for _, sg := range ref.Suggestions {
+				out.Body.Suggestions = append(out.Body.Suggestions, api.ReferenceSuggestion{NodeID: sg.NodeID, Node: sg.Node, Key: sg.Key, As: sg.As, Value: sg.Value})
+			}
+			for _, src := range ref.Sources {
 				keys := make([]api.ReferenceKey, 0, len(src.Keys))
 				for _, k := range src.Keys {
-					keys = append(keys, api.ReferenceKey{Key: k.Key, Secret: k.Secret, Provided: k.Provided})
+					keys = append(keys, api.ReferenceKey{Key: k.Key, As: k.As, Secret: k.Secret, Provided: k.Provided})
 				}
 				out.Body.Sources = append(out.Body.Sources, api.ReferenceSource{
 					NodeID: src.NodeID, Name: src.Name, Type: string(src.Type), Image: src.Image, Keys: keys,

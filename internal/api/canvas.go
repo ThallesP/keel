@@ -253,6 +253,7 @@ type VariableList struct {
 
 type ReferenceKey struct {
 	Key      string `json:"key"`
+	As       string `json:"as" doc:"The variable name to give a reference to it: DATABASE_URL stays, api.URL becomes API_URL"`
 	Secret   bool   `json:"secret"`
 	Provided bool   `json:"provided" doc:"Computed (DATABASE_URL, REDIS_URL, URL, HOST, PORT), not a row"`
 }
@@ -265,8 +266,17 @@ type ReferenceSource struct {
 	Keys   []ReferenceKey `json:"keys" doc:"Provided keys first (URL key, HOST, PORT), then the node's rows"`
 }
 
+type ReferenceSuggestion struct {
+	NodeID string `json:"nodeId"`
+	Node   string `json:"node"`
+	Key    string `json:"key"`
+	As     string `json:"as" doc:"The variable to create"`
+	Value  string `json:"value" doc:"The reference, e.g. ${{ postgres.DATABASE_URL }}"`
+}
+
 type ReferenceSourceList struct {
-	Sources []ReferenceSource `json:"sources" doc:"Every other deployable node of the environment, in creation order"`
+	Sources     []ReferenceSource     `json:"sources" doc:"Every other deployable node of the environment, in creation order"`
+	Suggestions []ReferenceSuggestion `json:"suggestions" doc:"Services only: each source's connection key the node neither references nor has a variable for yet"`
 }
 
 type SetVariableRequest struct {

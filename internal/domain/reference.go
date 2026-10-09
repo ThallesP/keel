@@ -193,6 +193,16 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 	return out
 }
 
+func SuggestedKey(node, key string) string {
+	switch key {
+	case "URL", "HOST", "PORT":
+		return strings.ToUpper(strings.ReplaceAll(node, "-", "_")) + "_" + key
+	}
+	return key
+}
+
+func RefText(node, key string) string { return "${{ " + node + "." + key + " }}" }
+
 // RefPart is a piece of a variable's value: literal text, or a reference (Ref non-nil).
 type RefPart struct {
 	Text string

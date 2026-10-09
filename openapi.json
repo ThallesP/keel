@@ -1644,6 +1644,10 @@
       "ReferenceKey": {
         "additionalProperties": false,
         "properties": {
+          "as": {
+            "description": "The variable name to give a reference to it: DATABASE_URL stays, api.URL becomes API_URL",
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
@@ -1657,6 +1661,7 @@
         },
         "required": [
           "key",
+          "as",
           "secret",
           "provided"
         ],
@@ -1707,10 +1712,48 @@
               "$ref": "#/components/schemas/ReferenceSource"
             },
             "type": "array"
+          },
+          "suggestions": {
+            "description": "Services only: each source's connection key the node neither references nor has a variable for yet",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSuggestion"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "sources"
+          "sources",
+          "suggestions"
+        ],
+        "type": "object"
+      },
+      "ReferenceSuggestion": {
+        "additionalProperties": false,
+        "properties": {
+          "as": {
+            "description": "The variable to create",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "value": {
+            "description": "The reference, e.g. ${{ postgres.DATABASE_URL }}",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "node",
+          "key",
+          "as",
+          "value"
         ],
         "type": "object"
       },

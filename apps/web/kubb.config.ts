@@ -30,6 +30,7 @@ export default defineConfig({
     pluginReactQuery({
       output: { path: "./hooks" },
       hooks: true,
+      suspense: {},
       // Every query key starts with the resolved request path (`/api/environments/abc/nodes`),
       // then the query parameters object when the operation has any: realtime topics and
       // Keel-Invalidate name path prefixes (docs/go/ARCHITECTURE.md, "Realtime").

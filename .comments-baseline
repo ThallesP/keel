@@ -10,14 +10,14 @@
 6 apps/web/src/components/canvas/add-dialog.tsx
 4 apps/web/src/components/canvas/bottom-panel/log-stream.tsx
 6 apps/web/src/components/canvas/bottom-panel/panel-frame.tsx
-4 apps/web/src/components/canvas/bottom-panel/panel.tsx
-8 apps/web/src/components/canvas/bottom-panel/reference-palette.tsx
+3 apps/web/src/components/canvas/bottom-panel/panel.tsx
+6 apps/web/src/components/canvas/bottom-panel/reference-palette.tsx
 1 apps/web/src/components/canvas/bottom-panel/step-icon.tsx
 4 apps/web/src/components/canvas/bottom-panel/tabs/deployments.tsx
 7 apps/web/src/components/canvas/bottom-panel/tabs/logs.tsx
 4 apps/web/src/components/canvas/bottom-panel/tabs/settings.tsx
 6 apps/web/src/components/canvas/bottom-panel/tabs/tracing.tsx
-13 apps/web/src/components/canvas/bottom-panel/tabs/variables.tsx
+10 apps/web/src/components/canvas/bottom-panel/tabs/variables.tsx
 12 apps/web/src/components/canvas/canvas.tsx
 6 apps/web/src/components/canvas/copy-prompt.tsx
 4 apps/web/src/components/canvas/endpoint-address.tsx

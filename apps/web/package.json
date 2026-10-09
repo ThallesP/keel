@@ -27,6 +27,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-error-boundary": "^6.1.6",
     "sonner": "catalog:",
     "varlock": "catalog:",
     "zod": "catalog:"

@@ -245,7 +245,7 @@ func TestCanvasHTTPProjectsAndAccess(t *testing.T) {
 		"/api/projects/by-slug/acme":                         `{"project":null}`,
 		"/api/projects":                                      `{"projects":[]}`,
 		"/api/nodes/" + node.ID + "/variables":               `{"variables":[]}`,
-		"/api/nodes/" + node.ID + "/variables/referenceable": `{"sources":[]}`,
+		"/api/nodes/" + node.ID + "/variables/referenceable": `{"sources":[],"suggestions":[]}`,
 	} {
 		if status, _, raw := c.do("GET", path, nil); status != 200 || raw != want {
 			t.Errorf("foreign GET %s: %d %s, want %s", path, status, raw, want)

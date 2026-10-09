@@ -1,5 +1,10 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { useNodes } from "@xyflow/react";
+import { Suspense } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+
+import { errorMessage } from "@/lib/api";
 
 import { IconTile } from "../nodes/icons";
 import { StatusDot } from "../primitives";
@@ -53,6 +58,7 @@ export function BottomPanel() {
   const { panelNodeId, panelTab, panelCollapsed } = useCanvasUi();
   const dispatch = useCanvasDispatch();
   const nodes = useNodes<CanvasNode>();
+  const { reset } = useQueryErrorResetBoundary();
   const node = nodes.find((n) => n.id === panelNodeId);
   if (!node || node.type === "group") return null;
   const shown = tabsFor(node);
@@ -94,9 +100,22 @@ export function BottomPanel() {
         panelCollapsed && <span className="font-mono text-2xs text-faint">{metaFor(node)}</span>
       }
     >
-      {/* Keyed by node: a switch remounts the tab, so a half-typed variable, an open row editor
-          or the previous node's log lines never carry over to the next node. */}
-      <TabContent key={node.id} node={node} tab={tab} />
+      <ErrorBoundary
+        key={node.id}
+        onReset={reset}
+        fallbackRender={({ error, resetErrorBoundary }) => (
+          <p className="px-5 py-4 text-xs text-danger">
+            {errorMessage(error)}{" "}
+            <button type="button" className="underline" onClick={resetErrorBoundary}>
+              Retry
+            </button>
+          </p>
+        )}
+      >
+        <Suspense fallback={<p className="px-5 py-4 text-xs text-faint">Loading…</p>}>
+          <TabContent node={node} tab={tab} />
+        </Suspense>
+      </ErrorBoundary>
     </PanelFrame>
   );
 }

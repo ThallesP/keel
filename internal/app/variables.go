@@ -36,8 +36,22 @@ type ReferenceSource struct {
 // ReferenceKey: Provided keys are computed (DATABASE_URL, HOST, …), the rest are the node's rows.
 type ReferenceKey struct {
 	Key      string
+	As       string
 	Secret   bool
 	Provided bool
+}
+
+type ReferenceSuggestion struct {
+	NodeID string
+	Node   string
+	Key    string
+	As     string
+	Value  string
+}
+
+type Referenceable struct {
+	Sources     []ReferenceSource
+	Suggestions []ReferenceSuggestion
 }
 
 // SetVariableInput is variables.set's arguments. PreviousKey renames that row instead (nil = Key).
@@ -96,8 +110,8 @@ func (a *App) ListVariables(ctx context.Context, actor domain.Actor, nodeID stri
 // ReferenceableVariables is what the reference picker offers: every other deployable node of the
 // environment in creation order, its provided keys not shadowed by its own rows, then its rows.
 // Credentials are never read here (every one at its fallback), so REDIS_URL reads as not secret.
-func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, nodeID string) ([]ReferenceSource, error) {
-	out := []ReferenceSource{}
+func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, nodeID string) (Referenceable, error) {
+	out := Referenceable{Sources: []ReferenceSource{}, Suggestions: []ReferenceSuggestion{}}
 	err := a.read(ctx, func(tx Tx) error {
 		scope, ok, err := ownedNode(tx, actor, nodeID)
 		if err != nil || !ok {
@@ -108,6 +122,16 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 			return err
 		}
 		fallback := func(_, fb string) string { return fb }
+		suggest := scope.Node.Type == domain.NodeService
+		referenced, taken := map[string]bool{}, map[string]bool{}
+		for _, row := range r.Own(nodeID) {
+			taken[row.Key] = true
+			for _, part := range r.Expand(scope.Node, row.Value).Parts {
+				if part.Ref != nil && part.Ref.NodeID != "" {
+					referenced[part.Ref.NodeID] = true
+				}
+			}
+		}
 		for _, n := range nodes {
 			if n.ID == nodeID || !n.Type.Deployable() {
 				continue
@@ -120,21 +144,35 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 			keys := []ReferenceKey{}
 			for _, p := range domain.ProvidedKeys(n, fallback) {
 				if !shadowed[p.Key] {
-					keys = append(keys, ReferenceKey{Key: p.Key, Secret: p.Secret, Provided: true})
+					keys = append(keys, ReferenceKey{Key: p.Key, As: domain.SuggestedKey(n.Name, p.Key), Secret: p.Secret, Provided: true})
 				}
 			}
 			for _, row := range own {
-				keys = append(keys, ReferenceKey{Key: row.Key, Secret: row.Secret})
+				keys = append(keys, ReferenceKey{Key: row.Key, As: row.Key, Secret: row.Secret})
 			}
 			src := ReferenceSource{NodeID: n.ID, Name: n.Name, Type: n.Type, Keys: keys}
 			if n.Desired != nil {
 				src.Image = n.Desired.Image
 			}
-			out = append(out, src)
+			out.Sources = append(out.Sources, src)
+			if suggest && !referenced[n.ID] {
+				if s, ok := connection(n, keys); ok && !taken[s.As] {
+					out.Suggestions = append(out.Suggestions, s)
+				}
+			}
 		}
 		return nil
 	})
 	return out, err
+}
+
+func connection(n domain.Node, keys []ReferenceKey) (ReferenceSuggestion, bool) {
+	for _, k := range keys {
+		if k.Provided && k.Key != "HOST" && k.Key != "PORT" {
+			return ReferenceSuggestion{NodeID: n.ID, Node: n.Name, Key: k.Key, As: k.As, Value: domain.RefText(n.Name, k.Key)}, true
+		}
+	}
+	return ReferenceSuggestion{}, false
 }
 
 // SetVariable upserts a variable by key; PreviousKey renames that row (references to it follow,

@@ -26,7 +26,8 @@
     "react/set-state-in-effect": "error",
     "react/no-deriving-state-in-effects": "error",
     "react/exhaustive-deps": "error",
-    "typescript/no-unnecessary-condition": "error"
+    "typescript/no-unnecessary-condition": "error",
+    "keel/no-in": "error"
   },
   "env": {
     "builtin": true
@@ -34,5 +35,8 @@
   "ignorePatterns": [
     "**/src/api/gen/**",
     "**/*.gen.ts"
+  ],
+  "jsPlugins": [
+    "./tools/oxlint/keel.js"
   ]
 }

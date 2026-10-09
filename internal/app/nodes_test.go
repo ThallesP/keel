@@ -560,7 +560,7 @@ func TestCanvasOtherOrganization(t *testing.T) {
 	if vars, err := k.app.ListVariables(k.ctx, b, api); err != nil || len(vars) != 0 {
 		t.Errorf("list variables: %v %v", vars, err)
 	}
-	if src, err := k.app.ReferenceableVariables(k.ctx, b, api); err != nil || len(src) != 0 {
+	if src, err := k.app.ReferenceableVariables(k.ctx, b, api); err != nil || len(src.Sources) != 0 {
 		t.Errorf("referenceable: %v %v", src, err)
 	}
 	if list, _ := k.app.ListProjects(k.ctx, b); len(list) != 1 || list[0].Project.Slug != "theirs" {

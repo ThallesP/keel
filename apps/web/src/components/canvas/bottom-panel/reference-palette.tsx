@@ -1,26 +1,17 @@
 import { Braces, Lock } from "lucide-react";
 import { useMemo, type RefObject } from "react";
 
-import type { ReferenceSource } from "@/api/types";
+import type { ReferenceKey, ReferenceSource } from "@/api/gen";
 import { Palette, type PalettePage } from "@/components/palette";
 
 import { NodeTypeIcon } from "../nodes/icons";
 
-export type { ReferenceSource };
-
 /** `${{ postgres.DATABASE_URL }}`. Mirrors `canvasRefRE` in `internal/domain/reference.go`. */
 export const refText = (node: string, key: string) => `\${{ ${node}.${key} }}`;
 
-const GENERIC = new Set(["URL", "HOST", "PORT"]);
-
-/** Name the new variable after what it holds: `DATABASE_URL` stays, `api.URL` becomes `API_URL`. */
-export function defaultKey(node: string, key: string) {
-  return GENERIC.has(key) ? `${node.toUpperCase().replace(/-/g, "_")}_${key}` : key;
-}
-
 function pages(
   sources: ReferenceSource[],
-  pick: (source: ReferenceSource, key: string) => void,
+  pick: (source: ReferenceSource, key: ReferenceKey) => void,
 ): PalettePage {
   const keysOf = (source: ReferenceSource): PalettePage => ({
     title: source.name,
@@ -36,7 +27,7 @@ function pages(
       ) : (
         <Braces size={13} strokeWidth={1.5} aria-hidden />
       ),
-      onSelect: () => pick(source, k.key),
+      onSelect: () => pick(source, k),
     })),
   });
 
@@ -81,14 +72,9 @@ export function ReferencePalette({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sources: ReferenceSource[];
-  onPick: (source: ReferenceSource, key: string) => void;
+  onPick: (source: ReferenceSource, key: ReferenceKey) => void;
   finalFocus?: RefObject<HTMLElement | null>;
 }) {
-  // Keyed on content: a live re-query with the same result must not reset an open palette.
-  const signature = JSON.stringify(sources);
-  const root = useMemo(
-    () => pages(JSON.parse(signature) as ReferenceSource[], onPick),
-    [signature, onPick],
-  );
+  const root = useMemo(() => pages(sources, onPick), [sources, onPick]);
   return <Palette open={open} onOpenChange={onOpenChange} root={root} finalFocus={finalFocus} />;
 }

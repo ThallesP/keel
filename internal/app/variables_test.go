@@ -77,23 +77,59 @@ func TestCanvasReferenceable(t *testing.T) {
 	k.setVar(web, "HOST", "override")
 	k.setVar(web, "A", "1")
 
-	src, err := k.app.ReferenceableVariables(k.ctx, m, api)
+	ref, err := k.app.ReferenceableVariables(k.ctx, m, api)
 	if err != nil {
 		t.Fatal(err)
 	}
+	src := ref.Sources
 	if len(src) != 2 || src[0].NodeID != redis || src[1].NodeID != web || src[0].Image != "redis:7" || src[0].Type != domain.NodeCache {
 		t.Fatalf("sources %+v", src)
 	}
-	wantRedis := []app.ReferenceKey{{Key: "REDIS_URL", Provided: true}, {Key: "HOST", Provided: true}, {Key: "PORT", Provided: true}, {Key: "REDIS_PASSWORD", Secret: true}}
+	wantRedis := []app.ReferenceKey{{Key: "REDIS_URL", As: "REDIS_URL", Provided: true}, {Key: "HOST", As: "REDIS_HOST", Provided: true}, {Key: "PORT", As: "REDIS_PORT", Provided: true}, {Key: "REDIS_PASSWORD", As: "REDIS_PASSWORD", Secret: true}}
 	if !reflect.DeepEqual(src[0].Keys, wantRedis) {
 		t.Errorf("redis keys %+v (REDIS_URL reads as not secret: credentials are never read here)", src[0].Keys)
 	}
-	wantWeb := []app.ReferenceKey{{Key: "URL", Provided: true}, {Key: "PORT", Provided: true}, {Key: "HOST"}, {Key: "A"}}
+	wantWeb := []app.ReferenceKey{{Key: "URL", As: "WEB_URL", Provided: true}, {Key: "PORT", As: "WEB_PORT", Provided: true}, {Key: "HOST", As: "HOST"}, {Key: "A", As: "A"}}
 	if !reflect.DeepEqual(src[1].Keys, wantWeb) {
 		t.Errorf("web keys %+v (an own HOST shadows the provided one)", src[1].Keys)
 	}
-	if src, _ := k.app.ReferenceableVariables(k.ctx, canvasMember(canvasOther), api); len(src) != 0 {
+	if ref, _ := k.app.ReferenceableVariables(k.ctx, canvasMember(canvasOther), api); len(ref.Sources) != 0 {
 		t.Error("foreign member sees sources")
+	}
+}
+
+func TestCanvasReferenceSuggestions(t *testing.T) {
+	k := canvasSetup(t)
+	env := k.project(canvasOrg, "Acme")
+	m := canvasMember(canvasOrg)
+	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api"})
+	redis := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})
+	web := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "my-web"})
+	db := k.create(env, app.CreateNodeInput{Type: domain.NodeDatabase})
+
+	suggestions := func(node string) []app.ReferenceSuggestion {
+		ref, err := k.app.ReferenceableVariables(k.ctx, m, node)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ref.Suggestions
+	}
+	want := []app.ReferenceSuggestion{
+		{NodeID: redis, Node: "redis", Key: "REDIS_URL", As: "REDIS_URL", Value: "${{ redis.REDIS_URL }}"},
+		{NodeID: web, Node: "my-web", Key: "URL", As: "MY_WEB_URL", Value: "${{ my-web.URL }}"},
+		{NodeID: db, Node: "postgres", Key: "DATABASE_URL", As: "DATABASE_URL", Value: "${{ postgres.DATABASE_URL }}"},
+	}
+	if got := suggestions(api); !reflect.DeepEqual(got, want) {
+		t.Fatalf("fresh service:\n got  %+v\n want %+v", got, want)
+	}
+
+	k.setVar(api, "CACHE", "${{ redis.HOST }}")
+	k.setVar(api, "DATABASE_URL", "postgres://elsewhere")
+	if got := suggestions(api); !reflect.DeepEqual(got, want[1:2]) {
+		t.Fatalf("referenced redis and taken DATABASE_URL drop out: %+v", got)
+	}
+	if got := suggestions(db); len(got) != 0 {
+		t.Fatalf("only services get suggestions: %+v", got)
 	}
 }
 

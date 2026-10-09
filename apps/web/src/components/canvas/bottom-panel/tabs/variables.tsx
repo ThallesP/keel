@@ -4,9 +4,11 @@ import { Braces, Eye, EyeOff, Link2, Lock, LockOpen, Pencil, Plus, Trash2 } from
 import { useCallback, useRef, useState } from "react";
 
 import {
+  type ReferenceKey,
+  type ReferenceSource,
   useDeleteVariable,
-  useListReferenceableVariables,
-  useListVariables,
+  useListReferenceableVariablesSuspense,
+  useListVariablesSuspense,
   useSetVariable,
 } from "@/api/gen";
 import type { VariableRef, VariableView } from "@/api/types";
@@ -15,7 +17,7 @@ import { succeeded } from "@/lib/panel-write";
 import { Kbd } from "../../primitives";
 import { useCanvasDispatch } from "../../store";
 import type { CanvasNode, InfraNode } from "../../types";
-import { defaultKey, ReferencePalette, refText, type ReferenceSource } from "../reference-palette";
+import { ReferencePalette, refText } from "../reference-palette";
 
 type Save = (key: string, value: string, secret: boolean) => Promise<boolean>;
 
@@ -52,8 +54,7 @@ function Editor({
 }: {
   initial?: { key: string; value: string; secret: boolean };
   sources: ReferenceSource[];
-  /** Keys already used on this node (minus the one being edited). */
-  taken: Set<string>;
+  taken: string[];
   onSave: Save;
   onCancel?: () => void;
   autoFocus?: boolean;
@@ -67,17 +68,17 @@ function Editor({
   const valueRef = useRef<HTMLInputElement>(null);
 
   const trimmed = key.trim();
-  const clash = taken.has(trimmed);
+  const clash = taken.includes(trimmed);
   const valid = KEY_RE.test(trimmed) && !clash;
 
   // Inserts at the caret the value input had before the palette took focus.
-  const onPick = useCallback((source: ReferenceSource, k: string) => {
+  const onPick = useCallback((source: ReferenceSource, k: ReferenceKey) => {
     const input = valueRef.current;
     setValue((v) => {
       const at = input?.selectionStart ?? v.length;
-      return v.slice(0, at) + refText(source.name, k) + v.slice(input?.selectionEnd ?? at);
+      return v.slice(0, at) + refText(source.name, k.key) + v.slice(input?.selectionEnd ?? at);
     });
-    setKey((current) => current || defaultKey(source.name, k));
+    setKey((current) => current || k.as);
   }, []);
 
   const reset = () => {
@@ -304,33 +305,19 @@ function Row({
   );
 }
 
-/** One-click references for a service: each other node's connection var it does not use yet. */
-function suggestionsFor(node: InfraNode, variables: VariableView[], sources: ReferenceSource[]) {
-  if (node.type !== "service") return [];
-  const used = new Set(
-    variables.flatMap((v) => v.parts.flatMap((p) => (p.ref?.nodeId ? [p.ref.nodeId] : []))),
-  );
-  const keys = new Set(variables.map((v) => v.key));
-  return sources.flatMap((source) => {
-    const offered = source.keys.find((k) => k.provided && k.key !== "HOST" && k.key !== "PORT");
-    if (!offered || used.has(source.nodeId)) return [];
-    const as = defaultKey(source.name, offered.key);
-    return keys.has(as) ? [] : [{ source, key: offered.key, as }];
-  });
-}
-
 export function VariablesTab({ node }: { node: InfraNode }) {
   const path = { id: node.id };
-  const { data: list } = useListVariables({ path });
-  const sources = useListReferenceableVariables({ path }).data?.sources ?? [];
+  const {
+    data: { variables },
+  } = useListVariablesSuspense({ path });
+  const {
+    data: { sources, suggestions },
+  } = useListReferenceableVariablesSuspense({ path });
   const setVariable = useSetVariable();
   const deleteVariable = useDeleteVariable();
   const [editing, setEditing] = useState<string | null>(null);
 
-  // `list` is undefined while loading: the empty-state copy waits for the answer.
-  const rows = list?.variables ?? [];
-  const keys = new Set(rows.map((v) => v.key));
-  const suggestions = suggestionsFor(node, rows, sources).slice(0, 4);
+  const keys = variables.map((v) => v.key);
 
   // The key travels in the body (it is user input); a rename keeps the row's place.
   const save =
@@ -344,33 +331,33 @@ export function VariablesTab({ node }: { node: InfraNode }) {
       {suggestions.length > 0 && (
         <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line px-5 text-2xs text-faint">
           <span className="pr-1">Connect</span>
-          {suggestions.map((s) => (
+          {suggestions.slice(0, 4).map((s) => (
             <button
-              key={s.source.nodeId}
+              key={s.nodeId}
               type="button"
-              onClick={() => void save()(s.as, refText(s.source.name, s.key), false)}
+              onClick={() => void save()(s.as, s.value, false)}
               className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-primary"
             >
               <Plus size={10} strokeWidth={2} aria-hidden />
-              {s.source.name}.{s.key}
+              {s.node}.{s.key}
             </button>
           ))}
         </div>
       )}
-      {list && rows.length === 0 && (
+      {variables.length === 0 && (
         <p className="px-5 py-4 text-xs text-faint">
           No variables yet. Type one above, paste <code className="font-mono">KEY=value</code>, or
           use <span className="text-primary">Reference</span> to pull one from another service.
         </p>
       )}
-      {rows.map((v) =>
+      {variables.map((v) =>
         editing === v.key ? (
           <Editor
             key={v.key}
             autoFocus
             initial={v}
             sources={sources}
-            taken={new Set([...keys].filter((k) => k !== v.key))}
+            taken={keys.filter((k) => k !== v.key)}
             onSave={async (key, value, secret) => {
               const ok = await save(v.key)(key, value, secret);
               if (ok) setEditing(null);

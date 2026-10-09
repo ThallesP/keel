@@ -929,7 +929,7 @@ CLI (`apps/cli/internal/keel/api.go translate`, exact match unless noted): `Node
 | ″ Disconnect dialog | `logSinks.disconnect` | mutation | `{}` | on confirm |
 | `observability/explorer.tsx` `useStream` | `logs.recent` | action | `{ environmentId, range, search, tail: 300 }` | poll: both calls together (`allSettled`), next run 10 s **after both settle**; only while the overview is visible; restarts on range/search change (search trimmed, debounced 300 ms; default range `1h`) |
 | ″ | `traces.overview` | action | `{ environmentId, range, search }` | same poll, only when `sink.traces` is non-null |
-| `observability/trace.tsx` | `traces.get` | action | `{ environmentId, traceId, at? }` | once per (traceId, at); `at` = root start (from a request) or line time (from a line); absent for a pasted `&trace=` link |
+| `observability/trace/trace-detail.tsx` | `traces.get` | action | `{ environmentId, traceId, at? }` | once per (traceId, at); `at` = root start (from a request) or line time (from a line); absent for a pasted `&trace=` link |
 | `observability/log-context.tsx` | `logs.around`, `traces.around` | actions | `{ environmentId, at }` | once per `at` (`&around=<ms>`) |
 | `observability/chrome.tsx` `useServices` | `nodes.list` | reactive query | `{ environmentId }` | subscribed (service names/tones; other spec) |
 | `copy-prompt.tsx` (lamp empty state, NoRequests card, Tracing section) | `tracing.prompt` | reactive query | `{ nodeId? , environmentId? }` | subscribed |

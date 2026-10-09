@@ -19,12 +19,15 @@ import { formatTimestamp } from "../format";
 import { PageHeader, SectionLabel } from "../primitives";
 import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
-import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
+import type { Hover } from "./charts/layout";
+import { LatencyChart } from "./charts/latency-chart";
+import { RequestsChart } from "./charts/requests-chart";
+import { StatRow } from "./charts/stat-row";
 import { route, SearchField } from "./chrome";
 import { StreamEmpty, StreamError } from "./lamp";
 import { LogContext } from "./log-context";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
-import { TraceDetail } from "./trace";
+import { TraceDetail } from "./trace/trace-detail";
 
 /**
  * The Observability page with a sink: requests and logs in one place (ClickStack-style, no

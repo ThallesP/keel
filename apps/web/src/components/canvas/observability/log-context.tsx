@@ -15,7 +15,7 @@ import { formatDuration, formatLogTime, formatTimestamp } from "../format";
 import { SectionLabel } from "../primitives";
 import { useServices } from "./chrome";
 import { EventStream, lineEvent, requestEvent, type StreamEvent } from "./stream";
-import { LineDetail } from "./trace";
+import { LineDetail } from "./trace/line-detail";
 
 /**
  * A log line that names no trace, full screen: every service's lines from 30s either side of it

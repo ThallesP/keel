@@ -33,7 +33,6 @@
 1 apps/web/src/components/canvas/nodes/volume-node.tsx
 1 apps/web/src/components/canvas/not-wired.ts
 18 apps/web/src/components/canvas/observability/axiom-gate.tsx
-23 apps/web/src/components/canvas/observability/charts.tsx
 9 apps/web/src/components/canvas/observability/chrome.tsx
 12 apps/web/src/components/canvas/observability/correlate.ts
 29 apps/web/src/components/canvas/observability/explorer.tsx
@@ -41,7 +40,6 @@
 10 apps/web/src/components/canvas/observability/log-context.tsx
 6 apps/web/src/components/canvas/observability/page.tsx
 12 apps/web/src/components/canvas/observability/stream.tsx
-22 apps/web/src/components/canvas/observability/trace.tsx
 5 apps/web/src/components/canvas/primitives.tsx
 7 apps/web/src/components/canvas/project-switcher.tsx
 4 apps/web/src/components/canvas/rail.tsx

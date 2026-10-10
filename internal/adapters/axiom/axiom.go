@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type Client struct {
@@ -23,13 +23,6 @@ type Client struct {
 
 func New() *Client {
 	return &Client{http: &http.Client{Timeout: time.Minute}}
-}
-
-func baseURL(domain string) string {
-	if !strings.Contains(domain, "://") {
-		domain = "https://" + domain
-	}
-	return strings.TrimRight(domain, "/")
 }
 
 func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, path string, body any) ([]byte, error) {
@@ -41,7 +34,7 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, baseURL(t.Domain)+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, domain.AxiomBaseURL(t.Domain)+path, rd)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +266,7 @@ func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCo
 }
 
 func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTPReply, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL(f.Domain)+"/v1/traces", bytes.NewReader(f.Body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, domain.AxiomBaseURL(f.Domain)+"/v1/traces", bytes.NewReader(f.Body))
 	if err != nil {
 		return app.HTTPReply{}, err
 	}

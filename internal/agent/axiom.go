@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type AxiomSink struct {
@@ -23,11 +25,8 @@ func NewAxiomSink(cfg SinkConfig, log *slog.Logger) *AxiomSink {
 	return &AxiomSink{url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token, log: log, sleep: sleepCtx}
 }
 
-func axiomIngestURL(domain, dataset string) string {
-	base := strings.TrimRight(domain, "/")
-	if !strings.Contains(base, "://") {
-		base = "https://" + base
-	}
+func axiomIngestURL(host, dataset string) string {
+	base := domain.AxiomBaseURL(host)
 	if strings.HasSuffix(base, ".edge.axiom.co") {
 		return base + "/v1/ingest/" + url.PathEscape(dataset)
 	}

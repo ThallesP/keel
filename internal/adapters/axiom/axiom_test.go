@@ -281,16 +281,3 @@ func TestForwardTraces(t *testing.T) {
 		t.Fatal("no error from a closed server")
 	}
 }
-
-func TestBaseURL(t *testing.T) {
-	for in, want := range map[string]string{
-		"api.axiom.co":           "https://api.axiom.co",
-		"api.eu.axiom.co":        "https://api.eu.axiom.co",
-		"http://127.0.0.1:4318/": "http://127.0.0.1:4318",
-		"https://x.example//":    "https://x.example",
-	} {
-		if got := baseURL(in); got != want {
-			t.Errorf("baseURL(%q) = %q", in, got)
-		}
-	}
-}

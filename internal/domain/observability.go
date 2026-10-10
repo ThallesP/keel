@@ -1,6 +1,9 @@
 package domain
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 const SinkKindAxiom = "axiom"
 
@@ -21,6 +24,13 @@ type AxiomOrg struct {
 }
 
 var AxiomDomains = []string{"api.axiom.co", "api.eu.axiom.co"}
+
+func AxiomBaseURL(domain string) string {
+	if !strings.Contains(domain, "://") {
+		domain = "https://" + domain
+	}
+	return strings.TrimRight(domain, "/")
+}
 
 const (
 	DatasetLogs   = "keel-logs"

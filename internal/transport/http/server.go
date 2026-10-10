@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -42,9 +43,6 @@ func init() {
 			}
 		}
 		return p
-	}
-	huma.NewErrorWithContext = func(_ huma.Context, status int, msg string, errs ...error) huma.StatusError {
-		return huma.NewError(status, msg, errs...)
 	}
 }
 
@@ -96,7 +94,7 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 		mux.Handle("GET /api/ws", s.opts.WS)
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, &api.Problem{Status: 404, Title: "Not Found", Detail: "No such API route", Code: domain.CodeNotFound})
+		writeProblem(w, problemFor(domain.NotFound("No such API route")))
 	})
 	if s.opts.Web != nil {
 		mux.Handle("/", spa(s.opts.Web))
@@ -111,40 +109,41 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		token := SessionToken(r)
-		bearer := authViaBearer(r)
+		token, bearer := sessionToken(r)
 		viaCookie := !bearer && token != ""
 		browserWrite := !authSafeMethod(r.Method) && !bearer &&
 			(viaCookie || r.Header.Get("Origin") != "" || r.Header.Get("Referer") != "")
 		if browserWrite {
-			if msg := s.authCSRFRefusal(r); msg != "" {
-				writeProblem(w, &api.Problem{Status: http.StatusForbidden, Title: http.StatusText(http.StatusForbidden), Detail: msg, Code: domain.CodeForbidden})
+			if refusal := s.authCSRFRefusal(r); refusal != nil {
+				writeProblem(w, problemFor(refusal))
 				return
 			}
 		}
 		actor, err := s.app.ResolveSession(r.Context(), token)
 		if err != nil {
 			s.app.Log.Error("resolve session", "err", err)
-			writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
-				Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
+			writeProblem(w, problemFor(domain.E(domain.CodeUnavailable, "Could not check the session; try again")))
 			return
 		}
 		if viaCookie && actor.SessionRenewed {
 			http.SetCookie(w, new(s.authSessionCookie(token, actor.SessionExpiresAt)))
 		}
-		ctx := authWithClient(context.WithValue(r.Context(), actorKey{}, actor), r)
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		ctx := context.WithValue(r.Context(), actorKey{}, actor)
+		ctx = context.WithValue(ctx, authClientKey{}, app.ClientInfo{IP: ip, UserAgent: r.UserAgent()})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func SessionToken(r *http.Request) string {
-	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		return strings.TrimSpace(token)
+func sessionToken(r *http.Request) (token string, bearer bool) {
+	if t, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		return strings.TrimSpace(t), true
 	}
-	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
-		return c.Value
+	c, err := r.Cookie(SessionCookie)
+	if err != nil {
+		return "", false
 	}
-	return ""
+	return c.Value, false
 }
 
 func ActorFrom(ctx context.Context) domain.Actor {
@@ -167,22 +166,25 @@ func problemOf(err error) error {
 		return p
 	}
 	if r, ok := errors.AsType[*domain.DeviceRefusal](err); ok {
-		return &authDeviceError{status: r.Status, body: api.DeviceError{Error: r.Code, ErrorDescription: r.Description}}
+		return authDeviceError{r}
 	}
 	if limited, ok := errors.AsType[*domain.RateLimitError](err); ok {
-		p := &api.Problem{Status: http.StatusTooManyRequests, Title: http.StatusText(http.StatusTooManyRequests),
-			Detail: domain.MsgTooManyRequests, Code: domain.CodeRateLimited}
-		return huma.ErrorWithHeaders(p, http.Header{"Retry-After": {strconv.FormatInt(limited.RetryAfterSeconds, 10)}})
+		return huma.ErrorWithHeaders(problemFor(domain.E(domain.CodeRateLimited, domain.MsgTooManyRequests)),
+			http.Header{"Retry-After": {strconv.FormatInt(limited.RetryAfterSeconds, 10)}})
 	}
 	if de, ok := errors.AsType[*domain.Error](err); ok {
-		status := StatusOf(de.Code)
-		return &api.Problem{Status: status, Title: http.StatusText(status), Detail: de.Message, Code: de.Code}
+		return problemFor(de)
 	}
 	if errors.Is(err, context.Canceled) {
 		return &api.Problem{Status: 499, Title: "Client Closed Request", Detail: "Cancelled", Code: domain.CodeServerError}
 	}
 	slog.Error("unexpected error", "err", err)
-	return &api.Problem{Status: 500, Title: "Internal Server Error", Detail: "Something went wrong on the server", Code: domain.CodeServerError}
+	return problemFor(domain.E(domain.CodeServerError, "Something went wrong on the server"))
+}
+
+func problemFor(de *domain.Error) *api.Problem {
+	status := StatusOf(de.Code)
+	return &api.Problem{Status: status, Title: http.StatusText(status), Detail: de.Message, Code: de.Code}
 }
 
 func StatusOf(code string) int {

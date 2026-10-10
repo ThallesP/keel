@@ -18,9 +18,6 @@ type NodeScope struct {
 }
 
 func ownedEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, bool, error) {
-	if !actor.System && actor.OrganizationID == "" {
-		return EnvScope{}, false, nil
-	}
 	env, err := tx.Environment(id)
 	if errors.Is(err, ErrNoRow) {
 		return EnvScope{}, false, nil

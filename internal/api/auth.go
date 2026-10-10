@@ -1,5 +1,7 @@
 package api
 
+import "github.com/ThallesP/keel/internal/domain"
+
 type User struct {
 	ID    string `json:"id"`
 	Email string `json:"email" example:"ci@example.com"`
@@ -7,10 +9,10 @@ type User struct {
 }
 
 type Organization struct {
-	ID   string `json:"id"`
-	Name string `json:"name" example:"Default"`
-	Slug string `json:"slug" example:"default"`
-	Role string `json:"role" enum:"owner,admin,member"`
+	ID   string      `json:"id"`
+	Name string      `json:"name" example:"Default"`
+	Slug string      `json:"slug" example:"default"`
+	Role domain.Role `json:"role" enum:"owner,admin,member"`
 }
 
 type Me struct {
@@ -44,12 +46,12 @@ type AuthSuccess struct {
 }
 
 type Member struct {
-	ID        string `json:"id"`
-	UserID    string `json:"userId"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	Role      string `json:"role" enum:"owner,admin,member"`
-	CreatedAt int64  `json:"createdAt" doc:"When they joined (unix ms)"`
+	ID        string      `json:"id"`
+	UserID    string      `json:"userId"`
+	Email     string      `json:"email"`
+	Name      string      `json:"name"`
+	Role      domain.Role `json:"role" enum:"owner,admin,member"`
+	CreatedAt int64       `json:"createdAt" doc:"When they joined (unix ms)"`
 }
 
 type Members struct {
@@ -57,25 +59,25 @@ type Members struct {
 }
 
 type CreateInvitationRequest struct {
-	Email string `json:"email"`
-	Role  string `json:"role,omitempty" doc:"owner, admin or member (default)"`
+	Email string      `json:"email"`
+	Role  domain.Role `json:"role,omitempty" doc:"owner, admin or member (default)"`
 }
 
 type CreatedInvitation struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	ExpiresAt int64  `json:"expiresAt" doc:"unix ms"`
+	ID        string      `json:"id"`
+	Email     string      `json:"email"`
+	Role      domain.Role `json:"role"`
+	ExpiresAt int64       `json:"expiresAt" doc:"unix ms"`
 }
 
 type Invitation struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	Status    string `json:"status" enum:"pending,accepted,canceled"`
-	InviterID string `json:"inviterId"`
-	ExpiresAt int64  `json:"expiresAt"`
-	CreatedAt int64  `json:"createdAt"`
+	ID        string                  `json:"id"`
+	Email     string                  `json:"email"`
+	Role      domain.Role             `json:"role"`
+	Status    domain.InvitationStatus `json:"status" enum:"pending,accepted,canceled"`
+	InviterID string                  `json:"inviterId"`
+	ExpiresAt int64                   `json:"expiresAt"`
+	CreatedAt int64                   `json:"createdAt"`
 }
 
 type Invitations struct {
@@ -127,8 +129,8 @@ type DeviceError struct {
 }
 
 type DeviceStatus struct {
-	UserCode string `json:"user_code" doc:"As given"`
-	Status   string `json:"status" enum:"pending,approved,denied"`
+	UserCode string              `json:"user_code" doc:"As given"`
+	Status   domain.DeviceStatus `json:"status" enum:"pending,approved,denied"`
 }
 
 type DeviceDecision struct {

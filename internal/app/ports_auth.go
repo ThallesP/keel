@@ -36,7 +36,7 @@ type AuthTx interface {
 	AuthSetDevicePolled(id string, at int64) error
 	AuthDeleteDeviceCode(id string) error
 	AuthBindDeviceCode(id, userID string) error
-	AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) error
+	AuthDecideDeviceCode(id string, status domain.DeviceStatus) error
 	AuthDeleteExpiredDeviceCodes(now int64) error
 }
 

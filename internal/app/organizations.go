@@ -25,14 +25,6 @@ func foundOrganization(tx Tx, ch *Changes, ownerID string, now int64) error {
 	return nil
 }
 
-func authFreshMember(tx Tx, actor domain.Actor) (domain.Member, error) {
-	m, err := tx.AuthMembership(actor.UserID)
-	if errors.Is(err, ErrNoRow) || (err == nil && m.OrganizationID != actor.OrganizationID) {
-		return domain.Member{}, domain.ErrNoOrganization
-	}
-	return m, err
-}
-
 func (a *App) ListMembers(ctx context.Context, actor domain.Actor) ([]MemberAccount, error) {
 	if err := actor.RequireMember(); err != nil {
 		return nil, err
@@ -54,7 +46,7 @@ func (a *App) ListInvitations(ctx context.Context, actor domain.Actor) ([]domain
 	return out, err
 }
 
-func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, role string) (domain.Invitation, error) {
+func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email string, role domain.Role) (domain.Invitation, error) {
 	if err := actor.RequireMember(); err != nil {
 		return domain.Invitation{}, err
 	}
@@ -62,28 +54,24 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 	if !domain.ValidUserEmail(email) {
 		return domain.Invitation{}, domain.Invalid(domain.MsgInvalidEmail)
 	}
+	grant, err := domain.InviteRole(actor.Role, role)
+	if err != nil {
+		return domain.Invitation{}, err
+	}
 	var inv domain.Invitation
-	err := a.write(ctx, func(tx Tx, ch *Changes) error {
+	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		now := a.Now()
-		m, err := authFreshMember(tx, actor)
-		if err != nil {
-			return err
-		}
-		grant, err := domain.InviteRole(m.Role, role)
-		if err != nil {
-			return err
-		}
-		member, err := tx.AuthIsMemberByEmail(m.OrganizationID, email)
+		member, err := tx.AuthIsMemberByEmail(actor.OrganizationID, email)
 		if err != nil {
 			return err
 		}
 		if member {
 			return domain.Conflict("User is already a member of this organization")
 		}
-		if err := tx.AuthCancelPendingInvitations(m.OrganizationID, email, now); err != nil {
+		if err := tx.AuthCancelPendingInvitations(actor.OrganizationID, email, now); err != nil {
 			return err
 		}
-		n, err := tx.AuthCountPendingInvitations(m.OrganizationID, now)
+		n, err := tx.AuthCountPendingInvitations(actor.OrganizationID, now)
 		if err != nil {
 			return err
 		}
@@ -92,13 +80,13 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 		}
 		inv = domain.Invitation{
 			ID:             domain.NewSecret(16),
-			OrganizationID: m.OrganizationID, Email: email, Role: grant, Status: domain.InvitationPending,
+			OrganizationID: actor.OrganizationID, Email: email, Role: grant, Status: domain.InvitationPending,
 			InviterID: actor.UserID, ExpiresAt: now + domain.InvitationTTL, CreatedAt: now,
 		}
 		if err := tx.AuthInsertInvitation(inv); err != nil {
 			return err
 		}
-		ch.Organization(m.OrganizationID)
+		ch.Organization(actor.OrganizationID)
 		return nil
 	})
 	return inv, err
@@ -116,11 +104,7 @@ func (a *App) CancelInvitation(ctx context.Context, actor domain.Actor, id strin
 		if err != nil {
 			return err
 		}
-		m, err := authFreshMember(tx, actor)
-		if err != nil {
-			return err
-		}
-		if !domain.CanManageInvitations(m.Role) {
+		if !actor.Role.CanManageInvitations() {
 			return domain.E(domain.CodeForbidden, "You are not allowed to cancel this invitation")
 		}
 		if !inv.Standing(a.Now()) {

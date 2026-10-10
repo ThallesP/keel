@@ -173,7 +173,7 @@ func (s *Server) registerAuth(h huma.API) {
 		out := api.Invitations{Invitations: make([]api.Invitation, 0, len(invs))}
 		for _, i := range invs {
 			out.Invitations = append(out.Invitations, api.Invitation{ID: i.ID, Email: i.Email, Role: i.Role,
-				Status: string(i.Status), InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt})
+				Status: i.Status, InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt})
 		}
 		return &authInvitationsOutput{Body: out}, nil
 	})
@@ -269,7 +269,7 @@ func (s *Server) registerAuth(h huma.API) {
 		if err != nil {
 			return nil, err
 		}
-		return &authDeviceStatusOutput{Body: api.DeviceStatus{UserCode: v.UserCode, Status: string(v.Status)}}, nil
+		return &authDeviceStatusOutput{Body: api.DeviceStatus{UserCode: v.UserCode, Status: v.Status}}, nil
 	})
 
 	for _, d := range []struct {

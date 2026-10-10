@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,32 +11,29 @@ import (
 
 	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
-
-func authViaBearer(r *http.Request) bool {
-	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
-}
 
 func authSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
 
-func (s *Server) authCSRFRefusal(r *http.Request) string {
+func (s *Server) authCSRFRefusal(r *http.Request) *domain.Error {
 	src := cmp.Or(r.Header.Get("Origin"), r.Header.Get("Referer"))
 	if src == "" || src == "null" {
-		return "Missing or null Origin"
+		return domain.E(domain.CodeForbidden, "Missing or null Origin")
 	}
 	u, err := url.Parse(src)
 	if err != nil || u.Host == "" {
-		return "Invalid origin"
+		return domain.E(domain.CodeForbidden, "Invalid origin")
 	}
 	if strings.EqualFold(u.Host, r.Host) {
-		return ""
+		return nil
 	}
 	if site, err := url.Parse(s.app.Config.SiteURL); err == nil && strings.EqualFold(u.Host, site.Host) {
-		return ""
+		return nil
 	}
-	return "Invalid origin"
+	return domain.E(domain.CodeForbidden, "Invalid origin")
 }
 
 func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
@@ -48,27 +44,21 @@ func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
 	return http.Cookie{
 		Name: SessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
 		Secure: strings.HasPrefix(strings.ToLower(s.app.Config.SiteURL), "https://"),
-		MaxAge: maxAge, Expires: time.UnixMilli(expiresAt).UTC(),
+		MaxAge: maxAge, Expires: time.UnixMilli(expiresAt),
 	}
 }
 
 type authClientKey struct{}
-
-func authWithClient(ctx context.Context, r *http.Request) context.Context {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	return context.WithValue(ctx, authClientKey{}, app.ClientInfo{IP: ip, UserAgent: r.UserAgent()})
-}
 
 func authClientOf(ctx context.Context) app.ClientInfo {
 	c, _ := ctx.Value(authClientKey{}).(app.ClientInfo)
 	return c
 }
 
-type authDeviceError struct {
-	status int
-	body   api.DeviceError
-}
+type authDeviceError struct{ *domain.DeviceRefusal }
 
-func (e *authDeviceError) Error() string                { return e.body.ErrorDescription }
-func (e *authDeviceError) GetStatus() int               { return e.status }
-func (e *authDeviceError) MarshalJSON() ([]byte, error) { return json.Marshal(e.body) }
+func (e authDeviceError) GetStatus() int { return e.Status }
+
+func (e authDeviceError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(api.DeviceError{Error: e.Code, ErrorDescription: e.Description})
+}

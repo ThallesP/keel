@@ -5,7 +5,7 @@ type Actor struct {
 	Email          string
 	Name           string
 	OrganizationID string
-	Role           string
+	Role           Role
 	SessionID      string
 	System         bool
 

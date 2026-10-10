@@ -11,7 +11,7 @@ func authUserOf(u sqlc.User) domain.User {
 }
 
 func authInvitationOf(i sqlc.Invitation) domain.Invitation {
-	return domain.Invitation{ID: i.ID, OrganizationID: i.OrganizationID, Email: i.Email, Role: i.Role,
+	return domain.Invitation{ID: i.ID, OrganizationID: i.OrganizationID, Email: i.Email, Role: domain.Role(i.Role),
 		Status: domain.InvitationStatus(i.Status), InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt}
 }
 
@@ -84,12 +84,12 @@ func (t *tx) AuthMembership(userID string) (domain.Member, error) {
 	if err != nil {
 		return domain.Member{}, noRow(err)
 	}
-	return domain.Member{ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt}, nil
+	return domain.Member{ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID, Role: domain.Role(m.Role), CreatedAt: m.CreatedAt}, nil
 }
 
 func (t *tx) AuthInsertMember(m domain.Member) error {
 	return t.q.AuthInsertMember(t.ctx, sqlc.AuthInsertMemberParams{ID: m.ID, OrganizationID: m.OrganizationID,
-		UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt})
+		UserID: m.UserID, Role: string(m.Role), CreatedAt: m.CreatedAt})
 }
 
 func (t *tx) AuthCountMembers(organizationID string) (int64, error) {
@@ -104,7 +104,7 @@ func (t *tx) AuthMembers(organizationID string) ([]app.MemberAccount, error) {
 	out := make([]app.MemberAccount, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, app.MemberAccount{
-			Member: domain.Member{ID: r.ID, OrganizationID: r.OrganizationID, UserID: r.UserID, Role: r.Role, CreatedAt: r.CreatedAt},
+			Member: domain.Member{ID: r.ID, OrganizationID: r.OrganizationID, UserID: r.UserID, Role: domain.Role(r.Role), CreatedAt: r.CreatedAt},
 			Email:  r.Email, Name: r.Name,
 		})
 	}
@@ -125,7 +125,7 @@ func (t *tx) AuthInvitation(id string) (domain.Invitation, error) {
 
 func (t *tx) AuthInsertInvitation(inv domain.Invitation) error {
 	return t.q.AuthInsertInvitation(t.ctx, sqlc.AuthInsertInvitationParams{ID: inv.ID, OrganizationID: inv.OrganizationID,
-		Email: inv.Email, Role: inv.Role, Status: string(inv.Status), InviterID: inv.InviterID,
+		Email: inv.Email, Role: string(inv.Role), Status: string(inv.Status), InviterID: inv.InviterID,
 		ExpiresAt: inv.ExpiresAt, CreatedAt: inv.CreatedAt})
 }
 
@@ -186,8 +186,8 @@ func (t *tx) AuthBindDeviceCode(id, userID string) error {
 	return t.q.AuthBindDeviceCode(t.ctx, sqlc.AuthBindDeviceCodeParams{UserID: &userID, ID: id})
 }
 
-func (t *tx) AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) error {
-	return t.q.AuthDecideDeviceCode(t.ctx, sqlc.AuthDecideDeviceCodeParams{Status: string(status), UserID: &userID, ID: id})
+func (t *tx) AuthDecideDeviceCode(id string, status domain.DeviceStatus) error {
+	return t.q.AuthDecideDeviceCode(t.ctx, sqlc.AuthDecideDeviceCodeParams{Status: string(status), ID: id})
 }
 
 func (t *tx) AuthDeleteExpiredDeviceCodes(now int64) error {

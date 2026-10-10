@@ -40,7 +40,7 @@ func (q *Queries) AuthBindDeviceCode(ctx context.Context, arg AuthBindDeviceCode
 
 const authCancelPendingInvitations = `-- name: AuthCancelPendingInvitations :exec
 UPDATE invitations SET status = 'canceled'
-WHERE organization_id = ? AND email = ? COLLATE NOCASE AND status = 'pending' AND expires_at >= ?
+WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at >= ?
 `
 
 type AuthCancelPendingInvitationsParams struct {
@@ -83,18 +83,16 @@ func (q *Queries) AuthCountPendingInvitations(ctx context.Context, arg AuthCount
 }
 
 const authDecideDeviceCode = `-- name: AuthDecideDeviceCode :exec
-UPDATE device_codes SET status = ?, user_id = ?
-WHERE id = ? AND status = 'pending'
+UPDATE device_codes SET status = ? WHERE id = ?
 `
 
 type AuthDecideDeviceCodeParams struct {
 	Status string
-	UserID *string
 	ID     string
 }
 
 func (q *Queries) AuthDecideDeviceCode(ctx context.Context, arg AuthDecideDeviceCodeParams) error {
-	_, err := q.db.ExecContext(ctx, authDecideDeviceCode, arg.Status, arg.UserID, arg.ID)
+	_, err := q.db.ExecContext(ctx, authDecideDeviceCode, arg.Status, arg.ID)
 	return err
 }
 
@@ -281,7 +279,7 @@ func (q *Queries) AuthGetUser(ctx context.Context, id string) (User, error) {
 }
 
 const authGetUserByEmail = `-- name: AuthGetUserByEmail :one
-SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = ? COLLATE NOCASE
+SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = ?
 `
 
 func (q *Queries) AuthGetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -457,7 +455,7 @@ func (q *Queries) AuthInsertUser(ctx context.Context, arg AuthInsertUserParams) 
 const authIsMemberByEmail = `-- name: AuthIsMemberByEmail :one
 SELECT EXISTS (
   SELECT 1 FROM members m JOIN users u ON u.id = m.user_id
-  WHERE m.organization_id = ? AND u.email = ? COLLATE NOCASE
+  WHERE m.organization_id = ? AND u.email = ?
 ) AS member
 `
 

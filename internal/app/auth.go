@@ -30,7 +30,7 @@ type MyOrganization struct {
 	ID   string
 	Name string
 	Slug string
-	Role string
+	Role domain.Role
 }
 
 type Me struct {
@@ -60,8 +60,11 @@ func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, e
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
+		if err != nil {
+			return err
+		}
 		actor.OrganizationID, actor.Role = m.OrganizationID, m.Role
-		return err
+		return nil
 	})
 	if err != nil || !actor.SignedIn() {
 		return domain.Actor{}, err
@@ -197,7 +200,7 @@ func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (Signed
 	token := domain.NewSecret(32)
 	s := domain.Session{
 		ID: domain.NewID(), UserID: user.ID, ExpiresAt: now + domain.SessionTTL, CreatedAt: now,
-		UserAgent: client.UserAgent[:min(len(client.UserAgent), 512)], IP: client.IP[:min(len(client.IP), 64)],
+		UserAgent: client.UserAgent[:min(len(client.UserAgent), 512)], IP: client.IP,
 	}
 	if err := tx.AuthInsertSession(s, domain.HashSecret(token)); err != nil {
 		return SignedIn{}, err

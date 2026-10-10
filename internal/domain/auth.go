@@ -5,13 +5,15 @@ import (
 	"slices"
 )
 
+type Role string
+
 const (
-	RoleOwner  = "owner"
-	RoleAdmin  = "admin"
-	RoleMember = "member"
+	RoleOwner  Role = "owner"
+	RoleAdmin  Role = "admin"
+	RoleMember Role = "member"
 )
 
-func CanManageInvitations(role string) bool { return role == RoleOwner || role == RoleAdmin }
+func (r Role) CanManageInvitations() bool { return r == RoleOwner || r == RoleAdmin }
 
 type User struct {
 	ID        string
@@ -40,7 +42,7 @@ type Member struct {
 	ID             string
 	OrganizationID string
 	UserID         string
-	Role           string
+	Role           Role
 	CreatedAt      int64
 }
 
@@ -56,7 +58,7 @@ type Invitation struct {
 	ID             string
 	OrganizationID string
 	Email          string
-	Role           string
+	Role           Role
 	Status         InvitationStatus
 	InviterID      string
 	ExpiresAt      int64
@@ -67,12 +69,12 @@ func (i Invitation) Standing(now int64) bool {
 	return i.Status == InvitationPending && i.ExpiresAt >= now
 }
 
-func InviteRole(inviterRole, role string) (string, error) {
-	if !CanManageInvitations(inviterRole) {
+func InviteRole(inviterRole, role Role) (Role, error) {
+	if !inviterRole.CanManageInvitations() {
 		return "", E(CodeForbidden, "You are not allowed to invite users to this organization")
 	}
 	role = cmp.Or(role, RoleMember)
-	if !slices.Contains([]string{RoleOwner, RoleAdmin, RoleMember}, role) {
+	if !slices.Contains([]Role{RoleOwner, RoleAdmin, RoleMember}, role) {
 		return "", Invalid("Role not found: %s", role)
 	}
 	if role == RoleOwner && inviterRole != RoleOwner {

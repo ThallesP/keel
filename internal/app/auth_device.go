@@ -95,8 +95,11 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 				return err
 			}
 			s, err := issueSession(tx, user, now, client)
+			if err != nil {
+				return err
+			}
 			token = s.Token
-			return err
+			return nil
 		default:
 			return nil
 		}
@@ -112,13 +115,13 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 
 func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode string) (DeviceView, error) {
 	var dc domain.DeviceCode
-	err := a.read(ctx, func(tx Tx) (err error) {
+	err := a.write(ctx, func(tx Tx, _ *Changes) (err error) {
 		dc, err = liveDeviceCode(tx, userCode, a.Now())
-		return err
+		if err != nil || !actor.SignedIn() {
+			return err
+		}
+		return tx.AuthBindDeviceCode(dc.ID, actor.UserID)
 	})
-	if err == nil && actor.SignedIn() {
-		err = a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthBindDeviceCode(dc.ID, actor.UserID) })
-	}
 	if err != nil {
 		return DeviceView{}, err
 	}
@@ -141,7 +144,7 @@ func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCod
 		if approve {
 			status = domain.DeviceApproved
 		}
-		return tx.AuthDecideDeviceCode(dc.ID, status, actor.UserID)
+		return tx.AuthDecideDeviceCode(dc.ID, status)
 	})
 }
 

@@ -106,9 +106,8 @@ func TestInvitationStanding(t *testing.T) {
 func TestInviteRole(t *testing.T) {
 	forbidden := E(CodeForbidden, "You are not allowed to invite users to this organization")
 	cases := []struct {
-		inviter, role string
-		want          string
-		err           error
+		inviter, role, want Role
+		err                 error
 	}{
 		{RoleOwner, "", RoleMember, nil},
 		{RoleOwner, RoleMember, RoleMember, nil},
@@ -179,7 +178,7 @@ func TestDecideDevice(t *testing.T) {
 		refusal *DeviceRefusal
 	}{
 		{"processed", DeviceCode{Status: DeviceApproved, UserID: "u1"}, "u1", true, &DeviceRefusal{400, "invalid_request", "Device code already processed"}},
-		{"unclaimed", DeviceCode{Status: DevicePending}, "u1", true, &DeviceRefusal{400, "invalid_request", MsgDeviceNotClaimed}},
+		{"unclaimed", DeviceCode{Status: DevicePending}, "u1", true, &DeviceRefusal{400, "invalid_request", "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"}},
 		{"someone else approves", claimed, "u2", true, &DeviceRefusal{403, "access_denied", "You are not authorized to approve this device authorization"}},
 		{"someone else denies", claimed, "u2", false, &DeviceRefusal{403, "access_denied", "You are not authorized to deny this device authorization"}},
 		{"approve", claimed, "u1", true, nil},
@@ -193,8 +192,8 @@ func TestDecideDevice(t *testing.T) {
 }
 
 func TestRateLimitError(t *testing.T) {
-	var de *Error
-	if !errors.As(&RateLimitError{RetryAfterSeconds: 30}, &de) || de.Code != CodeRateLimited || de.Message != MsgTooManyRequests {
+	de, ok := errors.AsType[*Error](&RateLimitError{RetryAfterSeconds: 30})
+	if !ok || de.Code != CodeRateLimited || de.Message != MsgTooManyRequests {
 		t.Fatalf("RateLimitError unwraps to %+v", de)
 	}
 }

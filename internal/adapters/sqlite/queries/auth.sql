@@ -8,7 +8,7 @@ SELECT EXISTS (SELECT 1 FROM users) AS found;
 SELECT * FROM users WHERE id = ?;
 
 -- name: AuthGetUserByEmail :one
-SELECT * FROM users WHERE email = ? COLLATE NOCASE;
+SELECT * FROM users WHERE email = ?;
 
 -- name: AuthInsertUser :exec
 INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
@@ -54,7 +54,7 @@ ORDER BY m.created_at, m.id;
 -- name: AuthIsMemberByEmail :one
 SELECT EXISTS (
   SELECT 1 FROM members m JOIN users u ON u.id = m.user_id
-  WHERE m.organization_id = ? AND u.email = ? COLLATE NOCASE
+  WHERE m.organization_id = ? AND u.email = ?
 ) AS member;
 
 -- name: AuthGetInvitation :one
@@ -70,7 +70,7 @@ WHERE id = sqlc.arg(id) AND status = sqlc.arg(from_status);
 
 -- name: AuthCancelPendingInvitations :exec
 UPDATE invitations SET status = 'canceled'
-WHERE organization_id = ? AND email = ? COLLATE NOCASE AND status = 'pending' AND expires_at >= ?;
+WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at >= ?;
 
 -- name: AuthCountPendingInvitations :one
 SELECT COUNT(*) FROM invitations
@@ -102,8 +102,7 @@ UPDATE device_codes SET user_id = ?
 WHERE id = ? AND status = 'pending' AND user_id IS NULL;
 
 -- name: AuthDecideDeviceCode :exec
-UPDATE device_codes SET status = ?, user_id = ?
-WHERE id = ? AND status = 'pending';
+UPDATE device_codes SET status = ? WHERE id = ?;
 
 -- name: AuthDeleteExpiredDeviceCodes :exec
 DELETE FROM device_codes WHERE expires_at < ?;

@@ -73,12 +73,11 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 		return ProjectSummary{}, domain.Invalid("Project name needs a letter or digit (a-z, 0-9)")
 	}
 	var out ProjectSummary
-	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		created, err := canvasInsertProject(tx, actor.OrganizationID, name, slug, a.Now())
+	err := a.write(ctx, func(tx Tx, ch *Changes) (err error) {
+		out, err = canvasInsertProject(tx, actor.OrganizationID, name, slug, a.Now())
 		if err != nil {
 			return err
 		}
-		out = created
 		ch.Projects(actor.OrganizationID)
 		return nil
 	})
@@ -86,9 +85,6 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 }
 
 func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string) (*ProjectHome, error) {
-	if actor.OrganizationID == "" {
-		return nil, nil
-	}
 	var out *ProjectHome
 	err := a.read(ctx, func(tx Tx) error {
 		p, err := tx.CanvasProjectBySlug(actor.OrganizationID, slug)
@@ -112,7 +108,7 @@ func (a *App) ListProjects(ctx context.Context, actor domain.Actor) ([]ProjectSu
 	if err := actor.RequireMember(); err != nil {
 		return nil, err
 	}
-	out := []ProjectSummary{}
+	var out []ProjectSummary
 	err := a.read(ctx, func(tx Tx) error {
 		projects, err := tx.CanvasProjects(actor.OrganizationID)
 		if err != nil {

@@ -36,10 +36,7 @@ type DeviceRefusal struct {
 
 func (r *DeviceRefusal) Error() string { return r.Description }
 
-const (
-	MsgDeviceInvalidClient = "Invalid client ID"
-	MsgDeviceNotClaimed    = "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"
-)
+const MsgDeviceInvalidClient = "Invalid client ID"
 
 type PollAction int
 
@@ -72,7 +69,7 @@ func DecideDevice(dc DeviceCode, userID string, approve bool) *DeviceRefusal {
 		return &DeviceRefusal{400, "invalid_request", "Device code already processed"}
 	}
 	if dc.UserID == "" {
-		return &DeviceRefusal{400, "invalid_request", MsgDeviceNotClaimed}
+		return &DeviceRefusal{400, "invalid_request", "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"}
 	}
 	if dc.UserID == userID {
 		return nil

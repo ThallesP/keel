@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"sort"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -63,7 +62,6 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	sort.Strings(names)
 	for _, name := range names {
 		var n int
 		if err := s.w.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&n); err != nil {

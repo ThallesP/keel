@@ -222,12 +222,8 @@ func TestAuthSignInLimiter(t *testing.T) {
 		f.now += 1000
 	}
 	_, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
-	var limited *domain.RateLimitError
-	if !errors.As(err, &limited) {
+	if limited, ok := errors.AsType[*domain.RateLimitError](err); !ok || limited.RetryAfterSeconds != 290 {
 		t.Fatalf("11th try: %v", err)
-	}
-	if limited.RetryAfterSeconds != 290 {
-		t.Fatalf("retry after %d", limited.RetryAfterSeconds)
 	}
 	canvasWantErr(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 
@@ -241,10 +237,9 @@ func TestAuthSignInLimiter(t *testing.T) {
 	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient); err != nil {
 		t.Fatalf("after the window: %v", err)
 	}
-	for i := range app.SignInAttempts {
-		if _, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient); errors.As(err, &limited) {
-			t.Fatalf("limited after a success reset, try %d", i)
-		}
+	for range app.SignInAttempts {
+		_, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient)
+		canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 	}
 }
 
@@ -496,6 +491,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 }
 
 func TestAuthDeviceLogin(t *testing.T) {
+	const notClaimed = "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"
 	f := authSetup(t)
 	alice := f.actor(f.signUp("alice@example.com", "").Token)
 	poll := func(code string) (app.DeviceToken, error) {
@@ -534,7 +530,7 @@ func TestAuthDeviceLogin(t *testing.T) {
 	err = f.app.DecideDeviceLogin(f.ctx, domain.Actor{}, pretty, true)
 	authWantRefusal(t, err, 401, "unauthorized", "Authentication required")
 	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
-	authWantRefusal(t, err, 400, "invalid_request", domain.MsgDeviceNotClaimed)
+	authWantRefusal(t, err, 400, "invalid_request", notClaimed)
 	err = f.app.DecideDeviceLogin(f.ctx, alice, "ZZZZ-ZZZZ", true)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 
@@ -543,7 +539,7 @@ func TestAuthDeviceLogin(t *testing.T) {
 		t.Fatalf("anonymous lookup: %+v %v", v, err)
 	}
 	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
-	authWantRefusal(t, err, 400, "invalid_request", domain.MsgDeviceNotClaimed)
+	authWantRefusal(t, err, 400, "invalid_request", notClaimed)
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, "nope")
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 

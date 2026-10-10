@@ -7,10 +7,8 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func rev(r string) map[string]string { return map[string]string{"keel.revision": r} }
-
-func task(r, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
-	t := SwarmTask{DesiredState: desired, State: state, Labels: rev(r)}
+func task(r int, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
+	t := SwarmTask{DesiredState: desired, State: state, Revision: r}
 	for _, m := range mods {
 		m(&t)
 	}
@@ -19,8 +17,8 @@ func task(r, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
 
 func withErr(e string) func(*SwarmTask) { return func(t *SwarmTask) { t.Err = e } }
 func at(ms int64) func(*SwarmTask)      { return func(t *SwarmTask) { t.Timestamp = ms } }
-func svc(r, update, msg string) SwarmService {
-	return SwarmService{Name: "svc-x", Labels: rev(r), UpdateState: update, UpdateMessage: msg}
+func svc(r int, update, msg string) SwarmService {
+	return SwarmService{Name: "svc-x", Revision: r, UpdateState: update, UpdateMessage: msg}
 }
 
 func TestSummarizeTasks(t *testing.T) {
@@ -33,92 +31,71 @@ func TestSummarizeTasks(t *testing.T) {
 	}{
 		{"gone", nil, SwarmService{},
 			domain.Observed{Revision: 0, Running: 0, State: domain.ObservedOK, At: now}},
-		{"fresh create, running", []SwarmTask{task("1", "running", "running")}, svc("1", "", ""),
+		{"fresh create, running", []SwarmTask{task(1, "running", "running")}, svc(1, "", ""),
 			domain.Observed{Revision: 1, Running: 1, State: domain.ObservedOK, At: now}},
-		{"update in progress keeps updating", []SwarmTask{task("2", "running", "running")}, svc("2", "updating", ""),
+		{"update in progress keeps updating", []SwarmTask{task(2, "running", "running")}, svc(2, "updating", ""),
 			domain.Observed{Revision: 2, Running: 1, State: domain.ObservedUpdating, At: now}},
-		{"update completed", []SwarmTask{task("2", "running", "running")}, svc("2", "completed", ""),
+		{"update completed", []SwarmTask{task(2, "running", "running")}, svc(2, "completed", ""),
 			domain.Observed{Revision: 2, Running: 1, State: domain.ObservedOK, At: now}},
 		{"a live task not running yet", []SwarmTask{
-			task("1", "running", "running"),
-			task("1", "running", "starting"),
-		}, svc("1", "", ""),
+			task(1, "running", "running"),
+			task(1, "running", "starting"),
+		}, svc(1, "", ""),
 			domain.Observed{Revision: 1, Running: 1, State: domain.ObservedUpdating, At: now}},
-		{"unschedulable", []SwarmTask{task("1", "running", "pending")}, svc("1", "", ""),
+		{"unschedulable", []SwarmTask{task(1, "running", "pending")}, svc(1, "", ""),
 			domain.Observed{Revision: 1, Running: 0, State: domain.ObservedPending, At: now}},
 		{"crash loop: five failed, last error wins", []SwarmTask{
-			task("3", "shutdown", "failed", withErr("e1")),
-			task("3", "shutdown", "rejected", withErr("e2")),
-			task("3", "shutdown", "failed", withErr("e3")),
-			task("3", "shutdown", "failed", withErr("e4")),
-			task("3", "running", "failed", withErr("exit 1")),
-		}, svc("3", "", ""),
+			task(3, "shutdown", "failed", withErr("e1")),
+			task(3, "shutdown", "rejected", withErr("e2")),
+			task(3, "shutdown", "failed", withErr("e3")),
+			task(3, "shutdown", "failed", withErr("e4")),
+			task(3, "running", "failed", withErr("exit 1")),
+		}, svc(3, "", ""),
 			domain.Observed{Revision: 3, Running: 0, State: domain.ObservedCrashloop, Error: "exit 1", At: now}},
 		{"four failed is not a crash loop (the live slot is not running: updating)", []SwarmTask{
-			task("3", "shutdown", "failed"), task("3", "shutdown", "failed"),
-			task("3", "shutdown", "failed"), task("3", "running", "failed", withErr("boom")),
-		}, svc("3", "", ""),
+			task(3, "shutdown", "failed"), task(3, "shutdown", "failed"),
+			task(3, "shutdown", "failed"), task(3, "running", "failed", withErr("boom")),
+		}, svc(3, "", ""),
 			domain.Observed{Revision: 3, Running: 0, State: domain.ObservedUpdating, Error: "boom", At: now}},
 		{"rolled back: revision names what failed", []SwarmTask{
-			task("2", "running", "running"),
-			task("3", "shutdown", "failed", withErr("exit 1")),
-		}, svc("2", "rollback_completed", "update rolled back due to failure"),
+			task(2, "running", "running"),
+			task(3, "shutdown", "failed", withErr("exit 1")),
+		}, svc(2, "rollback_completed", "update rolled back due to failure"),
 			domain.Observed{Revision: 3, Running: 0, State: domain.ObservedFailed, Error: "exit 1", At: now}},
 		{"rolled back, failed task without error: the rollback message", []SwarmTask{
-			task("3", "shutdown", "failed"),
-		}, svc("2", "rollback_started", "rolling back"),
+			task(3, "shutdown", "failed"),
+		}, svc(2, "rollback_started", "rolling back"),
 			domain.Observed{Revision: 3, Running: 0, State: domain.ObservedFailed, Error: "rolling back", At: now}},
-		{"paused counts as rolled back", []SwarmTask{task("4", "running", "running")}, svc("4", "paused", "update paused"),
+		{"paused counts as rolled back", []SwarmTask{task(4, "running", "running")}, svc(4, "paused", "update paused"),
 			domain.Observed{Revision: 4, Running: 1, State: domain.ObservedFailed, Error: "update paused", At: now}},
 		{"one-shot: every task exited 0", []SwarmTask{
-			task("5", "shutdown", "complete", at(300)),
-			task("5", "shutdown", "complete", at(700)),
-			task("4", "shutdown", "complete", at(900)),
-		}, svc("5", "", ""),
+			task(5, "shutdown", "complete", at(300)),
+			task(5, "shutdown", "complete", at(700)),
+			task(4, "shutdown", "complete", at(900)),
+		}, svc(5, "", ""),
 			domain.Observed{Revision: 5, Running: 0, Completed: 2, FinishedAt: 700, State: domain.ObservedCompleted, At: now}},
-		{"one-shot with an unknown timestamp", []SwarmTask{task("1", "shutdown", "complete")}, SwarmService{},
+		{"one-shot with an unknown timestamp", []SwarmTask{task(1, "shutdown", "complete")}, SwarmService{},
 			domain.Observed{Revision: 1, Running: 0, Completed: 1, FinishedAt: 0, State: domain.ObservedCompleted, At: now}},
 		{"completed beside a failure is not one-shot", []SwarmTask{
-			task("1", "shutdown", "complete"), task("1", "shutdown", "failed"),
+			task(1, "shutdown", "complete"), task(1, "shutdown", "failed"),
 		}, SwarmService{},
 			domain.Observed{Revision: 1, Running: 0, State: domain.ObservedOK, At: now}},
 		{"old revisions are ignored", []SwarmTask{
-			task("1", "shutdown", "failed", withErr("old")),
-			task("2", "running", "running"),
-		}, svc("2", "", ""),
+			task(1, "shutdown", "failed", withErr("old")),
+			task(2, "running", "running"),
+		}, svc(2, "", ""),
 			domain.Observed{Revision: 2, Running: 1, State: domain.ObservedOK, At: now}},
 		{"tasks without a revision are not current", []SwarmTask{
-			task("", "running", "running"),
-		}, svc("2", "", ""),
+			task(0, "running", "running"),
+		}, svc(2, "", ""),
 			domain.Observed{Revision: 2, Running: 0, State: domain.ObservedOK, At: now}},
-		{"stopped service keeps its spec revision", nil, svc("7", "completed", ""),
+		{"stopped service keeps its spec revision", nil, svc(7, "completed", ""),
 			domain.Observed{Revision: 7, Running: 0, State: domain.ObservedOK, At: now}},
 	}
 	for _, c := range cases {
 		got := summarizeTasks(c.tasks, c.svc, now)
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s:\n got %+v\nwant %+v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestTaskRevision(t *testing.T) {
-	cases := []struct {
-		labels map[string]string
-		want   int
-		ok     bool
-	}{
-		{nil, 0, false},
-		{rev("3"), 3, true},
-		{rev(" 4 "), 0, false},
-		{rev(""), 0, false},
-		{rev("x"), 0, false},
-		{rev("1.5"), 0, false},
-	}
-	for _, c := range cases {
-		got, ok := taskRevision(c.labels)
-		if got != c.want || ok != c.ok {
-			t.Errorf("taskRevision(%v) = %d, %v; want %d, %v", c.labels, got, ok, c.want, c.ok)
 		}
 	}
 }
@@ -130,12 +107,12 @@ func TestSettlingTasks(t *testing.T) {
 		rev   int
 		want  bool
 	}{
-		{"starting", []SwarmTask{task("2", "running", "starting")}, 2, true},
-		{"preparing", []SwarmTask{task("2", "running", "preparing")}, 2, true},
-		{"pending is the timeout's job", []SwarmTask{task("2", "running", "pending")}, 2, false},
-		{"shut down", []SwarmTask{task("2", "shutdown", "starting")}, 2, false},
-		{"another revision", []SwarmTask{task("1", "running", "starting")}, 2, false},
-		{"running", []SwarmTask{task("2", "running", "running")}, 2, false},
+		{"starting", []SwarmTask{task(2, "running", "starting")}, 2, true},
+		{"preparing", []SwarmTask{task(2, "running", "preparing")}, 2, true},
+		{"pending is the timeout's job", []SwarmTask{task(2, "running", "pending")}, 2, false},
+		{"shut down", []SwarmTask{task(2, "shutdown", "starting")}, 2, false},
+		{"another revision", []SwarmTask{task(1, "running", "starting")}, 2, false},
+		{"running", []SwarmTask{task(2, "running", "running")}, 2, false},
 		{"none", nil, 2, false},
 	}
 	for _, c := range cases {

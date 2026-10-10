@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -116,7 +115,7 @@ type fakeSwarm struct {
 	removed                  []string
 	pulls                    []string
 	observed                 []string
-	ready, total             int
+	ready                    int
 	agents                   []app.AgentSpec
 	versions                 uint64
 	undated                  []string
@@ -205,13 +204,12 @@ func (f *fakeSwarm) view(id string) (app.SwarmService, []app.SwarmTask) {
 	if s == nil {
 		return app.SwarmService{}, tasks
 	}
-	labels := map[string]string{"keel.service": id, "keel.revision": strconv.Itoa(s.spec.Revision)}
 	if !scripted {
 		for range s.spec.Replicas {
-			tasks = append(tasks, app.SwarmTask{DesiredState: "running", State: "running", Labels: labels})
+			tasks = append(tasks, app.SwarmTask{DesiredState: "running", State: "running", Revision: s.spec.Revision})
 		}
 	}
-	return app.SwarmService{Name: "svc-" + id, Labels: labels, UpdateState: f.updateState[id]}, tasks
+	return app.SwarmService{Name: "svc-" + id, Revision: s.spec.Revision, UpdateState: f.updateState[id]}, tasks
 }
 
 func (f *fakeSwarm) ObserveService(ctx context.Context, id string) (app.SwarmService, []app.SwarmTask, error) {
@@ -239,19 +237,16 @@ func (f *fakeSwarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []
 			services = append(services, s)
 		}
 		for _, t := range ts {
-			if t.Labels == nil {
-				t.Labels = map[string]string{}
-			}
-			t.Labels["keel.service"] = id
+			t.NodeID = id
 			tasks = append(tasks, t)
 		}
 	}
 	return services, tasks, nil
 }
 
-func (f *fakeSwarm) Servers(ctx context.Context) (int, int, error) {
+func (f *fakeSwarm) Servers(ctx context.Context) (int, error) {
 	f.call(ctx, "Servers")
-	return f.ready, f.total, nil
+	return f.ready, nil
 }
 
 func (f *fakeSwarm) EnsureAgent(_ context.Context, spec app.AgentSpec) error {

@@ -156,11 +156,11 @@ func TestDockerObserve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if svc.Name != "svc-n1" || svc.UpdateState != "rollback_completed" || svc.UpdateMessage != "rolled back" || svc.Labels["keel.revision"] != "2" {
+	if svc.Name != "svc-n1" || svc.UpdateState != "rollback_completed" || svc.UpdateMessage != "rolled back" || svc.Revision != 2 {
 		t.Fatalf("service: %+v", svc)
 	}
 	if len(tasks) != 2 || tasks[0].State != "running" || tasks[0].Timestamp != 1791460800123 ||
-		tasks[0].Labels["keel.revision"] != "2" || tasks[1].Err != "exit 1" || tasks[1].Timestamp != 0 || tasks[1].Labels != nil {
+		tasks[0].Revision != 2 || tasks[0].NodeID != "n1" || tasks[1].Err != "exit 1" || tasks[1].Timestamp != 0 || tasks[1].Revision != 0 || tasks[1].NodeID != "" {
 		t.Fatalf("tasks: %+v", tasks)
 	}
 	var taskQuery string
@@ -179,8 +179,8 @@ func TestDockerObserve(t *testing.T) {
 	if err != nil || len(services) != 1 || len(all) != 2 {
 		t.Fatalf("sweep: %+v %+v %v", services, all, err)
 	}
-	if ready, total, err := s.Servers(ctx); ready != 2 || total != 3 || err != nil {
-		t.Fatalf("servers: %d/%d %v", ready, total, err)
+	if ready, err := s.Servers(ctx); ready != 2 || err != nil {
+		t.Fatalf("servers: %d %v", ready, err)
 	}
 }
 

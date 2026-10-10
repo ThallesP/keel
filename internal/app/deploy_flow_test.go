@@ -405,8 +405,8 @@ func TestDeploymentTimeout(t *testing.T) {
 	a := w.addNode("api")
 	b := w.addNode("worker")
 	w.swarm.tasks[a.ID] = []app.SwarmTask{
-		{DesiredState: "shutdown", State: "rejected", Err: "no suitable node", Labels: map[string]string{"keel.revision": "1"}},
-		{DesiredState: "running", State: "pending", Labels: map[string]string{"keel.revision": "1"}},
+		{DesiredState: "shutdown", State: "rejected", Err: "no suitable node", Revision: 1},
+		{DesiredState: "running", State: "pending", Revision: 1},
 	}
 	id := w.ship(app.ShipOptions{})
 	w.jobs.advance(4*time.Minute + 59*time.Second)
@@ -464,7 +464,7 @@ func TestRecover(t *testing.T) {
 	if len(w.swarm.creates) != 2 {
 		t.Fatalf("creates: %+v", w.swarm.creates)
 	}
-	w.swarm.tasks[b.ID] = []app.SwarmTask{{DesiredState: "running", State: "pending", Labels: map[string]string{"keel.revision": "1"}}}
+	w.swarm.tasks[b.ID] = []app.SwarmTask{{DesiredState: "running", State: "pending", Revision: 1}}
 	w.app.ScheduleObserve(b.ID)
 	w.jobs.advance(time.Second)
 	if d := w.deployment(fresh); d.Status != domain.DeploymentRunning {
@@ -521,7 +521,7 @@ func TestIngestEventsDebounce(t *testing.T) {
 	}
 
 	w.swarm.observed = nil
-	w.swarm.tasks[a.ID] = []app.SwarmTask{{DesiredState: "running", State: "starting", Labels: map[string]string{"keel.revision": "1"}}}
+	w.swarm.tasks[a.ID] = []app.SwarmTask{{DesiredState: "running", State: "starting", Revision: 1}}
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{svcEvent("container", "svc-"+a.ID)}, false)
 	w.jobs.advance(500 * time.Millisecond)
 	if w.jobs.count("observe:"+a.ID) != 1 {
@@ -556,7 +556,7 @@ func TestObservePublishesOnlyChanges(t *testing.T) {
 	if len(w.pub.topics) != 0 {
 		t.Fatalf("an unchanged scan published %v", w.pub.topics)
 	}
-	w.swarm.tasks[a.ID] = []app.SwarmTask{{DesiredState: "running", State: "failed", Err: "oom", Labels: map[string]string{"keel.revision": "1"}}}
+	w.swarm.tasks[a.ID] = []app.SwarmTask{{DesiredState: "running", State: "failed", Err: "oom", Revision: 1}}
 	w.app.ScheduleObserve(a.ID)
 	w.jobs.advance(time.Second)
 	if !w.pub.has("org", "/api/environments/env") {
@@ -564,7 +564,7 @@ func TestObservePublishesOnlyChanges(t *testing.T) {
 	}
 
 	w.pub.reset()
-	w.swarm.ready, w.swarm.total = 2, 3
+	w.swarm.ready = 2
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, false)
 	w.jobs.run()
 	if !w.pub.has("org", "/api/environments") || !w.pub.has("org2", "/api/environments") {

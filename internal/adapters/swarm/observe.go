@@ -3,6 +3,7 @@ package swarm
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -52,7 +53,7 @@ func (s *Swarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []app.
 }
 
 func serviceOf(svc swarm.Service) app.SwarmService {
-	out := app.SwarmService{Name: svc.Spec.Name, Labels: svc.Spec.Labels}
+	out := app.SwarmService{Name: svc.Spec.Name, Revision: revisionOf(svc.Spec.Labels)}
 	if u := svc.UpdateStatus; u != nil {
 		out.UpdateState, out.UpdateMessage = string(u.State), u.Message
 	}
@@ -71,9 +72,14 @@ func tasksOf(items []swarm.Task) []app.SwarmTask {
 			task.Timestamp = t.Status.Timestamp.UnixMilli()
 		}
 		if cs := t.Spec.ContainerSpec; cs != nil {
-			task.Labels = cs.Labels
+			task.NodeID, task.Revision = cs.Labels[labelService], revisionOf(cs.Labels)
 		}
 		out = append(out, task)
 	}
 	return out
+}
+
+func revisionOf(labels map[string]string) int {
+	r, _ := strconv.Atoi(labels["keel.revision"])
+	return r
 }

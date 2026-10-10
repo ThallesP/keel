@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,21 +16,11 @@ var transientTaskStates = map[string]bool{
 	"preparing": true, "ready": true, "starting": true,
 }
 
-func taskRevision(labels map[string]string) (int, bool) {
-	r, err := strconv.Atoi(labels["keel.revision"])
-	if err != nil {
-		return 0, false
-	}
-	return r, true
-}
-
 func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Observed {
 	rolledBack := svc.UpdateState == "paused" || strings.HasPrefix(svc.UpdateState, "rollback")
-	revision, _ := taskRevision(svc.Labels)
+	revision := svc.Revision
 	for _, t := range tasks {
-		if r, ok := taskRevision(t.Labels); ok {
-			revision = max(revision, r)
-		}
+		revision = max(revision, t.Revision)
 	}
 
 	o := domain.Observed{Revision: revision, At: now}
@@ -39,7 +28,7 @@ func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Obser
 	var pending bool
 	var finishedAt int64
 	for _, t := range tasks {
-		if r, ok := taskRevision(t.Labels); !ok || r != revision {
+		if t.Revision != revision {
 			continue
 		}
 		if t.DesiredState == "running" {
@@ -84,8 +73,7 @@ func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Obser
 
 func settlingTasks(tasks []SwarmTask, revision int) bool {
 	return slices.ContainsFunc(tasks, func(t SwarmTask) bool {
-		r, ok := taskRevision(t.Labels)
-		return ok && r == revision && t.DesiredState != "shutdown" && transientTaskStates[t.State]
+		return t.Revision == revision && t.DesiredState != "shutdown" && transientTaskStates[t.State]
 	})
 }
 
@@ -200,8 +188,7 @@ func (a *App) observeAll(ctx context.Context) {
 	}
 	tasksByNode := map[string][]SwarmTask{}
 	for _, t := range tasks {
-		id := t.Labels["keel.service"]
-		tasksByNode[id] = append(tasksByNode[id], t)
+		tasksByNode[t.NodeID] = append(tasksByNode[t.NodeID], t)
 	}
 	now := a.Now()
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -221,7 +208,7 @@ func (a *App) observeAll(ctx context.Context) {
 
 func (a *App) observeServers(ctx context.Context) {
 	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-	ready, _, err := a.Swarm.Servers(dctx)
+	ready, err := a.Swarm.Servers(dctx)
 	cancel()
 	if err != nil {
 		a.Log.Error("observeServers", "err", err)

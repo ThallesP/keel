@@ -30,7 +30,7 @@ type Swarm interface {
 	RemoveService(ctx context.Context, nodeID string) error
 	ObserveService(ctx context.Context, nodeID string) (SwarmService, []SwarmTask, error)
 	ObserveServices(ctx context.Context) ([]SwarmService, []SwarmTask, error)
-	Servers(ctx context.Context) (ready, total int, err error)
+	Servers(ctx context.Context) (ready int, err error)
 	EnsureAgent(ctx context.Context, spec AgentSpec) error
 }
 
@@ -45,17 +45,18 @@ type ServiceSpec struct {
 
 type SwarmService struct {
 	Name          string
-	Labels        map[string]string
+	Revision      int
 	UpdateState   string
 	UpdateMessage string
 }
 
 type SwarmTask struct {
+	NodeID       string
 	DesiredState string
 	State        string
 	Err          string
 	Timestamp    int64
-	Labels       map[string]string
+	Revision     int
 }
 
 type AgentSpec struct {

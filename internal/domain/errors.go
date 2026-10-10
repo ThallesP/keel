@@ -44,14 +44,13 @@ func NotFound(format string, args ...any) *Error { return E(CodeNotFound, format
 func Conflict(format string, args ...any) *Error { return E(CodeConflict, format, args...) }
 
 const (
-	MsgNotAuthenticated    = "Not authenticated"
 	MsgNoOrganization      = "You're not in an organization yet. Ask a member for an invite link."
 	MsgEnvironmentNotFound = "Environment not found"
 	MsgNodeNotFound        = "Node not found"
 )
 
 var (
-	ErrNotAuthenticated = &Error{Code: CodeNotAuthenticated, Message: MsgNotAuthenticated}
+	ErrNotAuthenticated = &Error{Code: CodeNotAuthenticated, Message: "Not authenticated"}
 	ErrNoOrganization   = &Error{Code: CodeNoOrganization, Message: MsgNoOrganization}
 )
 

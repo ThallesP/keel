@@ -2,17 +2,11 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 )
-
-func authCode(err error) string {
-	if err == nil {
-		return ""
-	}
-	return CodeOf(err)
-}
 
 func TestValidUserEmail(t *testing.T) {
 	for email, want := range map[string]bool{
@@ -130,26 +124,27 @@ func TestInvitationStanding(t *testing.T) {
 }
 
 func TestInviteRole(t *testing.T) {
+	forbidden := E(CodeForbidden, "You are not allowed to invite users to this organization")
 	cases := []struct {
 		inviter, role string
 		want          string
-		code, msg     string
+		err           error
 	}{
-		{RoleOwner, "", RoleMember, "", ""},
-		{RoleOwner, RoleMember, RoleMember, "", ""},
-		{RoleOwner, RoleAdmin, RoleAdmin, "", ""},
-		{RoleOwner, RoleOwner, RoleOwner, "", ""},
-		{RoleAdmin, RoleMember, RoleMember, "", ""},
-		{RoleAdmin, RoleAdmin, RoleAdmin, "", ""},
-		{RoleAdmin, RoleOwner, "", CodeForbidden, MsgNotAllowedToInviteWithRole},
-		{RoleMember, RoleMember, "", CodeForbidden, MsgNotAllowedToInvite},
-		{"", RoleMember, "", CodeForbidden, MsgNotAllowedToInvite},
-		{RoleOwner, "superuser", "", CodeInvalidInput, "Role not found: superuser"},
+		{RoleOwner, "", RoleMember, nil},
+		{RoleOwner, RoleMember, RoleMember, nil},
+		{RoleOwner, RoleAdmin, RoleAdmin, nil},
+		{RoleOwner, RoleOwner, RoleOwner, nil},
+		{RoleAdmin, RoleMember, RoleMember, nil},
+		{RoleAdmin, RoleAdmin, RoleAdmin, nil},
+		{RoleAdmin, RoleOwner, "", E(CodeForbidden, "You are not allowed to invite a user with this role")},
+		{RoleMember, RoleMember, "", forbidden},
+		{"", RoleMember, "", forbidden},
+		{RoleOwner, "superuser", "", Invalid("Role not found: superuser")},
 	}
 	for _, c := range cases {
 		got, err := InviteRole(c.inviter, c.role)
-		if got != c.want || authCode(err) != c.code || (err != nil && err.Error() != c.msg) {
-			t.Errorf("InviteRole(%q, %q) = %q, %v; want %q, %s %q", c.inviter, c.role, got, err, c.want, c.code, c.msg)
+		if got != c.want || !reflect.DeepEqual(err, c.err) {
+			t.Errorf("InviteRole(%q, %q) = %q, %v; want %q, %v", c.inviter, c.role, got, err, c.want, c.err)
 		}
 	}
 }
@@ -298,14 +293,9 @@ func TestCheckUserCodeAndBind(t *testing.T) {
 		}
 	}
 }
-
 func TestRateLimitError(t *testing.T) {
-	var err error = &RateLimitError{RetryAfterSeconds: 30}
 	var de *Error
-	if !errors.As(err, &de) || de.Code != CodeRateLimited || de.Message != MsgTooManyRequests {
+	if !errors.As(&RateLimitError{RetryAfterSeconds: 30}, &de) || de.Code != CodeRateLimited || de.Message != MsgTooManyRequests {
 		t.Fatalf("RateLimitError unwraps to %+v", de)
-	}
-	if CodeOf(err) != CodeRateLimited {
-		t.Fatalf("CodeOf = %s", CodeOf(err))
 	}
 }

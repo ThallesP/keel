@@ -9,16 +9,12 @@ var idEncoding = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadd
 
 func NewID() string {
 	b := make([]byte, 13)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
+	rand.Read(b)
 	return idEncoding.EncodeToString(b)[:20]
 }
 
 func NewSecret(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
+	rand.Read(b)
 	return idEncoding.EncodeToString(b)
 }

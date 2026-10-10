@@ -428,8 +428,8 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if !k.node(api).Dirty || !k.node(web).Dirty {
 		t.Error("referrers not staged")
 	}
-	if k.proxy != 1 || !reflect.DeepEqual(k.removed, []string{pg}) || !reflect.DeepEqual(k.observed, []string{pg}) {
-		t.Errorf("after commit: proxy %d removed %v observed %v", k.proxy, k.removed, k.observed)
+	if want := []string{"proxy:sync", "remove:" + pg, "reconcile"}; !slices.Equal(k.jobs.order, want) {
+		t.Errorf("after commit: jobs %v, want %v", k.jobs.order, want)
 	}
 	if topics := k.pub.take(canvasOrg); !slices.Equal(topics, []string{"/api/environments/" + env, "/api/nodes/", "/api/nodes/" + pg}) {
 		t.Errorf("topics %v", topics)
@@ -445,8 +445,8 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if n := k.node(vol); n.ParentID != "" || n.Position != (domain.Position{X: 105, Y: 206}) {
 		t.Errorf("child %q at %+v", n.ParentID, n.Position)
 	}
-	if k.proxy != 1 || len(k.removed) != 1 {
-		t.Errorf("group delete scheduled work: %d %v", k.proxy, k.removed)
+	if len(k.jobs.order) != 3 {
+		t.Errorf("group delete scheduled work: %v", k.jobs.order)
 	}
 	for _, id := range []string{"nope", pg} {
 		if err := k.app.RemoveNode(k.ctx, m, id); err != nil {
@@ -530,7 +530,7 @@ func TestCanvasOtherOrganization(t *testing.T) {
 		t.Errorf("foreign delete: %v", err)
 	}
 	n := k.node(api)
-	if n.Name != "api" || n.Position != (domain.Position{}) || n.Dirty || k.vars(api)[0].Value != "v" || len(k.ships) != 0 || len(k.removed) != 0 {
+	if n.Name != "api" || n.Position != (domain.Position{}) || n.Dirty || k.vars(api)[0].Value != "v" || len(k.ships) != 0 || len(k.jobs.order) != 0 {
 		t.Errorf("foreign writes landed: %+v %+v", n, k.vars(api))
 	}
 	if nodes, _ := k.app.ListNodes(k.ctx, domain.Actor{UserID: "u"}, env); len(nodes) != 0 {

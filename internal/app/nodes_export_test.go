@@ -1,20 +1,9 @@
 package app
 
-import (
-	"context"
-	"testing"
-)
+import "context"
 
-type CanvasSeams struct {
-	Ship       func(a *App, tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error)
-	Schedulers CanvasSchedulers
-}
-
-func StubCanvasSeams(t testing.TB, s CanvasSeams) {
-	ship, sched := canvasShip, canvasSchedulers
-	t.Cleanup(func() { canvasShip, canvasSchedulers = ship, sched })
-	canvasShip = s.Ship
-	canvasSchedulers = func(*App) CanvasSchedulers { return s.Schedulers }
+func (a *App) StubShip(ship func(tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error)) {
+	a.ship = ship
 }
 
 func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[string]string, err error) {

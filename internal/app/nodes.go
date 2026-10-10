@@ -121,7 +121,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 		if !in.Deploy || !in.Type.Deployable() {
 			return nil
 		}
-		id, err := canvasShip(a, tx, ch, scope, ShipOptions{Only: []string{node.ID}})
+		id, err := a.ship(tx, ch, scope, ShipOptions{Only: []string{node.ID}})
 		if _, refused := errors.AsType[*domain.Error](err); refused {
 			return nil
 		}
@@ -358,7 +358,7 @@ func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (str
 			return err
 		}
 		ch.Environment(scope.Project.OrganizationID, node.EnvironmentID)
-		deploymentID, err = canvasShip(a, tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: verb})
+		deploymentID, err = a.ship(tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: verb})
 		return err
 	})
 	return deploymentID, err
@@ -383,7 +383,7 @@ func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (stri
 			return err
 		}
 		ch.Environment(scope.Project.OrganizationID, node.EnvironmentID)
-		deploymentID, err = canvasShip(a, tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: "stop"})
+		deploymentID, err = a.ship(tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: "stop"})
 		return err
 	})
 	return deploymentID, err
@@ -421,13 +421,12 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 		ch.Environment(scope.Project.OrganizationID, node.EnvironmentID)
 		ch.Node(scope.Project.OrganizationID, node.EnvironmentID, id)
 		ch.AfterCommit(func() {
-			s := canvasSchedulers(a)
 			if len(node.Endpoints) > 0 {
-				s.ProxySync()
+				a.ScheduleProxySync()
 			}
 			if node.Desired != nil {
-				s.RemoveService(id)
-				s.Observe(id)
+				a.ScheduleRemoveService(id)
+				a.ScheduleObserve(id)
 			}
 		})
 		return nil

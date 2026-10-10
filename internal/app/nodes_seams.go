@@ -2,19 +2,6 @@ package app
 
 import "github.com/ThallesP/keel/internal/domain"
 
-var (
-	canvasShip       = (*App).beginDeployment
-	canvasSchedulers = func(a *App) CanvasSchedulers {
-		return CanvasSchedulers{ProxySync: a.ScheduleProxySync, RemoveService: a.ScheduleRemoveService, Observe: a.ScheduleObserve}
-	}
-)
-
-type CanvasSchedulers struct {
-	ProxySync     func()
-	RemoveService func(nodeID string)
-	Observe       func(nodeID string)
-}
-
 func canvasInsertVariables(tx Tx, nodeID string, vars []domain.Variable) error {
 	for _, v := range vars {
 		v.ID, v.NodeID = domain.NewID(), nodeID

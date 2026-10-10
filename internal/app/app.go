@@ -25,6 +25,7 @@ type App struct {
 	deploy     *deployRuntime
 	ingress    *ingressState
 	authLimits *authLimiters
+	ship       func(tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error)
 }
 
 type Config struct {
@@ -58,6 +59,7 @@ func New(a App) *App {
 	}
 	a.deploy = &deployRuntime{observe: map[string]pendingScan{}, applies: map[string]*applyQueue{}}
 	a.ingress = &ingressState{}
+	a.ship = a.beginDeployment
 	a.authLimits = &authLimiters{
 		signIn:      newAuthAttempts(SignInAttempts, SignInWindow),
 		perIP:       newAuthAttempts(AuthPerIP, AuthPerIPWindow),

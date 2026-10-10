@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
 	"github.com/ThallesP/keel/internal/app"
@@ -32,11 +33,9 @@ type canvasKit struct {
 	pub   canvasPublisher
 	now   int64
 
-	ships    []app.ShipOptions
-	shipErr  error
-	proxy    int
-	removed  []string
-	observed []string
+	jobs    *igJobs
+	ships   []app.ShipOptions
+	shipErr error
 }
 
 const (
@@ -52,22 +51,17 @@ func canvasSetup(t *testing.T) *canvasKit {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	k := &canvasKit{t: t, ctx: ctx, store: store, pub: canvasPublisher{}, now: 1_000}
+	k := &canvasKit{t: t, ctx: ctx, store: store, pub: canvasPublisher{}, now: 1_000,
+		jobs: &igJobs{pending: map[string]func(context.Context){}, every: map[string]time.Duration{}}}
 	k.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org-a', 'A', 'a', 1), ('org-b', 'B', 'b', 1)`)
-	k.app = app.New(app.App{Store: store, Events: k.pub, Now: func() int64 { k.now++; return k.now }, Config: app.Config{PublicIP: "203.0.113.7"}})
-	app.StubCanvasSeams(t, app.CanvasSeams{
-		Ship: func(a *app.App, tx app.Tx, ch *app.Changes, scope app.EnvScope, opts app.ShipOptions) (string, error) {
-			if k.shipErr != nil {
-				return "", k.shipErr
-			}
-			k.ships = append(k.ships, opts)
-			return "dep-" + scope.Environment.ID, nil
-		},
-		Schedulers: app.CanvasSchedulers{
-			ProxySync:     func() { k.proxy++ },
-			RemoveService: func(id string) { k.removed = append(k.removed, id) },
-			Observe:       func(id string) { k.observed = append(k.observed, id) },
-		},
+	k.app = app.New(app.App{Store: store, Events: k.pub, Jobs: k.jobs, Now: func() int64 { k.now++; return k.now },
+		Config: app.Config{PublicIP: "203.0.113.7"}})
+	k.app.StubShip(func(_ app.Tx, _ *app.Changes, scope app.EnvScope, opts app.ShipOptions) (string, error) {
+		if k.shipErr != nil {
+			return "", k.shipErr
+		}
+		k.ships = append(k.ships, opts)
+		return "dep-" + scope.Environment.ID, nil
 	})
 	return k
 }

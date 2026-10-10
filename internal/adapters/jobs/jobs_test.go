@@ -6,250 +6,226 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.b.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.b.String()
-}
-
-func newTest(t *testing.T) (*Scheduler, *syncBuffer) {
-	t.Helper()
-	buf := &syncBuffer{}
-	s := New(slog.New(slog.NewTextHandler(buf, nil)))
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = s.Stop(ctx)
-	})
-	return s, buf
-}
-
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-}
+func newScheduler() *Scheduler { return New(slog.New(slog.DiscardHandler)) }
 
 func TestAfterCoalescesPendingKey(t *testing.T) {
-	s, _ := newTest(t)
-	var a, b atomic.Int32
-	s.After("observe:n1", 30*time.Millisecond, func(context.Context) { a.Add(1) })
-	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
-	waitFor(t, "first job", func() bool { return a.Load() == 1 })
-	time.Sleep(20 * time.Millisecond)
-	if b.Load() != 0 {
-		t.Fatalf("second call with a pending key ran %d times", b.Load())
-	}
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var first, second int
+		s.After("observe:n1", time.Second, func(context.Context) { first++ })
+		s.After("observe:n1", 0, func(context.Context) { second++ })
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if first != 1 || second != 0 {
+			t.Fatalf("first ran %d, second %d times, want 1 and 0", first, second)
+		}
 
-	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
-	waitFor(t, "rescheduled job", func() bool { return b.Load() == 1 })
+		s.After("observe:n1", 0, func(context.Context) { second++ })
+		synctest.Wait()
+		if second != 1 {
+			t.Fatalf("rescheduled job ran %d times", second)
+		}
+	})
 }
 
 func TestAfterKeyFreedWhenRunning(t *testing.T) {
-	s, _ := newTest(t)
-	started, release := make(chan struct{}), make(chan struct{})
-	var second atomic.Int32
-	s.After("k", 0, func(context.Context) {
-		close(started)
-		<-release
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		release := make(chan struct{})
+		defer close(release)
+		var second int
+		s.After("k", 0, func(context.Context) { <-release })
+		synctest.Wait()
+		s.After("k", 0, func(context.Context) { second++ })
+		synctest.Wait()
+		if second != 1 {
+			t.Fatalf("second job ran %d times while the first runs", second)
+		}
 	})
-	<-started
-	s.After("k", 0, func(context.Context) { second.Add(1) })
-	waitFor(t, "second job while the first runs", func() bool { return second.Load() == 1 })
-	close(release)
 }
 
 func TestAfterDistinctAndEmptyKeys(t *testing.T) {
-	s, _ := newTest(t)
-	var n atomic.Int32
-	inc := func(context.Context) { n.Add(1) }
-	s.After("a", 5*time.Millisecond, inc)
-	s.After("b", 5*time.Millisecond, inc)
-	s.After("", 5*time.Millisecond, inc)
-	s.After("", 5*time.Millisecond, inc)
-	waitFor(t, "four jobs", func() bool { return n.Load() == 4 })
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var n atomic.Int32
+		inc := func(context.Context) { n.Add(1) }
+		for _, key := range []string{"a", "b", "", ""} {
+			s.After(key, time.Second, inc)
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if n.Load() != 4 {
+			t.Fatalf("%d jobs ran, want 4", n.Load())
+		}
+	})
 }
 
 func TestEveryDifferentNamesRunConcurrently(t *testing.T) {
-	s, _ := newTest(t)
-	var a, b atomic.Int32
-	block := make(chan struct{})
-	defer close(block)
-	s.Every("slow", 2*time.Millisecond, func(context.Context) {
-		if a.Add(1) == 1 {
-			<-block
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		defer s.Stop(context.Background())
+		block := make(chan struct{})
+		defer close(block)
+		var fast int
+		s.Every("slow", time.Second, func(context.Context) { <-block })
+		s.Every("fast", time.Second, func(context.Context) { fast++ })
+		time.Sleep(3 * time.Second)
+		synctest.Wait()
+		if fast != 3 {
+			t.Fatalf("fast job ran %d times while the slow one blocks, want 3", fast)
 		}
 	})
-	s.Every("fast", 2*time.Millisecond, func(context.Context) { b.Add(1) })
-	waitFor(t, "fast job while the slow one blocks", func() bool { return b.Load() >= 3 })
 }
 
 func TestPanicRecovered(t *testing.T) {
-	s, logs := newTest(t)
-	var after, every atomic.Int32
-	s.After("boom", 0, func(context.Context) { panic("kaboom") })
-	s.Every("flaky", 2*time.Millisecond, func(context.Context) {
-		if every.Add(1) == 1 {
-			panic("first tick")
+	synctest.Test(t, func(t *testing.T) {
+		var logs bytes.Buffer
+		s := New(slog.New(slog.NewTextHandler(&logs, nil)))
+		var every, after int
+		s.After("boom", 0, func(context.Context) { panic("kaboom") })
+		s.Every("flaky", time.Second, func(context.Context) {
+			if every++; every == 1 {
+				panic("first tick")
+			}
+		})
+		time.Sleep(3 * time.Second)
+		s.After("next", 0, func(context.Context) { after++ })
+		synctest.Wait()
+		if err := s.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if every != 3 || after != 1 {
+			t.Fatalf("Every ran %d times, the next job %d, want 3 and 1", every, after)
+		}
+		for _, want := range []string{"job panicked", "job=boom", "kaboom", "job=flaky", "first tick", "stack="} {
+			if !strings.Contains(logs.String(), want) {
+				t.Fatalf("log lacks %q:\n%s", want, logs.String())
+			}
 		}
 	})
-	waitFor(t, "panic logged", func() bool { return strings.Contains(logs.String(), "kaboom") })
-	s.After("next", 0, func(context.Context) { after.Add(1) })
-	waitFor(t, "job after a panic", func() bool { return after.Load() == 1 })
-	waitFor(t, "Every after its own panic", func() bool { return every.Load() >= 3 })
-	out := logs.String()
-	for _, want := range []string{"job panicked", "job=boom", "job=flaky", "first tick", "stack="} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("log lacks %q:\n%s", want, out)
-		}
-	}
 }
 
 func TestStopCancelsPendingAndWaitsForRunning(t *testing.T) {
-	s := New(slog.New(slog.DiscardHandler))
-	var pendingRan, lateRan, everyRan atomic.Int32
-	s.After("later", 50*time.Millisecond, func(context.Context) { pendingRan.Add(1) })
-	s.After("", 50*time.Millisecond, func(context.Context) { pendingRan.Add(1) })
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var ran atomic.Int32
+		inc := func(context.Context) { ran.Add(1) }
+		s.After("later", time.Second, inc)
+		s.After("", time.Second, inc)
+		var finished, sawCancel bool
+		s.After("running", 0, func(ctx context.Context) {
+			time.Sleep(500 * time.Millisecond)
+			sawCancel = ctx.Err() != nil
+			finished = true
+		})
+		synctest.Wait()
 
-	started := make(chan struct{})
-	var finished atomic.Bool
-	var sawCancel atomic.Bool
-	s.After("running", 0, func(ctx context.Context) {
-		close(started)
-		time.Sleep(40 * time.Millisecond)
-		sawCancel.Store(ctx.Err() != nil)
-		finished.Store(true)
+		if err := s.Stop(context.Background()); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+		if !finished || sawCancel {
+			t.Fatalf("running job finished %v, saw its context cancelled %v; want it to finish uncancelled", finished, sawCancel)
+		}
+
+		s.After("late", 0, inc)
+		s.Every("late-every", time.Millisecond, inc)
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		if n := ran.Load(); n != 0 {
+			t.Fatalf("%d jobs ran after Stop", n)
+		}
+		if err := s.Stop(context.Background()); err != nil {
+			t.Fatalf("second Stop: %v", err)
+		}
 	})
-	<-started
-
-	if err := s.Stop(context.Background()); err != nil {
-		t.Fatalf("Stop: %v", err)
-	}
-	if !finished.Load() {
-		t.Fatal("Stop returned before the running job finished")
-	}
-	if sawCancel.Load() {
-		t.Fatal("the running job's context was cancelled although Stop had time to wait")
-	}
-
-	s.After("late", 0, func(context.Context) { lateRan.Add(1) })
-	s.Every("late-every", time.Millisecond, func(context.Context) { everyRan.Add(1) })
-	time.Sleep(80 * time.Millisecond)
-	if n := pendingRan.Load() + lateRan.Load() + everyRan.Load(); n != 0 {
-		t.Fatalf("%d jobs ran after Stop", n)
-	}
-	if err := s.Stop(context.Background()); err != nil {
-		t.Fatalf("second Stop: %v", err)
-	}
 }
 
 func TestStopDeadlineCancelsJobContext(t *testing.T) {
-	s := New(slog.New(slog.DiscardHandler))
-	started, cancelled := make(chan struct{}), make(chan struct{})
-	s.After("stuck", 0, func(ctx context.Context) {
-		close(started)
-		<-ctx.Done()
-		close(cancelled)
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var cancelled bool
+		s.After("stuck", 0, func(ctx context.Context) {
+			<-ctx.Done()
+			cancelled = true
+		})
+		synctest.Wait()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := s.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Stop = %v, want deadline exceeded", err)
+		}
+		synctest.Wait()
+		if !cancelled {
+			t.Fatal("job context not cancelled after Stop's deadline")
+		}
 	})
-	<-started
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	if err := s.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Stop = %v, want deadline exceeded", err)
-	}
-	select {
-	case <-cancelled:
-	case <-time.After(time.Second):
-		t.Fatal("job context not cancelled after Stop's deadline")
-	}
 }
 
 func TestWaitAfterStopDeadline(t *testing.T) {
-	s := New(slog.New(slog.DiscardHandler))
-	started := make(chan struct{})
-	var recorded atomic.Bool
-	s.After("apply", 0, func(ctx context.Context) {
-		close(started)
-		<-ctx.Done()
-		time.Sleep(30 * time.Millisecond)
-		recorded.Store(true)
-	})
-	<-started
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	if err := s.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Stop = %v, want deadline exceeded", err)
-	}
-	if recorded.Load() {
-		t.Fatal("Stop waited past its deadline")
-	}
-	wctx, wcancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer wcancel()
-	if err := s.Wait(wctx); err != nil {
-		t.Fatalf("Wait: %v", err)
-	}
-	if !recorded.Load() {
-		t.Fatal("Wait returned before the cancelled job finished")
-	}
-
-	s2 := New(slog.New(slog.DiscardHandler))
-	defer func() { _ = s2.Stop(context.Background()) }()
-	release := make(chan struct{})
-	defer close(release)
-	running := make(chan struct{})
-	s2.After("stuck", 0, func(context.Context) { close(running); <-release })
-	<-running
-	short, scancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer scancel()
-	if err := s2.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Wait = %v, want deadline exceeded", err)
-	}
-}
-
-func TestStopEndsEveryLoopsAfterCurrentRun(t *testing.T) {
-	s := New(slog.New(slog.DiscardHandler))
-	started := make(chan struct{}, 1)
-	var runs atomic.Int32
-	var done atomic.Bool
-	s.Every("tick", time.Millisecond, func(context.Context) {
-		if runs.Add(1) == 1 {
-			started <- struct{}{}
-			time.Sleep(30 * time.Millisecond)
-			done.Store(true)
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var recorded atomic.Bool
+		s.After("apply", 0, func(ctx context.Context) {
+			<-ctx.Done()
+			time.Sleep(time.Second)
+			recorded.Store(true)
+		})
+		synctest.Wait()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := s.Stop(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Stop = %v, want deadline exceeded", err)
+		}
+		if recorded.Load() {
+			t.Fatal("Stop waited past its deadline")
+		}
+		if err := s.Wait(context.Background()); err != nil {
+			t.Fatalf("Wait: %v", err)
+		}
+		if !recorded.Load() {
+			t.Fatal("Wait returned before the cancelled job finished")
 		}
 	})
-	<-started
-	if err := s.Stop(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if !done.Load() {
-		t.Fatal("Stop did not wait for the running Every job")
-	}
-	n := runs.Load()
-	time.Sleep(20 * time.Millisecond)
-	if runs.Load() != n {
-		t.Fatal("Every kept running after Stop")
-	}
+}
+
+func TestWaitDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		release := make(chan struct{})
+		defer close(release)
+		s.After("stuck", 0, func(context.Context) { <-release })
+		synctest.Wait()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := s.Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Wait = %v, want deadline exceeded", err)
+		}
+	})
+}
+
+func TestStopStartsNoRunAfterTheCurrentOne(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newScheduler()
+		var started, finished atomic.Int32
+		for range 20 {
+			s.Every("tick", time.Second, func(context.Context) {
+				started.Add(1)
+				time.Sleep(5 * time.Second)
+				finished.Add(1)
+			})
+		}
+		time.Sleep(2 * time.Second)
+		if err := s.Stop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if started.Load() != 20 || finished.Load() != 20 {
+			t.Fatalf("%d runs started and %d finished by Stop, want 20 and 20", started.Load(), finished.Load())
+		}
+	})
 }

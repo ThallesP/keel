@@ -63,6 +63,11 @@ func (s *Scheduler) Every(name string, interval time.Duration, fn func(context.C
 			case <-s.quit:
 				return
 			case <-ticker.C:
+				select {
+				case <-s.quit:
+					return
+				default:
+				}
 				s.run(name, fn)
 			}
 		}

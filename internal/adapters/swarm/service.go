@@ -37,7 +37,7 @@ func toSpec(s app.ServiceSpec) swarm.ServiceSpec {
 			},
 			Networks: []swarm.NetworkAttachmentConfig{{Target: "keel"}},
 		},
-		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: new(uint64(max(s.Replicas, 0)))}},
+		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: new(uint64(s.Replicas))}},
 		UpdateConfig: &swarm.UpdateConfig{
 			Parallelism:   1,
 			Order:         swarm.UpdateOrderStartFirst,
@@ -47,7 +47,7 @@ func toSpec(s app.ServiceSpec) swarm.ServiceSpec {
 }
 
 func engineArgs(image string, env []string) []string {
-	if imageEngine(image) != "redis" {
+	if domain.EngineOf(image) != domain.EngineRedis {
 		return nil
 	}
 	for _, e := range env {

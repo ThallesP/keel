@@ -3,6 +3,7 @@ package swarm
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,11 +12,11 @@ import (
 )
 
 func TestReadServiceLogs(t *testing.T) {
-	var query string
+	var query url.Values
 	s := fakeEngine(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/services/svc-abc/logs"):
-			query = r.URL.RawQuery
+			query = r.URL.Query()
 			_, _ = w.Write([]byte{1, 0, 0, 0, 0, 0, 0, 2, 'h', '\n'})
 		case strings.HasSuffix(r.URL.Path, "/services/svc-gone/logs"):
 			w.Header().Set("Content-Type", "application/json")
@@ -29,13 +30,8 @@ func TestReadServiceLogs(t *testing.T) {
 	if err != nil || !found || string(body) != "\x01\x00\x00\x00\x00\x00\x00\x02h\n" {
 		t.Fatalf("logs %q %v %v", body, found, err)
 	}
-	for _, p := range []string{"stdout=1", "stderr=1", "tail=300", "timestamps=1", "details=1"} {
-		if !strings.Contains(query, p) {
-			t.Errorf("query %q lacks %s", query, p)
-		}
-	}
-	if strings.Contains(query, "follow") {
-		t.Errorf("query %q follows", query)
+	if want := (url.Values{"stdout": {"1"}, "stderr": {"1"}, "tail": {"300"}, "timestamps": {"1"}, "details": {"1"}}); !reflect.DeepEqual(query, want) {
+		t.Errorf("query %v, want %v", query, want)
 	}
 	if _, found, err := s.ReadServiceLogs(context.Background(), "svc-gone", 10); err != nil || found {
 		t.Fatalf("missing service: %v %v", found, err)

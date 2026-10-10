@@ -11,8 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-var _ app.LogReader = (*Swarm)(nil)
-
 func (s *Swarm) ReadServiceLogs(ctx context.Context, service string, tail int) ([]byte, bool, error) {
 	rc, err := s.cli.ServiceLogs(ctx, service, client.ServiceLogsOptions{
 		ShowStdout: true,

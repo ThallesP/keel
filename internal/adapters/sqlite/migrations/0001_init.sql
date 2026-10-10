@@ -247,9 +247,3 @@ CREATE TABLE otlp_keys (
   key            TEXT NOT NULL UNIQUE,
   created_at     INTEGER NOT NULL
 );
-
--- Small install-wide settings (e.g. the public IP default domains were last computed with).
-CREATE TABLE settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);

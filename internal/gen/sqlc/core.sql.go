@@ -107,17 +107,6 @@ func (q *Queries) CoreGetProject(ctx context.Context, id string) (Project, error
 	return i, err
 }
 
-const coreGetSetting = `-- name: CoreGetSetting :one
-SELECT value FROM settings WHERE key = ?
-`
-
-func (q *Queries) CoreGetSetting(ctx context.Context, key string) (string, error) {
-	row := q.db.QueryRowContext(ctx, coreGetSetting, key)
-	var value string
-	err := row.Scan(&value)
-	return value, err
-}
-
 const coreInsertEndpoint = `-- name: CoreInsertEndpoint :exec
 INSERT INTO endpoints (
   id, node_id, ord, protocol, port, pinned_port, domain, public_port,
@@ -483,21 +472,6 @@ func (q *Queries) CoreOrganizationOfEnvironment(ctx context.Context, id string) 
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
-}
-
-const coreSetSetting = `-- name: CoreSetSetting :exec
-INSERT INTO settings (key, value) VALUES (?, ?)
-ON CONFLICT (key) DO UPDATE SET value = excluded.value
-`
-
-type CoreSetSettingParams struct {
-	Key   string
-	Value string
-}
-
-func (q *Queries) CoreSetSetting(ctx context.Context, arg CoreSetSettingParams) error {
-	_, err := q.db.ExecContext(ctx, coreSetSetting, arg.Key, arg.Value)
-	return err
 }
 
 const coreUpdateNode = `-- name: CoreUpdateNode :execrows

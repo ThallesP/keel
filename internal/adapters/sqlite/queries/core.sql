@@ -32,13 +32,6 @@ SELECT * FROM endpoints ORDER BY node_id, ord;
 SELECT p.organization_id FROM environments e JOIN projects p ON p.id = e.project_id
 WHERE e.id = ?;
 
--- name: CoreGetSetting :one
-SELECT value FROM settings WHERE key = ?;
-
--- name: CoreSetSetting :exec
-INSERT INTO settings (key, value) VALUES (?, ?)
-ON CONFLICT (key) DO UPDATE SET value = excluded.value;
-
 -- name: CoreInsertNode :exec
 INSERT INTO nodes (
   id, environment_id, type, name, parent_id, position_x, position_y,

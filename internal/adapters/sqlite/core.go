@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"cmp"
-	"database/sql"
 	"encoding/json"
-	"errors"
 
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
@@ -227,19 +225,4 @@ func (t *tx) ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error {
 		}
 	}
 	return nil
-}
-
-func (t *tx) Setting(key string) (string, bool, error) {
-	v, err := t.q.CoreGetSetting(t.ctx, key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, err
-	}
-	return v, true, nil
-}
-
-func (t *tx) SetSetting(key, value string) error {
-	return t.q.CoreSetSetting(t.ctx, sqlc.CoreSetSettingParams{Key: key, Value: value})
 }

@@ -189,11 +189,6 @@ type Session struct {
 	Ip        string
 }
 
-type Setting struct {
-	Key   string
-	Value string
-}
-
 type User struct {
 	ID           string
 	Email        string

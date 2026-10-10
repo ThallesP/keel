@@ -11,7 +11,7 @@ SELECT * FROM projects WHERE organization_id = ? AND slug = ?;
 INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES (?, ?, ?, ?, ?);
 
 -- name: CanvasListEnvironments :many
-SELECT * FROM environments WHERE project_id = ? ORDER BY rowid;
+SELECT * FROM environments WHERE project_id = ? ORDER BY is_production DESC, rowid;
 
 -- name: CanvasInsertEnvironment :exec
 INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES (?, ?, ?, ?, ?);

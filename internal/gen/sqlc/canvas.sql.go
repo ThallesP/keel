@@ -152,7 +152,7 @@ func (q *Queries) CanvasListEnvironmentVariables(ctx context.Context, environmen
 }
 
 const canvasListEnvironments = `-- name: CanvasListEnvironments :many
-SELECT id, project_id, name, is_production, created_at FROM environments WHERE project_id = ? ORDER BY rowid
+SELECT id, project_id, name, is_production, created_at FROM environments WHERE project_id = ? ORDER BY is_production DESC, rowid
 `
 
 func (q *Queries) CanvasListEnvironments(ctx context.Context, projectID string) ([]Environment, error) {

@@ -98,7 +98,7 @@ func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string
 		if err != nil {
 			return err
 		}
-		out = &ProjectHome{Project: p, Environment: canvasProductionFirst(envs)[0]}
+		out = &ProjectHome{Project: p, Environment: envs[0]}
 		return nil
 	})
 	return out, err
@@ -119,24 +119,9 @@ func (a *App) ListProjects(ctx context.Context, actor domain.Actor) ([]ProjectSu
 			if err != nil {
 				return err
 			}
-			out = append(out, ProjectSummary{Project: p, Environments: canvasProductionFirst(envs)})
+			out = append(out, ProjectSummary{Project: p, Environments: envs})
 		}
 		return nil
 	})
 	return out, err
-}
-
-func canvasProductionFirst(envs []domain.Environment) []domain.Environment {
-	out := make([]domain.Environment, 0, len(envs))
-	for _, e := range envs {
-		if e.IsProduction {
-			out = append(out, e)
-		}
-	}
-	for _, e := range envs {
-		if !e.IsProduction {
-			out = append(out, e)
-		}
-	}
-	return out
 }

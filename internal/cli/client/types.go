@@ -108,30 +108,30 @@ func deploymentOf(d *api.Deployment) *Deployment {
 		return nil
 	}
 	out := &Deployment{
-		ID: d.ID, Status: d.Status, Message: d.Message, StartedAt: Millis(float64(d.StartedAt)),
+		ID: d.ID, Status: d.Status, Message: d.Message, StartedAt: Millis(d.StartedAt),
 		Steps: make([]Step, len(d.Steps)), Log: make([]LogEntry, len(d.Log)),
 	}
 	if d.FinishedAt != nil {
-		t := Millis(float64(*d.FinishedAt))
+		t := Millis(*d.FinishedAt)
 		out.FinishedAt = &t
 	}
 	for i, s := range d.Steps {
 		out.Steps[i] = Step{ServiceID: s.NodeID, Label: s.Label, Status: s.Status}
 	}
 	for i, l := range d.Log {
-		out.Log[i] = LogEntry{At: Millis(float64(l.At)), ServiceID: l.NodeID, Text: l.Text}
+		out.Log[i] = LogEntry{At: Millis(l.At), ServiceID: l.NodeID, Text: l.Text}
 	}
 	return out
 }
 
 type Time struct{ time.Time }
 
-func Millis(ms float64) Time { return Time{time.UnixMilli(int64(ms)).UTC()} }
+func Millis(ms int64) Time { return Time{time.UnixMilli(ms).UTC()} }
 
 func (t *Time) UnmarshalJSON(b []byte) error {
 	var ms float64
 	if err := json.Unmarshal(b, &ms); err == nil {
-		*t = Millis(ms)
+		*t = Millis(int64(ms))
 		return nil
 	}
 	var s string

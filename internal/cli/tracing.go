@@ -127,12 +127,13 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 }
 
 func (a *app) tracingSwitchCmd(on bool) *cobra.Command {
-	use, short := "enable <service>", "Turn tracing on for a service (staged until keel ship)"
-	if !on {
-		use, short = "disable <service>", "Turn tracing off for a service (staged until keel ship)"
+	verb, state := "disable", "off"
+	if on {
+		verb, state = "enable", "on"
 	}
+	short := "Turn tracing " + state + " for a service (staged until keel ship)"
 	return &cobra.Command{
-		Use:   use,
+		Use:   verb + " <service>",
 		Short: short,
 		Long: short + `. On, the service gets the OTEL_* variables, pointing at Keel, on its next deploy: keel
 ship <service>, or keel redeploy <service> to pull a new image too. Needs an Axiom connection
@@ -144,10 +145,6 @@ with traces (TRACES_OFF otherwise).`,
 			if err != nil {
 				return err
 			}
-			if svc.Type != "service" {
-				return output.Errorf(output.CodeInvalidInput, "Pick a service: keel service list",
-					"%s is a %s; only services can be traced", svc.Name, svc.Type)
-			}
 			if err := s.api.SetTracing(ctx, svc.ID, on); err != nil {
 				return err
 			}
@@ -156,10 +153,6 @@ with traces (TRACES_OFF otherwise).`,
 				Tracing bool   `json:"tracing"`
 				Staged  bool   `json:"staged"`
 			}{svc.Name, on, true}, func(w io.Writer) {
-				state := "on"
-				if !on {
-					state = "off"
-				}
 				fmt.Fprintf(w, "Tracing %s for %s, staged. Next: keel ship %s (or keel redeploy %s to pull a new image too)\n",
 					state, svc.Name, svc.Name, svc.Name)
 			})

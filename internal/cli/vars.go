@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -56,7 +57,7 @@ func (a *app) varListCmd() *cobra.Command {
 				if show || !views[i].Secret {
 					views[i].Resolved = &v.Resolved
 				}
-				if views[i].Value == nil || views[i].Resolved == nil {
+				if !show && views[i].Secret {
 					hidden++
 				}
 			}
@@ -200,8 +201,8 @@ func (a *app) varDeleteCmd() *cobra.Command {
 }
 
 func withDone(err error, done []string) error {
-	oe, ok := err.(*output.Error)
-	if !ok || len(done) == 0 {
+	var oe *output.Error
+	if len(done) == 0 || !errors.As(err, &oe) {
 		return err
 	}
 	oe.Message += fmt.Sprintf(" (after %s went through)", strings.Join(done, ", "))

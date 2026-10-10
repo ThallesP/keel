@@ -71,9 +71,9 @@ func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 			"keel login <dashboard-url>, or set KEEL_URL and KEEL_TOKEN", "Not logged in")
 	}
 	if token != "" {
-		copy := *inst
-		copy.Token = token
-		inst = &copy
+		withToken := *inst
+		withToken.Token = token
+		inst = &withToken
 	}
 	return name, inst, nil
 }
@@ -199,12 +199,17 @@ func pickProject(projects []api.ProjectSummary, slug string) (*api.ProjectSummar
 	return nil, output.Errorf(output.CodeProjectNotFound, "Projects: "+list, "No project %q", slug)
 }
 
-func (a *app) connectService(ctx context.Context, name string) (*session, *client.Service, error) {
+func (a *app) connectProject(ctx context.Context) (*session, *api.ProjectSummary, *api.ProjectEnvironment, error) {
 	s, err := a.connect(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	_, env, err := a.project(ctx, s)
+	p, env, err := a.project(ctx, s)
+	return s, p, env, err
+}
+
+func (a *app) connectService(ctx context.Context, name string) (*session, *client.Service, error) {
+	s, _, env, err := a.connectProject(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

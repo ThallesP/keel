@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 
 	"github.com/ThallesP/keel/internal/api"
@@ -78,12 +79,11 @@ func (c *Client) CreateService(ctx context.Context, environmentID, name, image s
 	if err != nil {
 		return nil, err
 	}
-	for i := range services {
-		if services[i].ID == created.ID {
-			return &services[i], nil
-		}
+	i := slices.IndexFunc(services, func(s Service) bool { return s.ID == created.ID })
+	if i < 0 {
+		return nil, output.Errorf(output.CodeServiceNotFound, "keel service list", "Service %s was deleted right after it was created", name)
 	}
-	return nil, output.Errorf(output.CodeServiceNotFound, "keel service list", "Service %s was deleted right after it was created", name)
+	return &services[i], nil
 }
 
 func (c *Client) DeleteService(ctx context.Context, id string) error {
@@ -108,7 +108,7 @@ func (c *Client) Tail(ctx context.Context, serviceID string, lines int) (*Tail, 
 	}
 	out := &Tail{Source: t.Source, Lines: make([]LogLine, len(t.Lines))}
 	for i, l := range t.Lines {
-		out.Lines[i] = LogLine{Time: Millis(l.Time), Stream: l.Stream, Task: l.Task, Text: l.Text}
+		out.Lines[i] = LogLine{Time: Millis(int64(l.Time)), Stream: l.Stream, Task: l.Task, Text: l.Text}
 	}
 	return out, nil
 }
@@ -134,7 +134,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 	}
 	for i, t := range o.Traces {
 		out.Traces[i] = TraceSummary{
-			TraceID: t.TraceID, Name: t.Name, Service: t.Service, Start: Millis(t.Start), DurationMs: t.Duration,
+			TraceID: t.TraceID, Name: t.Name, Service: t.Service, Start: Millis(int64(t.Start)), DurationMs: t.Duration,
 			Spans: int(t.Spans), Errors: int(t.Errors), Error: t.Error, Local: t.Local,
 		}
 		if t.HTTPStatus != nil {

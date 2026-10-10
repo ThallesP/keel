@@ -42,8 +42,8 @@ object per line: {"service","time","stream","task","text"}.`,
 				return err
 			}
 			sortLines(tail.Lines)
-			fetched := tail.Lines
-			tail.Lines = tail.Lines[max(0, len(tail.Lines)-lines):]
+			dropped := tail.Lines[:max(0, len(tail.Lines)-lines)]
+			tail.Lines = tail.Lines[len(dropped):]
 			if !follow {
 				a.out.Result(struct {
 					Service string `json:"service"`
@@ -70,7 +70,7 @@ object per line: {"service","time","stream","task","text"}.`,
 					}
 				}
 			}
-			for _, l := range fetched[:len(fetched)-len(tail.Lines)] {
+			for _, l := range dropped {
 				seen.add(l)
 			}
 			emit(tail.Lines)
@@ -115,18 +115,18 @@ func sortLines(ls []client.LogLine) {
 
 type lineSet struct {
 	last time.Time
-	at   map[string]bool
+	at   map[[3]string]bool
 }
 
-func newLineSet() *lineSet { return &lineSet{at: map[string]bool{}} }
+func newLineSet() *lineSet { return &lineSet{at: map[[3]string]bool{}} }
 
 func (s *lineSet) add(l client.LogLine) bool {
-	key := l.Task + "\x00" + l.Stream + "\x00" + l.Text
+	key := [3]string{l.Task, l.Stream, l.Text}
 	switch {
 	case l.Time.Before(s.last):
 		return false
 	case l.Time.After(s.last):
-		s.last, s.at = l.Time.Time, map[string]bool{}
+		s.last, s.at = l.Time.Time, map[[3]string]bool{}
 	case s.at[key]:
 		return false
 	}

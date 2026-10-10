@@ -41,17 +41,14 @@ func (a *app) projectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			slug := a.projectSlug(s)
-			if slug == "" && len(projects) == 1 {
-				slug = projects[0].Slug
-			}
+			current, _ := pickProject(projects, a.projectSlug(s))
 			type row struct {
 				api.ProjectSummary
 				Current bool `json:"current"`
 			}
 			rows := make([]row, len(projects))
 			for i, p := range projects {
-				rows[i] = row{p, p.Slug == slug || p.ID == slug}
+				rows[i] = row{p, current != nil && current.ID == p.ID}
 			}
 			a.out.Result(struct {
 				Projects []row `json:"projects"`
@@ -102,10 +99,9 @@ also links this directory to it, as keel link does.`,
 			if link {
 				dir = cwd()
 				s.cfg.SetLink(dir, &config.Link{Instance: s.name, Project: p.Slug})
-				if err := saveConfig(s.cfg); err != nil {
-					oe := err.(*output.Error)
-					oe.Message = fmt.Sprintf("Created project %s, but can't link it: %s", p.Slug, oe.Message)
-					return oe
+				if err := s.cfg.Save(); err != nil {
+					return output.Errorf(output.CodeConfig, "Check the permissions of "+s.cfg.Path(),
+						"Created project %s, but can't link it: Can't write the config file: %v", p.Slug, err)
 				}
 			}
 			canvas := s.inst.URL + "/p/" + p.Slug
@@ -115,11 +111,11 @@ also links this directory to it, as keel link does.`,
 				Linked  string             `json:"linked,omitempty"`
 			}{*p, canvas, dir}, func(w io.Writer) {
 				fmt.Fprintf(w, "Created project %s: %s\n", p.Slug, canvas)
-				if dir != "" {
-					fmt.Fprintf(w, "Linked %s to it. Next: keel service create <name> --image <ref>\n", dir)
-				} else {
+				if dir == "" {
 					fmt.Fprintf(w, "Next: keel link %s, then keel service create <name> --image <ref>\n", p.Slug)
+					return
 				}
+				fmt.Fprintf(w, "Linked %s to it. Next: keel service create <name> --image <ref>\n", dir)
 			})
 			return nil
 		},
@@ -193,9 +189,9 @@ func (a *app) unlinkCmd() *cobra.Command {
 			}{link != nil, dir}, func(w io.Writer) {
 				if link == nil {
 					fmt.Fprintln(w, "Nothing linked here")
-				} else {
-					fmt.Fprintf(w, "Unlinked %s\n", dir)
+					return
 				}
+				fmt.Fprintf(w, "Unlinked %s\n", dir)
 			})
 			return nil
 		},
@@ -209,11 +205,7 @@ func (a *app) statusCmd() *cobra.Command {
 		Args:  args(0, 0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			p, env, err := a.project(ctx, s)
+			s, p, env, err := a.connectProject(ctx)
 			if err != nil {
 				return err
 			}

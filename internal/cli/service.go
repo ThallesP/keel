@@ -22,15 +22,12 @@ func (a *app) serviceCmd() *cobra.Command {
 		Short:   "List the project's services, databases, caches and volumes",
 		Args:    args(0, 0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := a.connect(cmd.Context())
+			ctx := cmd.Context()
+			s, _, env, err := a.connectProject(ctx)
 			if err != nil {
 				return err
 			}
-			_, env, err := a.project(cmd.Context(), s)
-			if err != nil {
-				return err
-			}
-			services, err := s.api.Services(cmd.Context(), env.ID)
+			services, err := s.api.Services(ctx, env.ID)
 			if err != nil {
 				return err
 			}
@@ -68,11 +65,7 @@ a-z, 0-9 and -, up to 40, unique in the project; a taken one fails with NAME_TAK
 				replicasArg = &replicas
 			}
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			p, env, err := a.project(ctx, s)
+			s, p, env, err := a.connectProject(ctx)
 			if err != nil {
 				return err
 			}

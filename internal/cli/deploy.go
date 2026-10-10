@@ -64,11 +64,7 @@ staged. Staged changes on these services go out with it. Waits like keel ship.`,
 
 func (a *app) deploy(cmd *cobra.Command, names []string, refresh bool, wait waitFlags) error {
 	ctx := cmd.Context()
-	s, err := a.connect(ctx)
-	if err != nil {
-		return err
-	}
-	_, env, err := a.project(ctx, s)
+	s, _, env, err := a.connectProject(ctx)
 	if err != nil {
 		return err
 	}
@@ -244,14 +240,14 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_, env, err := a.project(ctx, s)
+			if err != nil && len(args) == 0 {
+				return err
+			}
 			var d *client.Deployment
 			if len(args) == 1 {
 				d, err = s.api.Deployment(ctx, args[0])
 			} else {
-				_, env, perr := a.project(ctx, s)
-				if perr != nil {
-					return perr
-				}
 				d, err = s.api.LatestDeployment(ctx, env.ID)
 			}
 			if err != nil {
@@ -266,7 +262,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 			}
 			if wait && d.Status != "success" {
 				var services []client.Service
-				if _, env, err := a.project(ctx, s); err == nil {
+				if env != nil {
 					services, _ = s.api.Services(ctx, env.ID)
 				}
 				return a.await(ctx, s, d.ID, services, timeout)

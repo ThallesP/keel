@@ -32,11 +32,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 			if !slices.Contains([]string{"15m", "1h", "24h", "7d"}, since) {
 				return usage(cmd, "--since must be one of 15m, 1h, 24h, 7d")
 			}
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
+			s, _, env, err := a.connectProject(ctx)
 			if err != nil {
 				return err
 			}
@@ -69,7 +65,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 						local = "local"
 					}
 					fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", r.Start.Local().Format(time.DateTime),
-						dash(r.Service), r.Name, requestStatus(r), millis(&r.DurationMs), r.Spans, local)
+						cmp.Or(r.Service, "-"), r.Name, requestStatus(r), millis(&r.DurationMs), r.Spans, local)
 				}
 				t.Flush()
 				st := traces.Stats

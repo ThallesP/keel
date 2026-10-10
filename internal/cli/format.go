@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -26,7 +27,7 @@ func servicesTable(w io.Writer, services []client.Service) {
 			status += " (staged)"
 		}
 		fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%d/%d\t%s\n",
-			s.Name, s.Type, status, dash(s.Image), s.Running, s.Replicas, dash(s.PublicURL))
+			s.Name, s.Type, status, cmp.Or(s.Image, "-"), s.Running, s.Replicas, cmp.Or(s.PublicURL, "-"))
 	}
 	t.Flush()
 }
@@ -51,13 +52,6 @@ func duration(d *client.Deployment) string {
 		return "-"
 	}
 	return d.FinishedAt.Sub(d.StartedAt.Time).Round(time.Second).String()
-}
-
-func dash(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
 }
 
 func plural(n int, one, many string) string {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"sync"
 	"time"
 
@@ -26,21 +27,7 @@ type authLimiters struct {
 	devicePoll  *authAttempts
 }
 
-var authLimiterMu sync.Mutex
-
-func (a *App) limits() *authLimiters {
-	authLimiterMu.Lock()
-	defer authLimiterMu.Unlock()
-	if a.authLimits == nil {
-		a.authLimits = &authLimiters{
-			signIn:      newAuthAttempts(SignInAttempts, SignInWindow),
-			perIP:       newAuthAttempts(AuthPerIP, AuthPerIPWindow),
-			deviceStart: newAuthAttempts(DeviceStartPerIP, AuthPerIPWindow),
-			devicePoll:  newAuthAttempts(60, AuthPerIPWindow),
-		}
-	}
-	return a.authLimits
-}
+func (a *App) limits() *authLimiters { return a.authLimits }
 
 func (a *App) limited(l *authAttempts, key string) error {
 	if wait := l.take(key, a.Now()); wait > 0 {
@@ -95,11 +82,7 @@ func (l *authAttempts) take(key string, now int64) int64 {
 }
 
 func (l *authAttempts) sweep(now int64) {
-	for k, w := range l.hits {
-		if now-w.start >= l.window {
-			delete(l.hits, k)
-		}
-	}
+	maps.DeleteFunc(l.hits, func(_ string, w *authWindow) bool { return now-w.start >= l.window })
 }
 
 func (l *authAttempts) reset(key string) {

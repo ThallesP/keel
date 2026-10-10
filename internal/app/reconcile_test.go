@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,13 +16,13 @@ func nodeWith(desiredRev, replicas int, o *domain.Observed) *domain.Node {
 
 func TestSettleStep(t *testing.T) {
 	const now = 50
-	applied := domain.DeployStep{NodeID: "n", Label: "api", Status: domain.StepRunning, AppliedAt: i64(10)}
+	applied := domain.DeployStep{NodeID: "n", Label: "api", Status: domain.StepRunning, AppliedAt: new(int64(10))}
 	failed := func(s domain.DeployStep) domain.DeployStep {
-		s.Status, s.FinishedAt = domain.StepFailed, i64(now)
+		s.Status, s.FinishedAt = domain.StepFailed, new(int64(now))
 		return s
 	}
 	done := func(s domain.DeployStep) domain.DeployStep {
-		s.Status, s.FinishedAt = domain.StepDone, i64(now)
+		s.Status, s.FinishedAt = domain.StepDone, new(int64(now))
 		return s
 	}
 	notApplied := applied
@@ -49,7 +50,7 @@ func TestSettleStep(t *testing.T) {
 			done(applied), "api: 2/2 replicas running"},
 		{"stopped", applied, nodeWith(3, 0, &domain.Observed{Revision: 3, Running: 0, State: domain.ObservedOK}),
 			done(applied), "api: stopped"},
-		{"ran to completion", applied, nodeWith(2, 1, &domain.Observed{Revision: 2, Completed: iptr(1), State: domain.ObservedCompleted}),
+		{"ran to completion", applied, nodeWith(2, 1, &domain.Observed{Revision: 2, Completed: new(1), State: domain.ObservedCompleted}),
 			done(applied), "api: ran to completion"},
 		{"still rolling out", applied, nodeWith(2, 2, &domain.Observed{Revision: 2, Running: 1, State: domain.ObservedUpdating}), applied, ""},
 	}
@@ -71,7 +72,7 @@ func TestSettleDeployment(t *testing.T) {
 	step := func(id string, status domain.StepStatus, applied bool) domain.DeployStep {
 		s := domain.DeployStep{NodeID: id, Label: id, Status: status}
 		if applied {
-			s.AppliedAt = i64(5)
+			s.AppliedAt = new(int64(5))
 		}
 		return s
 	}
@@ -107,7 +108,7 @@ func TestSettleDeployment(t *testing.T) {
 			map[string]*domain.Node{"a": nil}, want{domain.DeploymentFailed, domain.StepFailed, []string{"a: node deleted"}, true}},
 	}
 	for _, c := range cases {
-		before := append([]domain.DeployStep(nil), c.d.Steps...)
+		before := slices.Clone(c.d.Steps)
 		next, appended, changed := settleDeployment(c.d, c.nodes, now)
 		if !reflect.DeepEqual(before, c.d.Steps) {
 			t.Errorf("%s: input mutated", c.name)
@@ -127,7 +128,7 @@ func TestSettleDeployment(t *testing.T) {
 			t.Errorf("%s: finishedAt %v with status %s", c.name, next.FinishedAt, next.Status)
 		}
 	}
-	d := dep("ship a", step("a", domain.StepRunning, true), domain.DeployStep{Label: healthStepLabel, Status: domain.StepRunning, StartedAt: i64(7)})
+	d := dep("ship a", step("a", domain.StepRunning, true), domain.DeployStep{Label: healthStepLabel, Status: domain.StepRunning, StartedAt: new(int64(7))})
 	next, _, _ := settleDeployment(d, map[string]*domain.Node{"a": healthy}, now)
 	if h := next.Steps[1]; *h.StartedAt != 7 || *h.FinishedAt != now {
 		t.Errorf("health: %+v", h)

@@ -7,19 +7,14 @@ import (
 
 type CanvasSeams struct {
 	Ship       func(a *App, tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error)
-	Schedulers *CanvasSchedulers
+	Schedulers CanvasSchedulers
 }
 
 func StubCanvasSeams(t testing.TB, s CanvasSeams) {
 	ship, sched := canvasShip, canvasSchedulers
 	t.Cleanup(func() { canvasShip, canvasSchedulers = ship, sched })
-	if s.Ship != nil {
-		canvasShip = s.Ship
-	}
-	if s.Schedulers != nil {
-		fixed := *s.Schedulers
-		canvasSchedulers = func(*App) CanvasSchedulers { return fixed }
-	}
+	canvasShip = s.Ship
+	canvasSchedulers = func(*App) CanvasSchedulers { return s.Schedulers }
 }
 
 func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[string]string, err error) {

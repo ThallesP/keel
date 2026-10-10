@@ -93,36 +93,33 @@ func settlingTasks(tasks []SwarmTask, revision int) bool {
 }
 
 func (a *App) ScheduleObserve(nodeID string) {
-	if _, exists := a.scheduleObserve(context.Background(), nodeID, observeDebounce, 0); !exists {
+	if !a.scheduleObserve(context.Background(), nodeID, observeDebounce, 0) {
 		a.Jobs.After("reconcile", 0, func(ctx context.Context) { a.reconcileRunning(ctx, "") })
 	}
 }
 
-func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duration, settle int) (scheduled, exists bool) {
+func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duration, settle int) (exists bool) {
 	err := a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(id)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
-		if err != nil {
-			return err
-		}
 		exists = n.Desired != nil
-		return nil
+		return err
 	})
 	if err != nil {
 		a.Log.Error("schedule observe", "node", id, "err", err)
-		return false, true
+		return true
 	}
 	if !exists {
-		return false, false
+		return false
 	}
-	rt := a.deployRuntime()
+	rt := a.deploy
 	due := a.Now() + delay.Milliseconds()
 	rt.mu.Lock()
 	if p, ok := rt.observe[id]; ok && p.due <= due {
 		rt.mu.Unlock()
-		return false, true
+		return true
 	}
 	gen := rt.next()
 	rt.observe[id] = pendingScan{due: due, settle: settle, gen: gen}
@@ -130,11 +127,11 @@ func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duratio
 	a.Jobs.After(fmt.Sprintf("observe:%s:%d", id, gen), delay, func(ctx context.Context) {
 		a.runScheduledObserve(ctx, id, gen)
 	})
-	return true, true
+	return true
 }
 
 func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
-	rt := a.deployRuntime()
+	rt := a.deploy
 	rt.mu.Lock()
 	p, ok := rt.observe[id]
 	if !ok || p.gen != gen {
@@ -147,26 +144,17 @@ func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
 }
 
 func (a *App) observeNode(ctx context.Context, id string, settle int) {
-	if a.noSwarm("observeNode") {
-		return
-	}
 	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-	inspected, tasks, err := a.Swarm.ObserveService(dctx, id)
+	svc, tasks, err := a.Swarm.ObserveService(dctx, id)
 	cancel()
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
 		return
 	}
-	var svc SwarmService
-	if inspected != nil {
-		svc = *inspected
-	}
 	now := a.Now()
 	observed := summarizeTasks(tasks, svc, now)
-	a.Log.Info("observeNode", "node", id, "tasks", len(tasks), "update", svc.UpdateState, "revision", observed.Revision,
-		"state", observed.State, "running", observed.Running, "settle", settle)
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
-		envID, err := a.setObserved(tx, ch, id, observed)
+		envID, err := setObserved(tx, ch, id, observed)
 		if err != nil {
 			return err
 		}
@@ -176,17 +164,14 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 		a.Log.Error("observeNode", "node", id, "err", err)
 		return
 	}
-	settling := settle < observeSettleMax && settlingTasks(tasks, observed.Revision)
-	updating := settle < observeUpdatingMax && (svc.UpdateState == "updating" || svc.UpdateState == "rollback_started")
+	settling := settle < 2 && settlingTasks(tasks, observed.Revision)
+	updating := settle < int(deployTimeout/observeSettleDelay) && (svc.UpdateState == "updating" || svc.UpdateState == "rollback_started")
 	if settling || updating {
 		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
 	}
 }
 
 func (a *App) observeAll(ctx context.Context) {
-	if a.noSwarm("observe (full sweep)") {
-		return
-	}
 	var nodes []domain.Node
 	err := a.read(ctx, func(tx Tx) (err error) {
 		nodes, err = tx.AllNodes()
@@ -197,7 +182,6 @@ func (a *App) observeAll(ctx context.Context) {
 		return
 	}
 	nodes = slices.DeleteFunc(nodes, func(n domain.Node) bool { return n.Desired == nil || n.Desired.Revision == 0 })
-	a.Log.Info("observe (full sweep)", "nodes", len(nodes))
 	if len(nodes) == 0 {
 		a.observeServers(ctx)
 		return
@@ -221,7 +205,7 @@ func (a *App) observeAll(ctx context.Context) {
 	now := a.Now()
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		for _, n := range nodes {
-			if _, err := a.setObserved(tx, ch, n.ID, summarizeTasks(tasksByNode[n.ID], serviceByName[n.ServiceName()], now)); err != nil {
+			if _, err := setObserved(tx, ch, n.ID, summarizeTasks(tasksByNode[n.ID], serviceByName[n.ServiceName()], now)); err != nil {
 				return err
 			}
 		}
@@ -235,17 +219,13 @@ func (a *App) observeAll(ctx context.Context) {
 }
 
 func (a *App) observeServers(ctx context.Context) {
-	if a.noSwarm("observeServers") {
-		return
-	}
 	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-	ready, total, err := a.Swarm.Servers(dctx)
+	ready, _, err := a.Swarm.Servers(dctx)
 	cancel()
 	if err != nil {
 		a.Log.Error("observeServers", "err", err)
 		return
 	}
-	a.Log.Info("observeServers", "ready", ready, "total", total)
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		before, err := tx.ClusterServers()
 		if err != nil {
@@ -271,7 +251,7 @@ func (a *App) observeServers(ctx context.Context) {
 	}
 }
 
-func (a *App) setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, error) {
+func setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, error) {
 	n, err := tx.Node(id)
 	if errors.Is(err, ErrNoRow) {
 		return "", nil
@@ -293,14 +273,10 @@ func (a *App) setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (str
 	if err := tx.UpdateNode(n); err != nil {
 		return "", err
 	}
-	if observedFace(n) != before {
-		org, err := deployOrgOf(tx, n.EnvironmentID)
-		if err != nil {
-			return "", err
-		}
-		ch.Environment(org, n.EnvironmentID)
+	if observedFace(n) == before {
+		return n.EnvironmentID, nil
 	}
-	return n.EnvironmentID, nil
+	return n.EnvironmentID, environmentChanged(tx, ch, n.EnvironmentID)
 }
 
 type nodeFace struct {

@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,32 +20,20 @@ import (
 type fakeJob struct {
 	key string
 	due int64
-	seq int
 	fn  func(context.Context)
 }
 
 type fakeJobs struct {
 	clock   *int64
 	pending []*fakeJob
-	seq     int
 	ctx     context.Context
 }
 
-func (j *fakeJobs) jobCtx() context.Context {
-	if j.ctx == nil {
-		return context.Background()
-	}
-	return j.ctx
-}
-
 func (j *fakeJobs) After(key string, delay time.Duration, fn func(context.Context)) {
-	for _, p := range j.pending {
-		if p.key == key {
-			return
-		}
+	if slices.ContainsFunc(j.pending, func(p *fakeJob) bool { return p.key == key }) {
+		return
 	}
-	j.seq++
-	j.pending = append(j.pending, &fakeJob{key: key, due: *j.clock + delay.Milliseconds(), seq: j.seq, fn: fn})
+	j.pending = append(j.pending, &fakeJob{key: key, due: *j.clock + delay.Milliseconds(), fn: fn})
 }
 
 func (j *fakeJobs) Every(string, time.Duration, func(context.Context)) {}
@@ -57,7 +44,7 @@ func (j *fakeJobs) next(by int64) *fakeJob {
 		if p.due > by {
 			continue
 		}
-		if idx < 0 || p.due < j.pending[idx].due || p.due == j.pending[idx].due && p.seq < j.pending[idx].seq {
+		if idx < 0 || p.due < j.pending[idx].due {
 			idx = i
 		}
 	}
@@ -65,7 +52,7 @@ func (j *fakeJobs) next(by int64) *fakeJob {
 		return nil
 	}
 	p := j.pending[idx]
-	j.pending = append(j.pending[:idx], j.pending[idx+1:]...)
+	j.pending = slices.Delete(j.pending, idx, idx+1)
 	return p
 }
 
@@ -82,7 +69,7 @@ func (j *fakeJobs) advance(d time.Duration) {
 		if p.due > *j.clock {
 			*j.clock = p.due
 		}
-		p.fn(j.jobCtx())
+		p.fn(j.ctx)
 	}
 }
 
@@ -90,8 +77,8 @@ func (j *fakeJobs) runOne(t *testing.T, prefix string) {
 	t.Helper()
 	for i, p := range j.pending {
 		if strings.HasPrefix(p.key, prefix) && p.due <= *j.clock {
-			j.pending = append(j.pending[:i], j.pending[i+1:]...)
-			p.fn(j.jobCtx())
+			j.pending = slices.Delete(j.pending, i, i+1)
+			p.fn(j.ctx)
 			return
 		}
 	}
@@ -145,13 +132,6 @@ type fakeSwarm struct {
 func (f *fakeSwarm) call(ctx context.Context, name string) {
 	if _, ok := ctx.Deadline(); !ok {
 		f.undated = append(f.undated, name)
-	}
-}
-
-func newFakeSwarm() *fakeSwarm {
-	return &fakeSwarm{
-		cached: map[string]bool{}, pullErr: map[string]error{}, services: map[string]*fakeService{},
-		tasks: map[string][]app.SwarmTask{}, updateState: map[string]string{},
 	}
 }
 
@@ -226,26 +206,22 @@ func (f *fakeSwarm) RemoveService(ctx context.Context, id string) error {
 	return nil
 }
 
-func (f *fakeSwarm) view(id string) (*app.SwarmService, []app.SwarmTask) {
+func (f *fakeSwarm) view(id string) (app.SwarmService, []app.SwarmTask) {
 	s := f.services[id]
-	if tasks, ok := f.tasks[id]; ok {
-		if s == nil {
-			return nil, tasks
-		}
-		return &app.SwarmService{Name: "svc-" + id, Labels: map[string]string{"keel.service": id, "keel.revision": strconv.Itoa(s.spec.Revision)}, UpdateState: f.updateState[id]}, tasks
-	}
+	tasks, scripted := f.tasks[id]
 	if s == nil {
-		return nil, nil
+		return app.SwarmService{}, tasks
 	}
 	labels := map[string]string{"keel.service": id, "keel.revision": strconv.Itoa(s.spec.Revision)}
-	var tasks []app.SwarmTask
-	for i := 0; i < s.spec.Replicas; i++ {
-		tasks = append(tasks, app.SwarmTask{NodeID: "swarm-1", DesiredState: "running", State: "running", Labels: labels})
+	if !scripted {
+		for range s.spec.Replicas {
+			tasks = append(tasks, app.SwarmTask{NodeID: "swarm-1", DesiredState: "running", State: "running", Labels: labels})
+		}
 	}
-	return &app.SwarmService{Name: "svc-" + id, Labels: labels, UpdateState: f.updateState[id]}, tasks
+	return app.SwarmService{Name: "svc-" + id, Labels: labels, UpdateState: f.updateState[id]}, tasks
 }
 
-func (f *fakeSwarm) ObserveService(ctx context.Context, id string) (*app.SwarmService, []app.SwarmTask, error) {
+func (f *fakeSwarm) ObserveService(ctx context.Context, id string) (app.SwarmService, []app.SwarmTask, error) {
 	f.call(ctx, "ObserveService")
 	f.observed = append(f.observed, id)
 	s, tasks := f.view(id)
@@ -266,8 +242,8 @@ func (f *fakeSwarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []
 	var tasks []app.SwarmTask
 	for id := range ids {
 		s, ts := f.view(id)
-		if s != nil {
-			services = append(services, *s)
+		if s.Name != "" {
+			services = append(services, s)
 		}
 		for _, t := range ts {
 			if t.Labels == nil {
@@ -298,14 +274,7 @@ func (r *recorder) Publish(org string, topics []string) {
 
 func (r *recorder) reset() { r.topics = map[string][]string{} }
 
-func (r *recorder) has(org, topic string) bool {
-	for _, t := range r.topics[org] {
-		if t == topic {
-			return true
-		}
-	}
-	return false
-}
+func (r *recorder) has(org, topic string) bool { return slices.Contains(r.topics[org], topic) }
 
 type world struct {
 	t        *testing.T
@@ -320,6 +289,7 @@ type world struct {
 	follows  []int
 	syncs    int
 	envVars  map[string]map[string]string
+	created  int64
 }
 
 func newWorld(t *testing.T) *world {
@@ -341,21 +311,20 @@ func newWorld(t *testing.T) *world {
 	clock := int64(1_000_000)
 	w := &world{
 		t: t, store: store, clock: &clock,
-		jobs:     &fakeJobs{clock: &clock},
-		swarm:    newFakeSwarm(),
+		jobs: &fakeJobs{clock: &clock, ctx: context.Background()},
+		swarm: &fakeSwarm{
+			cached: map[string]bool{}, pullErr: map[string]error{}, services: map[string]*fakeService{},
+			tasks: map[string][]app.SwarmTask{}, updateState: map[string]string{},
+		},
 		pub:      &recorder{topics: map[string][]string{}},
 		member:   domain.Actor{UserID: "u1", OrganizationID: "org", Role: domain.RoleOwner},
 		outsider: domain.Actor{UserID: "u2", OrganizationID: "org2", Role: domain.RoleOwner},
 		envVars:  map[string]map[string]string{},
 	}
 	w.app = w.newApp(app.Config{})
-	restore := app.UseDeploySeams(app.DeploySeams{
+	app.UseDeploySeams(t, app.DeploySeams{
 		ComputeEnv: func(_ app.Tx, n domain.Node) (map[string]string, error) {
-			env := map[string]string{}
-			for k, v := range w.envVars[n.ID] {
-				env[k] = v
-			}
-			return env, nil
+			return w.envVars[n.ID], nil
 		},
 		FollowPort: func(_ app.Tx, _ *app.Changes, _ app.NodeScope, port int, _ int64) (bool, error) {
 			w.follows = append(w.follows, port)
@@ -363,21 +332,20 @@ func newWorld(t *testing.T) *world {
 		},
 		ProxySync: func() { w.syncs++ },
 	})
-	t.Cleanup(restore)
 	return w
 }
 
 func (w *world) newApp(cfg app.Config) *app.App {
 	return app.New(app.App{
-		Store: w.store, Jobs: w.jobs, Swarm: w.swarm, Events: w.pub, Config: cfg,
+		Store: w.store, Jobs: w.jobs, Swarm: w.swarm, Proxy: &igProxy{}, Events: w.pub, Config: cfg,
 		Now: func() int64 { return *w.clock },
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log: slog.New(slog.DiscardHandler),
 	})
 }
 
 func (w *world) restart(cfg app.Config) {
 	w.jobs.pending = nil
-	w.jobs.ctx = nil
+	w.jobs.ctx = context.Background()
 	w.app = w.newApp(cfg)
 }
 
@@ -386,22 +354,19 @@ type nodeOpt func(*domain.Node)
 func clean(n *domain.Node)           { n.Dirty = false }
 func shipped(rev int) nodeOpt        { return func(n *domain.Node) { n.Desired.Revision = rev } }
 func image(img string) nodeOpt       { return func(n *domain.Node) { n.Desired.Image = img } }
-func replicas(r int) nodeOpt         { return func(n *domain.Node) { n.Desired.Replicas = r } }
 func port(p int) nodeOpt             { return func(n *domain.Node) { n.Desired.Port = &p } }
 func inEnv(env string) nodeOpt       { return func(n *domain.Node) { n.EnvironmentID = env } }
 func kind(t domain.NodeType) nodeOpt { return func(n *domain.Node) { n.Type = t } }
 func applyErr(text string) nodeOpt   { return func(n *domain.Node) { n.ApplyError = text } }
 func noDesired(n *domain.Node)       { n.Desired = nil }
 
-var nodeSeq int64
-
 func (w *world) addNode(name string, opts ...nodeOpt) domain.Node {
 	w.t.Helper()
-	nodeSeq++
+	w.created++
 	n := domain.Node{
 		ID: domain.NewID(), EnvironmentID: "env", Type: domain.NodeService, Name: name,
-		Desired: &domain.Desired{Image: "nginx:alpine", Revision: 0, Replicas: 1},
-		Dirty:   true, CreatedAt: nodeSeq,
+		Desired: &domain.Desired{Image: "nginx:alpine", Replicas: 1},
+		Dirty:   true, CreatedAt: w.created,
 	}
 	for _, o := range opts {
 		o(&n)
@@ -469,11 +434,7 @@ func stepStatuses(d domain.Deployment) string {
 	return strings.Join(out, " ")
 }
 
-func sortedCopy(in []string) []string {
-	out := append([]string(nil), in...)
-	sort.Strings(out)
-	return out
-}
+func sortedCopy(in []string) []string { return slices.Sorted(slices.Values(in)) }
 
 func codeAndMessage(err error) string {
 	var de *domain.Error

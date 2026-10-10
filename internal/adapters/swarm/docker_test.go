@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/moby/moby/api/types/swarm"
 	"github.com/moby/moby/client"
 
 	"github.com/ThallesP/keel/internal/app"
@@ -117,8 +118,8 @@ func TestDockerApplyCalls(t *testing.T) {
 	if create == nil || update == nil || !strings.Contains(update.query, "version=42") {
 		t.Fatalf("calls: %+v", f.calls)
 	}
-	var sent map[string]any
-	if err := json.Unmarshal([]byte(create.body), &sent); err != nil || sent["Name"] != "svc-new" || sent["EndpointSpec"] != nil {
+	var sent swarm.ServiceSpec
+	if err := json.Unmarshal([]byte(create.body), &sent); err != nil || sent.Name != "svc-new" || sent.EndpointSpec != nil {
 		t.Fatalf("create body: %s", create.body)
 	}
 }
@@ -155,7 +156,7 @@ func TestDockerObserve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if svc == nil || svc.Name != "svc-n1" || svc.UpdateState != "rollback_completed" || svc.UpdateMessage != "rolled back" || svc.Labels["keel.revision"] != "2" {
+	if svc.Name != "svc-n1" || svc.UpdateState != "rollback_completed" || svc.UpdateMessage != "rolled back" || svc.Labels["keel.revision"] != "2" {
 		t.Fatalf("service: %+v", svc)
 	}
 	if len(tasks) != 2 || tasks[0].NodeID != "sw1" || tasks[0].State != "running" || tasks[0].Timestamp != 1791460800123 ||
@@ -171,7 +172,7 @@ func TestDockerObserve(t *testing.T) {
 	if !strings.Contains(taskQuery, "keel.service%3Dn1") {
 		t.Fatalf("task filter: %s", taskQuery)
 	}
-	if svc, _, err := s.ObserveService(ctx, "gone"); svc != nil || err != nil {
+	if svc, _, err := s.ObserveService(ctx, "gone"); svc.Name != "" || err != nil {
 		t.Fatalf("missing service: %+v %v", svc, err)
 	}
 	services, all, err := s.ObserveServices(ctx)

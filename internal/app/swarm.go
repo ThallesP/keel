@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strconv"
+	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -19,11 +21,10 @@ type applyRequest struct {
 }
 
 func (a *App) scheduleApply(req applyRequest) {
-	rt := a.deployRuntime()
+	rt := a.deploy
 	rt.mu.Lock()
-	q := rt.applies[req.nodeID]
-	start := q == nil
-	if start {
+	q, draining := rt.applies[req.nodeID]
+	if !draining {
 		q = &applyQueue{}
 		rt.applies[req.nodeID] = q
 	}
@@ -33,13 +34,13 @@ func (a *App) scheduleApply(req applyRequest) {
 	}
 	key := fmt.Sprintf("apply:%s:%d", req.nodeID, rt.next())
 	rt.mu.Unlock()
-	if start {
+	if !draining {
 		a.Jobs.After(key, 0, func(ctx context.Context) { a.drainApplies(ctx, req.nodeID) })
 	}
 }
 
 func (a *App) drainApplies(ctx context.Context, nodeID string) {
-	rt := a.deployRuntime()
+	rt := a.deploy
 	for {
 		rt.mu.Lock()
 		q := rt.applies[nodeID]
@@ -79,48 +80,35 @@ type applyInput struct {
 	desired domain.Desired
 	env     []string
 	oneShot bool
-	applied bool
 }
 
-func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*applyInput, error) {
-	var in *applyInput
-	err := a.read(ctx, func(tx Tx) error {
+func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (in applyInput, ok bool, err error) {
+	err = a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(req.nodeID)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
-		if err != nil {
+		if err != nil || n.Desired == nil {
 			return err
 		}
-		if n.Desired == nil {
+		d, err := tx.Deployment(req.deploymentID)
+		if err != nil && !errors.Is(err, ErrNoRow) {
+			return err
+		}
+		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.nodeID && s.AppliedAt != nil }) {
 			return nil
 		}
 		env, err := deployComputeEnv(tx, n)
 		if err != nil {
 			return err
 		}
-		if env, err = deployWithTracing(a, tx, n, env); err != nil {
+		if env, err = a.withTracing(tx, n, env); err != nil {
 			return err
 		}
-		in = &applyInput{desired: *n.Desired, env: deployEnvList(env), oneShot: n.OneShot}
-		if req.deploymentID == "" {
-			return nil
-		}
-		d, err := tx.Deployment(req.deploymentID)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		for _, s := range d.Steps {
-			if s.NodeID == req.nodeID && s.AppliedAt != nil {
-				in.applied = true
-			}
-		}
+		in, ok = applyInput{desired: *n.Desired, env: deployEnvList(env), oneShot: n.OneShot}, true
 		return nil
 	})
-	return in, err
+	return in, ok, err
 }
 
 func (a *App) wantedRevision(ctx context.Context, nodeID string) (revision int, ok bool, err error) {
@@ -141,20 +129,15 @@ func (a *App) wantedRevision(ctx context.Context, nodeID string) (revision int, 
 }
 
 func deployEnvList(env map[string]string) []string {
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make([]string, 0, len(keys))
-	for _, k := range keys {
+	out := make([]string, 0, len(env))
+	for _, k := range slices.Sorted(maps.Keys(env)) {
 		out = append(out, k+"="+env[k])
 	}
 	return out
 }
 
 func (a *App) apply(parent context.Context, req applyRequest) {
-	ctx, cancel := context.WithTimeout(parent, applyDeadline)
+	ctx, cancel := context.WithTimeout(parent, 15*time.Minute)
 	defer cancel()
 	record := context.WithoutCancel(parent)
 	id := req.nodeID
@@ -176,20 +159,13 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		a.setApplyError(record, id, text)
 		step(stepFailed, "error: "+text)
 	}
-	if a.noSwarm("apply") {
-		fail(errors.New("no Swarm driver configured"))
-		return
-	}
 
-	in, err := a.loadApplyInput(ctx, req)
+	in, ok, err := a.loadApplyInput(ctx, req)
 	if err != nil {
 		fail(err)
 		return
 	}
-	if in == nil {
-		return
-	}
-	if in.applied {
+	if !ok {
 		return
 	}
 	if in.desired.Revision > req.revision {
@@ -208,14 +184,15 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	} else {
 		step(stepRunning, "pulling "+image)
 		t0 := a.Now()
-		if err := a.Swarm.PullImage(ctx, image); err != nil {
-			if !cached {
-				fail(err)
-				return
-			}
+		err := a.Swarm.PullImage(ctx, image)
+		switch {
+		case err == nil:
+			step(stepLog, fmt.Sprintf("pulled %s in %.1fs", image, float64(a.Now()-t0)/1000))
+		case cached:
 			step(stepLog, "pull failed ("+deployErrorText(err)+"), using cached image")
-		} else {
-			step(stepLog, "pulled "+image+" in "+strconv.FormatFloat(float64(a.Now()-t0)/1000, 'f', 1, 64)+"s")
+		default:
+			fail(err)
+			return
 		}
 	}
 
@@ -264,39 +241,25 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	}
 	moved := false
 	err = a.write(record, func(tx Tx, ch *Changes) error {
-		if req.deploymentID != "" {
-			if err := a.patchStep(tx, ch, req.deploymentID, id, stepApplied, text); err != nil {
-				return err
-			}
-		}
-		n, err := tx.Node(id)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
-		if err != nil {
+		if err := a.patchStep(tx, ch, req.deploymentID, id, stepApplied, text); err != nil {
 			return err
 		}
-		org, err := deployOrgOf(tx, n.EnvironmentID)
-		if err != nil {
+		scope, ok, err := ownedNode(tx, domain.SystemActor, id)
+		if err != nil || !ok {
 			return err
 		}
-		if n.ApplyError != "" {
+		if n := scope.Node; n.ApplyError != "" {
 			n.ApplyError = ""
 			if err := tx.UpdateNode(n); err != nil {
 				return err
 			}
-			ch.Environment(org, n.EnvironmentID)
+			ch.Environment(scope.Org, n.EnvironmentID)
 		}
-		if in.desired.Port != nil {
-			scope, ok, err := ownedNode(tx, domain.SystemActor, id)
-			if err != nil || !ok {
-				return err
-			}
-			if moved, err = deployFollowPort(tx, ch, scope, *in.desired.Port, a.Now()); err != nil {
-				return err
-			}
+		if in.desired.Port == nil {
+			return nil
 		}
-		return nil
+		moved, err = deployFollowPort(tx, ch, scope, *in.desired.Port, a.Now())
+		return err
 	})
 	if err != nil {
 		fail(err)
@@ -345,12 +308,7 @@ func (a *App) setApplyError(ctx context.Context, nodeID, text string) {
 		if err := tx.UpdateNode(n); err != nil {
 			return err
 		}
-		org, err := deployOrgOf(tx, n.EnvironmentID)
-		if err != nil {
-			return err
-		}
-		ch.Environment(org, n.EnvironmentID)
-		return nil
+		return environmentChanged(tx, ch, n.EnvironmentID)
 	})
 	if err != nil {
 		a.Log.Error("set apply error", "node", nodeID, "err", err)
@@ -358,17 +316,14 @@ func (a *App) setApplyError(ctx context.Context, nodeID, text string) {
 }
 
 func (a *App) ScheduleRemoveService(nodeID string) {
-	rt := a.deployRuntime()
-	rt.mu.Lock()
-	delete(rt.observe, nodeID)
-	rt.mu.Unlock()
+	a.deploy.mu.Lock()
+	delete(a.deploy.observe, nodeID)
+	a.deploy.mu.Unlock()
 	a.Jobs.After("remove:"+nodeID, 0, func(ctx context.Context) {
-		if !a.noSwarm("remove service") {
-			dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-			if err := a.Swarm.RemoveService(dctx, nodeID); err != nil {
-				a.Log.Error("remove service", "node", nodeID, "err", err)
-			}
-			cancel()
+		dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+		defer cancel()
+		if err := a.Swarm.RemoveService(dctx, nodeID); err != nil {
+			a.Log.Error("remove service", "node", nodeID, "err", err)
 		}
 		a.reconcileRunning(ctx, "")
 	})

@@ -17,6 +17,8 @@ const (
 	StepFailed  StepStatus = "failed"
 )
 
+func (s StepStatus) Finished() bool { return s == StepDone || s == StepFailed }
+
 type DeployStep struct {
 	NodeID     string
 	Label      string

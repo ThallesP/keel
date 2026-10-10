@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -62,7 +63,7 @@ func canvasSetup(t *testing.T) *canvasKit {
 			k.ships = append(k.ships, opts)
 			return "dep-" + scope.Environment.ID, nil
 		},
-		Schedulers: &app.CanvasSchedulers{
+		Schedulers: app.CanvasSchedulers{
 			ProxySync:     func() { k.proxy++ },
 			RemoveService: func(id string) { k.removed = append(k.removed, id) },
 			Observe:       func(id string) { k.observed = append(k.observed, id) },
@@ -137,15 +138,11 @@ func (k *canvasKit) clean(env string) {
 	k.exec(`UPDATE nodes SET dirty = 0 WHERE environment_id = ?`, env)
 }
 
-func canvasPtr[T any](v T) *T { return &v }
-
 func canvasWantErr(t *testing.T, err error, code, msg string) {
 	t.Helper()
-	if err == nil {
-		t.Fatalf("no error, want %s %q", code, msg)
-	}
-	if domain.CodeOf(err) != code || err.Error() != msg {
-		t.Fatalf("error = %s %q, want %s %q", domain.CodeOf(err), err.Error(), code, msg)
+	var de *domain.Error
+	if !errors.As(err, &de) || *de != (domain.Error{Code: code, Message: msg}) {
+		t.Fatalf("error = %v, want %s %q", err, code, msg)
 	}
 }
 

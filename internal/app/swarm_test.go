@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sync"
 	"testing"
@@ -45,11 +44,9 @@ func (j *goJobs) After(_ string, delay time.Duration, fn func(context.Context)) 
 
 func (j *goJobs) Every(string, time.Duration, func(context.Context)) {}
 
-type stubSwarm struct{ Swarm }
-
 func TestApplyQueueSerializesPerNode(t *testing.T) {
 	store, jobs := &countingStore{}, &goJobs{}
-	a := New(App{Store: store, Jobs: jobs, Swarm: stubSwarm{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	a := New(App{Store: store, Jobs: jobs, Log: slog.New(slog.DiscardHandler)})
 	var callers sync.WaitGroup
 	for i := range 50 {
 		callers.Add(1)
@@ -63,10 +60,9 @@ func TestApplyQueueSerializesPerNode(t *testing.T) {
 	if store.peak != 1 || store.read < 50 {
 		t.Fatalf("peak %d reads %d", store.peak, store.read)
 	}
-	rt := a.deployRuntime()
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	if len(rt.applies) != 0 {
-		t.Fatalf("queues left: %v", rt.applies)
+	a.deploy.mu.Lock()
+	defer a.deploy.mu.Unlock()
+	if len(a.deploy.applies) != 0 {
+		t.Fatalf("queues left: %v", a.deploy.applies)
 	}
 }

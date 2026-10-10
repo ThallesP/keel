@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"testing"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -14,12 +15,10 @@ type DeploySeams struct {
 	ProxySync  func()
 }
 
-func UseDeploySeams(s DeploySeams) (restore func()) {
+func UseDeploySeams(t testing.TB, s DeploySeams) {
 	env, follow, sync := deployComputeEnv, deployFollowPort, deployProxySync
+	t.Cleanup(func() { deployComputeEnv, deployFollowPort, deployProxySync = env, follow, sync })
 	deployComputeEnv = s.ComputeEnv
 	deployFollowPort = s.FollowPort
 	deployProxySync = func(*App) { s.ProxySync() }
-	return func() {
-		deployComputeEnv, deployFollowPort, deployProxySync = env, follow, sync
-	}
 }

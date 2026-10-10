@@ -28,7 +28,7 @@ type Swarm interface {
 	CreateService(ctx context.Context, spec ServiceSpec) error
 	UpdateService(ctx context.Context, version uint64, spec ServiceSpec) error
 	RemoveService(ctx context.Context, nodeID string) error
-	ObserveService(ctx context.Context, nodeID string) (*SwarmService, []SwarmTask, error)
+	ObserveService(ctx context.Context, nodeID string) (SwarmService, []SwarmTask, error)
 	ObserveServices(ctx context.Context) ([]SwarmService, []SwarmTask, error)
 	Servers(ctx context.Context) (ready, total int, err error)
 	EnsureAgent(ctx context.Context, spec AgentSpec) error

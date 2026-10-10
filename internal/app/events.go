@@ -13,7 +13,6 @@ type DockerEvent struct {
 	Action      string
 	Name        string
 	ServiceName string
-	Time        *float64
 }
 
 func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resync bool) {
@@ -37,7 +36,6 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 			continue
 		}
 		seen[id] = true
-		scheduled, _ := a.scheduleObserve(ctx, id, observeDebounce, 0)
-		a.Log.Info("event", "type", e.Type, "action", e.Action, "name", name, "observeScheduled", scheduled)
+		a.scheduleObserve(ctx, id, observeDebounce, 0)
 	}
 }

@@ -34,38 +34,21 @@ type runningApply struct {
 
 var errApplySuperseded = errors.New("superseded by a newer revision")
 
-var deployRuntimes sync.Map
-
-func (a *App) deployRuntime() *deployRuntime {
-	if v, ok := deployRuntimes.Load(a); ok {
-		return v.(*deployRuntime)
-	}
-	v, _ := deployRuntimes.LoadOrStore(a, &deployRuntime{
-		observe: map[string]pendingScan{},
-		applies: map[string]*applyQueue{},
-	})
-	return v.(*deployRuntime)
-}
-
 func (r *deployRuntime) next() uint64 {
 	r.seq++
 	return r.seq
 }
 
 var (
-	deployComputeEnv  = computeEnv
-	deployWithTracing = (*App).withTracing
-	deployFollowPort  = followPort
-	deployProxySync   = (*App).ScheduleProxySync
+	deployComputeEnv = computeEnv
+	deployFollowPort = followPort
+	deployProxySync  = (*App).ScheduleProxySync
 )
 
 const (
 	deployTimeout      = 5 * time.Minute
 	observeDebounce    = 500 * time.Millisecond
 	observeSettleDelay = 2 * time.Second
-	observeSettleMax   = 2
-	observeUpdatingMax = int(deployTimeout / observeSettleDelay)
-	applyDeadline      = 15 * time.Minute
 	dockerCallDeadline = time.Minute
 )
 

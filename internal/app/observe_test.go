@@ -20,8 +20,6 @@ func task(r, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
 func onNode(id string) func(*SwarmTask) { return func(t *SwarmTask) { t.NodeID = id } }
 func withErr(e string) func(*SwarmTask) { return func(t *SwarmTask) { t.Err = e } }
 func at(ms int64) func(*SwarmTask)      { return func(t *SwarmTask) { t.Timestamp = ms } }
-func iptr(i int) *int                   { return &i }
-func i64(i int64) *int64                { return &i }
 func svc(r, update, msg string) SwarmService {
 	return SwarmService{Name: "svc-x", Labels: rev(r), UpdateState: update, UpdateMessage: msg}
 }
@@ -78,9 +76,9 @@ func TestSummarizeTasks(t *testing.T) {
 			task("5", "shutdown", "complete", at(700)),
 			task("4", "shutdown", "complete", at(900)),
 		}, svc("5", "", ""),
-			domain.Observed{Revision: 5, Running: 0, Completed: iptr(2), FinishedAt: i64(700), State: domain.ObservedCompleted, At: now}},
+			domain.Observed{Revision: 5, Running: 0, Completed: new(2), FinishedAt: new(int64(700)), State: domain.ObservedCompleted, At: now}},
 		{"one-shot with an unknown timestamp", []SwarmTask{task("1", "shutdown", "complete")}, SwarmService{},
-			domain.Observed{Revision: 1, Running: 0, Completed: iptr(1), FinishedAt: i64(0), State: domain.ObservedCompleted, At: now}},
+			domain.Observed{Revision: 1, Running: 0, Completed: new(1), FinishedAt: new(int64(0)), State: domain.ObservedCompleted, At: now}},
 		{"completed beside a failure is not one-shot", []SwarmTask{
 			task("1", "shutdown", "complete"), task("1", "shutdown", "failed"),
 		}, SwarmService{},

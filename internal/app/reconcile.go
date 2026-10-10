@@ -1,10 +1,12 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,55 +14,43 @@ import (
 )
 
 func settleStep(step domain.DeployStep, node *domain.Node, now int64) (domain.DeployStep, string) {
-	name := step.Label
 	if node == nil {
-		step.Status, step.FinishedAt = domain.StepFailed, deployPtr(now)
-		return step, name + ": node deleted"
-	}
-	if step.AppliedAt == nil || node.Observed == nil || node.Desired == nil {
-		return step, ""
+		step.Status, step.FinishedAt = domain.StepFailed, new(now)
+		return step, step.Label + ": node deleted"
 	}
 	o, d := node.Observed, node.Desired
-	if o.Revision != d.Revision {
+	if step.AppliedAt == nil || o == nil || d == nil || o.Revision != d.Revision {
 		return step, ""
 	}
-	if o.State == domain.ObservedCrashloop || o.State == domain.ObservedFailed {
-		why := ""
-		if o.Error != "" {
-			why = " · " + o.Error
-		}
-		what := "crash loop"
-		if o.State == domain.ObservedFailed {
-			what = "rolled back by Swarm"
-		}
-		step.Status, step.FinishedAt = domain.StepFailed, deployPtr(now)
-		return step, name + ": " + what + why
+	why := ""
+	if o.Error != "" {
+		why = " · " + o.Error
 	}
-	if domain.Converged(d, o) {
-		var text string
-		switch {
-		case o.State == domain.ObservedCompleted:
-			text = name + ": ran to completion"
-		case d.Replicas == 0:
-			text = name + ": stopped"
-		default:
-			text = name + ": " + strconv.Itoa(o.Running) + "/" + strconv.Itoa(d.Replicas) + " replicas running"
-		}
-		step.Status, step.FinishedAt = domain.StepDone, deployPtr(now)
-		return step, text
+	var text string
+	switch {
+	case o.State == domain.ObservedCrashloop:
+		step.Status, text = domain.StepFailed, "crash loop"+why
+	case o.State == domain.ObservedFailed:
+		step.Status, text = domain.StepFailed, "rolled back by Swarm"+why
+	case !domain.Converged(d, o):
+		return step, ""
+	case o.State == domain.ObservedCompleted:
+		step.Status, text = domain.StepDone, "ran to completion"
+	case d.Replicas == 0:
+		step.Status, text = domain.StepDone, "stopped"
+	default:
+		step.Status, text = domain.StepDone, fmt.Sprintf("%d/%d replicas running", o.Running, d.Replicas)
 	}
-	return step, ""
+	step.FinishedAt = new(now)
+	return step, step.Label + ": " + text
 }
 
 func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now int64) (next domain.Deployment, appended []domain.LogLine, changed bool) {
 	next = d
-	next.Steps = append([]domain.DeployStep(nil), d.Steps...)
+	next.Steps = slices.Clone(d.Steps)
 	for i, step := range d.Steps {
-		if step.NodeID == "" || step.Status == domain.StepDone || step.Status == domain.StepFailed {
-			continue
-		}
 		node := nodes[step.NodeID]
-		if step.Status == domain.StepPending && node != nil {
+		if step.NodeID == "" || step.Status.Finished() || step.Status == domain.StepPending && node != nil {
 			continue
 		}
 		s, text := settleStep(step, node, now)
@@ -70,54 +60,34 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 		}
 	}
 	anyFailed, allDone, allApplied := false, true, true
-	health := -1
-	for i, s := range next.Steps {
+	for _, s := range next.Steps {
 		if s.NodeID == "" {
-			if health < 0 {
-				health = i
-			}
 			continue
 		}
-		if s.Status == domain.StepFailed {
-			anyFailed = true
-		}
-		if s.Status != domain.StepDone {
-			allDone = false
-		}
-		if s.Status == domain.StepPending || s.AppliedAt == nil {
-			allApplied = false
-		}
+		anyFailed = anyFailed || s.Status == domain.StepFailed
+		allDone = allDone && s.Status == domain.StepDone
+		allApplied = allApplied && s.Status != domain.StepPending && s.AppliedAt != nil
 	}
-	if health >= 0 {
-		h := &next.Steps[health]
-		switch {
-		case anyFailed:
-			h.Status, h.FinishedAt = domain.StepFailed, deployPtr(now)
-		case allDone:
-			h.Status, h.FinishedAt = domain.StepDone, deployPtr(now)
-			if h.StartedAt == nil {
-				h.StartedAt = deployPtr(now)
-			}
-			text := "all replicas healthy"
-			if strings.HasPrefix(d.Message, "stop ") {
-				text = "stopped"
-			}
-			appended = append(appended, domain.LogLine{At: now, Text: text})
-		case allApplied && h.Status == domain.StepPending:
-			h.Status, h.StartedAt = domain.StepRunning, deployPtr(now)
-		}
-	}
+	health := &next.Steps[len(next.Steps)-1]
 	switch {
 	case anyFailed:
-		next.Status, next.FinishedAt = domain.DeploymentFailed, deployPtr(now)
+		health.Status, health.FinishedAt = domain.StepFailed, new(now)
+		next.Status, next.FinishedAt = domain.DeploymentFailed, new(now)
 	case allDone:
-		next.Status, next.FinishedAt = domain.DeploymentSuccess, deployPtr(now)
+		health.Status, health.StartedAt, health.FinishedAt = domain.StepDone, cmp.Or(health.StartedAt, new(now)), new(now)
+		next.Status, next.FinishedAt = domain.DeploymentSuccess, new(now)
+		text := "all replicas healthy"
+		if strings.HasPrefix(d.Message, "stop ") {
+			text = "stopped"
+		}
+		appended = append(appended, domain.LogLine{At: now, Text: text})
 	default:
 		next.Status, next.FinishedAt = domain.DeploymentRunning, nil
+		if allApplied && health.Status == domain.StepPending {
+			health.Status, health.StartedAt = domain.StepRunning, new(now)
+		}
 	}
-	changed = len(appended) > 0 || next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps) ||
-		!reflect.DeepEqual(next.FinishedAt, d.FinishedAt)
-	return next, appended, changed
+	return next, appended, next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps)
 }
 
 func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
@@ -131,18 +101,14 @@ func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) err
 			if s.NodeID == "" {
 				continue
 			}
-			if _, seen := nodes[s.NodeID]; seen {
+			n, err := tx.Node(s.NodeID)
+			if errors.Is(err, ErrNoRow) {
 				continue
 			}
-			n, err := tx.Node(s.NodeID)
-			switch {
-			case errors.Is(err, ErrNoRow):
-				nodes[s.NodeID] = nil
-			case err != nil:
+			if err != nil {
 				return err
-			default:
-				nodes[s.NodeID] = &n
 			}
+			nodes[s.NodeID] = &n
 		}
 		next, appended, changed := settleDeployment(d, nodes, now)
 		if !changed {
@@ -186,10 +152,10 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 		var appended []domain.LogLine
 		for i := range d.Steps {
 			s := &d.Steps[i]
-			if s.Status == domain.StepDone || s.Status == domain.StepFailed {
+			if s.Status.Finished() {
 				continue
 			}
-			s.Status, s.FinishedAt = domain.StepFailed, deployPtr(now)
+			s.Status, s.FinishedAt = domain.StepFailed, new(now)
 			if s.NodeID == "" {
 				continue
 			}
@@ -198,20 +164,21 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 			if err != nil && !missing {
 				return err
 			}
-			why := ""
-			if !missing && n.Observed != nil && n.Observed.Error != "" {
-				why = " · " + n.Observed.Error
+			reason := "timed out waiting for replicas"
+			if n.Observed != nil && n.Observed.Error != "" {
+				reason += " · " + n.Observed.Error
 			}
-			appended = append(appended, domain.LogLine{At: now, NodeID: s.NodeID, Text: s.Label + ": timed out waiting for replicas" + why})
-			if !missing {
-				n.ApplyError = "timed out waiting for replicas" + why
-				if err := tx.UpdateNode(n); err != nil {
-					return err
-				}
-				ch.Environment(org, n.EnvironmentID)
+			appended = append(appended, domain.LogLine{At: now, NodeID: s.NodeID, Text: s.Label + ": " + reason})
+			if missing {
+				continue
 			}
+			n.ApplyError = reason
+			if err := tx.UpdateNode(n); err != nil {
+				return err
+			}
+			ch.Environment(org, n.EnvironmentID)
 		}
-		d.Status, d.FinishedAt = domain.DeploymentFailed, deployPtr(now)
+		d.Status, d.FinishedAt = domain.DeploymentFailed, new(now)
 		if err := tx.UpdateDeployment(d, appended); err != nil {
 			return err
 		}
@@ -235,7 +202,7 @@ func (a *App) recoverDeploy(ctx context.Context) {
 		}
 		for _, d := range running {
 			for _, s := range d.Steps {
-				if s.NodeID == "" || !(s.Status == domain.StepPending || s.Status == domain.StepRunning && s.AppliedAt == nil) {
+				if s.NodeID == "" || s.Status.Finished() || s.AppliedAt != nil {
 					continue
 				}
 				n, err := tx.Node(s.NodeID)
@@ -263,7 +230,7 @@ func (a *App) recoverDeploy(ctx context.Context) {
 	}
 	now := a.Now()
 	for _, d := range running {
-		a.scheduleDeploymentTimeout(d.ID, time.Duration(d.StartedAt+deployTimeout.Milliseconds()-now)*time.Millisecond)
+		a.scheduleDeploymentTimeout(d.ID, deployTimeout-time.Duration(now-d.StartedAt)*time.Millisecond)
 	}
 	for _, r := range redos {
 		a.scheduleApply(r)
@@ -273,22 +240,8 @@ func (a *App) recoverDeploy(ctx context.Context) {
 	}
 }
 
-func (a *App) noSwarm(what string) bool {
-	if a.Swarm != nil {
-		return false
-	}
-	a.Log.Error(what + ": no Swarm driver configured")
-	return true
-}
-
 func (a *App) ensureAgent(ctx context.Context) {
-	if a.noSwarm("keel-agent") {
-		return
-	}
-	url := a.Config.AgentControlURL
-	if url == "" {
-		url = a.Config.SiteURL
-	}
+	url := cmp.Or(a.Config.AgentControlURL, a.Config.SiteURL)
 	if url == "" || a.Config.WorkerToken == "" {
 		a.Log.Warn("keel-agent not deployed: set KEEL_AGENT_CONTROL_URL (or KEEL_SITE_URL) and KEEL_WORKER_TOKEN")
 		return

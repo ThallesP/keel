@@ -12,8 +12,8 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (*app.SwarmService, []app.SwarmTask, error) {
-	var svc *app.SwarmService
+func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (app.SwarmService, []app.SwarmTask, error) {
+	var svc app.SwarmService
 	var inspectErr error
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -21,18 +21,14 @@ func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (*app.SwarmSe
 		if cerrdefs.IsNotFound(err) {
 			return
 		}
-		if err != nil {
-			inspectErr = err
-			return
-		}
-		svc = new(serviceOf(res.Service))
+		svc, inspectErr = serviceOf(res.Service), err
 	})
 	list, err := s.cli.TaskList(ctx, client.TaskListOptions{
 		Filters: make(client.Filters).Add("label", labelService+"="+nodeID),
 	})
 	wg.Wait()
 	if err := errors.Join(err, inspectErr); err != nil {
-		return nil, nil, err
+		return app.SwarmService{}, nil, err
 	}
 	return svc, tasksOf(list.Items), nil
 }

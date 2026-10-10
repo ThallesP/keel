@@ -20,7 +20,10 @@ type App struct {
 	Proxy Proxy
 	Axiom Axiom
 
-	Passwords  Passwords
+	Passwords Passwords
+
+	deploy     *deployRuntime
+	ingress    *ingressState
 	authLimits *authLimiters
 }
 
@@ -49,6 +52,14 @@ func New(a App) *App {
 	}
 	if a.Log == nil {
 		a.Log = slog.Default()
+	}
+	a.deploy = &deployRuntime{observe: map[string]pendingScan{}, applies: map[string]*applyQueue{}}
+	a.ingress = &ingressState{}
+	a.authLimits = &authLimiters{
+		signIn:      newAuthAttempts(SignInAttempts, SignInWindow),
+		perIP:       newAuthAttempts(AuthPerIP, AuthPerIPWindow),
+		deviceStart: newAuthAttempts(DeviceStartPerIP, AuthPerIPWindow),
+		devicePoll:  newAuthAttempts(60, AuthPerIPWindow),
 	}
 	return &a
 }

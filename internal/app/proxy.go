@@ -32,13 +32,6 @@ type ingressState struct {
 	failed  atomic.Bool
 }
 
-var ingressStates sync.Map
-
-func (a *App) ingress() *ingressState {
-	v, _ := ingressStates.LoadOrStore(a, &ingressState{})
-	return v.(*ingressState)
-}
-
 func (st *ingressState) begin() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -85,29 +78,25 @@ type routeStatus struct {
 }
 
 func (a *App) SyncProxy(ctx context.Context) {
-	if a.Proxy == nil {
-		return
-	}
-	st := a.ingress()
-	if !st.begin() {
+	if !a.ingress.begin() {
 		return
 	}
 	finished := false
 	defer func() {
 		if !finished {
-			st.release()
+			a.ingress.release()
 		}
 	}()
 	for ctx.Err() == nil {
-		a.syncProxy(ctx, st)
-		if !st.next() {
+		a.syncProxy(ctx)
+		if !a.ingress.next() {
 			finished = true
 			return
 		}
 	}
 }
 
-func (a *App) syncProxy(ctx context.Context, st *ingressState) {
+func (a *App) syncProxy(ctx context.Context) {
 	for range 3 {
 		routes, err := a.proxyRoutes(ctx)
 		if err != nil {
@@ -115,7 +104,7 @@ func (a *App) syncProxy(ctx context.Context, st *ingressState) {
 			return
 		}
 		statuses, loaded := a.applyProxy(ctx, routes)
-		st.failed.Store(!loaded)
+		a.ingress.failed.Store(!loaded)
 		if err := a.setEndpointStatuses(ctx, statuses); err != nil {
 			a.Log.Error("keel-proxy sync: write statuses", "err", err)
 			return
@@ -145,7 +134,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute) ([]routeStatu
 	out := make([]routeStatus, 0, len(routes))
 	failed, err := a.loadProxy(ctx, routes)
 	if err != nil {
-		msg := domain.TruncateRunes(strings.Join(strings.Fields(err.Error()), " "), 300)
+		msg := compactText(err.Error(), 300)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
 		for _, r := range routes {
 			out = append(out, routeStatus{r, domain.EndpointStatus{State: domain.EndpointFailed, Error: msg, At: at}})
@@ -326,7 +315,7 @@ func (a *App) ReportCert(ctx context.Context, event, name, certError string) err
 		if err := tx.ReplaceEndpoints(id, node.Endpoints); err != nil {
 			return err
 		}
-		ch.AfterCommit(a.ingress().againIfRunning)
+		ch.AfterCommit(a.ingress.againIfRunning)
 		return environmentChanged(tx, ch, node.EnvironmentID)
 	})
 }
@@ -386,7 +375,7 @@ func (a *App) ResyncProxy(ctx context.Context) {
 		a.Log.Error("keel-proxy resync", "err", err)
 		return
 	}
-	if exposed || a.ingress().failed.Load() {
+	if exposed || a.ingress.failed.Load() {
 		a.ScheduleProxySync()
 	}
 }
@@ -394,7 +383,7 @@ func (a *App) ResyncProxy(ctx context.Context) {
 func (a *App) startupProxySync(attempt int) func(context.Context) {
 	return func(ctx context.Context) {
 		exposed, _ := a.anyEndpoint(ctx)
-		if a.Proxy != nil && attempt < 8 && exposed {
+		if attempt < 8 && exposed {
 			if _, err := a.Proxy.HostAddrs(ctx); err != nil {
 				delay := min(time.Second<<attempt, 10*time.Second)
 				a.Jobs.After(proxyStartupKey, delay, a.startupProxySync(attempt+1))

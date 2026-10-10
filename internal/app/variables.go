@@ -209,10 +209,8 @@ func canvasVariablesChanged(tx Tx, ch *Changes, scope NodeScope) error {
 	if err := tx.CanvasMarkDirty(scope.Node.ID); err != nil {
 		return err
 	}
-	if err := markReferrersDirty(tx, scope.Node); err != nil {
-		return err
-	}
-	return canvasTouch(tx, ch, scope.Project.OrganizationID, scope.Node.EnvironmentID)
+	ch.Environment(scope.Project.OrganizationID, scope.Node.EnvironmentID)
+	return markReferrersDirty(tx, scope.Node)
 }
 
 func canvasRewriteReferences(tx Tx, node domain.Node, to func(oldKey string) (name, key string)) error {

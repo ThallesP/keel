@@ -154,11 +154,8 @@ func TestCanvasRenameNode(t *testing.T) {
 	if k.node(api).Dirty {
 		t.Error("referrer dirty after a rename")
 	}
-	topics := k.pub.take(canvasOrg)
-	for _, want := range []string{"/api/environments/" + env, "/api/nodes/" + api, "/api/nodes/" + pg} {
-		if !slices.Contains(topics, want) {
-			t.Errorf("topics %v lack %s", topics, want)
-		}
+	if topics := k.pub.take(canvasOrg); !slices.Equal(topics, []string{"/api/environments/" + env, "/api/nodes/"}) {
+		t.Errorf("topics %v", topics)
 	}
 
 	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("api")}); err != nil {
@@ -434,7 +431,7 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if k.proxy != 1 || !reflect.DeepEqual(k.removed, []string{pg}) || !reflect.DeepEqual(k.observed, []string{pg}) {
 		t.Errorf("after commit: proxy %d removed %v observed %v", k.proxy, k.removed, k.observed)
 	}
-	if topics := k.pub.take(canvasOrg); !slices.Contains(topics, "/api/nodes/"+pg) || !slices.Contains(topics, "/api/environments/"+env) || !slices.Contains(topics, "/api/nodes/"+web) {
+	if topics := k.pub.take(canvasOrg); !slices.Equal(topics, []string{"/api/environments/" + env, "/api/nodes/", "/api/nodes/" + pg}) {
 		t.Errorf("topics %v", topics)
 	}
 	vars, _ := k.app.ListVariables(k.ctx, m, api)

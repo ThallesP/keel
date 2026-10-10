@@ -15,18 +15,6 @@ type CanvasSchedulers struct {
 	Observe       func(nodeID string)
 }
 
-func canvasTouch(tx Tx, ch *Changes, org, environmentID string) error {
-	nodes, err := tx.Nodes(environmentID)
-	if err != nil {
-		return err
-	}
-	ch.Environment(org, environmentID)
-	for _, n := range nodes {
-		ch.Add(org, "/api/nodes/"+n.ID)
-	}
-	return nil
-}
-
 func canvasInsertVariables(tx Tx, nodeID string, vars []domain.Variable) error {
 	for _, v := range vars {
 		v.ID, v.NodeID = domain.NewID(), nodeID

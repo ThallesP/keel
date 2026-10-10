@@ -160,27 +160,29 @@ func TestNewUserCode(t *testing.T) {
 
 func TestDecidePoll(t *testing.T) {
 	const now = int64(1_000_000)
-	base := DeviceCode{Status: DevicePending, IntervalS: 5, ExpiresAt: now + 60_000}
-	with := func(f func(*DeviceCode)) DeviceCode { d := base; f(&d); return d }
+	const later = now + 60_000
 	slowDown := &DeviceRefusal{400, "slow_down", "Polling too frequently"}
 	pending := &DeviceRefusal{400, "authorization_pending", "Authorization pending"}
 	cases := []struct {
-		name    string
-		dc      DeviceCode
-		action  PollAction
-		refusal *DeviceRefusal
+		name         string
+		status       DeviceStatus
+		lastPolledAt *int64
+		expiresAt    int64
+		action       PollAction
+		refusal      *DeviceRefusal
 	}{
-		{"slow down", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 4_999) }), PollRefuse, slowDown},
-		{"slow down beats expiry", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 1); d.ExpiresAt = now - 1 }), PollRefuse, slowDown},
-		{"interval elapsed", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 5_000) }), PollTouch, pending},
-		{"pending", base, PollTouch, pending},
-		{"expired", with(func(d *DeviceCode) { d.ExpiresAt = now - 1 }), PollTouchDelete, &DeviceRefusal{400, "expired_token", "Device code has expired"}},
-		{"expires now is still valid", with(func(d *DeviceCode) { d.ExpiresAt = now }), PollTouch, pending},
-		{"denied", with(func(d *DeviceCode) { d.Status = DeviceDenied; d.UserID = "u" }), PollTouchDelete, &DeviceRefusal{400, "access_denied", "Access denied"}},
-		{"approved", with(func(d *DeviceCode) { d.Status = DeviceApproved; d.UserID = "u" }), PollIssue, nil},
+		{"slow down", DevicePending, new(now - 4_999), later, PollRefuse, slowDown},
+		{"slow down beats expiry", DevicePending, new(now - 1), now - 1, PollRefuse, slowDown},
+		{"interval elapsed", DevicePending, new(now - 5_000), later, PollTouch, pending},
+		{"pending", DevicePending, nil, later, PollTouch, pending},
+		{"expired", DevicePending, nil, now - 1, PollTouchDelete, &DeviceRefusal{400, "expired_token", "Device code has expired"}},
+		{"expires now is still valid", DevicePending, nil, now, PollTouch, pending},
+		{"denied", DeviceDenied, nil, later, PollTouchDelete, &DeviceRefusal{400, "access_denied", "Access denied"}},
+		{"approved", DeviceApproved, nil, later, PollIssue, nil},
 	}
 	for _, c := range cases {
-		action, refusal := DecidePoll(c.dc, now)
+		dc := DeviceCode{Status: c.status, IntervalS: 5, LastPolledAt: c.lastPolledAt, ExpiresAt: c.expiresAt}
+		action, refusal := DecidePoll(dc, now)
 		if action != c.action || !reflect.DeepEqual(refusal, c.refusal) {
 			t.Errorf("%s: %d %+v, want %d %+v", c.name, action, refusal, c.action, c.refusal)
 		}

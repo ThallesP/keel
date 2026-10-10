@@ -1,8 +1,8 @@
 package app
 
 import (
-	"cmp"
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -20,12 +20,11 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 	if resync {
 		a.Jobs.After("observe:all", 0, a.observeAll)
 	}
+	if slices.ContainsFunc(events, func(e DockerEvent) bool { return e.Type == "node" }) {
+		a.Jobs.After("observe:servers", 0, a.observeServers)
+	}
 	seen := map[string]bool{}
 	for _, e := range events {
-		if e.Type == "node" {
-			a.Jobs.After("observe:servers", 0, a.observeServers)
-			continue
-		}
 		if e.Type != "container" && e.Type != "service" {
 			continue
 		}
@@ -39,6 +38,6 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 		}
 		seen[id] = true
 		scheduled, _ := a.scheduleObserve(ctx, id, observeDebounce, 0)
-		a.Log.Info("event", "type", e.Type, "action", e.Action, "name", cmp.Or(e.ServiceName, e.Name), "observeScheduled", scheduled)
+		a.Log.Info("event", "type", e.Type, "action", e.Action, "name", name, "observeScheduled", scheduled)
 	}
 }

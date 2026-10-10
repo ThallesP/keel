@@ -22,11 +22,6 @@ type DeviceToken struct {
 	ExpiresIn   int64
 }
 
-type DeviceView struct {
-	UserCode string
-	Status   domain.DeviceStatus
-}
-
 func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client ClientInfo) (DeviceStart, error) {
 	if clientID != domain.DeviceClientID {
 		return DeviceStart{}, &domain.DeviceRefusal{Status: 400, Code: "invalid_client", Description: domain.MsgDeviceInvalidClient}
@@ -113,19 +108,23 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 	return DeviceToken{AccessToken: token, ExpiresIn: domain.SessionTTL / 1000}, nil
 }
 
-func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode string) (DeviceView, error) {
+func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode string) (domain.DeviceStatus, error) {
 	var dc domain.DeviceCode
-	err := a.write(ctx, func(tx Tx, _ *Changes) (err error) {
+	look := func(tx Tx) (err error) {
 		dc, err = liveDeviceCode(tx, userCode, a.Now())
-		if err != nil || !actor.SignedIn() {
+		return err
+	}
+	if !actor.SignedIn() {
+		err := a.read(ctx, look)
+		return dc.Status, err
+	}
+	err := a.write(ctx, func(tx Tx, _ *Changes) error {
+		if err := look(tx); err != nil {
 			return err
 		}
 		return tx.AuthBindDeviceCode(dc.ID, actor.UserID)
 	})
-	if err != nil {
-		return DeviceView{}, err
-	}
-	return DeviceView{UserCode: userCode, Status: dc.Status}, nil
+	return dc.Status, err
 }
 
 func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCode string, approve bool) error {

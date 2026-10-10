@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThallesP/keel/internal/adapters/password"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
@@ -477,8 +478,8 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	if _, err := f.app.ClaimDeviceCode(f.ctx, owner, start.UserCode); err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := f.app.ClaimDeviceCode(f.ctx, b, start.UserCode); v.Status != domain.DevicePending {
-		t.Fatalf("status %s", v.Status)
+	if status, _ := f.app.ClaimDeviceCode(f.ctx, b, start.UserCode); status != domain.DevicePending {
+		t.Fatalf("status %s", status)
 	}
 	err = f.app.DecideDeviceLogin(f.ctx, b, start.UserCode, true)
 	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to approve this device authorization")
@@ -534,9 +535,9 @@ func TestAuthDeviceLogin(t *testing.T) {
 	err = f.app.DecideDeviceLogin(f.ctx, alice, "ZZZZ-ZZZZ", true)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 
-	v, err := f.app.ClaimDeviceCode(f.ctx, domain.Actor{}, pretty)
-	if err != nil || v.UserCode != pretty || v.Status != domain.DevicePending {
-		t.Fatalf("anonymous lookup: %+v %v", v, err)
+	status, err := f.app.ClaimDeviceCode(f.ctx, domain.Actor{}, pretty)
+	if err != nil || status != domain.DevicePending {
+		t.Fatalf("anonymous lookup: %s %v", status, err)
 	}
 	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
 	authWantRefusal(t, err, 400, "invalid_request", notClaimed)
@@ -559,8 +560,8 @@ func TestAuthDeviceLogin(t *testing.T) {
 	}
 	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, false)
 	authWantRefusal(t, err, 400, "invalid_request", "Device code already processed")
-	if v, _ := f.app.ClaimDeviceCode(f.ctx, alice, start.UserCode); v.Status != domain.DeviceApproved {
-		t.Fatalf("status after approval: %s", v.Status)
+	if status, _ := f.app.ClaimDeviceCode(f.ctx, alice, start.UserCode); status != domain.DeviceApproved {
+		t.Fatalf("status after approval: %s", status)
 	}
 
 	f.now += 5_000
@@ -625,6 +626,33 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	}
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, forgotten.UserCode)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
+}
+
+func TestAuthAnonymousDeviceLookupSkipsTheWriter(t *testing.T) {
+	f := authSetup(t)
+	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error)
+	go func() {
+		done <- f.store.Write(f.ctx, func(app.Tx) error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+	ctx, cancel := context.WithTimeout(f.ctx, time.Second)
+	defer cancel()
+	status, err := f.app.ClaimDeviceCode(ctx, domain.Actor{}, start.UserCode)
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err != nil || status != domain.DevicePending {
+		t.Fatalf("anonymous lookup behind a held writer: %s %v", status, err)
+	}
 }
 
 func TestAuthPerIPLimits(t *testing.T) {

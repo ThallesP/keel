@@ -265,11 +265,11 @@ func (s *Server) registerAuth(h huma.API) {
 		Security:    authPublic,
 		Responses:   authDeviceResponses(h, "400"),
 	}, func(ctx context.Context, in *authDeviceLookupInput) (*authDeviceStatusOutput, error) {
-		v, err := s.app.ClaimDeviceCode(ctx, ActorFrom(ctx), in.UserCode)
+		status, err := s.app.ClaimDeviceCode(ctx, ActorFrom(ctx), in.UserCode)
 		if err != nil {
 			return nil, err
 		}
-		return &authDeviceStatusOutput{Body: api.DeviceStatus{UserCode: v.UserCode, Status: v.Status}}, nil
+		return &authDeviceStatusOutput{Body: api.DeviceStatus{UserCode: in.UserCode, Status: status}}, nil
 	})
 
 	for _, d := range []struct {

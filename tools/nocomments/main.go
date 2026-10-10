@@ -28,7 +28,7 @@ func main() {
 			}
 			for _, group := range f.Comments {
 				for _, c := range group.List {
-					if strings.HasPrefix(c.Text, "//go:") || strings.HasPrefix(c.Text, "//line ") {
+					if strings.HasPrefix(c.Text, "//go:") {
 						continue
 					}
 					found++

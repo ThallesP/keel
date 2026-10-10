@@ -11,9 +11,6 @@ import (
 var dist embed.FS
 
 func Dist() fs.FS {
-	sub, err := fs.Sub(dist, "dist")
-	if err != nil {
-		panic(err)
-	}
+	sub, _ := fs.Sub(dist, "dist")
 	return sub
 }

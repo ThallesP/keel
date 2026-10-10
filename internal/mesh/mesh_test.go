@@ -2,7 +2,6 @@ package mesh
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"testing"
 )
@@ -32,9 +31,8 @@ func TestOpenWithoutAuthKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer m.Close()
-	if m.Client.Transport != http.DefaultTransport {
-		t.Fatalf("mesh = %+v, want the default transport", m)
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

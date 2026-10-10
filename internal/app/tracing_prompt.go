@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	_ "embed"
 	"strings"
 )
@@ -13,11 +14,9 @@ func agentPrompt(service, project string) string {
 	if project != "" {
 		inProject = " in the project `" + project + "`"
 	}
-	svc := "<service>"
 	where := "It runs on Keel" + inProject + "; find which service it is with `keel service list` and use that name wherever this says `<service>`."
 	if service != "" {
-		svc = service
 		where = "It runs on Keel as the service `" + service + "`" + inProject + "."
 	}
-	return strings.NewReplacer("{{WHERE}}", where, "{{SVC}}", svc).Replace(agentPromptTemplate)
+	return strings.NewReplacer("{{WHERE}}", where, "{{SVC}}", cmp.Or(service, "<service>")).Replace(agentPromptTemplate)
 }

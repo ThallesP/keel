@@ -157,6 +157,8 @@ Invariant (not enforced by a unique index): at most one row per user.
 | `createdAt` | number | ms. |
 | `inviterId` | string | `user._id` of the inviter. |
 
+> **Go now:** a member's or invitation's role is exactly one of `owner`, `admin`, `member` (`members.role` CHECK, typed `domain.Role`), never a comma list; an invitation's role defaults to `member` in the schema, so no code falls back; invitation status is `pending`, `accepted` or `canceled` (no `rejected`); email columns are `COLLATE NOCASE`.
+
 Indexes: `organizationId`, `email`, `role`, `status`, `inviterId`, `organizationId_status`,
 `email_organizationId_status`. **The invitation `_id` is the secret in the invite link**
 (`<web origin>/invite/<id>`). Convex ids are not guessable in practice; the Go port must use ≥128
@@ -179,6 +181,8 @@ longer id or a separate random token for invitations).
 
 Indexes: `deviceCode`, `userCode`. Rows are deleted when consumed (token issued), denied-and-polled,
 or expired-and-polled.
+
+> **Go now:** `device_codes` keeps `device_code_hash` (SHA-256; the code is `NewSecret(25)`, 40 base32 chars), `user_code` (`NewUserCode`, base32 over the alphabet above), `status`, `user_id`, `last_polled_at` (`NOT NULL DEFAULT 0`, 0 = never polled), `expires_at`, `created_at`. No `clientId`, `pollingInterval` or `scope`: the client is always `keel-cli` and the interval 5 s, checked against `domain.DeviceClientID` / `DeviceIntervalS`. Issuing a code purges those expired for over an hour.
 
 #### `jwks`
 
@@ -287,6 +291,8 @@ user exists).
   comparing hex strings. Go: `scrypt.Key([]byte(norm.NFKC.String(pw)), []byte(saltHex), 16384, 16,
   1, 64)`; compare with `subtle.ConstantTimeCompare`.
 
+> **Go now:** no scrypt and no import. `internal/adapters/password` hashes NFKC passwords with argon2id into a PHC string (`$argon2id$v=19$m=19456,t=2,p=1$<salt>$<key>`, 16-byte salt, 32-byte key), verified in constant time; the length check counts runes (`utf8.RuneCountInString`), not UTF-16 units.
+
 ### 4.6 Origin / CSRF / CORS / rate limits
 
 - **CORS on `/api/auth/*`** (convex-helpers `corsRouter`): allowed origins = `[SITE_URL]`;
@@ -316,6 +322,8 @@ for cookie-authenticated unsafe methods (check `Origin` against `KEEL_SITE_URL` 
 SameSite=Lax + a custom header requirement). Do not require `Origin` on bearer requests (no ambient
 credential), but accept it. Add a modest login rate limit (e.g. 5 / min / IP on sign-in, sign-up,
 device code).
+
+> **Go now:** in-memory limiters on `App` (`internal/app/auth_limit.go`): sign-in 10 per 5 min per IP and email, sign-in and sign-up together 20 per min per IP, device code 10 per min per IP, device poll 60 per min per IP. A refusal is `429 RATE_LIMITED` with `Retry-After` (no `X-Retry-After`).
 
 ### 4.7 Better Auth error body shape
 
@@ -418,6 +426,8 @@ No organization requirement: a user without membership can sign in.
    "Bearer", expires_in: <seconds to session expiry>, scope: ""}`. **The token is handed out once.**
 10. Anything else → 500 `server_error` "Invalid device code status".
 
+> **Go now:** there is no step 3 (codes only exist for `keel-cli`, and step 1 already checked the client), no stored interval (step 4 uses the 5 s constant; `last_polled_at` 0 never slows down), and step 9 has no lost-race or user-not-found branch: the poll runs in one write transaction (`BEGIN IMMEDIATE`) that deletes the approved code it read and issues the session, and `user_id` cascades on delete. Step 10 cannot happen (`DecidePoll` covers every status).
+
 `GET /device?user_code=X` (no Origin check, GET)
 
 - `user_code` with `-` removed (case is **not** normalised server-side; the web upper-cases and
@@ -500,6 +510,8 @@ Consequences:
   has `activeOrganizationId`.
 - The founder's sign-up session has `activeOrganizationId: null` forever (not updated on founding).
 
+> **Go now:** one `SignUp` write does it all (`signUpRule`, then the user, then `foundOrganization` for the first account or `joinWithInvitation`, then the session). Emails are normalized once at the edge (`NormalizeUserEmail`) and compared as is, so there is no `sameEmail`; the invitation's role is never empty, so there is no `?? "member"`.
+
 ### 6.2 `auth.signUpOpen` (public query)
 
 Args `{}`. Returns `true` iff the `user` table is empty. No auth. The web shows the sign-up form
@@ -552,6 +564,8 @@ validates the name (details belong to the projects spec): trim; `""` or `> 60` �
 authenticated"`); if an org exists ⇒ throw `NO_ORGANIZATION`; else (nothing founded yet) return
 `[]`.
 
+> **Go now:** the first account founds the organization when it signs up (§6.1), so there is no `joinOrFound`, no legacy adoption of org-less projects and no `projects.list` special case: every project use case requires a membership (`RequireMember`: signed out `Not authenticated`, else `NO_ORGANIZATION`). `EnsureDefaultProject` only makes `acme-support` when the organization has no project.
+
 ### 6.4 The "founder without org" gotcha
 
 On a fresh install the first account is often created from a `keel login` link: the CLI prints
@@ -572,6 +586,8 @@ Go must keep both founding entry points (dashboard bootstrap and project create)
 eagerly at first sign-up (simpler, removes the gotcha; if chosen, `GET /api/me` and
 `listProjects` behave as if the founder always has a membership, and the CLI warning path becomes
 unreachable but must still be supported for legacy accounts without membership).
+
+> **Go now:** eager founding at the first sign-up, so the gotcha is gone. There are no legacy accounts to support.
 
 ### 6.5 Accounts without a membership after the org exists
 
@@ -703,6 +719,8 @@ server?)". `--convex-url` / `--convex-site-url` (or `KEEL_CONVEX_URL` / `KEEL_CO
 `KEEL_URL`) skip discovery. `config.js` is written by the web container:
 `window.__KEEL__ = {"convexUrl":"<url>","convexSiteUrl":"<url>"};` Keep the file and its shape
 (CLAUDE.md); the Go architecture adds `GET /api/meta` for new CLIs.
+
+> **Go now:** discovery is `GET <url>/api/meta` only (anything else is `DISCOVERY_FAILED`). There is no `/config.js`, no `--convex-url` / `--convex-site-url` and no `KEEL_CONVEX_*`.
 
 ### 8.2 Login state machine
 
@@ -916,6 +934,8 @@ and plain-text bodies so deployed workers and proxies keep working across the sw
 is replaced by the Go auth API (§13); `/.well-known/openid-configuration` and `/api/auth/convex/*`
 are dropped.
 
+> **Go now:** the paths and the plain-text bodies stay, but `POST /worker/events` takes only a JSON array (256 KiB counted in bytes; each element needs `Type`, not `Action`; trimmed to `{type, name, serviceName}`), the agent sends `X-Keel-Resync: 1` only when it wants a sweep, `/proxy/events` answers `400 bad report` for any body it cannot use (malformed JSON included), and the worker bearer is compared as SHA-256 digests in constant time. The agent and the proxy ship in the same image as `keel serve`, so nothing deployed needs the old shapes.
+
 ---
 
 ## 11. Web auth usage (what the UI depends on)
@@ -981,6 +1001,8 @@ refresh, lookup by token. Accept `Bearer <token>` with or without the legacy `.<
 suffix (strip it) so tokens printed by `keel token` before the switch keep working if sessions are
 imported. Password hashes import unchanged (§4.5). Member/organization/invitation rows import
 unchanged (ids are opaque strings). Device codes and JWKS need no import.
+
+> **Go now:** nothing is imported. A session token is `NewSecret(32)` (52 base32 chars); only its SHA-256 is stored (`sessions.token_hash`), and a bearer is used as given, with no `.<signature>` stripping.
 
 CLI (Go, same binary): drop `/convex/token` and the Convex HTTP API; call `/api/*` with
 `Authorization: Bearer <session token>`; keep the device flow, config file format, `KEEL_URL` /

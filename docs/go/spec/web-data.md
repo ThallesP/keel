@@ -124,6 +124,8 @@ defaultPendingComponent: Loader, context: {}, Wrap })`, where `Wrap` puts
   (ARCHITECTURE "Dev"). `ws: true` is required for `/api/ws`. With `public/config.js` deleted
   there is no shadowing question.
 
+> **Go now:** `keel serve` serves no `/config.js` (the CLI discovers through `GET /api/meta`), and Vite proxies `/api`, `/worker`, `/otlp` and `/proxy` only.
+
 ---
 
 ## 3. How auth state reaches components
@@ -789,6 +791,8 @@ Named after the keys above; a coarse key per scope, as in `project:<id>` / `org:
 | `ch.Canvas(org, env)` | `env:<env>/nodes` | `/api/environments/<env>/nodes` only (for `move`, which changes nothing else) |
 | `ch.Deployment(org, env, d)` | `deployment:<d>` | `/api/environments/<env>`, `/api/deployments/<d>`, `/api/nodes/<n>` for each step node |
 | `ch.Cluster()` | `cluster` | `/api/environments` to **every** org channel |
+
+> **Go now:** the helpers are `ch.Projects`, `ch.Environment`, `ch.Node`, `ch.Deployment` and `ch.Organization` (`internal/app/changes.go`), plus `ch.Add` for the one-off topics: `/api/environments/<env>/nodes` on a move, `/api/organization` and `/api/nodes` on a sink change, `/api/environments` to every organization on a server-count change, `/api/me` on a membership change. There is no `Sink`, `Canvas` or `Cluster` helper, and the session topic is `/api/me`.
 
 ### 10.3 Writes → helpers
 

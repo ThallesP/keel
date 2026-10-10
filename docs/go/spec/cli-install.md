@@ -683,6 +683,8 @@ The worker reads `KEEL_URL`, the token from `KEEL_WORKER_TOKEN` or `/run/secrets
 `/var/lib/keel-worker/state.json`), `KEEL_CONFIG_POLL_MS` (default 30000). It calls
 `POST /worker/events` and `GET /worker/config` (bearer = worker token).
 
+> **Go now:** `keel agent` reads `KEEL_URL`, the token the same way, `KEEL_STATE` (default `/var/lib/keel-agent/state.json`), `KEEL_CONFIG_POLL_MS` and an optional `KEEL_TS_AUTHKEY`; there is no `DOCKER_SOCKET` (moby's `client.FromEnv`, so `DOCKER_HOST`). It still calls `POST /worker/events` (JSON arrays only) and `GET /worker/config`.
+
 `scripts/dev-https.sh` (dev only): `tailscale serve --bg --https=443 http://127.0.0.1:3001`,
 `--https=8443 → 3210`, `--https=10000 → 3211`; rewrites `VITE_CONVEX_URL`/`VITE_CONVEX_SITE_URL`
 in `apps/web/.env`; `convex env set SITE_URL https://<host>`.
@@ -840,6 +842,8 @@ the polling cadences (1s await, 2s/15s/200 logs follow, device poll interval), `
    for linux/darwin/windows × amd64/arm64 on `v*` tags; the server image also carries the binary,
    and `install.sh` copies it to `/usr/local/bin/keel` on the control plane.
 
+> **Go now:** an instance in `config.json` is `{url, email, token, pending}` (no `apiUrl`, no Convex URLs; a Convex-era file is not read specially); there is no `--api-url`, no `--convex-*` flag and no `KEEL_CONVEX_*`; the CLI uses the server's problem `code` as is, with no message fallback; ids are `domain.NewID()` (20 base32 chars), so `keel run`'s overlay filter is `\bsvc-[0-9a-z]{20}\b`, and its endpoint is `<install URL>/otlp`.
+
 ## B2. API calls the CLI needs (proposal; 1:1 with A11)
 
 All under the dashboard origin, `Authorization: Bearer <session token>`, JSON in/out. Error body:
@@ -892,6 +896,8 @@ keys the web's subscribed queries use. Proposed keys and what they cover:
 
 ## B3. `/config.js` in the Go world
 
+> **Go now:** neither `/config.js` nor `/version` exists. The dashboard shares the API's origin and reads no runtime config, the CLI discovers an install through `GET /api/meta` (`{name, version, siteUrl}`), and `install.sh` checks `/api/meta`.
+
 `keel serve` serves `GET /config.js` itself (`Content-Type: application/javascript`,
 `Cache-Control: no-store`) with the **same shape** — one JSON object between the first `{` and
 the last `}`:
@@ -920,6 +926,8 @@ paths, `/assets/*` with `Cache-Control: public, max-age=31536000, immutable`, gz
 
 Recommendation: keep Compose (project `keel`) with a single service, so `compose up --wait`,
 healthchecks, `-p keel` and the README's uninstall/logs commands survive:
+
+> **Go now:** two services from one image (`deploy/compose.yml`): `keel` (`keel serve`, SQLite in volume `keel-data` at `/data`, the Docker socket, `KEEL_SITE_URL`) and `proxy` (`keel proxy`, embedded Caddy with the admin socket in the shared `proxy-admin` volume, never the Docker socket). Start-up runs schema migrations only; there are no data migrations and no `BETTER_AUTH_SECRET`.
 
 ```yaml
 name: keel
@@ -991,6 +999,8 @@ lines, same option names (A13). Changes per step:
 | check_health | `:3210/version`, `/config.js` contains addr, `:3211/worker/config` bearer, `keel-worker` n/n | `curl -fsS $SITE_URL/version`; `curl -fsS $SITE_URL/config.js \| grep -q $KEEL_ADDR`; `curl -fsS -H @- $SITE_URL/agent/config` (bearer `KEEL_WORKER_TOKEN`; keep `/worker/config` as an alias); `docker service ls --filter name=keel-agent` n/n (60×2s). Messages: `the control plane is not answering on <SITE_URL>` / `docker compose -p keel logs keel`; config and token messages as today with `keel` in the fix; `keel-agent is not running (replicas: …)` / `docker service ps keel-agent --no-trunc` |
 | output | A13 10 | stderr block: Dashboard `SITE_URL`, State, same hints (no Convex line). JSON: `{"ok":true,"url":SITE_URL,"apiUrl":SITE_URL,"convexUrl":SITE_URL,"convexSiteUrl":SITE_URL,"version","stateDir","publicIp"}` — `convexUrl`/`convexSiteUrl` kept (README contract; fields are only added) and equal to `url` |
 
+> **Go now:** no migrate step and no Convex secrets (`.env` keeps `KEEL_WORKER_TOKEN` among the settings); `check_health` reads `$SITE_URL/api/meta` (it must name `SITE_URL`), `$SITE_URL/`, `GET $SITE_URL/worker/config` with the bearer (there are no `/agent/*` routes) and waits for `keel-agent` n/n; the success JSON is `{ok, url, apiUrl, version, stateDir, publicIp, warnings}` with `apiUrl` equal to `url` and no `convexUrl` / `convexSiteUrl`.
+
 Ports after the switch (README table): `KEEL_WEB_PORT` (80) on the tailnet IP serves dashboard,
 API, WebSocket, `/otlp`, `/agent/*`; Swarm ports unchanged; public 80/443 + exposed ports from
 the embedded Caddy on non-tailnet host addresses. Deployed services' OTLP endpoint becomes
@@ -1029,6 +1039,8 @@ Must be automatic in `install.sh` and safe to re-run:
 5. Keep `keel_convex-data` and the export zip for rollback; print where they are.
 6. Idempotent: a present `keel.db` with a `migrations` row for the import skips steps 1–3.
 
+> **Go now:** dropped (docs/go/spec/INDEX.md): no export, no `import-convex`, no certificate copy, and `keel serve` does not remove `keel-worker` or reuse `keel-worker-state`; `keel-agent` keeps its state on its own `keel-agent-state` volume.
+
 ## B7. `keel agent` (replaces `apps/worker` and `deploy-worker.sh`)
 
 `keel serve` reconciles its own agent service at start (and after upgrades), with the same
@@ -1044,6 +1056,8 @@ create-or-update-if-changed logic as `deploy-worker.sh`:
 - Agent env stays: `KEEL_URL`, token from `KEEL_WORKER_TOKEN` or `/run/secrets/keel_worker_token`,
   `DOCKER_SOCKET`, `KEEL_STATE` (default `/var/lib/keel-agent/state.json`), `KEEL_CONFIG_POLL_MS`.
   Routes `POST /agent/events` and `GET /agent/config` (aliases `/worker/*` during the transition).
+
+> **Go now:** `EnsureAgent` runs when `KEEL_AGENT_IMAGE` is set; it labels the spec with a hash and updates only when that changes; `KEEL_URL` is `KEEL_AGENT_CONTROL_URL`, else `KEEL_SITE_URL`; command `keel agent`; every capability dropped. There is no `DOCKER_SOCKET` (`DOCKER_HOST`) and no `/agent/*` route: the agent calls `POST /worker/events` and `GET /worker/config`.
 
 ## B8. CI and release in the Go world
 
@@ -1143,3 +1157,5 @@ Four documents name the same settings differently. One table to settle before wr
 
 Agent env (`KEEL_URL`, `KEEL_WORKER_TOKEN` / `/run/secrets/keel_worker_token`, `KEEL_STATE`,
 `KEEL_CONFIG_POLL_MS`, `DOCKER_SOCKET`) is unchanged in every spec (swarm-worker.md §13.1).
+
+> **Go now:** `KEEL_SITE_URL` with no `SITE_URL` fallback, `KEEL_PROXY_SOCKET` and `KEEL_PROXY_REPORT_URL` kept (the edge stayed its own container), `KEEL_DATA_DIR` `/data`. The agent has no `DOCKER_SOCKET` (`DOCKER_HOST`), its `KEEL_STATE` defaults to `/var/lib/keel-agent/state.json`, and `KEEL_TS_AUTHKEY` is new.

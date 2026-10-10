@@ -89,6 +89,8 @@ them (truthiness of `public`), and it always clears both. The Go schema should n
 Convex→Go data import must apply the conversion of section 5.7 step 1 instead (or refuse to import
 an install that still has them).
 
+> **Go now:** neither the fields nor an import exist (docs/go/spec/INDEX.md).
+
 ### 2.3 Other node fields this area reads
 
 | Field | Used by | How |
@@ -275,6 +277,8 @@ switch (acme?.[1]) {
     return `Could not get a certificate: ${detail}`;
 }
 ```
+
+> **Go now:** `domain.CertHint` strips the three noise patterns with one `ReplaceAllString`, so every occurrence goes, not the first, and cuts the detail at 200 runes.
 
 The input has no newlines (the plugin collapses whitespace), so `$` is end of string. Examples:
 
@@ -664,6 +668,8 @@ after) the API starts serving.** Each step is idempotent. Returns
 4. Schedule `swarm.removeLegacyTunnels` and `proxy.sync` (always; this is what makes a fresh or
    recreated proxy serve what the database holds).
 
+> **Go now:** no `migrations.run` and no backfills. The recovery pass (`recoverIngress`) only does step 3 (`moveDefaultDomains`), queues the start-up proxy sync and arms the 2-minute resync; a new Redis cache gets `REDIS_PASSWORD` when it is created.
+
 ### 5.8 `swarm.removeLegacyTunnels` — internal action
 
 Docker Engine API on the manager socket:
@@ -675,6 +681,8 @@ Docker Engine API on the manager socket:
 
 No-op once they are gone. Keep it for one release in Go only if you import installs that never ran
 the TS `migrations.run`; otherwise drop it.
+
+> **Go now:** dropped.
 
 ### 5.9 `POST /proxy/events` — HTTP action (cert reports from keel-proxy)
 
@@ -695,6 +703,8 @@ Request body (sent by the plugin): `{"event":"cert_failed","name":"api-16w41g.20
 In Go with Caddy embedded in-process (section 12) this route disappears: the event handler calls
 the cert-report logic directly. Keep it only if the edge stays a separate process.
 
+> **Go now:** kept (the edge is its own container). The body is read through `http.MaxBytesReader` (256 KiB in bytes, else `413 too large`) and decoded into a typed report; malformed JSON, an empty `name`, an unknown `event` or a non-string `error` are all `400 bad report` (no `bad json`). The token is compared as SHA-256 digests in constant time.
+
 ---
 
 ## 6. The Caddy configuration built by `proxy.sync`
@@ -712,6 +722,8 @@ the cert-report logic directly. Keep it only if the edge stays a separate proces
 Started with `caddy run --resume --config /etc/keel-proxy/caddy.json`: after a restart Caddy loads
 its autosave (`/config/caddy/autosave.json`, the last config Convex pushed) instead of this file.
 Convex only ever `POST`s `/config/apps`.
+
+> **Go now:** no `caddy.json`. `keel proxy` (`internal/proxy`) marshals `caddy.Config` with the admin listener on the socket (`--socket`, else `KEEL_PROXY_SOCKET`, else `caddy.DefaultSocket`), and `--resume` (default on) loads the autosave first; an autosave that no longer loads falls back to that admin-only config.
 
 ### 6.2 Builder (`caddyApps(routes, addrs, reporter, acme)`)
 
@@ -863,6 +875,8 @@ Caddy's config and therefore into the autosave file in the `proxy-config` volume
 ## 7. keel-proxy (`apps/proxy`): the Caddy plugin and image
 
 Go package `proxy`, module `github.com/ThallesP/keel/apps/proxy`, compiled into Caddy with xcaddy.
+
+> **Go now:** `internal/proxy`, run as `keel proxy` from the one `keel` image (Linux builds without `-tags keel_noproxy`), embedding Caddy with the modules of §12.2; no xcaddy and no separate image. `GET /keel/certs` answers `{state, error?}` per name (no `notAfter`, which no client read).
 
 ### 7.1 Versions (pin together, bump deliberately)
 
@@ -1141,6 +1155,8 @@ No Axiom calls in this area.
 
 ## 12. Embedding Caddy in the Go control-plane binary
 
+> **Go now:** option 1 of §12.4. The edge is `keel proxy`, its own container from the same image, with the admin unix socket (`KEEL_PROXY_SOCKET`, shared `proxy-admin` volume), `--resume` and `POST /proxy/events`; `keel serve` drives it through `internal/adapters/caddy`. §12.1 to §12.3 describe the road not taken.
+
 ### 12.1 What disappears
 
 - The admin unix socket, `KEEL_PROXY_SOCKET`, the `proxy-admin` volume, the 30 s timeout and the
@@ -1276,3 +1292,5 @@ fields).
 | Q12 | Text truncation (`slice(0,300)`, `slice(0,200)`) counts UTF-16 units; whitespace collapse uses JS `\s`. | Use rune-safe truncation and `strings.Fields`; differences only matter for non-ASCII errors. |
 | Q13 | `unexpose` with a non-integer `publicPort` builds a key like `tcp:5432.5` and silently removes nothing. | Preserve (no error), or validate with `Port must be 1–65535`. |
 | Q14 | The worker token is stored in Caddy's autosaved config. | Embedded: gone. Separate edge: prefer a dedicated edge token. |
+
+> **Go now (Q12, Q13, Q14):** truncation counts runes and whitespace collapses with `strings.Fields`; `unexpose` validates its selector with Expose's rules first, so a non-integer or out-of-range `publicPort` is `INVALID_INPUT`; the worker token still sits in the pushed config (no dedicated edge token yet).

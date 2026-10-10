@@ -91,6 +91,8 @@ other servers (Swarm workers, joined over Tailscale)
 | `error` | string | no | Last failed task's `Status.Err`, else (when rolled back) `UpdateStatus.Message`. |
 | `at` | number (ms) | yes | Scan time (`Date.now()`). |
 
+> **Go now:** `domain.Observed` has no `nodeIds` (written on every scan, never read); `completed` and `finishedAt` are plain ints, 0 when unset, and `finishedAt` comes from the task's typed `Status.Timestamp`.
+
 ### 2.2 `deployments`
 
 | Field | Type | Req | Meaning |
@@ -154,6 +156,8 @@ Single row: `{ servers: number, at: number }`. `servers` = count of Swarm nodes 
 - **Client:** `dockerode` 5.x (`new Docker({ socketPath })`), which calls **unversioned paths** (`/services/create`, not `/v1.47/...`), so the daemon answers with its default (latest) API version. No `X-Registry-Auth` header is ever sent. Image refs are passed **as-is** (no client-side digest pinning; API ≥ 1.30 does not query the registry server-side either).
 - **Go recommendation:** `github.com/docker/docker/client` (or `github.com/moby/moby/client`) with `client.WithHost("unix:///var/run/docker.sock")` + `client.WithAPIVersionNegotiation()`. Use `QueryRegistry: false` on `ServiceCreate`/`ServiceUpdate` to keep tags unpinned (same as today). Consider an env override (e.g. `KEEL_DOCKER_SOCKET`, default `/var/run/docker.sock`) — new, optional.
 
+> **Go now:** `client.New(client.FromEnv)` in `internal/adapters/swarm` (and in the agent): `DOCKER_HOST` is the only override, default `unix:///var/run/docker.sock`; no Keel socket variable.
+
 ### 4.1 Every Docker call made by the control plane
 
 | # | Caller | Method + path | Query / body | Success | Error handling |
@@ -194,6 +198,8 @@ const errorText = (err) => (err instanceof Error ? err.message : String(err)).re
 ```
 
 These strings are display-only (no CLI code maps them). The Go port should keep the `(HTTP code N) reason - message` shape so existing `applyError` values and docs stay recognisable; exact parity is not a contract.
+
+> **Go now:** the text is the moby client's error passed through `app.CompactText(text, 300)`: whitespace runs collapsed (`strings.Fields`), invalid UTF-8 replaced, cut at 300 runes. The dockerode shape is not rebuilt.
 
 ---
 
@@ -287,6 +293,8 @@ Notes:
 - The manager's image cache decides "cached". On multi-server clusters, other servers' Swarm executors pull the tag themselves when their task starts.
 - `nodes.remove` deletes the row **before** scheduling `swarm.remove` (same transaction), so `stillWanted()` is authoritative.
 
+> **Go now:** the pull time is `fmt.Sprintf("%.1f")`, not `toFixed(1)`; applies of one node run in order through a per-node queue on `App`, and a newer revision cancels a running older apply (`superseded by revision N`).
+
 ### 6.2 `createOrUpdate(spec) → created:boolean`
 
 ```
@@ -341,6 +349,8 @@ They patch even when the deployment is no longer `running` (e.g. after a timeout
 
 `{}` → D7; deletes every service labelled `keel.ingress`; returns the count. Scheduled by `migrations.run` on every install.
 
+> **Go now:** dropped. No install carries Quick Tunnel services, so nothing removes them.
+
 ---
 
 ## 7. Who schedules what (call graph)
@@ -379,6 +389,8 @@ for e in events:
 ```
 
 Every container action (create/start/die/kill/stop/destroy/oom/…) and service action (create/update/remove) that names `svc-*` triggers a scan; the worker already filtered `exec_*` and `health_status*`.
+
+> **Go now:** `app.DockerEvent` is `{Type, Name, ServiceName}`; `action` and `time` are not read. `IngestWorkerEvents` schedules `observeServers` once, before the loop, when the batch has any `node` event.
 
 ### 8.2 Debounce: `scheduleObserveFor(rawId, {delayMs = 500, settle?})` → boolean
 
@@ -449,6 +461,8 @@ return {
   at: Date.now(),
 };
 ```
+
+> **Go now:** the Swarm adapter parses `keel.revision` once with `strconv.Atoi` (a missing or non-numeric label reads as 0, not `NaN`) and hands `summarizeTasks` typed tasks (revision, Keel node id, `Status.Timestamp` as epoch ms); `nodeIds` is gone.
 
 Semantics to keep:
 
@@ -646,6 +660,8 @@ Fail → `401`, body `unauthorized` (text/plain). Empty/unset `KEEL_WORKER_TOKEN
 | 5 | `resync = header "x-keel-resync" === "1"`. |
 | 6 | `events.ingest({events, resync})`; respond `200` `ok`. |
 
+> **Go now:** the body must be a JSON array (no single object, no NDJSON), at most 256 KiB in bytes (`http.MaxBytesReader`, else `413 too large`); each element decodes into `Type` and `Actor.Attributes`, and one without `Type` is `400 bad json`. The token check compares SHA-256 digests in constant time.
+
 ### 11.3 `GET /worker/config`
 
 Auth → 401. Else `200`, headers `content-type: application/json`, `cache-control: no-store`, body = `worker.config` (§12).
@@ -684,6 +700,8 @@ Example:
 
 Shape is a worker contract: "keep this small and stable: every node holds a copy, and a change here is a worker release". Only add fields.
 
+> **Go now:** one entry per organization sink, `{serviceIds, sink, since}` with no `projectId` and no legacy `sinkOf` fallback; `since` is `log_sinks.created_at` (integer ms). The agent ships in the same image as `keel serve`, so the shape moves with it.
+
 ---
 
 ## 13. The per-node worker (agent mode of the Go binary)
@@ -699,6 +717,8 @@ Replaces `apps/worker` (Bun, no deps). Runs on every Swarm node as the global se
 | `KEEL_STATE` | `/var/lib/keel-worker/state.json` | Resume state file (named volume `keel-worker-state`). |
 | `KEEL_CONFIG_POLL_MS` | `30000` | Config poll interval. |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket. |
+
+> **Go now:** the service is `keel-agent`; `KEEL_STATE` defaults to `/var/lib/keel-agent/state.json` (volume `keel-agent-state`); there is no `DOCKER_SOCKET` (moby's `client.FromEnv`, so `DOCKER_HOST`); `KEEL_TS_AUTHKEY` optionally reaches `KEEL_URL` through an embedded tsnet node; the missing-`KEEL_URL` error names the control plane's URL.
 
 ### 13.2 Startup and main loop
 
@@ -772,6 +792,8 @@ for n = 0; ; n = min(n+1, 6):
 
 Docker event fields the control plane needs: `Type`, `Action`, `Actor.Attributes.name`, `Actor.Attributes["com.docker.swarm.service.name"]`, `time`. Go agent recommendation: read the container id from `Actor.ID` (fall back to the legacy top-level `id`, which the TS reads and Docker has deprecated).
 
+> **Go now:** the agent reads moby's typed `events.Message` (container id from `Actor.ID`) and posts each relevant one as a one-element JSON array, re-encoded, not the raw line; `X-Keel-Resync: 1` is sent only when set; a 4xx is logged with its status and event count. The control plane reads only `Type`, `name` and the service-name label.
+
 ### 13.5 Log shipping
 
 Routing state (rebuilt on every config poll):
@@ -783,6 +805,8 @@ Routing state (rebuilt on every config poll):
 - `queues`: sinkKey → `{sink, entries[], draining, room waiters[]}`. One global `flushTimer`, one global `retryTimer`.
 
 `applyConfig(sinks)`: build new maps; drop queues whose key no sink uses any more (log `dropping <n> queued lines for a removed sink`, wake their waiters); log `config applied {sinks, services}` when the routing changed.
+
+> **Go now:** no project routes and no `sinkKey`: queues are keyed by the decoded `SinkConfig{Kind, Domain, Dataset, Token}` and each service id maps to its queue; there is no `config applied` line. The replica slot is `strconv.Atoi`, a line's stamp is parsed once with `time.Parse(time.RFC3339Nano)` into `Line.Time`, and every Docker `since` is `dockerTime` (`<unix>.<9-digit ns>`, the line's time + 1 ns), not `sinceAfter`'s regex and carry.
 
 `dockerSince(ms) = "<floor(ms/1000)>.<pad9(min(round((ms % 1000) * 1e6), 999999999))>"`.
 
@@ -859,9 +883,13 @@ send(events):  body = NDJSON (one JSON object per line, "\n"-joined, no trailing
   log "unreachable, keeping <n> events for a later attempt"; false
 ```
 
+> **Go now:** the base URL is `domain.AxiomBaseURL`, the dataset is `url.PathEscape`d, the body comes from `json.Encoder` (every line ends in `\n`), and the log lines are slog (A1).
+
 ### 13.7 State file
 
 `{"eventsSince":"1727600000.123456790","logsSince":{"<full container id>":"1727600000.123456790"}}`. Losing it costs one full sweep and, for logs, re-reading every container from its sink's connect time (duplicates, never a gap). The Go agent should read and write the **same file and format** on the same volume so an upgrade from the Bun worker does not replay or skip.
+
+> **Go now:** same JSON shape, but on `keel-agent-state` at `/var/lib/keel-agent/state.json`; nothing reads the Bun worker's `keel-worker-state` (no install to upgrade).
 
 ---
 
@@ -900,6 +928,8 @@ docker service create --detach --quiet --name keel-worker --mode global --networ
 - Removes the legacy `keel-events` service and its `keel-events-*` configs / `keel-events-token-*` secrets.
 
 Go port: the agent is the same binary (`keel agent` or similar) in the `keel` image; keep the service name `keel-worker`, the `keel-worker-state` volume, the secret target name `keel_worker_token`, global mode, host network. The control plane could create/update this service itself through the Docker API instead of a shell script; parameters above are the spec.
+
+> **Go now:** `keel serve` creates or updates `keel-agent` itself when `KEEL_AGENT_IMAGE` is set (`EnsureAgent`, `internal/adapters/swarm/agent.go`): command `keel agent`, volume `keel-agent-state` at `/var/lib/keel-agent`, secret `keel-agent-token-<sha256(token)[:12]>` with target `keel_worker_token`, global mode, host network, every capability dropped; no deploy script and no `keel-worker` or `keel-events` cleanup.
 
 ### 14.3 `install.sh` order and the token
 
@@ -940,6 +970,8 @@ Returns `{ quickTunnelsConverted: number, redisPasswords: number, domainsMoved: 
 4. Schedule `swarm.removeLegacyTunnels` and `proxy.sync` at +0.
 
 Go: run the same steps at control-plane boot (and/or in the Convex→Go importer for 1).
+
+> **Go now:** no `migrations.run` and no backfills: no Quick Tunnel conversion, no Redis password pass (a new cache gets `REDIS_PASSWORD` when it is created), no legacy tunnel removal. Only step 3 survives, as `moveDefaultDomains` in the recovery pass (`recoverIngress`), with `shortHash` from `hash/fnv` over the id's bytes (ids are ASCII).
 
 ### 16.2 Crons (`crons.ts`)
 
@@ -990,6 +1022,8 @@ Bind `nodes.list`, `environments.summary`, `deployments.latest`, `deployments.li
 | `db.normalizeId` rejects foreign ids | Unknown `svc-<x>` ids are ignored (no error). |
 | `_creationTime` float ms | `since` in `worker.config` stays epoch **milliseconds** (number, may be fractional). |
 
+> **Go now:** no jobs table. Jobs live in memory (`internal/adapters/jobs`) and the recovery pass, itself a job queued at start (`Jobs.After("recover", 0, a.Recover)`), re-derives them: (a), (b), (c) and (e) above, plus `keel-agent`; there is no (d).
+
 Docker access stays internal: no HTTP route ever takes a raw image/command/mount; images are validated by the regex in §2.1.
 
 ---
@@ -1009,6 +1043,8 @@ Docker access stays internal: no HTTP route ever takes a raw image/command/mount
 11. `MAX_BODY` counts UTF-16 code units, not bytes; a byte limit of 262144 in Go is an acceptable equivalent.
 12. Image cache check and pull happen on the **manager** daemon only; other servers pull at task start (Swarm executor), so "using cached" says nothing about remote servers.
 13. `listDeployable` (sweep) uses `desired.revision > 0`; `worker.config.serviceIds` uses any `desired` (includes never-shipped nodes).
+
+> **Go now (7, 11):** the agent still posts one event per request, as a one-element JSON array, and the route takes only arrays (no single object, no NDJSON); the 256 KiB limit counts bytes.
 
 ---
 
@@ -1045,6 +1081,8 @@ Docker access stays internal: no HTTP route ever takes a raw image/command/mount
 
 Env vars read by the control plane in this area: `KEEL_WORKER_TOKEN` (worker/proxy bearer; required for the routes to accept anything), `KEEL_PUBLIC_IP` (migrations), `KEEL_OTLP_URL` / `CONVEX_SITE_URL` (tracing env injected by apply). Docker socket path is hard-coded `/var/run/docker.sock`.
 
+> **Go now:** `GET /worker/config` entries carry no `projectId` (§12), `POST /worker/events` takes only a JSON array (§11.2), `swarm.removeLegacyTunnels` and `migrations.run` are gone (§6.7, §16.1), and the Docker socket comes from `DOCKER_HOST` (§4).
+
 ---
 
 ## Addendum (critic)
@@ -1053,6 +1091,8 @@ Env vars read by the control plane in this area: `KEEL_WORKER_TOKEN` (worker/pro
 
 Nothing parses these, but they are what an operator greps today, so the Go control plane and
 agent should print the same lines (same wording, same `key=value` fields).
+
+> **Go now:** not kept. `keel serve` and `keel agent` log through `log/slog` text handlers on stderr (`time=… level=… msg=… key=value`, errors as `err`), and only start (plus the agent's tailnet join), shutdown and failures: the per-event, per-scan, per-sweep, per-follower, `streaming docker events` and `config applied` lines are gone, and none of the templates below is kept.
 
 **Control plane** (Convex `console.log` / `console.warn`, visible in the backend container logs):
 

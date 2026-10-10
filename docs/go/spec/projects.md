@@ -19,6 +19,8 @@ Neighbouring specs own: Better Auth / sessions / organizations / invitations (au
 | JS string `.length` counts UTF-16 code units; JS `\s` / `.trim()` use the ECMAScript whitespace set. | Count UTF-16 units where a length limit applies (§12). Use the explicit whitespace class in §5.1 for the reference regex. |
 | Argument validators (`v.id("nodes")` etc.) reject malformed ids before the handler runs with a non-`ConvexError` (`ArgumentValidationError`), which the CLI shows as `SERVER_ERROR`. | Recommended: treat a malformed id exactly like a missing row (same "not found" behaviour as the handler), except `deployments.get` which already does that explicitly. |
 
+> **Go now:** no JavaScript string semantics. Length limits count runes (`utf8.RuneCountInString`), trimming is `strings.TrimSpace`, the reference regex uses RE2's `\s`, and ports and replicas are integers in the API schema (a fractional port fails request validation with `INVALID_INPUT`; positions stay float64).
+
 Signed-out callers: queries in this area return `null`/`[]` (exceptions: `projects.list`, `nodes.publicAddress` throw `Not authenticated`); mutations that resolve an environment/node throw `Environment not found` / `Node not found` (they do not say "Not authenticated"); `projects.ensureDefault` / `projects.create` throw `Not authenticated`. In the Go port the auth middleware will usually reject first with `NOT_AUTHENTICATED`, which the CLI treats the same; that is acceptable.
 
 **Roles:** no function in this area checks the member role. Any member of the organization can do everything here.
@@ -95,6 +97,8 @@ Index: `by_environment(environmentId)`.
 | `error` | string | optional | Last failed task's `Status.Err`, else Swarm's `UpdateStatus.Message` on rollback. |
 | `at` | number (ms) | yes | Scan time. |
 
+> **Go now:** `Observed` has no `nodeIds` (written on every scan, never read). `Desired.Port`, `Observed.Completed`, `Observed.FinishedAt` and `deployedRevision` are plain ints, 0 when unset (`NOT NULL DEFAULT 0` columns); `api.NodeView` keeps its optional JSON fields. The legacy `public` / `ingress` fields do not exist.
+
 `Endpoint` (child table in Go):
 
 | Field | Type | Req | Meaning |
@@ -137,6 +141,8 @@ Index: `by_node(nodeId)`. Order = creation order; a key rename (patch) keeps the
 Indexes: `by_environment(environmentId)`, `by_status(status)`. Deployments are never deleted; `steps[].nodeId` can dangle after a node delete.
 
 Go: `deployments`, `deployment_steps(deployment_id, idx, node_id NULL, label, status, started_at, applied_at, finished_at)`, `deployment_log(deployment_id, seq, at, node_id NULL, text)` (trim to 500 per deployment on insert). The JSON shape returned to clients is still the nested document of §9.5.
+
+> **Go now:** `domain.Deployment` has no `sha` (nothing ever wrote one); the column stays and `api.Deployment` keeps the always-omitted field. Running deployments are read without their log (reconcile and the recovery pass only look at steps).
 
 ### 1.6 `cluster`
 
@@ -321,6 +327,8 @@ REF_RE = /\$\{\{\s*(?:([a-z0-9-]{1,40})\.)?([A-Z_][A-Z0-9_]{0,63})\s*\}\}/g
 - Anything that does not match (e.g. lowercase key `${{ pg.url }}`) is literal text.
 - Go RE2 `\s` is ASCII-only and lacks `\v`; use the ECMAScript set explicitly: `[\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]*` in both `\s*` positions. Matches are non-overlapping, left to right (`FindAllStringSubmatchIndex`).
 
+> **Go now:** `canvasRefRE` (`internal/domain/reference.go`) uses RE2's own `\s`; the ECMAScript set is not emulated.
+
 ### 5.2 Keys a node answers to
 
 1. Its own variables (always win over 2.).
@@ -339,6 +347,8 @@ REF_RE = /\$\{\{\s*(?:([a-z0-9-]{1,40})\.)?([A-Z_][A-Z0-9_]{0,63})\s*\}\}/g
 Order of provided keys (matters for `referenceable`): the URL key first (`DATABASE_URL`/`REDIS_URL`/`URL`), then `HOST`, then `PORT`.
 
 `enc` = JavaScript `encodeURIComponent`: UTF-8 bytes, keep `A–Z a–z 0–9 - _ . ! ~ * ' ( )`, everything else `%XX` uppercase hex. **Not** Go's `url.QueryEscape`/`PathEscape` (they differ on space, `!`, `'`, `(`, `)`, `*`, `~`, `$`, `&`, `+`, …). Write a dedicated function and test it.
+
+> **Go now:** no `encodeURIComponent` clone. Connection URLs are built with `net/url` (`url.URL` plus `url.UserPassword`), which escapes the userinfo the way URL parsers expect.
 
 ### 5.3 Resolution algorithm (`resolver(environmentId)`)
 
@@ -643,6 +653,8 @@ return {revision, running: running.length, ...(oneShot && {completed: completed.
 
 "last" = last in Docker's list order. A missing service with no tasks gives `{revision: 0, running: 0, state: "ok", nodeIds: []}`.
 
+> **Go now:** the Swarm adapter parses `keel.revision` once with `strconv.Atoi` (missing or non-numeric reads as 0) and hands typed tasks to `summarizeTasks`; there is no `nodeIds`.
+
 `settling(tasks, revision)` = some task of `revision` with `DesiredState != "shutdown"` and `Status.State ∈ {new, allocated, assigned, accepted, preparing, ready, starting}` (`pending` deliberately excluded: that is the timeout's job).
 
 ### 8.5 Observe jobs
@@ -650,6 +662,8 @@ return {revision, running: running.length, ...(oneShot && {completed: completed.
 - `observeNode({id, settle=0})`: clear the node's pending-observe handle first (so events arriving during the scan schedule a fresh one); fetch service + tasks; `setObserved`; `reconcile.run`; if `settle < 2 && settling(tasks, observed.revision)` → `scheduleObserve(id, delay 2000, settle+1)`. Log line `observeNode <id> tasks=<n> update=<state|-> revision=<r> state=<s> running=<n> settle=<k>`.
 - `observeSwarmNodes()`: servers count only.
 - `observe()` (full sweep): `listDeployable` = every node install-wide with `desired.revision > 0`; one services + tasks listing; `setObserved` per node (tasks filtered by label = id, service by name); one `reconcile.run` if any; then servers count. Scheduled on agent resync and (Go) at startup.
+
+> **Go now:** no per-scan log line: observe logs through slog only on failure (`observeNode`, `observe (full sweep)`, `observeServers`, with `node` and `err`). `observeNode` writes `setObserved` and `reconcile` in one transaction, and also re-scans every 2 s while Swarm reports `updating` or `rollback_started`, up to the 5-minute deploy timeout.
 
 ### 8.6 Debounce (`scheduleObserveFor(rawId, {delayMs = 500, settle?})`)
 
@@ -660,6 +674,8 @@ return {revision, running: running.length, ...(oneShot && {completed: completed.
 
 The ARCHITECTURE `Jobs.After(key, …)` ("pending job with the same key wins") must be extended or wrapped to also replace a pending job that is due **later** than the new one. Key: `observe:<nodeId>`. Cancel the pending scan when the node is deleted.
 
+> **Go now:** wrapped, not extended: a map on `App` holds each node's pending scan (due time, settle count, generation) and every scan is its own job keyed `observe:<nodeId>:<gen>`; a job whose generation is no longer the node's current one does nothing. `ScheduleRemoveService` drops the node's entry.
+
 ### 8.7 Docker events ingestion (`POST /worker/events` → `events.ingest`)
 
 HTTP (path unchanged): bearer `KEEL_WORKER_TOKEN`, constant-time compare; missing env or header → `401 "unauthorized"`. Body > 256 KiB → `413 "too large"`. Parse: trimmed body starting with `[` → JSON array; else NDJSON (non-empty lines, each JSON); a single object is accepted. Each item must be an object with `Type` and `Action` keys, else `400 "bad json"`. Trim each to `{type: String(Type), action: String(Action), name: Actor.Attributes.name (string), serviceName: Actor.Attributes["com.docker.swarm.service.name"] (string), time: number}`. Header `X-Keel-Resync: 1` → resync. Reply `200 "ok"`.
@@ -668,6 +684,8 @@ HTTP (path unchanged): bearer `KEEL_WORKER_TOKEN`, constant-time compare; missin
 - `type == "node"`: schedule `observeSwarmNodes` once per batch.
 - `type` not container/service: ignore.
 - name = container → `serviceName`, service → `name`; must start with `svc-`; id = rest; once per id per batch → `scheduleObserveFor(id)`. Log `event <type> <action> <serviceName ?? name> → observeNode scheduled|skipped`.
+
+> **Go now:** the body is a JSON array only (no single object, no NDJSON), at most 256 KiB in bytes; an element needs `Type` (not `Action`) and is trimmed to `{type, name, serviceName}`; a malformed body is `400 bad json`. There is no per-event log line.
 
 ---
 
@@ -697,6 +715,8 @@ Topics: org projects (and org membership if founded).
 3. `slug = slugOf(name)`: NFKD normalize → strip U+0300–U+036F → lowercase → replace runs of `[^a-z0-9]+` with `-` → first 40 chars → trim leading/trailing `-`. (Go: `golang.org/x/text/unicode/norm`; JS `toLowerCase` uses full case mapping, Go `strings.ToLower` simple mapping, e.g. U+0130; negligible.) Empty → `Project name needs a letter or digit (a-z, 0-9)` (`INVALID_INPUT`).
 4. Slug taken in the org → `Project "<slug>" already exists` (`NAME_TAKEN`; CLI parses the slug out of it).
 5. Insert project `{name, slug, organizationId}` + production environment. Topics: org projects.
+
+> **Go now:** no `joinOrFound` and no legacy adoption: the organization is founded at the first sign-up, and every project use case requires a membership (`RequireMember`). The name goes through `strings.TrimSpace` and its 60-character limit counts runes; the slug strips combining marks with the `x/text` `runes.Remove(runes.In(unicode.Mn))` recipe after NFKD; a taken slug is refused by the unique `(organization_id, slug)` insert. `projects.list` has no "no organization yet" case.
 
 **`projects.getBySlug`** (P query) args `{slug}` → `{id, name, slug, environment: {id, name}}` or `null` (signed out, no membership, unknown slug, or no environment). Environment = the production one, else the first. Subscribed by the project route.
 
@@ -772,7 +792,11 @@ Topics: environment.
 
 `defaultDomain(node, ip) = "<name>-<shortHash(id)>.<ip with . → ->.sslip.io"`; `shortHash` = 32-bit FNV-1a over the id's UTF-16 code units (`h = 0x811c9dc5; h = imul(h ^ c, 0x01000193)`), unsigned, base-36, left-padded with `0` to 6, last 6 chars. Topics: environment.
 
+> **Go now:** `shortHash` is `hash/fnv` (`New32a`) over the id's bytes, the same value for ASCII ids. The default protocol comes from a table by node type, `pickPublicPort` owns the tcp/udp choice, and an endpoint without a stored public port renders as port 0 instead of failing the list.
+
 **`nodes.unexpose`** (P mutation) `{id, protocol?, domain?, publicPort?}` → null. `requireNode`; no selector = close all; a partial selector must name the endpoint (`protocol=http` + `domain`, or tcp/udp + `publicPort`) else `Name the endpoint: protocol and domain (http) or public port`; no endpoints → no-op; filter by key (`validDomain` applied to the domain); nothing removed → no-op; patch (`endpoints` unset when empty); job `proxy.sync`. Topics: environment.
+
+> **Go now:** the domain and the public port are validated before anything else, so a malformed one is `INVALID_INPUT` even when the node has no endpoints.
 
 **`nodes.publicAddress`** (P query, no args) → `KEEL_PUBLIC_IP` or `null`; `requireUser` (`Not authenticated`). Static per process.
 
@@ -808,6 +832,8 @@ Note: `resolvedSecret` from `expand` covers referenced secrets only; the row's o
 5. Row with `previousKey` exists → patch `{key, value, secret}`; else insert `{nodeId, key, value, secret}` (an unknown `previousKey` silently inserts).
 6. If a row was renamed → rewrite references to the node (§5.5).
 7. Node `dirty: true`; `markReferrersDirty(node)`.
+
+> **Go now:** `previousKey` is a plain string (`""` = no rename); the 4096 limit counts runes; step 4 has no read-check: the `UNIQUE (node_id, key)` index refuses the clash and the use case maps it to `<key> already exists` with `NAME_TAKEN`.
 
 Topics: environment (+ variables views of every node in it).
 
@@ -868,6 +894,8 @@ Idempotent steps, then `removeLegacyTunnels` + `proxy.sync` jobs; returns `{quic
 3. If `KEEL_PUBLIC_IP` set: every http endpoint whose domain matches `^(.+-([0-9a-z]{6}))\.(\d+-\d+-\d+-\d+)\.sslip\.io$` with group 2 == `shortHash(node id)` and group 3 != the current dashed IP → same name on the current IP, status starting.
 
 In Go: step 1 belongs in the Convex importer only; steps 2–3 stay in the startup data-migration pass.
+
+> **Go now:** no `migrations.run`, importer or data-migration pass. A new Redis cache gets its `REDIS_PASSWORD` when it is created; only step 3 survives, as `moveDefaultDomains` in the recovery pass (`recoverIngress`).
 
 ### 9.10 Related functions in other areas that write node state
 
@@ -954,6 +982,8 @@ The web uses optimistic updates for `nodes.move` (position) and `nodes.remove` (
 | Worker events body | 256 KiB | `/worker/events` |
 | Generated password | 20 chars, 56-char alphabet | `randomSecret` |
 | Concurrency | one `running` deployment per environment | `beginDeployment` |
+
+> **Go now:** the project name and variable value limits count runes, the error text is cut at 300 runes (`CompactText`), and the worker events body limit counts bytes.
 
 ## 13. Environment variables read in this area
 

@@ -41,6 +41,8 @@ Conventions in this document:
 
 Index: `by_organization [organizationId]`. Lookups use `.unique()` for an org (so at most one row per org is an invariant; a Go port should add a unique constraint on non-null `organization_id`).
 
+> **Go now:** `log_sinks (organization_id UNIQUE NOT NULL, kind, domain, dataset, traces, token, org, created_at)`; `created_at` (integer ms) is the connect time. No `projectId` and no legacy rows (§1.8).
+
 ### 1.2 `axiomClients` (DCR client per callback URL)
 
 | Field | Type | Req | Meaning |
@@ -121,6 +123,8 @@ Rows inserted before 2026-10-04 have `organizationId` unset and `projectId` set.
 
 Go port suggestion (behaviour-equivalent): a one-time migration that, per org without an org row, re-tags the newest legacy row (`organization_id = org`, keep its `_creationTime` as `connected_at`) and deletes the older ones; delete legacy rows whose project no longer exists. After that `sinkOf` is a single lookup. Also drop in-flight `axiomSignIns`/`axiomPending` rows at migration (they live ≤10 min).
 
+> **Go now:** no legacy rows and no migration: `orgSinkOf` is one lookup by organization.
+
 ---
 
 ## 2. Access rules
@@ -165,6 +169,8 @@ rangeWindow(range, now = Date.now()) {
 - `call(cfg, path, init)` (API-token calls): `fetch(baseUrl(cfg.domain)+path)` with headers `authorization: Bearer <cfg.token>`, `content-type: application/json` (init headers override). Non-2xx → `Error("Axiom <status>")` or `Error("Axiom <status>: <body>")` where body = response text with every whitespace run collapsed to one space, trimmed, first 200 chars. No timeout.
 - `personal(domain, token, orgId|null, path, init)`: same, plus header `x-axiom-org-id: <orgId>` when given. Same error format.
 
+> **Go now:** one `call` in `internal/adapters/axiom` (base URL from `domain.AxiomBaseURL`), a 1-minute HTTP client timeout, and non-2xx as a typed `app.AxiomError{Status, Detail}` with the same message; callers branch on the status (`axiomStatus`), never on regexes over the text.
+
 ### 3.3 APL query
 
 ```
@@ -179,11 +185,15 @@ ISO = JS `toISOString()` (UTC, millisecond precision, `Z`). Response `{ tables: 
 
 APL string literals: `"` + s with every `\` and `"` prefixed by `\` + `"` (JS `s.replace(/[\\"]/g, "\\$&")`). Node ids are inlined unescaped in log queries (Convex ids are alphanumeric; a Go port with other id formats must quote them with the same escaping).
 
+> **Go now:** windows are epoch ms (`int64`) up to the adapter, which sends them as UTC with milliseconds; an answer whose columns do not line up with its fields fails the query; every id and term is quoted with `aplLit`.
+
 ### 3.4 Time parsing
 
 - `preciseTime(x)` (log lines in `recent`/`around`/`traces.get`): `Date.parse(str)` (ms), plus the sub-millisecond digits: if the string matches `/\.\d{3}(\d+)/`, add `Number("0." + extraDigits)`. Unparseable → `0`.
 - `axiomTail` uses plain `Date.parse(...) || 0` (integer ms, no sub-ms).
 - `timeOf(x)` (spans, buckets, events): number → `x > 1e17 ? x/1e6 : x > 1e14 ? x/1e3 : x` (ns/µs/ms); all-digit string → same on `Number(x)`; else `preciseTime`; empty/non-string → `0`.
+
+> **Go now:** no `Date.parse` emulation. Every `_time` decodes into `axiomTime`: RFC 3339, or an integer epoch in ns/µs/ms (number or digit string, converted exactly), sub-ms kept everywhere, `axiomTail` included. Anything else (including `""`) fails that row, which is skipped and logged instead of reading as `0` (docs/logs.md).
 
 ---
 
@@ -273,6 +283,8 @@ Args `{ redirectUri: string }` → `{ url: string }`.
 5. `startSignIn` (internal mutation): `requireOrganization` (→ `NO_ORGANIZATION`); delete the org's existing `axiomSignIns` row; insert `{ organizationId, clientId, state, verifier, redirectUri }`; schedule `logSinks.dropSignIn({ id })` after **600 000 ms**.
 6. Return `{ url }`.
 
+> **Go now:** the authorize query is `url.Values.Encode`, so its parameters are sorted by name; OAuth error bodies decode into a struct, and a non-string `error` or `error_description` falls back to the other or `HTTP <status>`.
+
 Verifier/state are made server-side on purpose (the browser may be on plain http where `crypto.subtle` is missing). DCR refuses plain-http non-localhost redirect URIs (`invalid_redirect_uri`): Keel must be served over https or `http://localhost` for this to work.
 
 #### `logSinks.signInAxiom` — public action (called by the `/axiom/callback` web route)
@@ -293,6 +305,8 @@ Args `{ state: string, code: string }` → `{ choose: true } | { choose: false, 
 7. Else `stashPending({ token, orgs })` (internal mutation: `requireOrganization`; delete the org's existing pending row; insert; schedule `logSinks.dropPending({ id })` after 600 000 ms) → `{ choose: true }`.
 
 Wrapping: errors from steps 2–3 are re-thrown as `ConvexError(message)`; `provision` wraps its own (below).
+
+> **Go now (step 3):** the error is `<Axiom N…> (Axiom API rejected the sign-in token)`; the JWT `aud` (raw JSON, three-part tokens only) goes to a warn log instead of the message. The region comes from `defaultEdgeDeployment`, else `region` when that is empty.
 
 #### `provision(token, org)` (shared by `signInAxiom` and `chooseAxiomOrg`)
 
@@ -370,6 +384,8 @@ Provider errors are **uncaught** (not wrapped in ConvexError) on this path.
 - `replicas`: iterate rows (newest first); first time a non-empty `task` is seen, record `slot = Number(replica) || 0`; output `{ task, slot, state: "" }` sorted by `slot` asc then `task` (localeCompare).
 - `source: "axiom"`.
 
+> **Go now:** rows decode into `axiomLogRow` (`message`, `stream`, `task` strings, `replica` an int, `_time` an `axiomTime` with its sub-ms part); a row of another shape is skipped and logged instead of read through `str`/`Number`. Replicas sort by slot, then task in byte order (no `localeCompare`).
+
 `dockerTail(nodeId, n)` — runs on the **manager**, Docker socket `/var/run/docker.sock` (hard-coded path):
 - In parallel:
   - `GET /services/svc-<nodeId>/logs?stdout=1&stderr=1&tail=<n>&timestamps=1&details=1` (non-follow; dockerode sends `true`). HTTP 404 → return `{ source: "docker", lines: [], replicas: [] }` immediately. Other errors propagate (uncaught).
@@ -381,6 +397,8 @@ Provider errors are **uncaught** (not wrapped in ConvexError) on this path.
   - Else: all stdout text concatenated, split on `\n`, then all stderr text likewise; drop empty lines; strip one trailing `\r`; parse each line; concatenate stdout lines + stderr lines and **stable-sort by `time` ascending**.
   - Line parse: first space-separated token, if it ends with `Z` and `Date.parse(token with fractional seconds truncated to 3 digits)` is valid → `time` = that, rest after the space. Then if the next token (up to the next space, or the whole rest) starts with `com.docker.swarm.` it is the details block (`k=v,k=v`): `task` = value of `com.docker.swarm.task.id=`; the text is what follows the details token (or `""`). Lines without a stamp keep `time: 0`.
 - `source: "docker"`.
+
+> **Go now:** the socket comes from `DOCKER_HOST` (moby's `client.FromEnv`); logs then replicas are read in order, and a replica error is logged and gives `[]`; payloads stay raw bytes until split (a character cut across two frames survives); the stamp is `time.Parse(time.RFC3339Nano)` (a numeric offset also reads; date-only forms do not); the adapter returns `domain.LogReplica` with the `unknown` state default; lines are sorted with `slices.SortStableFunc`.
 
 ### 5.2 `logs.recent` — public action (Observability page stream)
 
@@ -457,6 +475,8 @@ Ids and terms go through the APL literal escaping (§3.3). A request = a root sp
 
 All span queries use the "invalid field" → `[]` rule.
 
+> **Go now:** summaries decode `axiomRootRow` (only the columns they show) and per-trace counts `axiomTraceCountRow`; `httpStatus` is `strconv.Atoi` of the attribute (`"200.0"` or `" 200 "` give `null`).
+
 ### 6.3 `traces.overview` — public action (Observability KPIs/charts/requests; `keel traces`)
 
 Args `{ environmentId, range: timeRange, search?: string /* default "" */, nodeId?: Id<nodes> }` → `TraceOverview`.
@@ -473,6 +493,8 @@ Args `{ environmentId, range: timeRange, search?: string /* default "" */, nodeI
 7. Return `{ source: "axiom", from, to, bucketMs: binMs, stats, buckets, traces }`. Provider errors → error `<message>`.
 
 Totals and series stop at `to` (end of the last bucket) so totals equal the sum of buckets.
+
+> **Go now:** stats decode into `axiomStatsRow` (`requests`, `errors` ints, percentiles `*axiomDuration`, null when absent); the bin column must be `_time` (no fallback to the first column); `search` is cut at 200 runes, not UTF-16 units.
 
 ### 6.4 `traces.get` — public action (trace waterfall)
 
@@ -500,6 +522,8 @@ Args `{ environmentId, at: number }` → `TraceSummary[]` (newest first).
 ## 7. Span row parsing (defensive; must match exactly)
 
 Rows come back with every dataset field as a column; dotted names flat (`attributes.http.method`), maps as objects (`attributes.custom`).
+
+> **Go now:** no `pick`/`str`/`Number`/`JSON.stringify` emulation (`internal/app/traces_parse.go`). Each row decodes into `axiomSpanRow`, whose json tags are Axiom's flat dotted columns (nested `service`, `status`, `scope`, `attributes` or `resource` objects are not read). `duration` is ns (number or decimal string), a Go duration string (the whole string) or the .NET timespan. Attributes and resource come from the `attributes.*` / `resource.*` columns with `custom` folded in, nested objects flattened, null and `""` skipped, numbers and bools as Axiom sent them, arrays as compact JSON, sorted in byte order. `events` is an array of objects (null elements skipped). A row that does not decode is skipped and logged; docs/logs.md has the rules.
 
 - `pick(obj, path)`: not an object → undefined. If `path` is an own key → its value. Else for each `.` position `i` left to right with `head = path[:i]` an existing key, recurse `pick(obj[head], path[i+1:])`; first non-undefined wins.
 - `attr(row, name) = pick(row, "attributes."+name) ?? pick(row, "attributes.custom."+name)`.
@@ -551,6 +575,8 @@ Called by `nodesInternal.applyInput` as `env = withTracing(node, computeEnv(node
 - `own` = set of keys in `env` (text before the first `=`). Append, in table order, every `k=v` from `tracingEnv(..., { local: false })` with `!overridden(own, k)`. Own variables come first in the Swarm `ContainerSpec.Env`.
 
 Turning tracing off and shipping removes all eight (they are never stored, only computed).
+
+> **Go now:** the endpoint falls back to `KEEL_SITE_URL + "/otlp"`; `enc` is `url.PathEscape`; the env is a map merged key by key and written to the spec sorted by key (`deployEnvList`), so own and tracing variables are not in two blocks.
 
 ### 8.3 `tracing.scope` — internal query
 
@@ -632,6 +658,8 @@ Steps, in order (first failure answers):
 | 11 | Axiom other (4xx) | `400`, body `detail \|\| "rejected"` (OTLP exporters drop on non-retryable) |
 
 Errors in 9–11 are logged as `otlp: Axiom <status>[: <detail>]`. No CORS, no other methods. No timeout on the forward (Go: add one, then map to 503).
+
+> **Go now:** the key leads to its organization in one query (`OTLPKeyOrganization`); the content type is parsed with `mime.ParseMediaType`; the forward has a 30 s timeout (→ 503); the log lines are slog warnings (`otlp: Axiom unreachable`, `otlp: Axiom rejected spans` with `status` and `detail`).
 
 Trust model (accepted): the relay does not read the body, so `keel.service_id` / `keel.environment_id` in the spans are the **sender's claim**. A holder of one environment's key can tag spans as another environment's service in the same organization and they would show there. The org is the boundary (members can obtain every env's key via `keel run`; the dataset is the org's). If the Go agent later decodes OTLP, it can set `keel.*` from the key instead.
 
@@ -731,6 +759,8 @@ Algorithm:
 
 Per project because the worker routes per project; equal sinks share one queue in the worker.
 
+> **Go now:** one entry per organization sink, `{"serviceIds", "sink", "since"}`, no `projectId` (`WorkerConfig`, `WorkerSinks` in `internal/adapters/sqlite/observability.go`): `serviceIds` are the organization's nodes with a desired image, `since` is `log_sinks.created_at` (integer ms). The agent routes per service.
+
 ### 11.2 Agent process (env, loop, shutdown)
 
 | Env var | Default | Meaning |
@@ -742,6 +772,8 @@ Per project because the worker routes per project; equal sinks share one queue i
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Read-only socket; every Docker call is a GET. |
 
 Deployment today: Swarm service `keel-worker`, `--mode global --network host`, socket bind-mounted read-only, volume `keel-worker-state:/var/lib/keel-worker`, secret `keel_worker_token`, restart any, stop grace 10s. Nothing listens.
+
+> **Go now:** the service is `keel-agent`, made by `keel serve` (`EnsureAgent`); `KEEL_STATE` defaults to `/var/lib/keel-agent/state.json` on volume `keel-agent-state`; there is no `DOCKER_SOCKET` (moby's `client.FromEnv`, so `DOCKER_HOST`); the agent logs through `log/slog` (`polling the worker config failed`, not `poll failed: …`).
 
 Startup: load state; start state writer; `GET /info` → `nodeId = Swarm.NodeID ?? Name ?? ""`. Then run forever, concurrently: the config loop and the Docker event forwarder (events → `/worker/events`, documented in the workers spec; this area only uses its container hooks, §11.6).
 
@@ -764,6 +796,8 @@ In-memory:
 `sinkKey(cfg) = "<kind>:<domain>:<dataset>:<last 6 chars of token>"`. `applyConfig` reuses an existing Sink object when its key matches, else builds a new one. After rebuilding the maps, every queue whose key no route uses any more is deleted: its queued lines are **dropped** (log `dropping N queued lines for a removed sink`) and waiters released. So a re-sign-in (new token) drops lines still queued for the old token. Logs `config applied {"sinks":<routes>,"services":<serviceIds>}` when the routing changed.
 
 `dockerSince(ms) = floor(ms/1000) + "." + pad9(min(round((ms % 1000) * 1e6), 999999999))`.
+
+> **Go now:** no `routes` and no `sinkKey`: queues are keyed by the decoded `SinkConfig{Kind, Domain, Dataset, Token}` (a new token is still a new queue), each service id maps to its queue, and there is no `config applied` line. `since` is integer ms, turned into Docker's form by `dockerTime(time.UnixMilli(since))`; the replica slot is `strconv.Atoi`.
 
 `reconcileFollowers()`:
 1. `GET /containers/json?filters={"label":["com.docker.swarm.service.name"],"status":["running","exited"]}`.
@@ -790,6 +824,8 @@ In-memory:
 - Line parse: strip one trailing `\r`; first token (before the first space) is a stamp iff `length >= 20`, ends with `Z`, and its 5th char is `-` → `{ time: stamp, text: rest after the space }`; else `{ time: "", text: whole line }`.
 - `sinceAfter(stamp)`: `/^(.+?)(?:\.(\d{1,9}))?Z$/`; `secs = floor(Date.parse(<prefix>Z)/1000)`; `nanos = Number(frac padded right to 9) + 1` with carry into seconds at 1e9; return `"<secs>.<pad9(nanos)>"` (Docker `since` is inclusive, so +1 ns makes it exclusive). Unparseable → undefined.
 
+> **Go now:** the first token is a stamp when `time.Parse(time.RFC3339Nano)` reads it, kept as `Line.Time`; the resume point is `dockerTime(t.Add(time.Nanosecond))` (`<unix>.<9-digit ns>`), so no regex and no manual carry.
+
 ### 11.6 Container event hooks
 
 The event forwarder calls `onContainerEvent(Action, id, Actor.Attributes)` for **every** `container`-type event that has an `id` (before its own relevance filter):
@@ -810,6 +846,8 @@ The event forwarder calls `onContainerEvent(Action, id, Actor.Attributes)` for *
 - `send(events)`: body = NDJSON (one `JSON.stringify(event)` per line, joined by `\n`, no trailing newline); headers `authorization: Bearer <token>`, `content-type: application/x-ndjson`; 15 s timeout per attempt. Up to 5 attempts: 2xx → `true`; 4xx other than 429 → log `rejected <status>, dropping <n> events` and `true` (malformed: dropped); else log and sleep `1000 * 2^attempt` ms (1, 2, 4, 8, 16 s, also after the last attempt) → after 5 → log `unreachable, keeping <n> events for a later attempt`, `false`.
 
 Adding a sink kind: a variant in `LogSink`, a `Sink` impl keyed by `sinkKey`, a read provider (`<kind>Tail`, lines/recent), a branch in `logs.tail`/`recent`/`around`, a `connect<Kind>`.
+
+> **Go now:** the body comes from `json.Encoder` (every line ends in `\n`), the dataset is `url.PathEscape`d, the log lines are slog (`axiom rejected log lines, dropping them`, `axiom ingest failed, retrying`, `axiom unreachable, keeping log lines for a later attempt`), and a new kind is keyed by `SinkConfig` (docs/logs.md, "Adding a provider").
 
 ---
 
@@ -911,6 +949,8 @@ Agent vars in §11.2.
 
 CLI (`apps/cli/internal/keel/api.go translate`, exact match unless noted): `Node not found` → `SERVICE_NOT_FOUND`; `Connect Axiom to see traces` and `Sign in with Axiom again to turn on traces` → `TRACES_OFF`; `Environment not found` → `PROJECT_NOT_FOUND`; prefix `You're not in an organization` → `NO_ORGANIZATION`; any other non-empty ConvexError → `INVALID_INPUT`; non-ConvexError → `SERVER_ERROR`. Rewording any of these needs the CLI updated. Argument validation failures (bad id, bad range literal) are not ConvexErrors today (→ `SERVER_ERROR`).
 
+> **Go now:** the sign-in token error drops `, aud <aud>` (§4.7). The CLI takes each problem's `code` as the server sends it instead of mapping messages to codes.
+
 ---
 
 ## 17. Web and CLI consumers
@@ -1011,6 +1051,8 @@ The worker config is polled (30 s, plus an early fetch on an unrouted `svc-*` co
 16. **Legacy rows** stand in for the org sink until a sign-in or disconnect; see §1.8.
 17. **Orphaned `otlpKeys`** after environment/project deletion → 401 at the relay.
 
+> **Go now (13, 15, 16):** the per-service tail keeps sub-ms like the stream; search terms are cut at 200 runes; there are no legacy rows.
+
 ---
 
 ## 20. Go port compatibility hazards
@@ -1022,3 +1064,5 @@ The worker config is polled (30 s, plus an early fetch on an unrouted `svc-*` co
 5. **Error strings** in §16 are an API contract for the CLI and the web.
 6. **JSON numbers**: times and durations must stay JSON numbers (fractional allowed); `Attribute` stays a `{ key, value }` object; `httpStatus`/percentiles use `null`, not omission; `traces`/`org` in `logSinks.get` use `null`.
 7. **No timeouts today** on control-plane Axiom calls (only Convex's action limit). Adding them is fine; map relay timeouts to `503`.
+
+> **Go now:** hazards 1–4 do not apply: nothing is imported from a Convex install (docs/go/spec/INDEX.md), and the agent reads `state.json` only from its own `keel-agent-state` volume.

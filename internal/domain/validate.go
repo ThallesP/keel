@@ -3,7 +3,10 @@ package domain
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -44,16 +47,7 @@ func ValidPort(port *int) error {
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
 func Slug(name string) string {
-	var b strings.Builder
-	for _, r := range norm.NFKD.String(name) {
-		if r >= 0x300 && r <= 0x36f {
-			continue
-		}
-		b.WriteRune(r)
-	}
-	s := nonSlug.ReplaceAllString(strings.ToLower(b.String()), "-")
-	if len(s) > 40 {
-		s = s[:40]
-	}
-	return strings.Trim(s, "-")
+	s, _, _ := transform.String(transform.Chain(norm.NFKD, runes.Remove(runes.In(unicode.Mn))), name)
+	s = nonSlug.ReplaceAllString(strings.ToLower(s), "-")
+	return strings.Trim(s[:min(len(s), 40)], "-")
 }

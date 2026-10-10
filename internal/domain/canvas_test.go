@@ -68,7 +68,6 @@ func TestCanvasUniqueName(t *testing.T) {
 }
 
 func TestCanvasNextPosition(t *testing.T) {
-	w := 500.0
 	cases := []struct {
 		name  string
 		nodes []Node
@@ -76,7 +75,7 @@ func TestCanvasNextPosition(t *testing.T) {
 	}{
 		{"empty", nil, Position{0, 0}},
 		{"one", []Node{{Position: Position{10, 20}}}, Position{290, 20}},
-		{"group width", []Node{{Position: Position{0, 5}, Config: NodeConfig{Width: &w}}, {Position: Position{100, 7}}}, Position{560, 5}},
+		{"group width", []Node{{Position: Position{0, 5}, Config: NodeConfig{Width: new(500.0)}}, {Position: Position{100, 7}}}, Position{560, 5}},
 		{"children ignored", []Node{{Position: Position{0, 0}}, {ParentID: "g", Position: Position{9000, 1}}}, Position{280, 0}},
 		{"first wins ties", []Node{{Position: Position{0, 1}}, {Position: Position{0, 2}}}, Position{280, 1}},
 	}
@@ -88,11 +87,10 @@ func TestCanvasNextPosition(t *testing.T) {
 }
 
 func TestCanvasPortAndReplicasNumbers(t *testing.T) {
-	f := func(v float64) *float64 { return &v }
 	ports := []struct {
 		in *float64
 		ok bool
-	}{{nil, true}, {f(80), true}, {f(80.0), true}, {f(80.5), false}, {f(0), false}, {f(1), true}, {f(65535), true}, {f(65536), false}, {f(-1), false}}
+	}{{nil, true}, {new(80.0), true}, {new(80.5), false}, {new(0.0), false}, {new(1.0), true}, {new(65535.0), true}, {new(65536.0), false}, {new(-1.0), false}}
 	for _, c := range ports {
 		_, err := PortNumber(c.in)
 		if (err == nil) != c.ok {
@@ -105,7 +103,7 @@ func TestCanvasPortAndReplicasNumbers(t *testing.T) {
 	reps := []struct {
 		in *float64
 		ok bool
-	}{{nil, true}, {f(0), true}, {f(20), true}, {f(21), false}, {f(1.5), false}, {f(-1), false}}
+	}{{nil, true}, {new(0.0), true}, {new(20.0), true}, {new(21.0), false}, {new(1.5), false}, {new(-1.0), false}}
 	for _, c := range reps {
 		_, err := ReplicasNumber(c.in)
 		if (err == nil) != c.ok {
@@ -115,7 +113,7 @@ func TestCanvasPortAndReplicasNumbers(t *testing.T) {
 			t.Errorf("replicas error %q", err)
 		}
 	}
-	if p, _ := PortNumber(f(8080)); p == nil || *p != 8080 {
+	if p, _ := PortNumber(new(8080.0)); p == nil || *p != 8080 {
 		t.Errorf("PortNumber(8080) = %v", p)
 	}
 }

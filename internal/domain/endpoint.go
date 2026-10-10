@@ -1,6 +1,9 @@
 package domain
 
-import "strconv"
+import (
+	"cmp"
+	"strconv"
+)
 
 type EndpointProtocol string
 
@@ -19,43 +22,32 @@ const (
 )
 
 type EndpointStatus struct {
-	State EndpointState `json:"state"`
-	Error string        `json:"error,omitempty"`
-	At    int64         `json:"at"`
+	State EndpointState
+	Error string
+	At    int64
 }
 
 type Endpoint struct {
-	ID         string           `json:"id"`
-	NodeID     string           `json:"nodeId"`
-	Protocol   EndpointProtocol `json:"protocol"`
-	Port       int              `json:"port"`
-	PinnedPort bool             `json:"pinnedPort,omitempty"`
-	Domain     string           `json:"domain,omitempty"`
-	PublicPort *int             `json:"publicPort,omitempty"`
-	Status     EndpointStatus   `json:"status"`
+	ID         string
+	NodeID     string
+	Protocol   EndpointProtocol
+	Port       int
+	PinnedPort bool
+	Domain     string
+	PublicPort *int
+	Status     EndpointStatus
 }
 
 func (e Endpoint) Key() string {
 	if e.Protocol == ProtocolHTTP {
 		return "http:" + e.Domain
 	}
-	port := 0
-	if e.PublicPort != nil {
-		port = *e.PublicPort
-	}
-	return string(e.Protocol) + ":" + strconv.Itoa(port)
+	return string(e.Protocol) + ":" + strconv.Itoa(*e.PublicPort)
 }
 
 func (e Endpoint) Address(publicIP string) string {
 	if e.Protocol == ProtocolHTTP {
 		return "https://" + e.Domain
 	}
-	if publicIP == "" {
-		publicIP = "<public IP>"
-	}
-	port := 0
-	if e.PublicPort != nil {
-		port = *e.PublicPort
-	}
-	return publicIP + ":" + strconv.Itoa(port)
+	return cmp.Or(publicIP, "<public IP>") + ":" + strconv.Itoa(*e.PublicPort)
 }

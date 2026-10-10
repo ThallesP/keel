@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"cmp"
 	"crypto/rand"
 	"math"
 	"math/big"
@@ -25,12 +26,11 @@ var NodeDefaults = map[NodeType]NodeDefault{
 }
 
 func DefaultConfig(t NodeType) NodeConfig {
-	f := func(v float64) *float64 { return &v }
 	switch t {
 	case NodeVolume:
-		return NodeConfig{SizeGb: f(10)}
+		return NodeConfig{SizeGb: new(10.0)}
 	case NodeGroup:
-		return NodeConfig{Width: f(300), Height: f(180)}
+		return NodeConfig{Width: new(300.0), Height: new(180.0)}
 	}
 	return NodeConfig{}
 }
@@ -113,11 +113,7 @@ func UniqueName(base string, taken map[string]bool) string {
 	}
 	for i := 2; ; i++ {
 		suffix := "-" + strconv.Itoa(i)
-		b := base
-		if len(b)+len(suffix) > MaxNameLen && len(suffix) < MaxNameLen {
-			b = b[:MaxNameLen-len(suffix)]
-		}
-		if name := b + suffix; !taken[name] {
+		if name := base[:min(len(base), MaxNameLen-len(suffix))] + suffix; !taken[name] {
 			return name
 		}
 	}
@@ -126,18 +122,9 @@ func UniqueName(base string, taken map[string]bool) string {
 var canvasNonName = regexp.MustCompile(`[^a-z0-9-]+`)
 
 func NameFromImage(image, fallback string) string {
-	s := canvasNonName.ReplaceAllString(strings.ToLower(canvasImageRepo(image)), "-")
-	s = strings.Trim(s, "-")
-	if len(s) > MaxNameLen {
-		s = s[:MaxNameLen]
-	}
-	if s == "" {
-		return fallback
-	}
-	return s
+	s := strings.Trim(canvasNonName.ReplaceAllString(strings.ToLower(canvasImageRepo(image)), "-"), "-")
+	return cmp.Or(s[:min(len(s), MaxNameLen)], fallback)
 }
-
-const NodeWidth = 220
 
 func NextPosition(nodes []Node) Position {
 	var at *Position
@@ -145,7 +132,7 @@ func NextPosition(nodes []Node) Position {
 		if n.ParentID != "" {
 			continue
 		}
-		w := float64(NodeWidth)
+		w := 220.0
 		if n.Config.Width != nil {
 			w = *n.Config.Width
 		}
@@ -161,31 +148,21 @@ func NextPosition(nodes []Node) Position {
 }
 
 func PortNumber(p *float64) (*int, error) {
-	v, ok := canvasIntNumber(p, 1, 65535)
-	if !ok {
-		return nil, Invalid(MsgPortRange)
-	}
-	return v, nil
+	return canvasIntNumber(p, 1, 65535, Invalid(MsgPortRange))
 }
 
 func ReplicasNumber(r *float64) (*int, error) {
-	v, ok := canvasIntNumber(r, 0, 20)
-	if !ok {
-		return nil, Invalid("Replicas must be 0–20")
-	}
-	return v, nil
+	return canvasIntNumber(r, 0, 20, Invalid("Replicas must be 0–20"))
 }
 
-func canvasIntNumber(p *float64, lo, hi int) (*int, bool) {
+func canvasIntNumber(p *float64, lo, hi float64, invalid error) (*int, error) {
 	if p == nil {
-		return nil, true
+		return nil, nil
 	}
-	f := *p
-	if math.IsNaN(f) || math.IsInf(f, 0) || f != math.Trunc(f) || f < float64(lo) || f > float64(hi) {
-		return nil, false
+	if f := *p; f != math.Trunc(f) || f < lo || f > hi {
+		return nil, invalid
 	}
-	v := int(f)
-	return &v, true
+	return new(int(*p)), nil
 }
 
 func UTF16Len(s string) int {

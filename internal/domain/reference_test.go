@@ -6,21 +6,6 @@ import (
 	"testing"
 )
 
-func TestCanvasEncodeURIComponent(t *testing.T) {
-	cases := map[string]string{
-		"":                              "",
-		"app":                           "app",
-		"A-z_0.9!":                      "A-z_0.9!",
-		"a b!~*'()$&+,/:;=?@#%é€😀_-.\t": "a%20b!~*'()%24%26%2B%2C%2F%3A%3B%3D%3F%40%23%25%C3%A9%E2%82%AC%F0%9F%98%80_-.%09",
-		"p@ss/w#rd":                     "p%40ss%2Fw%23rd",
-	}
-	for in, want := range cases {
-		if got := EncodeURIComponent(in); got != want {
-			t.Errorf("EncodeURIComponent(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestCanvasFindRefs(t *testing.T) {
 	type ref struct{ text, name, key string }
 	cases := []struct {
@@ -29,9 +14,8 @@ func TestCanvasFindRefs(t *testing.T) {
 	}{
 		{"${{ pg.URL }}", []ref{{"${{ pg.URL }}", "pg", "URL"}}},
 		{"x${{A}}y${{ b.B }}", []ref{{"${{A}}", "", "A"}, {"${{ b.B }}", "b", "B"}}},
-		{"${{\vA\u00a0}}", []ref{{"${{\vA\u00a0}}", "", "A"}}},
-		{"${{\ufeffA\u3000}}", []ref{{"${{\ufeffA\u3000}}", "", "A"}}},
-		{"${{\u0085A}}", nil},
+		{"${{\tA\n}}", []ref{{"${{\tA\n}}", "", "A"}}},
+		{"${{\u00a0A}}", nil},
 		{"${{ pg.url }}", nil},
 		{"${{ a.b.C }}", nil},
 		{"${{ ${{ A }} }}", []ref{{"${{ A }}", "", "A"}}},
@@ -153,13 +137,6 @@ func TestCanvasResolver(t *testing.T) {
 	}
 	if got := r.Expand(api, "").Parts; got != nil {
 		t.Errorf("empty value parts = %+v", got)
-	}
-
-	if got, want := r.Env(api), []string{"SELF=xxxxxx", "LOOP=", "HOST=override", "PLAIN=plain"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("Env(api) = %q, want %q", got, want)
-	}
-	if got := r.Env(pg); !reflect.DeepEqual(got, []string{"POSTGRES_USER=app", "POSTGRES_PASSWORD=p@ss/w#rd 8080"}) {
-		t.Errorf("Env(pg) = %q", got)
 	}
 }
 

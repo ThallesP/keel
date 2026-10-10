@@ -1,17 +1,17 @@
 package domain
 
 type Project struct {
-	ID             string `json:"id"`
-	OrganizationID string `json:"organizationId"`
-	Name           string `json:"name"`
-	Slug           string `json:"slug"`
-	CreatedAt      int64  `json:"createdAt"`
+	ID             string
+	OrganizationID string
+	Name           string
+	Slug           string
+	CreatedAt      int64
 }
 
 type Environment struct {
-	ID           string `json:"id"`
-	ProjectID    string `json:"projectId"`
-	Name         string `json:"name"`
-	IsProduction bool   `json:"isProduction"`
-	CreatedAt    int64  `json:"createdAt"`
+	ID           string
+	ProjectID    string
+	Name         string
+	IsProduction bool
+	CreatedAt    int64
 }

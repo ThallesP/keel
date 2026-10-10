@@ -58,16 +58,21 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Config{Instances: map[string]*Instance{}, Links: map[string]*Link{}, Path: filepath.Join(dir, "config.json")}
+	c := &Config{Path: filepath.Join(dir, "config.json")}
 	data, err := os.ReadFile(c.Path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return c, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	if err := json.Unmarshal(data, c); err != nil {
-		return nil, err
+	if err == nil {
+		if err := json.Unmarshal(data, c); err != nil {
+			return nil, err
+		}
+	}
+	if c.Instances == nil {
+		c.Instances = map[string]*Instance{}
+	}
+	if c.Links == nil {
+		c.Links = map[string]*Link{}
 	}
 	return c, nil
 }

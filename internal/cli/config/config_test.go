@@ -16,6 +16,20 @@ func TestLinkForWalksUp(t *testing.T) {
 	}
 }
 
+func TestLoadNullMaps(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KEEL_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"instances": null, "links": null}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Instances["dev"] = &Instance{URL: "https://keel.test"}
+	c.Links["/work/app"] = &Link{Instance: "dev", Project: "api"}
+}
+
 func TestSaveIsPrivateAndRoundTrips(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", filepath.Join(t.TempDir(), "keel"))
 	c, err := Load()

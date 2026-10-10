@@ -24,11 +24,11 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 	w.jobs.run()
 
 	d := w.deployment(id)
-	if d.Status != domain.DeploymentRunning || d.FinishedAt != nil {
+	if d.Status != domain.DeploymentRunning || d.FinishedAt != 0 {
 		t.Fatalf("shutdown failed the deployment: %s %s %q", d.Status, stepStatuses(d), logTexts(d))
 	}
 	for i, s := range d.Steps[:2] {
-		if s.Status == domain.StepFailed || s.AppliedAt != nil {
+		if s.Status == domain.StepFailed || s.AppliedAt != 0 {
 			t.Fatalf("step %d: %+v", i, s)
 		}
 	}

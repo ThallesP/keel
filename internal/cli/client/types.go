@@ -107,8 +107,8 @@ func deploymentOf(d *api.Deployment) *Deployment {
 		ID: d.ID, Status: d.Status, Message: d.Message, StartedAt: millis(d.StartedAt),
 		Steps: make([]Step, len(d.Steps)), Log: make([]LogEntry, len(d.Log)),
 	}
-	if d.FinishedAt != nil {
-		out.FinishedAt = new(millis(*d.FinishedAt))
+	if d.FinishedAt != 0 {
+		out.FinishedAt = new(millis(d.FinishedAt))
 	}
 	for i, s := range d.Steps {
 		out.Steps[i] = Step{ServiceID: s.NodeID, Label: s.Label, Status: s.Status}

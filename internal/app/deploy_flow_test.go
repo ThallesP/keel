@@ -27,7 +27,7 @@ func TestShipRulesAndMessages(t *testing.T) {
 
 	id := w.ship(app.ShipOptions{})
 	d := w.deployment(id)
-	if d.Message != "ship api, worker" || d.Status != domain.DeploymentRunning || d.StartedAt != *w.clock || d.FinishedAt != nil {
+	if d.Message != "ship api, worker" || d.Status != domain.DeploymentRunning || d.StartedAt != *w.clock || d.FinishedAt != 0 {
 		t.Fatalf("deployment: %+v", d)
 	}
 	if got := stepStatuses(d); got != "api=pending worker=pending health checks=pending" {
@@ -37,11 +37,11 @@ func TestShipRulesAndMessages(t *testing.T) {
 		t.Fatalf("steps: %+v log %v", d.Steps, d.Log)
 	}
 	for _, n := range []domain.Node{w.node(a.ID), w.node(b.ID)} {
-		if n.Desired.Revision != 1 || n.Dirty || n.ShippedAt == nil || *n.ShippedAt != *w.clock || n.ApplyError != "" {
+		if n.Desired.Revision != 1 || n.Dirty || n.ShippedAt != *w.clock || n.ApplyError != "" {
 			t.Fatalf("shipped node: %+v", n)
 		}
 	}
-	if n := w.node(c.ID); n.Desired.Revision != 4 || n.ShippedAt != nil {
+	if n := w.node(c.ID); n.Desired.Revision != 4 || n.ShippedAt != 0 {
 		t.Fatalf("clean node shipped: %+v", n)
 	}
 	if !w.pub.has("org", "/api/environments/env") || !w.pub.has("org", "/api/deployments/"+id) || !w.pub.has("org", "/api/nodes/"+a.ID) {
@@ -205,7 +205,7 @@ func TestApplyHappyPath(t *testing.T) {
 	if got := logTexts(d); !reflect.DeepEqual(got, []string{"pulling nginx:alpine", "pulled nginx:alpine in 0.0s", "service created · 1 replica(s)"}) {
 		t.Fatalf("log: %q", got)
 	}
-	if s := d.Steps[0]; s.Status != domain.StepRunning || s.StartedAt == nil || s.AppliedAt == nil {
+	if s := d.Steps[0]; s.Status != domain.StepRunning || s.StartedAt == 0 || s.AppliedAt == 0 {
 		t.Fatalf("step: %+v", s)
 	}
 	w.jobs.advance(499 * time.Millisecond)
@@ -214,7 +214,7 @@ func TestApplyHappyPath(t *testing.T) {
 	}
 	w.jobs.advance(time.Millisecond)
 	d = w.deployment(id)
-	if d.Status != domain.DeploymentSuccess || d.FinishedAt == nil || stepStatuses(d) != "api=done health checks=done" {
+	if d.Status != domain.DeploymentSuccess || d.FinishedAt == 0 || stepStatuses(d) != "api=done health checks=done" {
 		t.Fatalf("after observe: %s %s", d.Status, stepStatuses(d))
 	}
 	if got := logTexts(d)[3:]; !reflect.DeepEqual(got, []string{"api: 1/1 replicas running", "all replicas healthy"}) {
@@ -261,7 +261,7 @@ func TestApplyFailures(t *testing.T) {
 			t.Fatalf("node: %+v", n)
 		}
 		w.jobs.run()
-		if d := w.deployment(id); d.Steps[1].AppliedAt == nil || d.Status != domain.DeploymentFailed {
+		if d := w.deployment(id); d.Steps[1].AppliedAt == 0 || d.Status != domain.DeploymentFailed {
 			t.Fatalf("sibling: %+v", d.Steps[1])
 		}
 		if len(w.swarm.creates) != 1 || w.swarm.creates[0].NodeID != b.ID {
@@ -336,7 +336,7 @@ func TestApplySerializedAndSkipsStaleRevision(t *testing.T) {
 		if got := logTexts(w.deployment(d1)); got[len(got)-1] != "superseded by revision 2" {
 			t.Fatalf("d1 log: %q", got)
 		}
-		if s := w.deployment(d2).Steps[0]; s.AppliedAt == nil {
+		if s := w.deployment(d2).Steps[0]; s.AppliedAt == 0 {
 			t.Fatalf("d2 step: %+v", s)
 		}
 	})
@@ -390,7 +390,7 @@ func TestApplyNodeDeleted(t *testing.T) {
 		if !reflect.DeepEqual(w.swarm.removed, []string{a.ID}) {
 			t.Fatalf("orphan not taken back: %v", w.swarm.removed)
 		}
-		if d := w.deployment(id); d.Steps[0].AppliedAt != nil {
+		if d := w.deployment(id); d.Steps[0].AppliedAt != 0 {
 			t.Fatalf("step applied: %+v", d.Steps[0])
 		}
 	})
@@ -664,7 +664,7 @@ func TestStalledPullYieldsToNewerRevision(t *testing.T) {
 	if len(w.swarm.creates) != 1 || w.swarm.creates[0].Revision != 2 {
 		t.Fatalf("creates: %+v", w.swarm.creates)
 	}
-	if s := w.deployment(d2).Steps[0]; s.AppliedAt == nil {
+	if s := w.deployment(d2).Steps[0]; s.AppliedAt == 0 {
 		t.Fatalf("d2 step: %+v", s)
 	}
 }

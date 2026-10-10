@@ -9,7 +9,7 @@ import (
 )
 
 func TestNodeViewOf(t *testing.T) {
-	shipped := new(int64(5000))
+	shipped := int64(5000)
 	desired := func(rev, replicas int) *domain.Desired {
 		return &domain.Desired{Image: "nginx:alpine", Revision: rev, Replicas: replicas, Port: 80}
 	}

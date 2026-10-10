@@ -71,7 +71,7 @@ type Node struct {
 	Endpoints        []Endpoint
 	DeployedRevision int
 	Dirty            bool
-	ShippedAt        *int64
+	ShippedAt        int64
 	ApplyError       string
 	OneShot          bool
 	CreatedAt        int64

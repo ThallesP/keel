@@ -15,9 +15,9 @@ type DeployStep struct {
 	NodeID     string            `json:"nodeId,omitempty" doc:"Absent on the final health checks step"`
 	Label      string            `json:"label" doc:"Node name at ship time"`
 	Status     domain.StepStatus `json:"status" enum:"pending,running,done,failed"`
-	StartedAt  *int64            `json:"startedAt,omitempty"`
-	AppliedAt  *int64            `json:"appliedAt,omitempty" doc:"When Swarm took the new spec"`
-	FinishedAt *int64            `json:"finishedAt,omitempty"`
+	StartedAt  int64             `json:"startedAt,omitempty"`
+	AppliedAt  int64             `json:"appliedAt,omitempty" doc:"When Swarm took the new spec"`
+	FinishedAt int64             `json:"finishedAt,omitempty"`
 }
 
 type DeployLogLine struct {
@@ -33,7 +33,7 @@ type Deployment struct {
 	Message       string                  `json:"message" example:"ship api, postgres"`
 	Status        domain.DeploymentStatus `json:"status" enum:"running,success,failed"`
 	StartedAt     int64                   `json:"startedAt"`
-	FinishedAt    *int64                  `json:"finishedAt,omitempty"`
+	FinishedAt    int64                   `json:"finishedAt,omitempty"`
 	Steps         []DeployStep            `json:"steps" doc:"One per shipped node in canvas order, then health checks"`
 	Log           []DeployLogLine         `json:"log" doc:"The last 500 lines, oldest first"`
 }

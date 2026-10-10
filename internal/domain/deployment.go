@@ -23,9 +23,9 @@ type DeployStep struct {
 	NodeID     string
 	Label      string
 	Status     StepStatus
-	StartedAt  *int64
-	AppliedAt  *int64
-	FinishedAt *int64
+	StartedAt  int64
+	AppliedAt  int64
+	FinishedAt int64
 }
 
 type LogLine struct {
@@ -40,7 +40,7 @@ type Deployment struct {
 	Message       string
 	Status        DeploymentStatus
 	StartedAt     int64
-	FinishedAt    *int64
+	FinishedAt    int64
 	Steps         []DeployStep
 	Log           []LogLine
 }

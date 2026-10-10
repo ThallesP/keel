@@ -187,7 +187,7 @@ type CoreInsertNodeParams struct {
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
-	ShippedAt          *int64
+	ShippedAt          int64
 	ApplyError         *string
 	OneShot            int64
 	CreatedAt          int64
@@ -507,7 +507,7 @@ type CoreUpdateNodeParams struct {
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
-	ShippedAt          *int64
+	ShippedAt          int64
 	ApplyError         *string
 	OneShot            int64
 	CreatedAt          int64

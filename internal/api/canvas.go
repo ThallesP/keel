@@ -91,7 +91,7 @@ type NodeView struct {
 	Endpoints        []EndpointView    `json:"endpoints"`
 	Error            string            `json:"error,omitempty"`
 	Deploy           *NodeDeploy       `json:"deploy,omitempty" doc:"Only while deploying"`
-	StoppedAt        *int64            `json:"stoppedAt,omitempty" doc:"When the stop shipped (stopping, stopped)"`
+	StoppedAt        int64             `json:"stoppedAt,omitempty" doc:"When the stop shipped (stopping, stopped)"`
 	FinishedAt       *int64            `json:"finishedAt,omitempty" doc:"When a one-shot run finished (done)"`
 }
 
@@ -132,8 +132,8 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	}
 	switch status {
 	case domain.StatusDeploying:
-		if n.ShippedAt != nil {
-			v.Deploy = &NodeDeploy{Step: domain.DeployingStep(n), StartedAt: *n.ShippedAt}
+		if n.ShippedAt != 0 {
+			v.Deploy = &NodeDeploy{Step: domain.DeployingStep(n), StartedAt: n.ShippedAt}
 		}
 	case domain.StatusStopped, domain.StatusStopping:
 		v.StoppedAt = n.ShippedAt

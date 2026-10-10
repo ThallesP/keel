@@ -51,7 +51,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		n := &affected[i]
 		n.Desired.Revision++
 		n.Dirty = false
-		n.ShippedAt = new(now)
+		n.ShippedAt = now
 		n.ApplyError = ""
 		if err := tx.UpdateNode(*n); err != nil {
 			return "", err
@@ -195,11 +195,11 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 		s := &d.Steps[i]
 		switch {
 		case s.NodeID == nodeID && change == stepRunning:
-			s.Status, s.StartedAt = domain.StepRunning, new(now)
+			s.Status, s.StartedAt = domain.StepRunning, now
 		case s.NodeID == nodeID && change == stepApplied:
-			s.AppliedAt = new(now)
+			s.AppliedAt = now
 		case change == stepFailed && (s.NodeID == nodeID || s.NodeID == ""):
-			s.Status, s.FinishedAt = domain.StepFailed, new(now)
+			s.Status, s.FinishedAt = domain.StepFailed, now
 		}
 	}
 	var appended []domain.LogLine
@@ -207,7 +207,7 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 		appended = []domain.LogLine{{At: now, NodeID: nodeID, Text: text}}
 	}
 	if change == stepFailed && d.Status == domain.DeploymentRunning {
-		d.Status, d.FinishedAt = domain.DeploymentFailed, new(now)
+		d.Status, d.FinishedAt = domain.DeploymentFailed, now
 	}
 	if err := tx.UpdateDeployment(d, appended); err != nil {
 		return err

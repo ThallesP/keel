@@ -319,7 +319,7 @@ func TestCanvasDuplicateNode(t *testing.T) {
 	if c.Desired == nil || c.Desired.Revision != 0 || c.Desired.Image != "postgres:16" || c.Desired.Port != 5432 || !c.Desired.Tracing {
 		t.Fatalf("copy desired %+v", c.Desired)
 	}
-	if !c.Dirty || !c.OneShot || c.Observed != nil || c.DeployedRevision != 0 || c.ApplyError != "" || c.ShippedAt != nil || len(c.Endpoints) != 0 {
+	if !c.Dirty || !c.OneShot || c.Observed != nil || c.DeployedRevision != 0 || c.ApplyError != "" || c.ShippedAt != 0 || len(c.Endpoints) != 0 {
 		t.Fatalf("copy state %+v", c)
 	}
 	cv, ov := k.vars(copyID), k.vars(pg)

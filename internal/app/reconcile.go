@@ -15,11 +15,11 @@ import (
 
 func settleStep(step domain.DeployStep, node *domain.Node, now int64) (domain.DeployStep, string) {
 	if node == nil {
-		step.Status, step.FinishedAt = domain.StepFailed, new(now)
+		step.Status, step.FinishedAt = domain.StepFailed, now
 		return step, step.Label + ": node deleted"
 	}
 	o, d := node.Observed, node.Desired
-	if step.AppliedAt == nil || o == nil || d == nil || o.Revision != d.Revision {
+	if step.AppliedAt == 0 || o == nil || d == nil || o.Revision != d.Revision {
 		return step, ""
 	}
 	why := ""
@@ -41,7 +41,7 @@ func settleStep(step domain.DeployStep, node *domain.Node, now int64) (domain.De
 	default:
 		step.Status, text = domain.StepDone, fmt.Sprintf("%d/%d replicas running", o.Running, d.Replicas)
 	}
-	step.FinishedAt = new(now)
+	step.FinishedAt = now
 	return step, step.Label + ": " + text
 }
 
@@ -66,23 +66,23 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 		}
 		anyFailed = anyFailed || s.Status == domain.StepFailed
 		allDone = allDone && s.Status == domain.StepDone
-		allApplied = allApplied && s.AppliedAt != nil
+		allApplied = allApplied && s.AppliedAt != 0
 	}
 	health := &next.Steps[len(next.Steps)-1]
 	switch {
 	case anyFailed:
-		health.Status, health.FinishedAt = domain.StepFailed, new(now)
-		next.Status, next.FinishedAt = domain.DeploymentFailed, new(now)
+		health.Status, health.FinishedAt = domain.StepFailed, now
+		next.Status, next.FinishedAt = domain.DeploymentFailed, now
 	case allDone:
-		health.Status, health.StartedAt, health.FinishedAt = domain.StepDone, cmp.Or(health.StartedAt, new(now)), new(now)
-		next.Status, next.FinishedAt = domain.DeploymentSuccess, new(now)
+		health.Status, health.StartedAt, health.FinishedAt = domain.StepDone, cmp.Or(health.StartedAt, now), now
+		next.Status, next.FinishedAt = domain.DeploymentSuccess, now
 		text := "all replicas healthy"
 		if strings.HasPrefix(d.Message, "stop ") {
 			text = "stopped"
 		}
 		appended = append(appended, domain.LogLine{At: now, Text: text})
 	case allApplied && health.Status == domain.StepPending:
-		health.Status, health.StartedAt = domain.StepRunning, new(now)
+		health.Status, health.StartedAt = domain.StepRunning, now
 	}
 	return next, appended, next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps)
 }
@@ -152,7 +152,7 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 			if s.Status.Finished() {
 				continue
 			}
-			s.Status, s.FinishedAt = domain.StepFailed, new(now)
+			s.Status, s.FinishedAt = domain.StepFailed, now
 			if s.NodeID == "" {
 				continue
 			}
@@ -175,7 +175,7 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 			}
 			ch.Environment(org, n.EnvironmentID)
 		}
-		d.Status, d.FinishedAt = domain.DeploymentFailed, new(now)
+		d.Status, d.FinishedAt = domain.DeploymentFailed, now
 		if err := tx.UpdateDeployment(d, appended); err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (a *App) recoverDeploy(ctx context.Context) {
 		}
 		for _, d := range running {
 			for _, s := range d.Steps {
-				if s.NodeID == "" || s.Status.Finished() || s.AppliedAt != nil {
+				if s.NodeID == "" || s.Status.Finished() || s.AppliedAt != 0 {
 					continue
 				}
 				n, err := tx.Node(s.NodeID)

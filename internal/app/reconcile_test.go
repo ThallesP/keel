@@ -14,17 +14,17 @@ func nodeWith(desiredRev, replicas int, o *domain.Observed) *domain.Node {
 
 func TestSettleStep(t *testing.T) {
 	const now = 50
-	applied := domain.DeployStep{NodeID: "n", Label: "api", Status: domain.StepRunning, AppliedAt: new(int64(10))}
+	applied := domain.DeployStep{NodeID: "n", Label: "api", Status: domain.StepRunning, AppliedAt: 10}
 	failed := func(s domain.DeployStep) domain.DeployStep {
-		s.Status, s.FinishedAt = domain.StepFailed, new(int64(now))
+		s.Status, s.FinishedAt = domain.StepFailed, now
 		return s
 	}
 	done := func(s domain.DeployStep) domain.DeployStep {
-		s.Status, s.FinishedAt = domain.StepDone, new(int64(now))
+		s.Status, s.FinishedAt = domain.StepDone, now
 		return s
 	}
 	notApplied := applied
-	notApplied.AppliedAt = nil
+	notApplied.AppliedAt = 0
 	cases := []struct {
 		name     string
 		step     domain.DeployStep
@@ -70,7 +70,7 @@ func TestSettleDeployment(t *testing.T) {
 	step := func(id string, status domain.StepStatus, applied bool) domain.DeployStep {
 		s := domain.DeployStep{NodeID: id, Label: id, Status: status}
 		if applied {
-			s.AppliedAt = new(int64(5))
+			s.AppliedAt = 5
 		}
 		return s
 	}
@@ -122,13 +122,13 @@ func TestSettleDeployment(t *testing.T) {
 		if next.Status != c.want.status || h.Status != c.want.health || !reflect.DeepEqual(texts, c.want.texts) || changed != c.want.changed {
 			t.Errorf("%s: got status=%s health=%s texts=%q changed=%v", c.name, next.Status, h.Status, texts, changed)
 		}
-		if (next.Status == domain.DeploymentRunning) != (next.FinishedAt == nil) {
+		if (next.Status == domain.DeploymentRunning) != (next.FinishedAt == 0) {
 			t.Errorf("%s: finishedAt %v with status %s", c.name, next.FinishedAt, next.Status)
 		}
 	}
-	d := dep("ship a", step("a", domain.StepRunning, true), domain.DeployStep{Label: healthStepLabel, Status: domain.StepRunning, StartedAt: new(int64(7))})
+	d := dep("ship a", step("a", domain.StepRunning, true), domain.DeployStep{Label: healthStepLabel, Status: domain.StepRunning, StartedAt: 7})
 	next, _, _ := settleDeployment(d, map[string]*domain.Node{"a": healthy}, now)
-	if h := next.Steps[1]; *h.StartedAt != 7 || *h.FinishedAt != now {
+	if h := next.Steps[1]; h.StartedAt != 7 || h.FinishedAt != now {
 		t.Errorf("health: %+v", h)
 	}
 }

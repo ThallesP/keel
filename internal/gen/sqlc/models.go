@@ -38,7 +38,7 @@ type Deployment struct {
 	Message       string
 	Status        string
 	StartedAt     int64
-	FinishedAt    *int64
+	FinishedAt    int64
 }
 
 type DeploymentLog struct {
@@ -55,9 +55,9 @@ type DeploymentStep struct {
 	NodeID       *string
 	Label        string
 	Status       string
-	StartedAt    *int64
-	AppliedAt    *int64
-	FinishedAt   *int64
+	StartedAt    int64
+	AppliedAt    int64
+	FinishedAt   int64
 }
 
 type DeviceCode struct {
@@ -149,7 +149,7 @@ type Node struct {
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
-	ShippedAt          *int64
+	ShippedAt          int64
 	ApplyError         *string
 	OneShot            int64
 	CreatedAt          int64

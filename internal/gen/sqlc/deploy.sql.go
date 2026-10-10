@@ -72,7 +72,7 @@ type DeployInsertParams struct {
 	Message       string
 	Status        string
 	StartedAt     int64
-	FinishedAt    *int64
+	FinishedAt    int64
 }
 
 func (q *Queries) DeployInsert(ctx context.Context, arg DeployInsertParams) error {
@@ -119,9 +119,9 @@ type DeployInsertStepParams struct {
 	NodeID       *string
 	Label        string
 	Status       string
-	StartedAt    *int64
-	AppliedAt    *int64
-	FinishedAt   *int64
+	StartedAt    int64
+	AppliedAt    int64
+	FinishedAt   int64
 }
 
 func (q *Queries) DeployInsertStep(ctx context.Context, arg DeployInsertStepParams) error {
@@ -369,7 +369,7 @@ UPDATE deployments SET status = ?2, finished_at = ?3 WHERE id = ?1
 type DeployUpdateParams struct {
 	ID         string
 	Status     string
-	FinishedAt *int64
+	FinishedAt int64
 }
 
 func (q *Queries) DeployUpdate(ctx context.Context, arg DeployUpdateParams) (int64, error) {

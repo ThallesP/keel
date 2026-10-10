@@ -89,7 +89,7 @@ func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (in applyInp
 		if err != nil && !errors.Is(err, ErrNoRow) {
 			return err
 		}
-		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.nodeID && s.AppliedAt != nil }) {
+		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.nodeID && s.AppliedAt != 0 }) {
 			return nil
 		}
 		env, err := computeEnv(tx, n)

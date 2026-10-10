@@ -116,7 +116,7 @@ CREATE TABLE nodes (
   observed_at          INTEGER,
   deployed_revision    INTEGER NOT NULL DEFAULT 0,
   dirty                INTEGER NOT NULL DEFAULT 0,
-  shipped_at           INTEGER,
+  shipped_at           INTEGER NOT NULL DEFAULT 0,
   apply_error          TEXT,
   one_shot             INTEGER NOT NULL DEFAULT 0,
   created_at           INTEGER NOT NULL
@@ -161,7 +161,7 @@ CREATE TABLE deployments (
   message        TEXT NOT NULL,
   status         TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
   started_at     INTEGER NOT NULL,
-  finished_at    INTEGER
+  finished_at    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX deployments_by_environment ON deployments(environment_id, started_at);
 CREATE INDEX deployments_by_status ON deployments(status);
@@ -173,9 +173,9 @@ CREATE TABLE deployment_steps (
   node_id       TEXT,
   label         TEXT NOT NULL,
   status        TEXT NOT NULL CHECK (status IN ('pending', 'running', 'done', 'failed')),
-  started_at    INTEGER,
-  applied_at    INTEGER,
-  finished_at   INTEGER,
+  started_at    INTEGER NOT NULL DEFAULT 0,
+  applied_at    INTEGER NOT NULL DEFAULT 0,
+  finished_at   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (deployment_id, idx)
 );
 

@@ -94,7 +94,7 @@ INSERT INTO deployment_log (deployment_id, at, node_id, text) VALUES (?, ?, ?, ?
 type DeployInsertLogParams struct {
 	DeploymentID string
 	At           int64
-	NodeID       *string
+	NodeID       string
 	Text         string
 }
 
@@ -116,7 +116,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 type DeployInsertStepParams struct {
 	DeploymentID string
 	Idx          int64
-	NodeID       *string
+	NodeID       string
 	Label        string
 	Status       string
 	StartedAt    int64

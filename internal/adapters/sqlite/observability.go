@@ -18,7 +18,7 @@ func (t *tx) LogSinkOf(organizationID string) (domain.LogSink, error) {
 }
 
 func sinkOf(r sqlc.LogSink) domain.LogSink {
-	return domain.LogSink{Kind: r.Kind, Domain: r.Domain, Dataset: r.Dataset, Traces: str(r.Traces), Token: r.Token, Org: str(r.Org)}
+	return domain.LogSink{Kind: r.Kind, Domain: r.Domain, Dataset: r.Dataset, Traces: r.Traces, Token: r.Token, Org: r.Org}
 }
 
 func (t *tx) ReplaceLogSink(organizationID string, sink domain.LogSink, connectedAt int64) error {
@@ -31,9 +31,9 @@ func (t *tx) ReplaceLogSink(organizationID string, sink domain.LogSink, connecte
 		Kind:           sink.Kind,
 		Domain:         sink.Domain,
 		Dataset:        sink.Dataset,
-		Traces:         nullStr(sink.Traces),
+		Traces:         sink.Traces,
 		Token:          sink.Token,
-		Org:            nullStr(sink.Org),
+		Org:            sink.Org,
 		CreatedAt:      connectedAt,
 	})
 }

@@ -182,13 +182,13 @@ type CoreInsertNodeParams struct {
 	ObservedRunning    int64
 	ObservedCompleted  int64
 	ObservedFinishedAt int64
-	ObservedState      *string
-	ObservedError      *string
+	ObservedState      string
+	ObservedError      string
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
 	ShippedAt          int64
-	ApplyError         *string
+	ApplyError         string
 	OneShot            int64
 	CreatedAt          int64
 }
@@ -502,13 +502,13 @@ type CoreUpdateNodeParams struct {
 	ObservedRunning    int64
 	ObservedCompleted  int64
 	ObservedFinishedAt int64
-	ObservedState      *string
-	ObservedError      *string
+	ObservedState      string
+	ObservedError      string
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
 	ShippedAt          int64
-	ApplyError         *string
+	ApplyError         string
 	OneShot            int64
 	CreatedAt          int64
 }

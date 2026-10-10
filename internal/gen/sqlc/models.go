@@ -45,14 +45,14 @@ type DeploymentLog struct {
 	Seq          int64
 	DeploymentID string
 	At           int64
-	NodeID       *string
+	NodeID       string
 	Text         string
 }
 
 type DeploymentStep struct {
 	DeploymentID string
 	Idx          int64
-	NodeID       *string
+	NodeID       string
 	Label        string
 	Status       string
 	StartedAt    int64
@@ -110,9 +110,9 @@ type LogSink struct {
 	Kind           string
 	Domain         string
 	Dataset        string
-	Traces         *string
+	Traces         string
 	Token          string
-	Org            *string
+	Org            string
 	CreatedAt      int64
 }
 
@@ -144,13 +144,13 @@ type Node struct {
 	ObservedRunning    int64
 	ObservedCompleted  int64
 	ObservedFinishedAt int64
-	ObservedState      *string
-	ObservedError      *string
+	ObservedState      string
+	ObservedError      string
 	ObservedAt         *int64
 	DeployedRevision   int64
 	Dirty              int64
 	ShippedAt          int64
-	ApplyError         *string
+	ApplyError         string
 	OneShot            int64
 	CreatedAt          int64
 }

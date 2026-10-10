@@ -25,7 +25,7 @@ func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, err
 	}
 	for _, s := range steps {
 		d.Steps = append(d.Steps, domain.DeployStep{
-			NodeID:     str(s.NodeID),
+			NodeID:     s.NodeID,
 			Label:      s.Label,
 			Status:     domain.StepStatus(s.Status),
 			StartedAt:  s.StartedAt,
@@ -63,7 +63,7 @@ func (t *tx) insertSteps(id string, steps []domain.DeployStep) error {
 		err := t.q.DeployInsertStep(t.ctx, sqlc.DeployInsertStepParams{
 			DeploymentID: id,
 			Idx:          int64(i),
-			NodeID:       nullStr(s.NodeID),
+			NodeID:       s.NodeID,
 			Label:        s.Label,
 			Status:       string(s.Status),
 			StartedAt:    s.StartedAt,
@@ -123,7 +123,7 @@ func (t *tx) DeploymentLog(id string) ([]domain.LogLine, error) {
 	}
 	out := make([]domain.LogLine, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.LogLine{At: r.At, NodeID: str(r.NodeID), Text: r.Text})
+		out = append(out, domain.LogLine{At: r.At, NodeID: r.NodeID, Text: r.Text})
 	}
 	return out, nil
 }
@@ -154,7 +154,7 @@ func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) er
 		return nil
 	}
 	for _, l := range appended {
-		err := t.q.DeployInsertLog(t.ctx, sqlc.DeployInsertLogParams{DeploymentID: d.ID, At: l.At, NodeID: nullStr(l.NodeID), Text: l.Text})
+		err := t.q.DeployInsertLog(t.ctx, sqlc.DeployInsertLogParams{DeploymentID: d.ID, At: l.At, NodeID: l.NodeID, Text: l.Text})
 		if err != nil {
 			return err
 		}

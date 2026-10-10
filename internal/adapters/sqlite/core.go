@@ -49,7 +49,7 @@ func nodeOf(r sqlc.Node) domain.Node {
 		DeployedRevision: int(r.DeployedRevision),
 		Dirty:            r.Dirty != 0,
 		ShippedAt:        r.ShippedAt,
-		ApplyError:       str(r.ApplyError),
+		ApplyError:       r.ApplyError,
 		OneShot:          r.OneShot != 0,
 		CreatedAt:        r.CreatedAt,
 	}
@@ -68,8 +68,8 @@ func nodeOf(r sqlc.Node) domain.Node {
 			Running:    int(r.ObservedRunning),
 			Completed:  int(r.ObservedCompleted),
 			FinishedAt: r.ObservedFinishedAt,
-			State:      domain.ObservedState(str(r.ObservedState)),
-			Error:      str(r.ObservedError),
+			State:      domain.ObservedState(r.ObservedState),
+			Error:      r.ObservedError,
 			At:         *r.ObservedAt,
 		}
 	}
@@ -158,7 +158,7 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		DeployedRevision: int64(n.DeployedRevision),
 		Dirty:            b2i(n.Dirty),
 		ShippedAt:        n.ShippedAt,
-		ApplyError:       nullStr(n.ApplyError),
+		ApplyError:       n.ApplyError,
 		OneShot:          b2i(n.OneShot),
 		CreatedAt:        n.CreatedAt,
 	}
@@ -167,9 +167,8 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		p.DesiredPort, p.DesiredTracing = int64(d.Port), b2i(d.Tracing)
 	}
 	if o := n.Observed; o != nil {
-		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = int64(o.Revision), int64(o.Running), new(o.At), new(string(o.State))
-		p.ObservedCompleted, p.ObservedFinishedAt = int64(o.Completed), o.FinishedAt
-		p.ObservedError = nullStr(o.Error)
+		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = int64(o.Revision), int64(o.Running), new(o.At), string(o.State)
+		p.ObservedCompleted, p.ObservedFinishedAt, p.ObservedError = int64(o.Completed), o.FinishedAt, o.Error
 	}
 	return p
 }

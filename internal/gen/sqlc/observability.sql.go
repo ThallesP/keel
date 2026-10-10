@@ -207,9 +207,9 @@ type ObsInsertSinkParams struct {
 	Kind           string
 	Domain         string
 	Dataset        string
-	Traces         *string
+	Traces         string
 	Token          string
-	Org            *string
+	Org            string
 	CreatedAt      int64
 }
 

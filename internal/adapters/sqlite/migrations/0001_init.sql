@@ -111,13 +111,13 @@ CREATE TABLE nodes (
   observed_running     INTEGER NOT NULL DEFAULT 0,
   observed_completed   INTEGER NOT NULL DEFAULT 0,
   observed_finished_at INTEGER NOT NULL DEFAULT 0,
-  observed_state       TEXT,
-  observed_error       TEXT,
+  observed_state       TEXT NOT NULL DEFAULT '',
+  observed_error       TEXT NOT NULL DEFAULT '',
   observed_at          INTEGER,
   deployed_revision    INTEGER NOT NULL DEFAULT 0,
   dirty                INTEGER NOT NULL DEFAULT 0,
   shipped_at           INTEGER NOT NULL DEFAULT 0,
-  apply_error          TEXT,
+  apply_error          TEXT NOT NULL DEFAULT '',
   one_shot             INTEGER NOT NULL DEFAULT 0,
   created_at           INTEGER NOT NULL
 );
@@ -170,7 +170,7 @@ CREATE INDEX deployments_by_status ON deployments(status);
 CREATE TABLE deployment_steps (
   deployment_id TEXT NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
   idx           INTEGER NOT NULL,
-  node_id       TEXT,
+  node_id       TEXT NOT NULL DEFAULT '',
   label         TEXT NOT NULL,
   status        TEXT NOT NULL CHECK (status IN ('pending', 'running', 'done', 'failed')),
   started_at    INTEGER NOT NULL DEFAULT 0,
@@ -184,7 +184,7 @@ CREATE TABLE deployment_log (
   seq           INTEGER PRIMARY KEY AUTOINCREMENT,
   deployment_id TEXT NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
   at            INTEGER NOT NULL,
-  node_id       TEXT,
+  node_id       TEXT NOT NULL DEFAULT '',
   text          TEXT NOT NULL
 );
 CREATE INDEX deployment_log_by_deployment ON deployment_log(deployment_id, seq);
@@ -206,9 +206,9 @@ CREATE TABLE log_sinks (
   kind            TEXT NOT NULL CHECK (kind IN ('axiom')),
   domain          TEXT NOT NULL,
   dataset         TEXT NOT NULL,
-  traces          TEXT,
+  traces          TEXT NOT NULL DEFAULT '',
   token           TEXT NOT NULL,
-  org             TEXT,
+  org             TEXT NOT NULL DEFAULT '',
   created_at      INTEGER NOT NULL
 );
 

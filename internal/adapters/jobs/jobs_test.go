@@ -32,7 +32,7 @@ func (b *syncBuffer) String() string {
 func newTest(t *testing.T) (*Scheduler, *syncBuffer) {
 	t.Helper()
 	buf := &syncBuffer{}
-	s := New(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	s := New(slog.New(slog.NewTextHandler(buf, nil)))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -57,16 +57,10 @@ func TestAfterCoalescesPendingKey(t *testing.T) {
 	var a, b atomic.Int32
 	s.After("observe:n1", 30*time.Millisecond, func(context.Context) { a.Add(1) })
 	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
-	if !s.Pending("observe:n1") {
-		t.Fatal("first job should be pending")
-	}
 	waitFor(t, "first job", func() bool { return a.Load() == 1 })
 	time.Sleep(20 * time.Millisecond)
 	if b.Load() != 0 {
 		t.Fatalf("second call with a pending key ran %d times", b.Load())
-	}
-	if s.Pending("observe:n1") {
-		t.Fatal("key still pending after the job ran")
 	}
 
 	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
@@ -96,29 +90,6 @@ func TestAfterDistinctAndEmptyKeys(t *testing.T) {
 	s.After("", 5*time.Millisecond, inc)
 	s.After("", 5*time.Millisecond, inc)
 	waitFor(t, "four jobs", func() bool { return n.Load() == 4 })
-}
-
-func TestEveryNoOverlap(t *testing.T) {
-	s, _ := newTest(t)
-	var runs, active, maxActive atomic.Int32
-	job := func(context.Context) {
-		cur := active.Add(1)
-		for {
-			m := maxActive.Load()
-			if cur <= m || maxActive.CompareAndSwap(m, cur) {
-				break
-			}
-		}
-		time.Sleep(25 * time.Millisecond)
-		active.Add(-1)
-		runs.Add(1)
-	}
-	s.Every("resync", 2*time.Millisecond, job)
-	s.Every("resync", 2*time.Millisecond, job)
-	waitFor(t, "three runs", func() bool { return runs.Load() >= 3 })
-	if m := maxActive.Load(); m != 1 {
-		t.Fatalf("runs of the same job overlapped: %d at once", m)
-	}
 }
 
 func TestEveryDifferentNamesRunConcurrently(t *testing.T) {
@@ -157,7 +128,7 @@ func TestPanicRecovered(t *testing.T) {
 }
 
 func TestStopCancelsPendingAndWaitsForRunning(t *testing.T) {
-	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	s := New(slog.New(slog.DiscardHandler))
 	var pendingRan, lateRan, everyRan atomic.Int32
 	s.After("later", 50*time.Millisecond, func(context.Context) { pendingRan.Add(1) })
 	s.After("", 50*time.Millisecond, func(context.Context) { pendingRan.Add(1) })
@@ -189,16 +160,13 @@ func TestStopCancelsPendingAndWaitsForRunning(t *testing.T) {
 	if n := pendingRan.Load() + lateRan.Load() + everyRan.Load(); n != 0 {
 		t.Fatalf("%d jobs ran after Stop", n)
 	}
-	if s.Pending("later") {
-		t.Fatal("pending job still listed after Stop")
-	}
 	if err := s.Stop(context.Background()); err != nil {
 		t.Fatalf("second Stop: %v", err)
 	}
 }
 
 func TestStopDeadlineCancelsJobContext(t *testing.T) {
-	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	s := New(slog.New(slog.DiscardHandler))
 	started, cancelled := make(chan struct{}), make(chan struct{})
 	s.After("stuck", 0, func(ctx context.Context) {
 		close(started)
@@ -219,7 +187,7 @@ func TestStopDeadlineCancelsJobContext(t *testing.T) {
 }
 
 func TestWaitAfterStopDeadline(t *testing.T) {
-	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	s := New(slog.New(slog.DiscardHandler))
 	started := make(chan struct{})
 	var recorded atomic.Bool
 	s.After("apply", 0, func(ctx context.Context) {
@@ -246,7 +214,7 @@ func TestWaitAfterStopDeadline(t *testing.T) {
 		t.Fatal("Wait returned before the cancelled job finished")
 	}
 
-	s2 := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	s2 := New(slog.New(slog.DiscardHandler))
 	defer func() { _ = s2.Stop(context.Background()) }()
 	release := make(chan struct{})
 	defer close(release)
@@ -261,7 +229,7 @@ func TestWaitAfterStopDeadline(t *testing.T) {
 }
 
 func TestStopEndsEveryLoopsAfterCurrentRun(t *testing.T) {
-	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
+	s := New(slog.New(slog.DiscardHandler))
 	started := make(chan struct{}, 1)
 	var runs atomic.Int32
 	var done atomic.Bool

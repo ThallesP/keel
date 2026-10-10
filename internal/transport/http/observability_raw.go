@@ -14,7 +14,7 @@ func (s *Server) registerObservabilityRaw(mux *http.ServeMux) {
 
 func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {
 	res := s.app.RelayTraces(r.Context(), app.OTLPRequest{
-		Authorization:   r.Header.Get("Authorization"),
+		Key:             bearerToken(r),
 		ContentType:     r.Header.Get("Content-Type"),
 		ContentLength:   r.ContentLength,
 		ContentEncoding: r.Header.Get("Content-Encoding"),

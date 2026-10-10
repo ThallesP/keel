@@ -27,12 +27,19 @@ func jsonEncode(w io.Writer, v any) error {
 
 var jsonFormat = huma.Format{Marshal: jsonEncode, Unmarshal: json.Unmarshal}
 
-func (s *Server) workerAuthorized(r *http.Request) bool {
+func bearerToken(r *http.Request) string {
 	token, isBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !isBearer || s.app.Config.WorkerToken == "" {
+	if !isBearer {
+		return ""
+	}
+	return strings.TrimSpace(token)
+}
+
+func (s *Server) workerAuthorized(r *http.Request) bool {
+	if s.app.Config.WorkerToken == "" {
 		return false
 	}
-	got, want := sha256.Sum256([]byte(strings.TrimSpace(token))), sha256.Sum256([]byte(s.app.Config.WorkerToken))
+	got, want := sha256.Sum256([]byte(bearerToken(r))), sha256.Sum256([]byte(s.app.Config.WorkerToken))
 	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
 }
 

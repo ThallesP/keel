@@ -38,24 +38,21 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	return key, nil
 }
 
-func (a *App) otlpRoute(ctx context.Context, key string) (sink *domain.LogSink, found bool, err error) {
-	err = a.read(ctx, func(tx Tx) error {
+func (a *App) otlpRoute(ctx context.Context, key string) (*domain.LogSink, error) {
+	var sink *domain.LogSink
+	err := a.read(ctx, func(tx Tx) error {
 		org, err := tx.OTLPKeyOrganization(key)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
 		if err != nil {
 			return err
 		}
-		found = true
 		sink, err = orgSinkOf(tx, org)
 		return err
 	})
-	return sink, found, err
+	return sink, err
 }
 
 type OTLPRequest struct {
-	Authorization   string
+	Key             string
 	ContentType     string
 	ContentLength   int64
 	ContentEncoding string
@@ -67,18 +64,16 @@ func otlpText(status int, body string) HTTPReply {
 }
 
 func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) HTTPReply {
-	token, isBearer := strings.CutPrefix(r.Authorization, "Bearer ")
-	key := strings.TrimSpace(token)
-	if !isBearer || !strings.HasPrefix(key, domain.OTLPKeyPrefix) {
+	if !strings.HasPrefix(r.Key, domain.OTLPKeyPrefix) {
 		return otlpText(401, "unauthorized")
 	}
-	sink, found, err := a.otlpRoute(ctx, key)
+	sink, err := a.otlpRoute(ctx, r.Key)
+	if errors.Is(err, ErrNoRow) {
+		return otlpText(401, "unauthorized")
+	}
 	if err != nil {
 		a.Log.Error("otlp: route", "err", err)
 		return otlpText(500, "internal error")
-	}
-	if !found {
-		return otlpText(401, "unauthorized")
 	}
 	ctype, _, _ := mime.ParseMediaType(r.ContentType)
 	if ctype != "application/x-protobuf" && ctype != "application/json" {

@@ -6,10 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
@@ -17,11 +15,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
 )
-
-type ingressNoJobs struct{}
-
-func (ingressNoJobs) After(string, time.Duration, func(context.Context)) {}
-func (ingressNoJobs) Every(string, time.Duration, func(context.Context)) {}
 
 type ingressHarness struct {
 	t     *testing.T
@@ -34,20 +27,11 @@ type ingressHarness struct {
 
 func newIngressHarness(t *testing.T) *ingressHarness {
 	t.Helper()
-	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	for _, q := range []string{
+	store := testStore(t,
 		`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org', 'Acme', 'acme', 1), ('org-b', 'Other', 'other', 1)`,
 		`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p', 'org', 'Shop', 'shop', 1)`,
 		`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env', 'p', 'production', 1, 1)`,
-	} {
-		if _, err := store.DB().Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 	for _, n := range []domain.Node{
 		{ID: "j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4", EnvironmentID: "env", Type: domain.NodeService, Name: "api", CreatedAt: 1,
 			Desired: &domain.Desired{Image: "api:1", Revision: 1, Replicas: 1, Port: new(8080)}, DeployedRevision: new(1)},
@@ -59,7 +43,7 @@ func newIngressHarness(t *testing.T) *ingressHarness {
 		}
 	}
 	h := &ingressHarness{t: t, store: store}
-	h.app = app.New(app.App{Store: store, Jobs: ingressNoJobs{}, Config: app.Config{PublicIP: "203.0.113.7", WorkerToken: "s3cret"}})
+	h.app = app.New(app.App{Store: store, Jobs: &recordedJobs{}, Config: app.Config{PublicIP: "203.0.113.7", WorkerToken: "s3cret"}})
 	mux := http.NewServeMux()
 	humaAPI := humago.New(mux, Config("test"))
 	s := &Server{app: h.app}

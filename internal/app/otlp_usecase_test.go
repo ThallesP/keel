@@ -20,8 +20,8 @@ func TestRelayTraces(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := obsOTLPKeyOf(t, e, "env")
-	relay := func(auth, ctype string, length int64, body string) app.HTTPReply {
-		return e.app.RelayTraces(ctx, app.OTLPRequest{Authorization: auth, ContentType: ctype, ContentLength: length, ContentEncoding: "gzip", Body: strings.NewReader(body)})
+	relay := func(key, ctype string, length int64, body string) app.HTTPReply {
+		return e.app.RelayTraces(ctx, app.OTLPRequest{Key: key, ContentType: ctype, ContentLength: length, ContentEncoding: "gzip", Body: strings.NewReader(body)})
 	}
 	check := func(r app.HTTPReply, status int, ctype, body string) {
 		t.Helper()
@@ -31,24 +31,23 @@ func TestRelayTraces(t *testing.T) {
 	}
 
 	check(relay("", "application/json", 2, "{}"), 401, "", "unauthorized")
-	check(relay("Bearer keel_otlp_unknown", "application/json", 2, "{}"), 401, "", "unauthorized")
-	check(relay("bearer "+key, "application/json", 2, "{}"), 401, "", "unauthorized")
-	check(relay("Bearer "+strings.TrimPrefix(key, "keel_otlp_"), "application/json", 2, "{}"), 401, "", "unauthorized")
-	check(relay("Bearer "+key, "text/plain", 2, "{}"), 415, "", "OTLP over HTTP: application/x-protobuf or application/json")
-	check(relay("Bearer "+key, "application/json", 4*1024*1024+1, "{}"), 413, "", "too large")
-	check(relay("Bearer "+key, "application/json", -1, strings.Repeat("x", 4*1024*1024+1)), 413, "", "too large")
+	check(relay("keel_otlp_unknown", "application/json", 2, "{}"), 401, "", "unauthorized")
+	check(relay(strings.TrimPrefix(key, "keel_otlp_"), "application/json", 2, "{}"), 401, "", "unauthorized")
+	check(relay(key, "text/plain", 2, "{}"), 415, "", "OTLP over HTTP: application/x-protobuf or application/json")
+	check(relay(key, "application/json", 4*1024*1024+1, "{}"), 413, "", "too large")
+	check(relay(key, "application/json", -1, strings.Repeat("x", 4*1024*1024+1)), 413, "", "too large")
 	if len(ax.forwarded) != 0 {
 		t.Fatal("forwarded a rejected request")
 	}
 
 	body := "\x00\x01binary"
-	check(relay("Bearer  "+key+" ", "Application/X-Protobuf; charset=x", int64(len(body)), body), 200, "application/x-protobuf", "\x01\x02")
+	check(relay(key, "Application/X-Protobuf; charset=x", int64(len(body)), body), 200, "application/x-protobuf", "\x01\x02")
 	want := app.OTLPForward{Domain: "api.axiom.co", Token: obsTracesOn.Token, Dataset: "keel-traces", ContentType: "application/x-protobuf", ContentEncoding: "gzip", Body: []byte(body)}
 	if len(ax.forwarded) != 1 || !reflect.DeepEqual(ax.forwarded[0], want) {
 		t.Fatalf("forwarded %+v", ax.forwarded)
 	}
 	ax.forwardRes = app.HTTPReply{Status: 202, Body: []byte(`{"partialSuccess":{}}`)}
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 200, "application/json", `{"partialSuccess":{}}`)
+	check(relay(key, "application/json", -1, "{}"), 200, "application/json", `{"partialSuccess":{}}`)
 
 	for _, c := range []struct {
 		status   int
@@ -67,31 +66,31 @@ func TestRelayTraces(t *testing.T) {
 		{404, strings.Repeat("y", 300), 400, strings.Repeat("y", 200)},
 	} {
 		ax.forwardRes = app.HTTPReply{Status: c.status, Body: []byte(c.body)}
-		check(relay("Bearer "+key, "application/json", -1, "{}"), c.want, "", c.wantBody)
+		check(relay(key, "application/json", -1, "{}"), c.want, "", c.wantBody)
 	}
 	ax.forwardErr = errors.New("dial tcp: refused")
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 503, "", "sink unreachable")
+	check(relay(key, "application/json", -1, "{}"), 503, "", "sink unreachable")
 	ax.forwardErr = nil
 
 	n := len(ax.forwarded)
 	old := obsTracesOn
 	old.Traces = ""
 	e.setSink(t, "org", old)
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 200, "application/json", "{}")
-	check(relay("Bearer "+key, "application/x-protobuf", -1, "x"), 200, "application/x-protobuf", "")
+	check(relay(key, "application/json", -1, "{}"), 200, "application/json", "{}")
+	check(relay(key, "application/x-protobuf", -1, "x"), 200, "application/x-protobuf", "")
 	if err := e.app.DisconnectLogSink(ctx, e.member); err != nil {
 		t.Fatal(err)
 	}
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 200, "application/json", "{}")
+	check(relay(key, "application/json", -1, "{}"), 200, "application/json", "{}")
 	if len(ax.forwarded) != n {
 		t.Fatal("forwarded without a traces dataset")
 	}
 	e.setSink(t, "org", obsTracesOn)
 	ax.forwardRes = app.HTTPReply{Status: 401}
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 400, "", "rejected")
+	check(relay(key, "application/json", -1, "{}"), 400, "", "rejected")
 
 	e.exec(t, `DELETE FROM environments WHERE id = 'env'`)
-	check(relay("Bearer "+key, "application/json", -1, "{}"), 401, "", "unauthorized")
+	check(relay(key, "application/json", -1, "{}"), 401, "", "unauthorized")
 }
 
 func TestWorkerConfigPerSink(t *testing.T) {

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,28 +17,13 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-type obsFakeAxiom struct{ forward app.HTTPReply }
+type obsFakeAxiom struct {
+	app.Axiom
+	forward app.HTTPReply
+}
 
 func (obsFakeAxiom) Query(context.Context, app.AxiomTarget, app.AxiomQuery) ([]app.AxiomRow, error) {
 	return nil, nil
-}
-func (obsFakeAxiom) CreateDataset(context.Context, app.AxiomTarget, string, string, string) error {
-	return nil
-}
-func (obsFakeAxiom) Datasets(context.Context, app.AxiomTarget, string) ([]app.AxiomDataset, error) {
-	return nil, nil
-}
-func (obsFakeAxiom) MintToken(context.Context, app.AxiomTarget, string, app.AxiomTokenRequest) (string, error) {
-	return "", nil
-}
-func (obsFakeAxiom) Orgs(context.Context, app.AxiomTarget) ([]app.AxiomOrgInfo, error) {
-	return nil, nil
-}
-func (obsFakeAxiom) RegisterClient(context.Context, string, string) (string, error) {
-	return "client", nil
-}
-func (obsFakeAxiom) ExchangeCode(context.Context, string, app.AxiomCodeExchange) (string, error) {
-	return "", nil
 }
 func (f obsFakeAxiom) ForwardTraces(context.Context, app.OTLPForward) (app.HTTPReply, error) {
 	return f.forward, nil
@@ -64,22 +48,12 @@ type obsHarness struct {
 
 func newObsHarness(t *testing.T) *obsHarness {
 	t.Helper()
-	ctx := context.Background()
-	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "keel.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	for _, q := range []string{
+	store := testStore(t,
 		`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org', 'Acme', 'acme', 1), ('org2', 'Other', 'other', 1)`,
 		`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p', 'org', 'Shop', 'shop', 1), ('p2', 'org2', 'X', 'x', 2)`,
 		`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env', 'p', 'production', 1, 1), ('env2', 'p2', 'production', 1, 2)`,
 		`INSERT INTO nodes (id, environment_id, type, name, desired_image, desired_revision, desired_replicas, created_at) VALUES ('api', 'env', 'service', 'api', 'nginx', 1, 1, 1)`,
-	} {
-		if _, err := store.DB().Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 	logs := &obsFakeLogs{}
 	a := app.New(app.App{
 		Store: store, Axiom: obsFakeAxiom{forward: app.HTTPReply{Status: 200}}, Logs: logs,
@@ -263,11 +237,14 @@ func TestOTLPRoute(t *testing.T) {
 	}
 	var key string
 	_ = h.store.DB().QueryRow(`SELECT key FROM otlp_keys`).Scan(&key)
+	if r := h.do(t, "", "POST", "/otlp/v1/traces", "{}", "Authorization", "bearer "+key, "Content-Type", "application/json"); r.status != 401 {
+		t.Fatalf("scheme: %d %s", r.status, r.body)
+	}
 	r = h.do(t, "", "POST", "/otlp/v1/traces", "{}", "Authorization", "Bearer "+key, "Content-Type", "text/plain")
 	if r.status != 415 {
 		t.Fatalf("type: %d %s", r.status, r.body)
 	}
-	r = h.do(t, "", "POST", "/otlp/v1/traces", "\x01", "Authorization", "Bearer "+key, "Content-Type", "application/x-protobuf")
+	r = h.do(t, "", "POST", "/otlp/v1/traces", "\x01", "Authorization", "Bearer  "+key+" ", "Content-Type", "application/x-protobuf")
 	if r.status != 200 || r.ctype != "application/x-protobuf" {
 		t.Fatalf("forward: %d %s %q", r.status, r.ctype, r.body)
 	}

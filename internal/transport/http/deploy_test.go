@@ -31,22 +31,28 @@ func (j *recordedJobs) has(prefix string) bool {
 	return slices.ContainsFunc(j.keys, func(k string) bool { return strings.HasPrefix(k, prefix) })
 }
 
-func deployTestApp(t *testing.T, token string) (*app.App, *recordedJobs, domain.Node) {
+func testStore(t *testing.T, seed ...string) *sqlite.Store {
 	t.Helper()
 	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	for _, q := range []string{
-		`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org', 'Acme', 'acme', 1), ('org2', 'Other', 'other', 2)`,
-		`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p', 'org', 'Acme', 'acme', 1)`,
-		`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env', 'p', 'production', 1, 1)`,
-	} {
+	for _, q := range seed {
 		if _, err := store.DB().Exec(q); err != nil {
 			t.Fatal(err)
 		}
 	}
+	return store
+}
+
+func deployTestApp(t *testing.T, token string) (*app.App, *recordedJobs, domain.Node) {
+	t.Helper()
+	store := testStore(t,
+		`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org', 'Acme', 'acme', 1), ('org2', 'Other', 'other', 2)`,
+		`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p', 'org', 'Acme', 'acme', 1)`,
+		`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env', 'p', 'production', 1, 1)`,
+	)
 	n := domain.Node{ID: "node1", EnvironmentID: "env", Type: domain.NodeService, Name: "api",
 		Desired: &domain.Desired{Image: "nginx:alpine", Replicas: 1}, Dirty: true, CreatedAt: 1}
 	if err := store.Write(context.Background(), func(tx app.Tx) error { return tx.InsertNode(n) }); err != nil {

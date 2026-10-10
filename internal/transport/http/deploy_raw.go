@@ -13,20 +13,21 @@ func (s *Server) registerDeployRaw(mux *http.ServeMux) {
 	mux.HandleFunc("POST /worker/events", s.workerEvents)
 }
 
-const workerEventsMaxBody = 256 * 1024
+const workerEventsMaxBody = 256 << 10
 
 func (s *Server) workerEvents(w http.ResponseWriter, r *http.Request) {
 	if !s.workerAuthorized(r) {
 		writeText(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, workerEventsMaxBody+1))
-	if err != nil {
-		writeText(w, http.StatusBadRequest, "bad json")
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, workerEventsMaxBody))
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
-	if len(body) > workerEventsMaxBody {
-		writeText(w, http.StatusRequestEntityTooLarge, "too large")
+	if err != nil {
+		writeText(w, http.StatusBadRequest, "bad json")
 		return
 	}
 	events, err := parseWorkerEvents(body)

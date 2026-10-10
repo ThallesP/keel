@@ -23,7 +23,7 @@ func Converged(desired *Desired, observed *Observed) bool {
 		return false
 	}
 	if observed.State == ObservedCompleted {
-		return observed.Completed != nil && *observed.Completed >= desired.Replicas
+		return observed.Completed >= desired.Replicas
 	}
 	return observed.State == ObservedOK && observed.Running >= desired.Replicas
 }

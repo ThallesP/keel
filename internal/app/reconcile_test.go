@@ -50,7 +50,7 @@ func TestSettleStep(t *testing.T) {
 			done(applied), "api: 2/2 replicas running"},
 		{"stopped", applied, nodeWith(3, 0, &domain.Observed{Revision: 3, Running: 0, State: domain.ObservedOK}),
 			done(applied), "api: stopped"},
-		{"ran to completion", applied, nodeWith(2, 1, &domain.Observed{Revision: 2, Completed: new(1), State: domain.ObservedCompleted}),
+		{"ran to completion", applied, nodeWith(2, 1, &domain.Observed{Revision: 2, Completed: 1, State: domain.ObservedCompleted}),
 			done(applied), "api: ran to completion"},
 		{"still rolling out", applied, nodeWith(2, 2, &domain.Observed{Revision: 2, Running: 1, State: domain.ObservedUpdating}), applied, ""},
 	}

@@ -91,7 +91,7 @@ func TestIngressExposeTCPAllocation(t *testing.T) {
 func TestIngressExposeErrors(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
-	e.node("noport", igEnvA, domain.NodeService, "worker", "worker:1", 0, igNoPort)
+	e.node("noport", igEnvA, domain.NodeService, "worker", "worker:1", 0)
 	e.node("vol", igEnvA, domain.NodeVolume, "data", "", 0, igNoDesired)
 	e.node("other-api", igEnvB, domain.NodeService, "shop", "shop:1", 8080)
 	if _, err := e.expose(e.other, "other-api", app.ExposeInput{Domain: new("app.example.com")}); err != nil {

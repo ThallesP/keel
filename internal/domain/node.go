@@ -33,7 +33,7 @@ type Desired struct {
 	Image    string
 	Revision int
 	Replicas int
-	Port     *int
+	Port     int
 	Tracing  bool
 }
 
@@ -51,8 +51,8 @@ const (
 type Observed struct {
 	Revision   int
 	Running    int
-	Completed  *int
-	FinishedAt *int64
+	Completed  int
+	FinishedAt int64
 	State      ObservedState
 	Error      string
 	At         int64
@@ -69,7 +69,7 @@ type Node struct {
 	Desired          *Desired
 	Observed         *Observed
 	Endpoints        []Endpoint
-	DeployedRevision *int
+	DeployedRevision int
 	Dirty            bool
 	ShippedAt        *int64
 	ApplyError       string

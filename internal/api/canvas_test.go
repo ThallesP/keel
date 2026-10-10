@@ -11,7 +11,7 @@ import (
 func TestNodeViewOf(t *testing.T) {
 	shipped := new(int64(5000))
 	desired := func(rev, replicas int) *domain.Desired {
-		return &domain.Desired{Image: "nginx:alpine", Revision: rev, Replicas: replicas, Port: new(80)}
+		return &domain.Desired{Image: "nginx:alpine", Revision: rev, Replicas: replicas, Port: 80}
 	}
 	obs := func(rev, running int, state domain.ObservedState) *domain.Observed {
 		return &domain.Observed{Revision: rev, Running: running, State: state, At: 1}
@@ -49,7 +49,7 @@ func TestNodeViewOf(t *testing.T) {
 		{"crash loop", domain.Node{Type: domain.NodeService, Desired: desired(1, 1), Observed: &domain.Observed{Revision: 1, Error: "exit 1", State: domain.ObservedCrashloop}}, func(v *NodeView) {
 			v.Status, v.Image, v.Port, v.Replicas, v.Revision, v.Error = "error", "nginx:alpine", new(80), 1, 1, "exit 1"
 		}},
-		{"healthy keeps an old task error out", domain.Node{Type: domain.NodeService, Desired: desired(1, 1), DeployedRevision: new(1), Observed: &domain.Observed{Revision: 1, Running: 1, Error: "old", State: domain.ObservedOK}}, func(v *NodeView) {
+		{"healthy keeps an old task error out", domain.Node{Type: domain.NodeService, Desired: desired(1, 1), DeployedRevision: 1, Observed: &domain.Observed{Revision: 1, Running: 1, Error: "old", State: domain.ObservedOK}}, func(v *NodeView) {
 			v.Status, v.Image, v.Port, v.Replicas, v.Revision, v.Running, v.DeployedRevision = "healthy", "nginx:alpine", new(80), 1, 1, 1, new(1)
 		}},
 		{"stopped", domain.Node{Type: domain.NodeService, Desired: desired(3, 0), ShippedAt: shipped, Observed: obs(0, 0, domain.ObservedOK)}, func(v *NodeView) {
@@ -59,7 +59,7 @@ func TestNodeViewOf(t *testing.T) {
 			v.Status, v.Image, v.Port, v.Revision, v.Running, v.StoppedAt = "stopping", "nginx:alpine", new(80), 3, 1, shipped
 		}},
 		{"done", domain.Node{Type: domain.NodeService, Desired: desired(1, 1), ShippedAt: shipped,
-			Observed: &domain.Observed{Revision: 1, State: domain.ObservedCompleted, Completed: new(1), FinishedAt: new(int64(9000))}}, func(v *NodeView) {
+			Observed: &domain.Observed{Revision: 1, State: domain.ObservedCompleted, Completed: 1, FinishedAt: 9000}}, func(v *NodeView) {
 			v.Status, v.Image, v.Port, v.Replicas, v.Revision, v.FinishedAt = "done", "nginx:alpine", new(80), 1, 1, new(int64(9000))
 		}},
 		{"group in nothing", domain.Node{Type: domain.NodeGroup, ParentID: "", Config: domain.DefaultConfig(domain.NodeGroup)}, func(v *NodeView) {

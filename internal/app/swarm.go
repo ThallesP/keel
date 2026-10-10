@@ -247,10 +247,10 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			}
 			ch.Environment(scope.Org, n.EnvironmentID)
 		}
-		if in.desired.Port == nil {
+		if in.desired.Port == 0 {
 			return nil
 		}
-		moved, err = deployFollowPort(tx, ch, scope, *in.desired.Port, a.Now())
+		moved, err = deployFollowPort(tx, ch, scope, in.desired.Port, a.Now())
 		return err
 	})
 	if err != nil {

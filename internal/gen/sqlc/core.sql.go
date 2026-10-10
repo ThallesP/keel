@@ -174,18 +174,18 @@ type CoreInsertNodeParams struct {
 	ConfigWidth        *float64
 	ConfigHeight       *float64
 	DesiredImage       *string
-	DesiredRevision    *int64
-	DesiredReplicas    *int64
-	DesiredPort        *int64
+	DesiredRevision    int64
+	DesiredReplicas    int64
+	DesiredPort        int64
 	DesiredTracing     int64
-	ObservedRevision   *int64
-	ObservedRunning    *int64
-	ObservedCompleted  *int64
-	ObservedFinishedAt *int64
+	ObservedRevision   int64
+	ObservedRunning    int64
+	ObservedCompleted  int64
+	ObservedFinishedAt int64
 	ObservedState      *string
 	ObservedError      *string
 	ObservedAt         *int64
-	DeployedRevision   *int64
+	DeployedRevision   int64
 	Dirty              int64
 	ShippedAt          *int64
 	ApplyError         *string
@@ -494,18 +494,18 @@ type CoreUpdateNodeParams struct {
 	ConfigWidth        *float64
 	ConfigHeight       *float64
 	DesiredImage       *string
-	DesiredRevision    *int64
-	DesiredReplicas    *int64
-	DesiredPort        *int64
+	DesiredRevision    int64
+	DesiredReplicas    int64
+	DesiredPort        int64
 	DesiredTracing     int64
-	ObservedRevision   *int64
-	ObservedRunning    *int64
-	ObservedCompleted  *int64
-	ObservedFinishedAt *int64
+	ObservedRevision   int64
+	ObservedRunning    int64
+	ObservedCompleted  int64
+	ObservedFinishedAt int64
 	ObservedState      *string
 	ObservedError      *string
 	ObservedAt         *int64
-	DeployedRevision   *int64
+	DeployedRevision   int64
 	Dirty              int64
 	ShippedAt          *int64
 	ApplyError         *string

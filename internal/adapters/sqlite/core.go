@@ -46,7 +46,7 @@ func nodeOf(r sqlc.Node) domain.Node {
 		ParentID:         str(r.ParentID),
 		Position:         domain.Position{X: r.PositionX, Y: r.PositionY},
 		Config:           domain.NodeConfig{SizeGb: r.ConfigSizeGb, Width: r.ConfigWidth, Height: r.ConfigHeight},
-		DeployedRevision: ptrInt(r.DeployedRevision),
+		DeployedRevision: int(r.DeployedRevision),
 		Dirty:            r.Dirty != 0,
 		ShippedAt:        r.ShippedAt,
 		ApplyError:       str(r.ApplyError),
@@ -56,23 +56,22 @@ func nodeOf(r sqlc.Node) domain.Node {
 	if r.DesiredImage != nil {
 		n.Desired = &domain.Desired{
 			Image:    *r.DesiredImage,
-			Revision: intOr0(r.DesiredRevision),
-			Replicas: intOr0(r.DesiredReplicas),
-			Port:     ptrInt(r.DesiredPort),
+			Revision: int(r.DesiredRevision),
+			Replicas: int(r.DesiredReplicas),
+			Port:     int(r.DesiredPort),
 			Tracing:  r.DesiredTracing != 0,
 		}
 	}
 	if r.ObservedAt != nil {
-		o := &domain.Observed{
-			Revision:   intOr0(r.ObservedRevision),
-			Running:    intOr0(r.ObservedRunning),
-			Completed:  ptrInt(r.ObservedCompleted),
+		n.Observed = &domain.Observed{
+			Revision:   int(r.ObservedRevision),
+			Running:    int(r.ObservedRunning),
+			Completed:  int(r.ObservedCompleted),
 			FinishedAt: r.ObservedFinishedAt,
 			State:      domain.ObservedState(str(r.ObservedState)),
 			Error:      str(r.ObservedError),
 			At:         *r.ObservedAt,
 		}
-		n.Observed = o
 	}
 	return n
 }
@@ -156,7 +155,7 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		ConfigSizeGb:     n.Config.SizeGb,
 		ConfigWidth:      n.Config.Width,
 		ConfigHeight:     n.Config.Height,
-		DeployedRevision: ptrInt64(n.DeployedRevision),
+		DeployedRevision: int64(n.DeployedRevision),
 		Dirty:            b2i(n.Dirty),
 		ShippedAt:        n.ShippedAt,
 		ApplyError:       nullStr(n.ApplyError),
@@ -164,14 +163,12 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		CreatedAt:        n.CreatedAt,
 	}
 	if d := n.Desired; d != nil {
-		p.DesiredImage, p.DesiredRevision, p.DesiredReplicas = new(d.Image), new(int64(d.Revision)), new(int64(d.Replicas))
-		p.DesiredPort = ptrInt64(d.Port)
-		p.DesiredTracing = b2i(d.Tracing)
+		p.DesiredImage, p.DesiredRevision, p.DesiredReplicas = new(d.Image), int64(d.Revision), int64(d.Replicas)
+		p.DesiredPort, p.DesiredTracing = int64(d.Port), b2i(d.Tracing)
 	}
 	if o := n.Observed; o != nil {
-		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = new(int64(o.Revision)), new(int64(o.Running)), new(o.At), new(string(o.State))
-		p.ObservedCompleted = ptrInt64(o.Completed)
-		p.ObservedFinishedAt = o.FinishedAt
+		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = int64(o.Revision), int64(o.Running), new(o.At), new(string(o.State))
+		p.ObservedCompleted, p.ObservedFinishedAt = int64(o.Completed), o.FinishedAt
 		p.ObservedError = nullStr(o.Error)
 	}
 	return p

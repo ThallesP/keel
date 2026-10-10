@@ -75,9 +75,9 @@ func TestSummarizeTasks(t *testing.T) {
 			task("5", "shutdown", "complete", at(700)),
 			task("4", "shutdown", "complete", at(900)),
 		}, svc("5", "", ""),
-			domain.Observed{Revision: 5, Running: 0, Completed: new(2), FinishedAt: new(int64(700)), State: domain.ObservedCompleted, At: now}},
+			domain.Observed{Revision: 5, Running: 0, Completed: 2, FinishedAt: 700, State: domain.ObservedCompleted, At: now}},
 		{"one-shot with an unknown timestamp", []SwarmTask{task("1", "shutdown", "complete")}, SwarmService{},
-			domain.Observed{Revision: 1, Running: 0, Completed: new(1), FinishedAt: new(int64(0)), State: domain.ObservedCompleted, At: now}},
+			domain.Observed{Revision: 1, Running: 0, Completed: 1, FinishedAt: 0, State: domain.ObservedCompleted, At: now}},
 		{"completed beside a failure is not one-shot", []SwarmTask{
 			task("1", "shutdown", "complete"), task("1", "shutdown", "failed"),
 		}, SwarmService{},

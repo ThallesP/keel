@@ -93,7 +93,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 		}
 		var desired *domain.Desired
 		if runtime {
-			desired = &domain.Desired{Image: image, Replicas: 1, Port: cmp.Or(customPort, &port)}
+			desired = &domain.Desired{Image: image, Replicas: 1, Port: *cmp.Or(customPort, &port)}
 			if replicas != nil {
 				desired.Replicas = *replicas
 			}
@@ -234,7 +234,7 @@ func canvasSetDesired(node *domain.Node, u NodeUpdate) error {
 	if err != nil {
 		return err
 	}
-	node.Desired.Port = cmp.Or(port, node.Desired.Port)
+	node.Desired.Port = *cmp.Or(port, &node.Desired.Port)
 	if replicas != nil {
 		node.Desired.Replicas = *replicas
 	}

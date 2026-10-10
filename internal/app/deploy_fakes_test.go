@@ -347,7 +347,7 @@ type nodeOpt func(*domain.Node)
 func clean(n *domain.Node)           { n.Dirty = false }
 func shipped(rev int) nodeOpt        { return func(n *domain.Node) { n.Desired.Revision = rev } }
 func image(img string) nodeOpt       { return func(n *domain.Node) { n.Desired.Image = img } }
-func port(p int) nodeOpt             { return func(n *domain.Node) { n.Desired.Port = &p } }
+func port(p int) nodeOpt             { return func(n *domain.Node) { n.Desired.Port = p } }
 func inEnv(env string) nodeOpt       { return func(n *domain.Node) { n.EnvironmentID = env } }
 func kind(t domain.NodeType) nodeOpt { return func(n *domain.Node) { n.Type = t } }
 func applyErr(text string) nodeOpt   { return func(n *domain.Node) { n.ApplyError = text } }

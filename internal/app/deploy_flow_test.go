@@ -212,7 +212,7 @@ func TestApplyHappyPath(t *testing.T) {
 		t.Fatalf("log: %q", got)
 	}
 	n := w.node(a.ID)
-	if n.DeployedRevision == nil || *n.DeployedRevision != 1 || n.Observed == nil || domain.DeriveStatus(n) != domain.StatusHealthy {
+	if n.DeployedRevision != 1 || n.Observed == nil || domain.DeriveStatus(n) != domain.StatusHealthy {
 		t.Fatalf("node: %+v", n)
 	}
 

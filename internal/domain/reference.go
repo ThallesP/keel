@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"cmp"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -92,13 +93,7 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 		return nil
 	}
 	host := node.ServiceName()
-	hostPort := func(e Engine) string {
-		port := Engines[e].Port
-		if d.Port != nil {
-			port = *d.Port
-		}
-		return host + ":" + strconv.Itoa(port)
-	}
+	hostPort := func(e Engine) string { return host + ":" + strconv.Itoa(cmp.Or(d.Port, Engines[e].Port)) }
 	var out []ProvidedKey
 	switch node.Type {
 	case NodeDatabase:
@@ -120,13 +115,13 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 		}
 		out = append(out, ProvidedKey{"REDIS_URL", u.String(), pass != ""})
 	case NodeService:
-		if d.Port != nil {
-			out = append(out, ProvidedKey{"URL", "http://" + host + ":" + strconv.Itoa(*d.Port), false})
+		if d.Port != 0 {
+			out = append(out, ProvidedKey{"URL", "http://" + host + ":" + strconv.Itoa(d.Port), false})
 		}
 	}
 	out = append(out, ProvidedKey{"HOST", host, false})
-	if d.Port != nil {
-		out = append(out, ProvidedKey{"PORT", strconv.Itoa(*d.Port), false})
+	if d.Port != 0 {
+		out = append(out, ProvidedKey{"PORT", strconv.Itoa(d.Port), false})
 	}
 	return out
 }

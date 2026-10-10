@@ -23,16 +23,16 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 		config   domain.NodeConfig
 		position domain.Position
 	}{
-		{app.CreateNodeInput{Type: domain.NodeService}, "nginx", &domain.Desired{Image: "nginx:alpine", Replicas: 1, Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 0, Y: 0}},
-		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", &domain.Desired{Image: "ghcr.io/acme/api-server:1.2", Replicas: 1, Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", &domain.Desired{Image: "postgres:16", Replicas: 1, Port: new(5432)}, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", &domain.Desired{Image: "mysql:8", Replicas: 1, Port: new(3306)}, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", &domain.Desired{Image: "mongo:7", Replicas: 1, Port: new(27018)}, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
-		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", &domain.Desired{Image: "redis:7", Replicas: 1, Port: new(6379)}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
-		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", &domain.Desired{Image: "redis:7", Replicas: 1, Port: new(6379)}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
+		{app.CreateNodeInput{Type: domain.NodeService}, "nginx", &domain.Desired{Image: "nginx:alpine", Replicas: 1, Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 0, Y: 0}},
+		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", &domain.Desired{Image: "ghcr.io/acme/api-server:1.2", Replicas: 1, Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", &domain.Desired{Image: "postgres:16", Replicas: 1, Port: 5432}, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", &domain.Desired{Image: "mysql:8", Replicas: 1, Port: 3306}, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", &domain.Desired{Image: "mongo:7", Replicas: 1, Port: 27018}, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
+		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", &domain.Desired{Image: "redis:7", Replicas: 1, Port: 6379}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
+		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", &domain.Desired{Image: "redis:7", Replicas: 1, Port: 6379}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
 		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", nil, false, "", domain.NodeConfig{SizeGb: new(10.0)}, domain.Position{X: 1960}},
 		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", nil, false, "", domain.NodeConfig{Width: new(300.0), Height: new(180.0)}, domain.Position{X: 5.5, Y: -3}},
-		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", &domain.Desired{Image: "nginx:alpine", Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
+		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", &domain.Desired{Image: "nginx:alpine", Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
 	}
 	var ids []string
 	for _, c := range cases {
@@ -194,7 +194,7 @@ func TestCanvasSetDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := k.node(redis)
-	if !n.Dirty || *n.Desired.Port != 6380 || n.Desired.Replicas != 2 || n.Desired.Image != "redis:7" || n.Desired.Revision != 3 || !n.Desired.Tracing {
+	if !n.Dirty || n.Desired.Port != 6380 || n.Desired.Replicas != 2 || n.Desired.Image != "redis:7" || n.Desired.Revision != 3 || !n.Desired.Tracing {
 		t.Fatalf("desired %+v dirty %v", n.Desired, n.Dirty)
 	}
 	if !k.node(worker).Dirty || !k.node(api).Dirty || k.node(other).Dirty {
@@ -320,10 +320,10 @@ func TestCanvasDuplicateNode(t *testing.T) {
 	if c.Name != "postgres-copy" || c.Type != domain.NodeDatabase || c.ParentID != group || c.Position != (domain.Position{X: 50, Y: 60}) {
 		t.Fatalf("copy %+v", c)
 	}
-	if c.Desired == nil || c.Desired.Revision != 0 || c.Desired.Image != "postgres:16" || *c.Desired.Port != 5432 || !c.Desired.Tracing {
+	if c.Desired == nil || c.Desired.Revision != 0 || c.Desired.Image != "postgres:16" || c.Desired.Port != 5432 || !c.Desired.Tracing {
 		t.Fatalf("copy desired %+v", c.Desired)
 	}
-	if !c.Dirty || !c.OneShot || c.Observed != nil || c.DeployedRevision != nil || c.ApplyError != "" || c.ShippedAt != nil || len(c.Endpoints) != 0 {
+	if !c.Dirty || !c.OneShot || c.Observed != nil || c.DeployedRevision != 0 || c.ApplyError != "" || c.ShippedAt != nil || len(c.Endpoints) != 0 {
 		t.Fatalf("copy state %+v", c)
 	}
 	cv, ov := k.vars(copyID), k.vars(pg)

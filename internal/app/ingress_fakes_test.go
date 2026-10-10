@@ -208,21 +208,17 @@ func newIngressEnv(t *testing.T) *igEnv {
 
 type igNodeOpt func(*domain.Node)
 
-func igNoPort(n *domain.Node)    { n.Desired.Port = nil }
-func igDirty(n *domain.Node)     { n.Dirty = true }
-func igNoDesired(n *domain.Node) { n.Desired = nil }
-func igUndeployed(n *domain.Node) {
-	n.DeployedRevision = nil
-}
+func igDirty(n *domain.Node)      { n.Dirty = true }
+func igNoDesired(n *domain.Node)  { n.Desired = nil }
+func igUndeployed(n *domain.Node) { n.DeployedRevision = 0 }
 
 func (e *igEnv) node(id, env string, typ domain.NodeType, name, image string, port int, opts ...igNodeOpt) domain.Node {
 	e.t.Helper()
 	e.seq++
-	rev := 1
 	n := domain.Node{
 		ID: id, EnvironmentID: env, Type: typ, Name: name, CreatedAt: e.seq,
-		Desired:          &domain.Desired{Image: image, Revision: 1, Replicas: 1, Port: &port},
-		DeployedRevision: &rev,
+		Desired:          &domain.Desired{Image: image, Revision: 1, Replicas: 1, Port: port},
+		DeployedRevision: 1,
 	}
 	for _, o := range opts {
 		o(&n)

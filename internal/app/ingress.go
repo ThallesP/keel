@@ -43,8 +43,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			if err != nil {
 				return err
 			}
-			deployed := node.DeployedRevision != nil && *node.DeployedRevision == node.Desired.Revision
-			if !has || node.Dirty || !deployed {
+			if !has || node.Dirty || node.DeployedRevision != node.Desired.Revision {
 				return domain.Invalid("Ship this Redis first: its password takes effect on the next Ship")
 			}
 		}
@@ -53,8 +52,8 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 		if err != nil {
 			return err
 		}
-		port = cmp.Or(port, node.Desired.Port)
-		if port == nil {
+		port = cmp.Or(port, &node.Desired.Port)
+		if *port == 0 {
 			return domain.Invalid("Set the service's port first")
 		}
 		ip := a.Config.PublicIP
@@ -105,7 +104,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			return domain.Invalid("At most 10 endpoints per node")
 		}
 		wanted.NodeID = node.ID
-		wanted.PinnedPort = node.Desired.Port == nil || *node.Desired.Port != wanted.Port
+		wanted.PinnedPort = node.Desired.Port != wanted.Port
 		wanted.Status = domain.EndpointStatus{State: domain.EndpointStarting, At: a.Now()}
 		if err := tx.ReplaceEndpoints(node.ID, append(rest, wanted)); err != nil {
 			return err

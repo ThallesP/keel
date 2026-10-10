@@ -41,8 +41,8 @@ func TestNodeRoundTrip(t *testing.T) {
 	want := domain.Node{
 		ID: domain.NewID(), EnvironmentID: env, Type: domain.NodeService, Name: "api",
 		Position: domain.Position{X: 1.5, Y: -2},
-		Desired:  &domain.Desired{Image: "nginx:1", Revision: 3, Replicas: 2, Port: new(8080), Tracing: true},
-		Observed: &domain.Observed{Revision: 3, Running: 2, Completed: new(1), FinishedAt: new(int64(99)),
+		Desired:  &domain.Desired{Image: "nginx:1", Revision: 3, Replicas: 2, Port: 8080, Tracing: true},
+		Observed: &domain.Observed{Revision: 3, Running: 2, Completed: 1, FinishedAt: 99,
 			State: domain.ObservedOK, At: 42},
 		Dirty: true, ApplyError: "boom", OneShot: true, CreatedAt: 7,
 	}

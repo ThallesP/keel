@@ -63,7 +63,7 @@ func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Obser
 	}
 	oneShot := completed > 0 && live == 0 && failed == 0
 	if oneShot {
-		o.Completed, o.FinishedAt = &completed, &finishedAt
+		o.Completed, o.FinishedAt = completed, finishedAt
 	}
 	switch {
 	case rolledBack:
@@ -263,7 +263,7 @@ func setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, erro
 	before := observedFace(n)
 	n.Observed = &o
 	if domain.Converged(n.Desired, &o) && o.Revision > 0 {
-		n.DeployedRevision = new(o.Revision)
+		n.DeployedRevision = o.Revision
 	}
 	switch {
 	case o.State == domain.ObservedCompleted:
@@ -294,18 +294,15 @@ func observedFace(n domain.Node) nodeFace {
 	if n.Observed != nil {
 		o = *n.Observed
 	}
-	f := nodeFace{status: domain.DeriveStatus(n), running: o.Running, err: n.ApplyError}
-	if n.DeployedRevision != nil {
-		f.deployedRevision = *n.DeployedRevision
-	}
+	f := nodeFace{status: domain.DeriveStatus(n), running: o.Running, deployedRevision: n.DeployedRevision, err: n.ApplyError}
 	if f.err == "" && f.status == domain.StatusError {
 		f.err = o.Error
 	}
 	if f.status == domain.StatusDeploying {
 		f.step = domain.DeployingStep(n)
 	}
-	if f.status == domain.StatusDone && o.FinishedAt != nil {
-		f.finishedAt = *o.FinishedAt
+	if f.status == domain.StatusDone {
+		f.finishedAt = o.FinishedAt
 	}
 	return f
 }

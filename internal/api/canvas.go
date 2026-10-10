@@ -98,20 +98,22 @@ type NodeView struct {
 func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	status := domain.DeriveStatus(n)
 	v := NodeView{
-		ID:               n.ID,
-		Type:             string(n.Type),
-		Name:             n.Name,
-		ParentID:         n.ParentID,
-		Position:         Position(n.Position),
-		Config:           NodeConfig(n.Config),
-		Dirty:            n.Dirty,
-		Status:           string(status),
-		DeployedRevision: n.DeployedRevision,
-		Public:           len(n.Endpoints) > 0,
-		Endpoints:        make([]EndpointView, 0, len(n.Endpoints)),
+		ID:        n.ID,
+		Type:      string(n.Type),
+		Name:      n.Name,
+		ParentID:  n.ParentID,
+		Position:  Position(n.Position),
+		Config:    NodeConfig(n.Config),
+		Dirty:     n.Dirty,
+		Status:    string(status),
+		Public:    len(n.Endpoints) > 0,
+		Endpoints: make([]EndpointView, 0, len(n.Endpoints)),
 	}
 	if d := n.Desired; d != nil {
-		v.Image, v.Port, v.Replicas, v.Revision = d.Image, d.Port, d.Replicas, d.Revision
+		v.Image, v.Port, v.Replicas, v.Revision = d.Image, new(d.Port), d.Replicas, d.Revision
+	}
+	if n.DeployedRevision > 0 {
+		v.DeployedRevision = new(n.DeployedRevision)
 	}
 	if o := n.Observed; o != nil {
 		v.Running = o.Running
@@ -144,7 +146,7 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	case domain.StatusStopped, domain.StatusStopping:
 		v.StoppedAt = n.ShippedAt
 	case domain.StatusDone:
-		v.FinishedAt = n.Observed.FinishedAt
+		v.FinishedAt = new(n.Observed.FinishedAt)
 	}
 	return v
 }

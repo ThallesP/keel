@@ -102,9 +102,7 @@ jobs:
       - run: sudo -E ./install.sh > first.json
       - name: The installer's JSON result
         run: |
-          jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR' first.json
-          # Fields are only ever added: the Convex-era URLs stay, equal to url.
-          jq -e '.apiUrl == .url and .convexUrl == .url and .convexSiteUrl == .url' first.json
+          jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR and .apiUrl == .url' first.json
           jq -e '.version == "ci" and .stateDir == "/opt/keel" and (.publicIp | type) == "string" and (.warnings | type) == "array"' first.json
       - name: Sign up and sign in against the installed control plane
         run: |

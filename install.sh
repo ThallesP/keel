@@ -248,11 +248,9 @@ main() {
   printf 'Open the dashboard from any device on your tailnet and sign up.\nUpgrade: re-run the install command.\n' >&2
   printf '\nExposed services are served from %s: let ports 80 and 443 (TCP) through\nits firewall or router, plus each TCP/UDP port you expose.\n' "${KEEL_PUBLIC_IP:-this server}" >&2
   if [ "${KEEL_JSON:-}" = 1 ]; then
-    # convexUrl and convexSiteUrl predate the single control plane; kept (fields are only added),
-    # both equal to url now.
-    printf '{"ok":true,"url":%s,"apiUrl":%s,"convexUrl":%s,"convexSiteUrl":%s,"version":%s,"stateDir":%s,"publicIp":%s,"warnings":%s}\n' \
-      "$(json_str "$SITE_URL")" "$(json_str "$SITE_URL")" "$(json_str "$SITE_URL")" "$(json_str "$SITE_URL")" \
-      "$(json_str "$KEEL_VERSION")" "$(json_str "$KEEL_DIR")" "$(json_str "$KEEL_PUBLIC_IP")" "$(json_warnings)"
+    printf '{"ok":true,"url":%s,"apiUrl":%s,"version":%s,"stateDir":%s,"publicIp":%s,"warnings":%s}\n' \
+      "$(json_str "$SITE_URL")" "$(json_str "$SITE_URL")" "$(json_str "$KEEL_VERSION")" \
+      "$(json_str "$KEEL_DIR")" "$(json_str "$KEEL_PUBLIC_IP")" "$(json_warnings)"
   fi
 }
 

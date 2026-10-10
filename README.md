@@ -100,7 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/ThallesP/keel/main/install.sh \
 The contract:
 
 - **Output:** stdout is exactly one JSON object and progress goes to stderr.
-  - Success prints `{"ok":true,"url":…,"apiUrl":…,"convexUrl":…,"convexSiteUrl":…,"version":…,"stateDir":"/opt/keel","publicIp":…,"warnings":[]}` and exits 0. `publicIp` is `""` when it could not be detected. `apiUrl`, `convexUrl` and `convexSiteUrl` all equal `url` (the last two predate the single control plane and stay for older readers). `warnings` repeats every `warning:` line of the run.
+  - Success prints `{"ok":true,"url":…,"apiUrl":…,"version":…,"stateDir":"/opt/keel","publicIp":…,"warnings":[]}` and exits 0. `publicIp` is `""` when it could not be detected. `apiUrl` equals `url`. `warnings` repeats every `warning:` line of the run.
   - Failure prints `{"ok":false,"error":…,"fix":…,"warnings":[…]}` and exits non-zero. `fix` is the next step to try.
 - **Without `KEEL_TAILSCALE_AUTHKEY`:** if the server is not on a tailnet yet, the installer prints a login URL on stderr and waits up to 15 minutes. Relay the URL to a human.
 - **Idempotent:** re-running is safe, never rotates secrets, and is also how you upgrade.

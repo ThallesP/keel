@@ -30,7 +30,7 @@ type ProxyRoute struct {
 }
 
 func (r ProxyRoute) Key() string {
-	return ingressKey(r.Protocol, r.Domain, r.PublicPort)
+	return domain.Endpoint{Protocol: r.Protocol, Domain: r.Domain, PublicPort: &r.PublicPort}.Key()
 }
 
 type Proxy interface {

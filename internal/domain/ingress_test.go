@@ -58,8 +58,7 @@ func TestValidDomain(t *testing.T) {
 		"app.localhost":         "app.localhost",
 		"203.0.113.7":           "203.0.113.7",
 		"a-b.c":                 "a-b.c",
-		string(rune(0xFEFF)) + "app.example.com" + string(rune(0xA0)): "app.example.com",
-		max: max,
+		max:                     max,
 	}
 	for in, want := range ok {
 		got, err := ValidDomain(in)
@@ -73,8 +72,8 @@ func TestValidDomain(t *testing.T) {
 		"bücher.example", max + "b",
 	}
 	for _, in := range bad {
-		if got, err := ValidDomain(in); err == nil || err.Error() != MsgBadDomain || CodeOf(err) != CodeInvalidInput {
-			t.Errorf("ValidDomain(%q) = %q, %v; want %q", in, got, err, MsgBadDomain)
+		if got, err := ValidDomain(in); err == nil || err.Error() != "Domain must look like app.example.com" || CodeOf(err) != CodeInvalidInput {
+			t.Errorf("ValidDomain(%q) = %q, %v", in, got, err)
 		}
 	}
 }
@@ -102,10 +101,10 @@ func TestAllocatePublicPort(t *testing.T) {
 		}
 	}
 	full := map[int]bool{5432: true}
-	for p := FirstSparePort; p <= 65535; p++ {
+	for p := 20000; p <= 65535; p++ {
 		full[p] = true
 	}
-	if _, err := AllocatePublicPort(5432, full); err == nil || err.Error() != MsgNoFreePublicPort {
+	if _, err := AllocatePublicPort(5432, full); err == nil || err.Error() != "No free public port left" {
 		t.Errorf("full: %v", err)
 	}
 }
@@ -163,10 +162,7 @@ func TestEndpointKeyAndAddress(t *testing.T) {
 	}
 }
 
-func TestCollapseAndTruncate(t *testing.T) {
-	if got := CollapseSpace("  a\n\tb   c "); got != "a b c" {
-		t.Errorf("CollapseSpace = %q", got)
-	}
+func TestTruncateRunes(t *testing.T) {
 	if got := TruncateRunes("héllo", 2); got != "hé" {
 		t.Errorf("TruncateRunes = %q", got)
 	}

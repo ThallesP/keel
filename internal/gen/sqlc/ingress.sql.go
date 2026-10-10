@@ -40,10 +40,7 @@ func (q *Queries) IngressHasVariable(ctx context.Context, arg IngressHasVariable
 }
 
 const ingressListNodesWithDomain = `-- name: IngressListNodesWithDomain :many
-SELECT DISTINCT e.node_id
-FROM endpoints e JOIN nodes n ON n.id = e.node_id
-WHERE e.protocol = 'http' AND e.domain = ?
-ORDER BY e.node_id
+SELECT node_id FROM endpoints WHERE protocol = 'http' AND domain = ?
 `
 
 func (q *Queries) IngressListNodesWithDomain(ctx context.Context, domain *string) ([]string, error) {

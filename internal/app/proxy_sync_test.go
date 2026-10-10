@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -48,14 +50,12 @@ func TestProxySyncLoadsAndRecordsStatuses(t *testing.T) {
 	if len(e.proxy.loads) != 1 {
 		t.Fatalf("loads: %d", len(e.proxy.loads))
 	}
-	var apps map[string]any
+	var apps map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(e.proxy.loads[0]), &apps); err != nil {
 		t.Fatal(err)
 	}
-	for _, app := range []string{"http", "tls", "events", "layer4"} {
-		if apps[app] == nil {
-			t.Fatalf("no %s app in %s", app, e.proxy.loads[0])
-		}
+	if got := slices.Sorted(maps.Keys(apps)); !slices.Equal(got, []string{"events", "http", "layer4", "tls"}) {
+		t.Fatalf("apps %v in %s", got, e.proxy.loads[0])
 	}
 	for _, want := range []string{
 		`"listen":["host-tcp/203.0.113.7:443","host-tcp/[2001:db8::1]:443"]`,
@@ -183,6 +183,9 @@ func TestProxySyncWholeFailure(t *testing.T) {
 		{"proxy unreachable mid-load", func(p *igProxy) {
 			p.loadErrs = []error{errors.New("keel-proxy did not answer within 30s")}
 		}, "keel-proxy did not answer within 30s"},
+		{"long error cut at 300 runes", func(p *igProxy) {
+			p.loadErrs = []error{errors.New(strings.Repeat("é", 400))}
+		}, strings.Repeat("é", 300)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -468,7 +471,7 @@ func TestProxyStartupWaitsForTheProxy(t *testing.T) {
 	e.setEndpoints(igAPI, domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api-16w41g.203-0-113-7.sslip.io", Status: live})
 	e.proxy.addrsErr = errors.New("keel-proxy is not running (no admin socket at /run/keel-proxy/admin.sock)")
 	e.app.RecoverIngressForTest(e.ctx)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		e.jobs.RunOne(t, "proxy:startup")
 	}
 	if e.jobs.Pending("proxy:sync") || e.endpoints(igAPI)[0].Status.State != domain.EndpointLive {

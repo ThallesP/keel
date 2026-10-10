@@ -18,7 +18,6 @@ type igJobs struct {
 	pending map[string]func(context.Context)
 	order   []string
 	every   map[string]time.Duration
-	everyFn map[string]func(context.Context)
 }
 
 func (j *igJobs) After(key string, _ time.Duration, fn func(context.Context)) {
@@ -31,11 +30,10 @@ func (j *igJobs) After(key string, _ time.Duration, fn func(context.Context)) {
 	j.order = append(j.order, key)
 }
 
-func (j *igJobs) Every(name string, interval time.Duration, fn func(context.Context)) {
+func (j *igJobs) Every(name string, interval time.Duration, _ func(context.Context)) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.every[name] = interval
-	j.everyFn[name] = fn
 }
 
 func (j *igJobs) Pending(key string) bool {
@@ -54,12 +52,7 @@ func (j *igJobs) RunOne(t *testing.T, key string) {
 		t.Fatalf("no pending job %q", key)
 	}
 	delete(j.pending, key)
-	for i, k := range j.order {
-		if k == key {
-			j.order = append(j.order[:i], j.order[i+1:]...)
-			break
-		}
-	}
+	j.order = slices.DeleteFunc(j.order, func(k string) bool { return k == key })
 	j.mu.Unlock()
 	fn(context.Background())
 }
@@ -197,7 +190,7 @@ func newIngressEnv(t *testing.T) *igEnv {
 	}
 	e := &igEnv{
 		t: t, ctx: context.Background(), store: store, now: 1_000,
-		jobs:   &igJobs{pending: map[string]func(context.Context){}, every: map[string]time.Duration{}, everyFn: map[string]func(context.Context){}},
+		jobs:   &igJobs{pending: map[string]func(context.Context){}, every: map[string]time.Duration{}},
 		proxy:  &igProxy{addrs: []string{igIP}},
 		pub:    &igPublisher{},
 		member: domain.Actor{UserID: "u1", OrganizationID: "org", Role: domain.RoleOwner},
@@ -268,7 +261,6 @@ func (e *igEnv) expose(actor domain.Actor, nodeID string, in app.ExposeInput) (d
 
 func igF(v float64) *float64 { return &v }
 func igS(v string) *string   { return &v }
-func igI(v int) *int         { return &v }
 
 func igWantErr(t *testing.T, err error, code, message string) {
 	t.Helper()

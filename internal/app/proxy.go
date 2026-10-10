@@ -1,9 +1,12 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -16,13 +19,9 @@ import (
 )
 
 const (
-	proxySyncKey         = "proxy:sync"
-	proxyResyncName      = "proxy:resync"
 	proxyStartupKey      = "proxy:startup"
 	proxyStartupAttempts = 8
-	ProxyResyncInterval  = 2 * time.Minute
 	proxySyncPasses      = 3
-	MsgNoHostAddress     = "keel-proxy found no public network address on the control plane"
 )
 
 const (
@@ -85,7 +84,7 @@ func (a *App) ScheduleProxySync() {
 	if a.Jobs == nil {
 		return
 	}
-	a.Jobs.After(proxySyncKey, 0, a.SyncProxy)
+	a.Jobs.After("proxy:sync", 0, a.SyncProxy)
 }
 
 type proxyReporter struct{ URL, Token string }
@@ -93,9 +92,7 @@ type proxyReporter struct{ URL, Token string }
 type proxyACME struct{ CA, Email string }
 
 type routeStatus struct {
-	NodeID string
-	Key    string
-	Port   int
+	ProxyRoute
 	Status domain.EndpointStatus
 }
 
@@ -124,10 +121,7 @@ func (a *App) SyncProxy(ctx context.Context) {
 }
 
 func (a *App) syncProxy(ctx context.Context, st *ingressState) {
-	reporter := proxyReporter{URL: a.Proxy.ReportURL(), Token: a.Config.WorkerToken}
-	if reporter.URL == "" {
-		reporter.URL = a.Config.SiteURL + "/proxy/events"
-	}
+	reporter := proxyReporter{URL: cmp.Or(a.Proxy.ReportURL(), a.Config.SiteURL+"/proxy/events"), Token: a.Config.WorkerToken}
 	acme := proxyACME{CA: a.Config.ACMECA, Email: a.Config.ACMEEmail}
 	for range proxySyncPasses {
 		routes, err := a.proxyRoutes(ctx)
@@ -163,91 +157,82 @@ func (a *App) proxyRoutes(ctx context.Context) ([]ProxyRoute, error) {
 
 func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyReporter, acme proxyACME) ([]routeStatus, bool) {
 	at := a.Now()
-	statusOf := func(r ProxyRoute, s domain.EndpointStatus) routeStatus {
-		return routeStatus{NodeID: r.NodeID, Key: r.Key(), Port: r.Port, Status: s}
-	}
-	fail := func(err error) ([]routeStatus, bool) {
-		msg := proxyErrorText(err)
+	out := make([]routeStatus, 0, len(routes))
+	failed, err := a.loadProxy(ctx, routes, rep, acme)
+	if err != nil {
+		msg := domain.TruncateRunes(strings.Join(strings.Fields(err.Error()), " "), 300)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
-		out := make([]routeStatus, 0, len(routes))
 		for _, r := range routes {
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointFailed, Error: msg, At: at}))
+			out = append(out, routeStatus{r, domain.EndpointStatus{State: domain.EndpointFailed, Error: msg, At: at}})
 		}
 		return out, false
 	}
-	failed := map[string]string{}
-	var addrs []string
-	if len(routes) > 0 {
-		var err error
-		if addrs, err = a.Proxy.HostAddrs(ctx); err != nil {
-			return fail(err)
-		}
-		if len(addrs) == 0 {
-			return fail(errors.New(MsgNoHostAddress))
-		}
-	}
-	for {
-		live := make([]ProxyRoute, 0, len(routes))
-		for _, r := range routes {
-			if _, out := failed[r.Key()]; !out {
-				live = append(live, r)
-			}
-		}
-		body, err := json.Marshal(caddyApps(live, addrs, rep, acme))
-		if err != nil {
-			return fail(err)
-		}
-		err = a.Proxy.LoadApps(ctx, body)
-		if err == nil {
-			break
-		}
-		var rejected *ProxyRejected
-		if !errors.As(err, &rejected) {
-			return fail(err)
-		}
-		blamed := blameListener(rejected.Message, live)
-		if len(blamed) == 0 {
-			return fail(errors.New(rejected.Message))
-		}
-		for key, why := range blamed {
-			failed[key] = why
-		}
-	}
 	var names []string
 	for _, r := range routes {
-		if _, out := failed[r.Key()]; r.Protocol == domain.ProtocolHTTP && !out {
+		if _, blamed := failed[r.Key()]; r.Protocol == domain.ProtocolHTTP && !blamed {
 			names = append(names, r.Domain)
 		}
 	}
-	certs := map[string]ProxyCert{}
+	var certs map[string]ProxyCert
 	if len(names) > 0 {
 		if got, err := a.Proxy.Certs(ctx, names); err == nil {
 			certs = got
 		}
 	}
-	out := make([]routeStatus, 0, len(routes))
 	for _, r := range routes {
-		if why, bad := failed[r.Key()]; bad {
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointFailed, Error: why, At: at}))
-			continue
-		}
-		if r.Protocol != domain.ProtocolHTTP {
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointLive, At: at}))
-			continue
-		}
-		switch cert := certs[r.Domain]; cert.State {
-		case "ok":
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointLive, At: at}))
-		case "failed":
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointFailed, Error: domain.CertHint(cert.Error, a.Config.PublicIP), At: at}))
+		status := domain.EndpointStatus{State: domain.EndpointLive, At: at}
+		cert := certs[r.Domain]
+		why, blamed := failed[r.Key()]
+		switch {
+		case blamed:
+			status.State, status.Error = domain.EndpointFailed, why
+		case r.Protocol != domain.ProtocolHTTP, cert.State == "ok":
+		case cert.State == "failed":
+			status.State, status.Error = domain.EndpointFailed, domain.CertHint(cert.Error, a.Config.PublicIP)
 		default:
-			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointStarting, At: at}))
+			status.State = domain.EndpointStarting
 		}
+		out = append(out, routeStatus{r, status})
 	}
 	return out, true
 }
 
-var blameRE = regexp.MustCompile(`listen (tcp|udp) \S*?:(\d+): (.+?)(?:$|\n)`)
+func (a *App) loadProxy(ctx context.Context, routes []ProxyRoute, rep proxyReporter, acme proxyACME) (map[string]string, error) {
+	var addrs []string
+	if len(routes) > 0 {
+		var err error
+		if addrs, err = a.Proxy.HostAddrs(ctx); err != nil {
+			return nil, err
+		}
+		if len(addrs) == 0 {
+			return nil, errors.New("keel-proxy found no public network address on the control plane")
+		}
+	}
+	failed := map[string]string{}
+	live := routes
+	for {
+		body, _ := json.Marshal(caddyApps(live, addrs, rep, acme))
+		err := a.Proxy.LoadApps(ctx, body)
+		if err == nil {
+			return failed, nil
+		}
+		var rejected *ProxyRejected
+		if !errors.As(err, &rejected) {
+			return nil, err
+		}
+		blamed := blameListener(rejected.Message, live)
+		if len(blamed) == 0 {
+			return nil, err
+		}
+		maps.Copy(failed, blamed)
+		live = slices.DeleteFunc(slices.Clone(live), func(r ProxyRoute) bool {
+			_, ok := blamed[r.Key()]
+			return ok
+		})
+	}
+}
+
+var blameRE = regexp.MustCompile(`listen (tcp|udp) \S*?:(\d+): (.+)`)
 
 func blameListener(message string, routes []ProxyRoute) map[string]string {
 	m := blameRE.FindStringSubmatch(message)
@@ -255,18 +240,14 @@ func blameListener(message string, routes []ProxyRoute) map[string]string {
 		return nil
 	}
 	protocol, reason := m[1], m[3]
-	port, err := strconv.Atoi(m[2])
-	if err != nil {
-		return nil
-	}
-	why := "cannot listen on " + strconv.Itoa(port) + "/" + protocol + ": " + reason
+	port, _ := strconv.Atoi(m[2])
+	why := fmt.Sprintf("Cannot listen on %d/%s: %s", port, protocol, reason)
 	if strings.Contains(reason, "address already in use") {
-		why = "port " + strconv.Itoa(port) + "/" + protocol + " is already in use on the control plane"
+		why = fmt.Sprintf("Port %d/%s is already in use on the control plane", port, protocol)
 	}
-	why = strings.ToUpper(why[:1]) + why[1:]
 	blamed := map[string]string{}
 	for _, r := range routes {
-		web := protocol == "tcp" && (port == 80 || port == 443) && r.Protocol == domain.ProtocolHTTP
+		web := protocol == "tcp" && domain.IsHTTPPort(port) && r.Protocol == domain.ProtocolHTTP
 		if web || (string(r.Protocol) == protocol && r.PublicPort == port) {
 			blamed[r.Key()] = why
 		}
@@ -274,27 +255,19 @@ func blameListener(message string, routes []ProxyRoute) map[string]string {
 	return blamed
 }
 
-func proxyErrorText(err error) string {
-	return domain.TruncateRunes(domain.CollapseSpace(err.Error()), 300)
-}
-
 func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) error {
 	if len(statuses) == 0 {
 		return nil
 	}
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
-		var order []string
 		byNode := map[string]map[string]routeStatus{}
 		for _, s := range statuses {
-			next := byNode[s.NodeID]
-			if next == nil {
-				next = map[string]routeStatus{}
-				byNode[s.NodeID] = next
-				order = append(order, s.NodeID)
+			if byNode[s.NodeID] == nil {
+				byNode[s.NodeID] = map[string]routeStatus{}
 			}
-			next[s.Key] = s
+			byNode[s.NodeID][s.Key()] = s
 		}
-		for _, id := range order {
+		for id, byKey := range byNode {
 			node, err := tx.Node(id)
 			if errors.Is(err, ErrNoRow) {
 				continue
@@ -302,22 +275,22 @@ func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) e
 			if err != nil {
 				return err
 			}
-			eps := append([]domain.Endpoint(nil), node.Endpoints...)
 			changed := false
-			for i, e := range eps {
-				s, ok := byNode[id][e.Key()]
-				if ok && s.Port == e.Port && !sameEndpointStatus(s.Status, e.Status) {
-					eps[i].Status = s.Status
-					changed = true
+			for i, e := range node.Endpoints {
+				s, ok := byKey[e.Key()]
+				if !ok || s.Port != e.Port || (s.Status.State == e.Status.State && s.Status.Error == e.Status.Error) {
+					continue
 				}
+				node.Endpoints[i].Status = s.Status
+				changed = true
 			}
 			if !changed {
 				continue
 			}
-			if err := tx.ReplaceEndpoints(id, eps); err != nil {
+			if err := tx.ReplaceEndpoints(id, node.Endpoints); err != nil {
 				return err
 			}
-			if err := a.environmentChanged(tx, ch, node.EnvironmentID); err != nil {
+			if err := environmentChanged(tx, ch, node.EnvironmentID); err != nil {
 				return err
 			}
 		}
@@ -325,11 +298,7 @@ func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) e
 	})
 }
 
-func sameEndpointStatus(a, b domain.EndpointStatus) bool {
-	return a.State == b.State && a.Error == b.Error
-}
-
-func (a *App) environmentChanged(tx Tx, ch *Changes, environmentID string) error {
+func environmentChanged(tx Tx, ch *Changes, environmentID string) error {
 	org, err := tx.OrganizationOfEnvironment(environmentID)
 	if errors.Is(err, ErrNoRow) {
 		return nil
@@ -364,16 +333,15 @@ func (a *App) ReportCert(ctx context.Context, event, name, certError string) err
 			if err != nil {
 				return err
 			}
-			eps := append([]domain.Endpoint(nil), node.Endpoints...)
-			for i, e := range eps {
+			for i, e := range node.Endpoints {
 				if e.Protocol == domain.ProtocolHTTP && e.Domain == name {
-					eps[i].Status = status
+					node.Endpoints[i].Status = status
 				}
 			}
-			if err := tx.ReplaceEndpoints(id, eps); err != nil {
+			if err := tx.ReplaceEndpoints(id, node.Endpoints); err != nil {
 				return err
 			}
-			if err := a.environmentChanged(tx, ch, node.EnvironmentID); err != nil {
+			if err := environmentChanged(tx, ch, node.EnvironmentID); err != nil {
 				return err
 			}
 		}
@@ -398,14 +366,13 @@ func (a *App) recoverIngress(ctx context.Context) {
 	}
 	a.Jobs.After(proxyStartupKey, 0, a.startupProxySync(0))
 	if a.ingress().resyncArmed.CompareAndSwap(false, true) {
-		a.Jobs.Every(proxyResyncName, ProxyResyncInterval, a.ResyncProxy)
+		a.Jobs.Every("proxy:resync", 2*time.Minute, a.ResyncProxy)
 	}
 }
 
 func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 	moved := 0
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		moved = 0
 		nodes, err := tx.AllNodes()
 		if err != nil {
 			return err
@@ -413,34 +380,30 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 		held := map[string]bool{}
 		for _, node := range nodes {
 			for _, e := range node.Endpoints {
-				if e.Protocol == domain.ProtocolHTTP {
-					held[e.Domain] = true
-				}
+				held[e.Domain] = true
 			}
 		}
 		at := a.Now()
 		for _, node := range nodes {
-			eps := append([]domain.Endpoint(nil), node.Endpoints...)
 			changed := false
-			for i, e := range eps {
-				if e.Protocol != domain.ProtocolHTTP {
+			for i, e := range node.Endpoints {
+				d, ok := domain.MovedDefaultDomain(node.ID, e.Domain, ip)
+				if !ok || held[d] {
 					continue
 				}
-				if d, ok := domain.MovedDefaultDomain(node.ID, e.Domain, ip); ok && !held[d] {
-					held[d] = true
-					eps[i].Domain = d
-					eps[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: at}
-					changed = true
-					moved++
-				}
+				held[d] = true
+				node.Endpoints[i].Domain = d
+				node.Endpoints[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: at}
+				changed = true
+				moved++
 			}
 			if !changed {
 				continue
 			}
-			if err := tx.ReplaceEndpoints(node.ID, eps); err != nil {
+			if err := tx.ReplaceEndpoints(node.ID, node.Endpoints); err != nil {
 				return err
 			}
-			if err := a.environmentChanged(tx, ch, node.EnvironmentID); err != nil {
+			if err := environmentChanged(tx, ch, node.EnvironmentID); err != nil {
 				return err
 			}
 		}
@@ -450,11 +413,7 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 }
 
 func (a *App) ResyncProxy(ctx context.Context) {
-	var exposed bool
-	err := a.read(ctx, func(tx Tx) (err error) {
-		exposed, err = tx.IngressAnyEndpoint()
-		return err
-	})
+	exposed, err := a.anyEndpoint(ctx)
 	if err != nil {
 		a.Log.Error("keel-proxy resync", "err", err)
 		return
@@ -466,7 +425,8 @@ func (a *App) ResyncProxy(ctx context.Context) {
 
 func (a *App) startupProxySync(attempt int) func(context.Context) {
 	return func(ctx context.Context) {
-		if a.Proxy != nil && attempt < proxyStartupAttempts && a.anyEndpoint(ctx) {
+		exposed, _ := a.anyEndpoint(ctx)
+		if a.Proxy != nil && attempt < proxyStartupAttempts && exposed {
 			if _, err := a.Proxy.HostAddrs(ctx); err != nil {
 				delay := min(time.Second<<attempt, 10*time.Second)
 				a.Jobs.After(proxyStartupKey, delay, a.startupProxySync(attempt+1))
@@ -477,11 +437,11 @@ func (a *App) startupProxySync(attempt int) func(context.Context) {
 	}
 }
 
-func (a *App) anyEndpoint(ctx context.Context) bool {
-	var any bool
+func (a *App) anyEndpoint(ctx context.Context) (bool, error) {
+	var exposed bool
 	err := a.read(ctx, func(tx Tx) (err error) {
-		any, err = tx.IngressAnyEndpoint()
+		exposed, err = tx.IngressAnyEndpoint()
 		return err
 	})
-	return err == nil && any
+	return exposed, err
 }

@@ -19,7 +19,4 @@ ORDER BY n.created_at, n.id, e.ord;
 SELECT EXISTS (SELECT 1 FROM endpoints);
 
 -- name: IngressListNodesWithDomain :many
-SELECT DISTINCT e.node_id
-FROM endpoints e JOIN nodes n ON n.id = e.node_id
-WHERE e.protocol = 'http' AND e.domain = ?
-ORDER BY e.node_id;
+SELECT node_id FROM endpoints WHERE protocol = 'http' AND domain = ?;

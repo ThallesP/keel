@@ -15,7 +15,6 @@ const (
 const (
 	AuthPerIP        = 20
 	DeviceStartPerIP = 10
-	DevicePollPerIP  = 60
 	AuthPerIPWindow  = time.Minute
 	limiterMaxKeys   = 10_000
 )
@@ -37,7 +36,7 @@ func (a *App) limits() *authLimiters {
 			signIn:      newAuthAttempts(SignInAttempts, SignInWindow),
 			perIP:       newAuthAttempts(AuthPerIP, AuthPerIPWindow),
 			deviceStart: newAuthAttempts(DeviceStartPerIP, AuthPerIPWindow),
-			devicePoll:  newAuthAttempts(DevicePollPerIP, AuthPerIPWindow),
+			devicePoll:  newAuthAttempts(60, AuthPerIPWindow),
 		}
 	}
 	return a.authLimits

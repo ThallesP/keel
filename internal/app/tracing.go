@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -33,9 +34,9 @@ func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key s
 	if local {
 		envName = "local"
 	}
-	resource := "keel.service_id=" + domain.EncodeURIComponent(node.ID) +
-		",keel.environment_id=" + domain.EncodeURIComponent(env.ID) +
-		",deployment.environment.name=" + domain.EncodeURIComponent(envName)
+	resource := "keel.service_id=" + url.PathEscape(node.ID) +
+		",keel.environment_id=" + url.PathEscape(env.ID) +
+		",deployment.environment.name=" + url.PathEscape(envName)
 	var out []envVar
 	if !local {
 		out = append(out, envVar{otelEndpoint, endpoint})

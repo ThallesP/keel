@@ -120,10 +120,10 @@ type CoreInsertEndpointParams struct {
 	Protocol    string
 	Port        int64
 	PinnedPort  int64
-	Domain      *string
-	PublicPort  *int64
+	Domain      string
+	PublicPort  int64
 	StatusState string
-	StatusError *string
+	StatusError string
 	StatusAt    int64
 }
 

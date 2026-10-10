@@ -47,8 +47,8 @@ WHERE e.node_id <> ?
 
 type IngressListOtherEndpointsRow struct {
 	Protocol   string
-	Domain     *string
-	PublicPort *int64
+	Domain     string
+	PublicPort int64
 	Name       string
 }
 
@@ -90,8 +90,8 @@ type IngressListRoutesRow struct {
 	NodeID     string
 	Protocol   string
 	Port       int64
-	Domain     *string
-	PublicPort *int64
+	Domain     string
+	PublicPort int64
 }
 
 func (q *Queries) IngressListRoutes(ctx context.Context) ([]IngressListRoutesRow, error) {
@@ -127,7 +127,7 @@ const ingressNodeWithDomain = `-- name: IngressNodeWithDomain :one
 SELECT node_id FROM endpoints WHERE protocol = 'http' AND domain = ?
 `
 
-func (q *Queries) IngressNodeWithDomain(ctx context.Context, domain *string) (string, error) {
+func (q *Queries) IngressNodeWithDomain(ctx context.Context, domain string) (string, error) {
 	row := q.db.QueryRowContext(ctx, ingressNodeWithDomain, domain)
 	var node_id string
 	err := row.Scan(&node_id)

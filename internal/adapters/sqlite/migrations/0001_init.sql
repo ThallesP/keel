@@ -135,15 +135,15 @@ CREATE TABLE endpoints (
   protocol     TEXT NOT NULL CHECK (protocol IN ('http', 'tcp', 'udp')),
   port         INTEGER NOT NULL,
   pinned_port  INTEGER NOT NULL DEFAULT 0,
-  domain       TEXT,
-  public_port  INTEGER,
+  domain       TEXT NOT NULL DEFAULT '',
+  public_port  INTEGER NOT NULL DEFAULT 0,
   status_state TEXT NOT NULL CHECK (status_state IN ('starting', 'live', 'failed')),
-  status_error TEXT,
+  status_error TEXT NOT NULL DEFAULT '',
   status_at    INTEGER NOT NULL
 );
 CREATE INDEX endpoints_by_node ON endpoints(node_id, ord);
-CREATE UNIQUE INDEX endpoints_domain ON endpoints(domain) WHERE domain IS NOT NULL;
-CREATE UNIQUE INDEX endpoints_public_port ON endpoints(protocol, public_port) WHERE public_port IS NOT NULL;
+CREATE UNIQUE INDEX endpoints_domain ON endpoints(domain) WHERE domain <> '';
+CREATE UNIQUE INDEX endpoints_public_port ON endpoints(protocol, public_port) WHERE public_port <> 0;
 
 CREATE TABLE variables (
   id      TEXT PRIMARY KEY,

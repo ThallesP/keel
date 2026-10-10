@@ -86,11 +86,9 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			if in.Domain != nil {
 				return domain.Invalid("Only HTTP endpoints have a domain")
 			}
-			public, err := pickPublicPort(protocol, port, in.PublicPort, own, others)
-			if err != nil {
+			if wanted.PublicPort, err = pickPublicPort(protocol, port, in.PublicPort, own, others); err != nil {
 				return err
 			}
-			wanted.PublicPort = &public
 		}
 
 		key := wanted.Key()
@@ -130,7 +128,7 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 		if !all && (in.Protocol == "" || !named) {
 			return domain.Invalid("Name the endpoint: protocol and domain (http) or public port")
 		}
-		target := domain.Endpoint{Protocol: in.Protocol, PublicPort: in.PublicPort}
+		target := domain.Endpoint{Protocol: in.Protocol, PublicPort: *cmp.Or(in.PublicPort, new(0))}
 		if in.Domain != nil {
 			if target.Domain, err = domain.ValidDomain(*in.Domain); err != nil {
 				return err
@@ -185,13 +183,13 @@ func pickPublicPort(protocol domain.EndpointProtocol, port int, public *int, own
 		}
 	}
 	for _, e := range own {
-		if e.Protocol != protocol || e.PublicPort == nil {
+		if e.Protocol != protocol {
 			continue
 		}
 		if e.Port == port {
-			return *e.PublicPort, nil
+			return e.PublicPort, nil
 		}
-		taken[*e.PublicPort] = true
+		taken[e.PublicPort] = true
 	}
 	return domain.AllocatePublicPort(port, taken)
 }

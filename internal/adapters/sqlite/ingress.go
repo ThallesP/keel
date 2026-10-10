@@ -19,8 +19,8 @@ func (t *tx) IngressOtherEndpoints(nodeID string) ([]app.OwnedEndpoint, error) {
 	for _, r := range rows {
 		out = append(out, app.OwnedEndpoint{
 			Protocol:   domain.EndpointProtocol(r.Protocol),
-			Domain:     str(r.Domain),
-			PublicPort: intOr0(r.PublicPort),
+			Domain:     r.Domain,
+			PublicPort: int(r.PublicPort),
 			Owner:      r.Name,
 		})
 	}
@@ -38,8 +38,8 @@ func (t *tx) IngressRoutes() ([]app.ProxyRoute, error) {
 			NodeID:     r.NodeID,
 			Protocol:   domain.EndpointProtocol(r.Protocol),
 			Port:       int(r.Port),
-			Domain:     str(r.Domain),
-			PublicPort: intOr0(r.PublicPort),
+			Domain:     r.Domain,
+			PublicPort: int(r.PublicPort),
 		})
 	}
 	return out, nil
@@ -50,6 +50,6 @@ func (t *tx) IngressAnyEndpoint() (bool, error) {
 }
 
 func (t *tx) IngressNodeWithDomain(name string) (string, error) {
-	id, err := t.q.IngressNodeWithDomain(t.ctx, &name)
+	id, err := t.q.IngressNodeWithDomain(t.ctx, name)
 	return id, noRow(err)
 }

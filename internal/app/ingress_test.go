@@ -60,30 +60,30 @@ func TestIngressExposeTCPAllocation(t *testing.T) {
 	e.node("pg3", igEnvB, domain.NodeDatabase, "pg", "postgres:16", 5432)
 
 	ep, err := e.expose(e.member, igPG, app.ExposeInput{})
-	if err != nil || ep.Protocol != domain.ProtocolTCP || *ep.PublicPort != 5432 || ep.Domain != "" {
+	if err != nil || ep.Protocol != domain.ProtocolTCP || ep.PublicPort != 5432 || ep.Domain != "" {
 		t.Fatalf("first: %+v %v", ep, err)
 	}
 	ep2, err := e.expose(e.member, "pg2", app.ExposeInput{})
-	if err != nil || *ep2.PublicPort != 20000 {
+	if err != nil || ep2.PublicPort != 20000 {
 		t.Fatalf("second: %+v %v", ep2, err)
 	}
 	ep2b, err := e.expose(e.member, "pg2", app.ExposeInput{})
-	if err != nil || *ep2b.PublicPort != 20000 {
+	if err != nil || ep2b.PublicPort != 20000 {
 		t.Fatalf("again: %+v %v", ep2b, err)
 	}
 	_, err = e.expose(e.other, "pg3", app.ExposeInput{PublicPort: new(5432)})
 	igWantErr(t, err, domain.CodeConflict, "Port 5432/tcp is already used by postgres")
 	ep3, err := e.expose(e.other, "pg3", app.ExposeInput{})
-	if err != nil || *ep3.PublicPort != 20001 {
+	if err != nil || ep3.PublicPort != 20001 {
 		t.Fatalf("third: %+v %v", ep3, err)
 	}
 	ep4, err := e.expose(e.member, igPG, app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(443)})
-	if err != nil || *ep4.PublicPort != 443 || ep4.Protocol != domain.ProtocolUDP {
+	if err != nil || ep4.PublicPort != 443 || ep4.Protocol != domain.ProtocolUDP {
 		t.Fatalf("udp: %+v %v", ep4, err)
 	}
 	e.node("web", igEnvA, domain.NodeService, "web", "nginx:1", 443)
 	ep5, err := e.expose(e.member, "web", app.ExposeInput{Protocol: domain.ProtocolTCP})
-	if err != nil || *ep5.PublicPort != 20002 {
+	if err != nil || ep5.PublicPort != 20002 {
 		t.Fatalf("tcp 443: %+v %v", ep5, err)
 	}
 }
@@ -151,7 +151,7 @@ func TestIngressExposeRedisGuard(t *testing.T) {
 	e.node("r4", igEnvA, domain.NodeCache, "redis-4", "redis:7", 6379)
 	e.variable("r4", "REDIS_PASSWORD", "x")
 	ep, err := e.expose(e.member, "r4", app.ExposeInput{})
-	if err != nil || ep.Protocol != domain.ProtocolTCP || *ep.PublicPort != 6379 {
+	if err != nil || ep.Protocol != domain.ProtocolTCP || ep.PublicPort != 6379 {
 		t.Fatalf("shipped redis: %+v %v", ep, err)
 	}
 }

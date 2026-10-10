@@ -34,7 +34,7 @@ type Endpoint struct {
 	Port       int
 	PinnedPort bool
 	Domain     string
-	PublicPort *int
+	PublicPort int
 	Status     EndpointStatus
 }
 
@@ -42,19 +42,12 @@ func (e Endpoint) Key() string {
 	if e.Protocol == ProtocolHTTP {
 		return "http:" + e.Domain
 	}
-	return string(e.Protocol) + ":" + e.publicPort()
+	return string(e.Protocol) + ":" + strconv.Itoa(e.PublicPort)
 }
 
 func (e Endpoint) Address(publicIP string) string {
 	if e.Protocol == ProtocolHTTP {
 		return "https://" + e.Domain
 	}
-	return cmp.Or(publicIP, "<public IP>") + ":" + e.publicPort()
-}
-
-func (e Endpoint) publicPort() string {
-	if e.PublicPort == nil {
-		return "0"
-	}
-	return strconv.Itoa(*e.PublicPort)
+	return cmp.Or(publicIP, "<public IP>") + ":" + strconv.Itoa(e.PublicPort)
 }

@@ -48,7 +48,7 @@ func TestNodeRoundTrip(t *testing.T) {
 	}
 	eps := []domain.Endpoint{
 		{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api.example.com", Status: domain.EndpointStatus{State: domain.EndpointLive, At: 1}},
-		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: new(5432), PinnedPort: true, Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "in use", At: 2}},
+		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: 5432, PinnedPort: true, Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "in use", At: 2}},
 	}
 	ctx := context.Background()
 	err := s.Write(ctx, func(tx app.Tx) error {

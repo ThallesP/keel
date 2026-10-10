@@ -81,7 +81,7 @@ func TestNodeViewOf(t *testing.T) {
 
 func TestNodeViewEndpoints(t *testing.T) {
 	n := domain.Node{ID: "n1", Name: "pg", Type: domain.NodeDatabase, Desired: &domain.Desired{Image: "postgres:16", Revision: 1, Replicas: 1}, Endpoints: []domain.Endpoint{
-		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: new(5432), Status: domain.EndpointStatus{State: domain.EndpointLive}},
+		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: 5432, Status: domain.EndpointStatus{State: domain.EndpointLive}},
 		{Protocol: domain.ProtocolHTTP, Port: 80, Domain: "a.example.com", Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "no cert"}},
 		{Protocol: domain.ProtocolHTTP, Port: 80, Domain: "b.example.com", Status: domain.EndpointStatus{State: domain.EndpointLive}},
 		{Protocol: domain.ProtocolUDP, Port: 53, Status: domain.EndpointStatus{State: domain.EndpointStarting}},
@@ -90,13 +90,13 @@ func TestNodeViewEndpoints(t *testing.T) {
 	if !v.Public || v.PublicURL != "https://a.example.com" || len(v.Endpoints) != 4 {
 		t.Fatalf("view %+v", v)
 	}
-	if e := v.Endpoints[0]; e.Address != "<public IP>:5432" || e.State != "live" || e.PublicPort == nil || *e.PublicPort != 5432 {
+	if e := v.Endpoints[0]; e.Address != "<public IP>:5432" || e.State != "live" || e.PublicPort != 5432 {
 		t.Errorf("tcp endpoint %+v", e)
 	}
 	if e := v.Endpoints[1]; e.Address != "https://a.example.com" || e.Error != "no cert" || e.State != "failed" {
 		t.Errorf("http endpoint %+v", e)
 	}
-	if e := v.Endpoints[3]; e.Address != "<public IP>:0" || e.PublicPort != nil {
+	if e := v.Endpoints[3]; e.Address != "<public IP>:0" || e.PublicPort != 0 {
 		t.Errorf("udp endpoint without a public port %+v", e)
 	}
 }

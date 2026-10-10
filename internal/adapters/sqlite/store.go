@@ -133,29 +133,6 @@ func b2i(b bool) int64 {
 	return 0
 }
 
-func ptrInt(p *int64) *int {
-	if p == nil {
-		return nil
-	}
-	v := int(*p)
-	return &v
-}
-
-func intOr0(p *int64) int {
-	if p == nil {
-		return 0
-	}
-	return int(*p)
-}
-
-func ptrInt64(p *int) *int64 {
-	if p == nil {
-		return nil
-	}
-	v := int64(*p)
-	return &v
-}
-
 func str(p *string) string {
 	if p == nil {
 		return ""

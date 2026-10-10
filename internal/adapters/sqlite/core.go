@@ -83,9 +83,9 @@ func endpointOf(r sqlc.Endpoint) domain.Endpoint {
 		Protocol:   domain.EndpointProtocol(r.Protocol),
 		Port:       int(r.Port),
 		PinnedPort: r.PinnedPort != 0,
-		Domain:     str(r.Domain),
-		PublicPort: ptrInt(r.PublicPort),
-		Status:     domain.EndpointStatus{State: domain.EndpointState(r.StatusState), Error: str(r.StatusError), At: r.StatusAt},
+		Domain:     r.Domain,
+		PublicPort: int(r.PublicPort),
+		Status:     domain.EndpointStatus{State: domain.EndpointState(r.StatusState), Error: r.StatusError, At: r.StatusAt},
 	}
 }
 
@@ -205,10 +205,10 @@ func (t *tx) ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error {
 			Protocol:    string(e.Protocol),
 			Port:        int64(e.Port),
 			PinnedPort:  b2i(e.PinnedPort),
-			Domain:      nullStr(e.Domain),
-			PublicPort:  ptrInt64(e.PublicPort),
+			Domain:      e.Domain,
+			PublicPort:  int64(e.PublicPort),
 			StatusState: string(e.Status.State),
-			StatusError: nullStr(e.Status.Error),
+			StatusError: e.Status.Error,
 			StatusAt:    e.Status.At,
 		})
 		if err != nil {

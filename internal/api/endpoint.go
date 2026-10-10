@@ -6,7 +6,7 @@ type EndpointView struct {
 	Protocol   string `json:"protocol" enum:"http,tcp,udp"`
 	Port       int    `json:"port" doc:"Container port the proxy dials"`
 	Domain     string `json:"domain,omitempty"`
-	PublicPort *int   `json:"publicPort,omitempty"`
+	PublicPort int    `json:"publicPort,omitempty"`
 	Address    string `json:"address" doc:"https://<domain>, or <ip>:<publicPort>"`
 	State      string `json:"state" enum:"starting,live,failed"`
 	Error      string `json:"error,omitempty"`

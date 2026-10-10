@@ -3,14 +3,15 @@ package realtime
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,12 +24,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-var (
-	DisconnectSignedOut         = centrifuge.Disconnect{Code: 4501, Reason: "signed out"}
-	DisconnectMembershipChanged = centrifuge.Disconnect{Code: 4001, Reason: "membership changed"}
-)
-
-const DefaultWindow = 100 * time.Millisecond
+var DisconnectSignedOut = centrifuge.Disconnect{Code: 4501, Reason: "signed out"}
 
 type Config struct {
 	Authenticate func(r *http.Request) (domain.Actor, error)
@@ -51,15 +47,9 @@ type Server struct {
 	window   time.Duration
 	log      *slog.Logger
 
-	mu       sync.Mutex
-	closed   bool
-	pending  map[string]*batch
-	sessions map[string]map[*centrifuge.Client]struct{}
-}
-
-type batch struct {
-	topics map[string]struct{}
-	timer  *time.Timer
+	mu      sync.Mutex
+	closed  bool
+	pending map[string]map[string]bool
 }
 
 var _ app.Publisher = (*Server)(nil)
@@ -72,19 +62,11 @@ type conn struct {
 }
 
 func New(cfg Config) (*Server, error) {
-	if cfg.Authenticate == nil {
-		return nil, errors.New("realtime: Config.Authenticate is required")
-	}
-	window := cfg.Window
-	if window == 0 {
-		window = DefaultWindow
-	}
 	s := &Server{
-		auth:     cfg.Authenticate,
-		window:   window,
-		log:      cfg.Log,
-		pending:  map[string]*batch{},
-		sessions: map[string]map[*centrifuge.Client]struct{}{},
+		auth:    cfg.Authenticate,
+		window:  cmp.Or(cfg.Window, 100*time.Millisecond),
+		log:     cfg.Log,
+		pending: map[string]map[string]bool{},
 	}
 	if u, err := url.Parse(cfg.SiteURL); err == nil {
 		s.siteHost = u.Host
@@ -101,7 +83,6 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.node = node
 	node.OnConnecting(s.onConnecting)
-	node.OnConnect(s.onConnect)
 	if err := node.Run(); err != nil {
 		return nil, err
 	}
@@ -133,18 +114,18 @@ func (c cookieCarrier) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return nil, nil, http.ErrNotSupported
 	}
 	nc, brw, err := h.Hijack()
-	if err != nil || len(c.Header().Values("Set-Cookie")) == 0 {
+	cookies := c.Header().Values("Set-Cookie")
+	if err != nil || len(cookies) == 0 {
 		return nc, brw, err
 	}
 	var extra []byte
-	for _, v := range c.Header().Values("Set-Cookie") {
+	for _, v := range cookies {
 		extra = append(extra, "Set-Cookie: "...)
-		for i := 0; i < len(v); i++ {
-			if b := v[i]; b > 31 && b != 127 {
-				extra = append(extra, b)
-			} else {
-				extra = append(extra, ' ')
+		for _, b := range []byte(v) {
+			if b < ' ' || b == 0x7f {
+				b = ' '
 			}
+			extra = append(extra, b)
 		}
 		extra = append(extra, "\r\n"...)
 	}
@@ -165,11 +146,7 @@ func (c *handshakeConn) Write(p []byte) (int, error) {
 	if end < 0 || !bytes.HasPrefix(p, []byte("HTTP/1.1 101 ")) {
 		return c.Conn.Write(p)
 	}
-	out := make([]byte, 0, len(p)+len(c.extra))
-	out = append(out, p[:end+2]...)
-	out = append(out, c.extra...)
-	out = append(out, p[end+2:]...)
-	if _, err := c.Conn.Write(out); err != nil {
+	if _, err := c.Conn.Write(slices.Concat(p[:end+2], c.extra, p[end+2:])); err != nil {
 		return 0, err
 	}
 	return len(p), nil
@@ -184,17 +161,11 @@ func (s *Server) originAllowed(r *http.Request) bool {
 	if err != nil || u.Host == "" {
 		return false
 	}
-	if strings.EqualFold(u.Host, r.Host) {
-		return true
-	}
-	return s.siteHost != "" && strings.EqualFold(u.Host, s.siteHost)
+	return strings.EqualFold(u.Host, r.Host) || strings.EqualFold(u.Host, s.siteHost)
 }
 
 func (s *Server) onConnecting(ctx context.Context, _ centrifuge.ConnectEvent) (centrifuge.ConnectReply, error) {
-	c, ok := ctx.Value(connKey{}).(conn)
-	if !ok {
-		return centrifuge.ConnectReply{}, centrifuge.DisconnectServerError
-	}
+	c := ctx.Value(connKey{}).(conn)
 	if c.err != nil {
 		s.log.Error("realtime: resolve session", "err", c.err)
 		return centrifuge.ConnectReply{}, centrifuge.DisconnectServerError
@@ -202,112 +173,61 @@ func (s *Server) onConnecting(ctx context.Context, _ centrifuge.ConnectEvent) (c
 	if !c.actor.SignedIn() {
 		return centrifuge.ConnectReply{}, DisconnectSignedOut
 	}
-	reply := centrifuge.ConnectReply{Credentials: &centrifuge.Credentials{UserID: c.actor.UserID}}
+	reply := centrifuge.ConnectReply{
+		Credentials: &centrifuge.Credentials{UserID: c.actor.UserID},
+		Labels:      map[string]string{"session": c.actor.SessionID},
+	}
 	if c.actor.OrganizationID != "" {
 		reply.Subscriptions = map[string]centrifuge.SubscribeOptions{Channel(c.actor.OrganizationID): {}}
 	}
 	return reply, nil
 }
 
-func (s *Server) onConnect(client *centrifuge.Client) {
-	c, _ := client.Context().Value(connKey{}).(conn)
-	sid := c.actor.SessionID
-	if sid == "" {
-		return
-	}
-	s.mu.Lock()
-	set := s.sessions[sid]
-	if set == nil {
-		set = map[*centrifuge.Client]struct{}{}
-		s.sessions[sid] = set
-	}
-	set[client] = struct{}{}
-	s.mu.Unlock()
-	client.OnDisconnect(func(centrifuge.DisconnectEvent) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if set := s.sessions[sid]; set != nil {
-			delete(set, client)
-			if len(set) == 0 {
-				delete(s.sessions, sid)
-			}
-		}
-	})
-}
-
 func (s *Server) Publish(organizationID string, topics []string) {
-	if organizationID == "" || len(topics) == 0 {
-		return
-	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed {
-		s.mu.Unlock()
 		return
 	}
-	b := s.pending[organizationID]
-	fresh := b == nil
-	if fresh {
-		b = &batch{topics: map[string]struct{}{}}
-		s.pending[organizationID] = b
+	batch, ok := s.pending[organizationID]
+	if !ok {
+		batch = map[string]bool{}
+		s.pending[organizationID] = batch
+		time.AfterFunc(s.window, func() { s.flush(organizationID) })
 	}
 	for _, t := range topics {
-		if t != "" {
-			b.topics[t] = struct{}{}
-		}
-	}
-	if fresh && s.window > 0 {
-		b.timer = time.AfterFunc(s.window, func() { s.flush(organizationID) })
-	}
-	s.mu.Unlock()
-	if fresh && s.window <= 0 {
-		s.flush(organizationID)
+		batch[t] = true
 	}
 }
 
 func (s *Server) flush(organizationID string) {
 	s.mu.Lock()
-	b := s.pending[organizationID]
+	batch := s.pending[organizationID]
 	delete(s.pending, organizationID)
 	closed := s.closed
 	s.mu.Unlock()
-	if b == nil || closed || len(b.topics) == 0 {
+	if closed {
 		return
 	}
-	topics := make([]string, 0, len(b.topics))
-	for t := range b.topics {
-		topics = append(topics, t)
-	}
-	sort.Strings(topics)
-	data, err := json.Marshal(Invalidation{Type: "invalidate", Topics: topics})
-	if err != nil {
-		s.log.Error("realtime: encode invalidation", "err", err)
-		return
-	}
+	data, _ := json.Marshal(Invalidation{Type: "invalidate", Topics: slices.Sorted(maps.Keys(batch))})
 	if _, err := s.node.Publish(Channel(organizationID), data); err != nil {
 		s.log.Error("realtime: publish", "org", organizationID, "err", err)
 	}
 }
 
 func (s *Server) DisconnectSession(sessionID string) {
-	if sessionID == "" {
-		return
-	}
-	s.mu.Lock()
-	clients := make([]*centrifuge.Client, 0, len(s.sessions[sessionID]))
-	for c := range s.sessions[sessionID] {
-		clients = append(clients, c)
-	}
-	s.mu.Unlock()
-	for _, c := range clients {
-		c.Disconnect(DisconnectSignedOut)
+	err := s.node.Disconnect("",
+		centrifuge.WithDisconnectAllUsers(true),
+		centrifuge.WithDisconnectLabelFilter(&centrifuge.FilterNode{Key: "session", Cmp: "eq", Val: sessionID}),
+		centrifuge.WithCustomDisconnect(DisconnectSignedOut))
+	if err != nil {
+		s.log.Error("realtime: disconnect session", "err", err)
 	}
 }
 
 func (s *Server) DisconnectUser(userID string) {
-	if userID == "" {
-		return
-	}
-	if err := s.node.Disconnect(userID, centrifuge.WithCustomDisconnect(DisconnectMembershipChanged)); err != nil {
+	err := s.node.Disconnect(userID, centrifuge.WithCustomDisconnect(centrifuge.Disconnect{Code: 4001, Reason: "membership changed"}))
+	if err != nil {
 		s.log.Error("realtime: disconnect user", "err", err)
 	}
 }
@@ -315,33 +235,17 @@ func (s *Server) DisconnectUser(userID string) {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	s.closed = true
-	for org, b := range s.pending {
-		if b.timer != nil {
-			b.timer.Stop()
-		}
-		delete(s.pending, org)
-	}
 	s.mu.Unlock()
 	return s.node.Shutdown(ctx)
 }
 
 func (s *Server) logEntry(e centrifuge.LogEntry) {
-	level := slog.LevelInfo
-	switch e.Level {
-	case centrifuge.LogLevelTrace, centrifuge.LogLevelDebug:
-		level = slog.LevelDebug
-	case centrifuge.LogLevelWarn:
-		level = slog.LevelWarn
-	case centrifuge.LogLevelError:
+	level := slog.LevelWarn
+	if e.Level == centrifuge.LogLevelError {
 		level = slog.LevelError
 	}
 	args := make([]any, 0, 2*len(e.Fields))
-	keys := make([]string, 0, len(e.Fields))
-	for k := range e.Fields {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(e.Fields)) {
 		args = append(args, k, e.Fields[k])
 	}
 	s.log.Log(context.Background(), level, "realtime: "+e.Message, args...)

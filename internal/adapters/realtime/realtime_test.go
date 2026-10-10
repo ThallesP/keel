@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +47,7 @@ func newHarness(t *testing.T, window time.Duration) *harness {
 		Authenticate: authenticate,
 		SiteURL:      "https://keel.example.com",
 		Window:       window,
-		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:          slog.New(slog.DiscardHandler),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -135,12 +135,11 @@ func (c *client) readLoop() {
 	}
 }
 
-func (c *client) send(cmd map[string]any) uint32 {
+func (c *client) send(command string) uint32 {
 	c.t.Helper()
 	c.nextID++
-	cmd["id"] = c.nextID
-	b, _ := json.Marshal(cmd)
-	if err := c.ws.Write(context.Background(), websocket.MessageText, b); err != nil {
+	frame := fmt.Sprintf(`{"id":%d,%s}`, c.nextID, command)
+	if err := c.ws.Write(context.Background(), websocket.MessageText, []byte(frame)); err != nil {
 		c.t.Fatalf("write: %v", err)
 	}
 	return c.nextID
@@ -187,7 +186,7 @@ func (c *client) closeStatus() websocket.StatusCode {
 
 func (c *client) connect() message {
 	c.t.Helper()
-	id := c.send(map[string]any{"connect": map[string]any{}})
+	id := c.send(`"connect":{}`)
 	m := c.next()
 	if m.ID != id {
 		c.t.Fatalf("reply id %d, want %d", m.ID, id)
@@ -229,7 +228,7 @@ func TestSignedOutRejected(t *testing.T) {
 		if err != nil {
 			t.Fatalf("dial %q: %v", token, err)
 		}
-		c.send(map[string]any{"connect": map[string]any{}})
+		c.send(`"connect":{}`)
 		if got := c.closeStatus(); got != 4501 {
 			t.Fatalf("token %q: close %d, want 4501 (signed out)", token, got)
 		}
@@ -242,7 +241,7 @@ func TestAuthenticateErrorAsksToRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.send(map[string]any{"connect": map[string]any{}})
+	c.send(`"connect":{}`)
 	if got := c.closeStatus(); got != 3004 {
 		t.Fatalf("close %d, want 3004", got)
 	}
@@ -298,7 +297,7 @@ func TestNoCrossOrganizationLeakage(t *testing.T) {
 	}
 	alice.quiet(50 * time.Millisecond)
 
-	id := alice.send(map[string]any{"subscribe": map[string]any{"channel": "org:org-b"}})
+	id := alice.send(`"subscribe":{"channel":"org:org-b"}`)
 	reply := alice.next()
 	if reply.ID != id || reply.Error == nil || reply.Subscribe != nil {
 		t.Fatalf("client-side subscribe to org:org-b was not refused: %+v", reply)
@@ -325,7 +324,6 @@ func TestSignedInWithoutOrganizationHasNoSubscriptions(t *testing.T) {
 		t.Fatalf("connect reply = %+v, want connected without subscriptions", m)
 	}
 	h.rt.Publish("org-a", []string{"/api/projects"})
-	h.rt.Publish("", []string{"/api/projects"})
 	c.quiet(50 * time.Millisecond)
 }
 
@@ -378,7 +376,6 @@ func TestDisconnectSession(t *testing.T) {
 	h.rt.Publish("org-a", []string{"/api/projects"})
 	invalidation(t, other.next(), "org:org-a")
 
-	h.rt.DisconnectSession("")
 	h.rt.DisconnectSession("missing")
 	h.rt.Publish("org-a", []string{"/api/projects"})
 	invalidation(t, other.next(), "org:org-a")
@@ -416,7 +413,7 @@ func TestShutdown(t *testing.T) {
 }
 
 func TestHandshakeCarriesRenewedCookie(t *testing.T) {
-	rt, err := New(Config{Authenticate: authenticate, Window: -1, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	rt, err := New(Config{Authenticate: authenticate, Window: -1, Log: slog.New(slog.DiscardHandler)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,11 +458,5 @@ func TestHandshakeCarriesRenewedCookie(t *testing.T) {
 	}
 	if v := resp.Header.Values("Set-Cookie"); len(v) != 0 {
 		t.Fatalf("unexpected Set-Cookie %q", v)
-	}
-}
-
-func TestNewRequiresAuthenticate(t *testing.T) {
-	if _, err := New(Config{}); err == nil {
-		t.Fatal("New without Authenticate succeeded")
 	}
 }

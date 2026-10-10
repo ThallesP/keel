@@ -23,11 +23,7 @@ func Converged(desired *Desired, observed *Observed) bool {
 		return false
 	}
 	if observed.State == ObservedCompleted {
-		completed := 0
-		if observed.Completed != nil {
-			completed = *observed.Completed
-		}
-		return completed >= desired.Replicas
+		return observed.Completed != nil && *observed.Completed >= desired.Replicas
 	}
 	return observed.State == ObservedOK && observed.Running >= desired.Replicas
 }
@@ -44,10 +40,7 @@ func DeriveStatus(n Node) NodeStatus {
 		return StatusDeploying
 	}
 	if d.Replicas == 0 {
-		if o.Running > 0 {
-			return StatusStopping
-		}
-		if o.Revision == 0 || o.Revision >= d.Revision {
+		if o.Running == 0 && (o.Revision == 0 || o.Revision >= d.Revision) {
 			return StatusStopped
 		}
 		return StatusStopping

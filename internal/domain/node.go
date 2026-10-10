@@ -15,22 +15,26 @@ func (t NodeType) Deployable() bool {
 }
 
 type Position struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
+	X float64
+	Y float64
 }
 
+func (p Position) Add(q Position) Position { return Position{X: p.X + q.X, Y: p.Y + q.Y} }
+
+func (p Position) Sub(q Position) Position { return Position{X: p.X - q.X, Y: p.Y - q.Y} }
+
 type NodeConfig struct {
-	SizeGb *float64 `json:"sizeGb,omitempty"`
-	Width  *float64 `json:"width,omitempty"`
-	Height *float64 `json:"height,omitempty"`
+	SizeGb *float64
+	Width  *float64
+	Height *float64
 }
 
 type Desired struct {
-	Image    string `json:"image"`
-	Revision int    `json:"revision"`
-	Replicas int    `json:"replicas"`
-	Port     *int   `json:"port,omitempty"`
-	Tracing  bool   `json:"tracing,omitempty"`
+	Image    string
+	Revision int
+	Replicas int
+	Port     *int
+	Tracing  bool
 }
 
 type ObservedState string
@@ -45,33 +49,33 @@ const (
 )
 
 type Observed struct {
-	Revision   int           `json:"revision"`
-	Running    int           `json:"running"`
-	Completed  *int          `json:"completed,omitempty"`
-	FinishedAt *int64        `json:"finishedAt,omitempty"`
-	State      ObservedState `json:"state"`
-	NodeIDs    []string      `json:"nodeIds"`
-	Error      string        `json:"error,omitempty"`
-	At         int64         `json:"at"`
+	Revision   int
+	Running    int
+	Completed  *int
+	FinishedAt *int64
+	State      ObservedState
+	NodeIDs    []string
+	Error      string
+	At         int64
 }
 
 type Node struct {
-	ID               string     `json:"id"`
-	EnvironmentID    string     `json:"environmentId"`
-	Type             NodeType   `json:"type"`
-	Name             string     `json:"name"`
-	ParentID         string     `json:"parentId,omitempty"`
-	Position         Position   `json:"position"`
-	Config           NodeConfig `json:"config"`
-	Desired          *Desired   `json:"desired,omitempty"`
-	Observed         *Observed  `json:"observed,omitempty"`
-	Endpoints        []Endpoint `json:"endpoints,omitempty"`
-	DeployedRevision *int       `json:"deployedRevision,omitempty"`
-	Dirty            bool       `json:"dirty,omitempty"`
-	ShippedAt        *int64     `json:"shippedAt,omitempty"`
-	ApplyError       string     `json:"applyError,omitempty"`
-	OneShot          bool       `json:"oneShot,omitempty"`
-	CreatedAt        int64      `json:"createdAt"`
+	ID               string
+	EnvironmentID    string
+	Type             NodeType
+	Name             string
+	ParentID         string
+	Position         Position
+	Config           NodeConfig
+	Desired          *Desired
+	Observed         *Observed
+	Endpoints        []Endpoint
+	DeployedRevision *int
+	Dirty            bool
+	ShippedAt        *int64
+	ApplyError       string
+	OneShot          bool
+	CreatedAt        int64
 }
 
 func (n Node) ServiceName() string { return ServicePrefix + n.ID }

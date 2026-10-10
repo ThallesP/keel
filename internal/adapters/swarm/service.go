@@ -41,16 +41,12 @@ func toSpec(s app.ServiceSpec) swarm.ServiceSpec {
 	if s.OneShot {
 		failure = swarm.UpdateFailureActionContinue
 	}
-	env := s.Env
-	if env == nil {
-		env = []string{}
-	}
 	return swarm.ServiceSpec{
 		Annotations: swarm.Annotations{Name: serviceName(s.NodeID), Labels: labels()},
 		TaskTemplate: swarm.TaskSpec{
 			ContainerSpec: &swarm.ContainerSpec{
 				Image:  s.Image,
-				Env:    env,
+				Env:    s.Env,
 				Args:   engineArgs(s.Image, s.Env),
 				Labels: labels(),
 			},
@@ -79,13 +75,12 @@ func engineArgs(image string, env []string) []string {
 	if imageEngine(image) != "redis" {
 		return nil
 	}
-	const key = "REDIS_PASSWORD="
 	for _, e := range env {
-		if strings.HasPrefix(e, key) {
-			if pass := strings.TrimPrefix(e, key); pass != "" {
-				return []string{"redis-server", "--requirepass", pass}
+		if pass, ok := strings.CutPrefix(e, "REDIS_PASSWORD="); ok {
+			if pass == "" {
+				return nil
 			}
-			return nil
+			return []string{"redis-server", "--requirepass", pass}
 		}
 	}
 	return nil

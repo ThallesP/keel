@@ -21,7 +21,4 @@ func New() (*Swarm, error) {
 	return &Swarm{cli: cli}, nil
 }
 
-// Client is the underlying moby client.
-func (s *Swarm) Client() *client.Client { return s.cli }
-
 func (s *Swarm) Close() error { return s.cli.Close() }

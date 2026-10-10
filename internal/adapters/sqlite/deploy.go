@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"errors"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
@@ -22,7 +23,6 @@ func deploymentOf(r db.Deployment) domain.Deployment {
 		Status:        domain.DeploymentStatus(r.Status),
 		StartedAt:     r.StartedAt,
 		FinishedAt:    r.FinishedAt,
-		Steps:         []domain.DeployStep{},
 	}
 }
 
@@ -197,7 +197,7 @@ func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) er
 
 func (t *tx) ClusterServers() (int, error) {
 	n, err := t.q.DeployGetCluster(t.ctx)
-	if errors.Is(noRow(err), app.ErrNoRow) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
 	return int(n), err

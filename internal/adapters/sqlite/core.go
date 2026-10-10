@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 
@@ -56,29 +57,24 @@ func nodeOf(r db.Node) domain.Node {
 		CreatedAt:        r.CreatedAt,
 	}
 	if r.DesiredImage != nil {
-		d := &domain.Desired{Image: *r.DesiredImage, Port: ptrInt(r.DesiredPort), Tracing: r.DesiredTracing != 0}
-		if r.DesiredRevision != nil {
-			d.Revision = int(*r.DesiredRevision)
+		n.Desired = &domain.Desired{
+			Image:    *r.DesiredImage,
+			Revision: intOr0(r.DesiredRevision),
+			Replicas: intOr0(r.DesiredReplicas),
+			Port:     ptrInt(r.DesiredPort),
+			Tracing:  r.DesiredTracing != 0,
 		}
-		if r.DesiredReplicas != nil {
-			d.Replicas = int(*r.DesiredReplicas)
-		}
-		n.Desired = d
 	}
 	if r.ObservedAt != nil {
 		o := &domain.Observed{
+			Revision:   intOr0(r.ObservedRevision),
+			Running:    intOr0(r.ObservedRunning),
 			Completed:  ptrInt(r.ObservedCompleted),
 			FinishedAt: r.ObservedFinishedAt,
 			State:      domain.ObservedState(str(r.ObservedState)),
 			Error:      str(r.ObservedError),
 			At:         *r.ObservedAt,
 			NodeIDs:    []string{},
-		}
-		if r.ObservedRevision != nil {
-			o.Revision = int(*r.ObservedRevision)
-		}
-		if r.ObservedRunning != nil {
-			o.Running = int(*r.ObservedRunning)
 		}
 		if r.ObservedNodeIds != nil {
 			_ = json.Unmarshal([]byte(*r.ObservedNodeIds), &o.NodeIDs)
@@ -247,7 +243,7 @@ func (t *tx) ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error {
 
 func (t *tx) Setting(key string) (string, bool, error) {
 	v, err := t.q.CoreGetSetting(t.ctx, key)
-	if errors.Is(noRow(err), app.ErrNoRow) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

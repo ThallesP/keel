@@ -139,13 +139,8 @@ func ns(d doc, k string) any { // nullable string
 }
 
 func num(d doc, k string) (float64, bool) {
-	switch v := d[k].(type) {
-	case float64:
-		return v, true
-	case map[string]any: // {"$integer": "..."} would be an Int64; Keel never stores one
-		return 0, false
-	}
-	return 0, false
+	v, ok := d[k].(float64) // {"$integer": "..."} would be an Int64; Keel never stores one
+	return v, ok
 }
 
 func i64(d doc, k string) int64 {
@@ -214,9 +209,9 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 	defer tx.Rollback()
 	r := &Report{Imported: map[string]int{}, Skipped: map[string]int{}}
 	ex := func(table, q string, args ...any) bool {
-		if _, err2 := tx.ExecContext(ctx, q, args...); err2 != nil {
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 			r.Skipped[table]++
-			r.warn("%s: %v", table, err2)
+			r.warn("%s: %v", table, err)
 			return false
 		}
 		r.Imported[table]++
@@ -233,16 +228,16 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 	users := map[string]bool{}
 	for _, u := range t["user"] {
 		id := s(u, "_id")
-		created := i64(u, "createdAt")
-		if created == 0 {
-			created = i64(u, "_creationTime")
+		at := i64(u, "createdAt")
+		if at == 0 {
+			at = created(u)
 		}
 		updated := i64(u, "updatedAt")
 		if updated == 0 {
-			updated = created
+			updated = at
 		}
 		if ex("users", `INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
-			id, strings.ToLower(strings.TrimSpace(s(u, "email"))), s(u, "name"), passwords[id], created, updated) {
+			id, strings.ToLower(strings.TrimSpace(s(u, "email"))), s(u, "name"), passwords[id], at, updated) {
 			users[id] = true
 		}
 	}

@@ -38,14 +38,11 @@ type Client struct {
 
 var _ app.Proxy = (*Client)(nil)
 
-// New is a client for the admin socket at socket ("" = DefaultSocket). reportURL is
+// New is a client for the admin socket at socket. reportURL is
 // KEEL_PROXY_REPORT_URL ("" lets the app use <KEEL_SITE_URL>/proxy/events). The edge dials it from
 // the host's network namespace, where Docker's DNS does not answer: use an IP address (the
 // control plane's tailnet address), not a name.
 func New(socket, reportURL string) *Client {
-	if socket == "" {
-		socket = DefaultSocket
-	}
 	c := &Client{socket: socket, reportURL: reportURL, idle: IdleTimeout}
 	c.http = &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

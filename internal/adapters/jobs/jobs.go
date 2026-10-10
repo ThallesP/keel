@@ -40,11 +40,8 @@ type Scheduler struct {
 
 var _ app.Jobs = (*Scheduler)(nil)
 
-// New is a running scheduler. log may be nil (slog.Default).
+// New is a running scheduler.
 func New(log *slog.Logger) *Scheduler {
-	if log == nil {
-		log = slog.Default()
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		log:     log,

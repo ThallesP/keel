@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
@@ -12,7 +13,7 @@ import (
 
 // canvasTaken maps a UNIQUE violation to app.ErrCanvasTaken (keeping the driver text).
 func canvasTaken(err error) error {
-	if IsUniqueViolation(err) {
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
 		return fmt.Errorf("%w: %v", app.ErrCanvasTaken, err)
 	}
 	return err

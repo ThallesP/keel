@@ -57,14 +57,19 @@ func jsonReply(v string) func(http.ResponseWriter, *http.Request) {
 func newDockerSwarm(t *testing.T, handlers map[string]func(http.ResponseWriter, *http.Request)) (*Swarm, *fakeDocker) {
 	t.Helper()
 	f := &fakeDocker{handlers: handlers}
-	srv := httptest.NewServer(f)
+	return fakeEngine(t, f.ServeHTTP), f
+}
+
+func fakeEngine(t *testing.T, handler http.HandlerFunc) *Swarm {
+	t.Helper()
+	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	cli, err := client.New(client.WithHost("tcp://"+strings.TrimPrefix(srv.URL, "http://")), client.WithAPIVersion("1.47"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { cli.Close() })
-	return &Swarm{cli: cli}, f
+	return &Swarm{cli: cli}
 }
 
 func TestDockerApplyCalls(t *testing.T) {

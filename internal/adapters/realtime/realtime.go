@@ -111,10 +111,6 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Authenticate == nil {
 		return nil, errors.New("realtime: Config.Authenticate is required")
 	}
-	log := cfg.Log
-	if log == nil {
-		log = slog.Default()
-	}
 	window := cfg.Window
 	if window == 0 {
 		window = DefaultWindow
@@ -122,7 +118,7 @@ func New(cfg Config) (*Server, error) {
 	s := &Server{
 		auth:     cfg.Authenticate,
 		window:   window,
-		log:      log,
+		log:      cfg.Log,
 		pending:  map[string]*batch{},
 		sessions: map[string]map[*centrifuge.Client]struct{}{},
 	}

@@ -35,13 +35,6 @@ func New() *Client {
 	return &Client{HTTP: &http.Client{}, Timeout: 60 * time.Second}
 }
 
-func (c *Client) client() *http.Client {
-	if c.HTTP != nil {
-		return c.HTTP
-	}
-	return http.DefaultClient
-}
-
 func (c *Client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if c.Timeout > 0 {
 		return context.WithTimeout(ctx, c.Timeout)
@@ -71,7 +64,7 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 	if orgID != "" {
 		req.Header.Set("X-Axiom-Org-Id", orgID)
 	}
-	res, err := c.client().Do(req)
+	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -119,9 +112,8 @@ func tabularRows(data []byte) ([]*app.JSONObject, error) {
 	columns, _ := field(table, "columns").([]any)
 	count := 0
 	if len(columns) > 0 {
-		if first, ok := columns[0].([]any); ok {
-			count = len(first)
-		}
+		first, _ := columns[0].([]any)
+		count = len(first)
 	}
 	rows := make([]*app.JSONObject, 0, count)
 	for i := 0; i < count; i++ {
@@ -278,7 +270,7 @@ func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, bo
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	res, err := c.client().Do(req)
+	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -293,13 +285,8 @@ func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, bo
 }
 
 func stringField(o *app.JSONObject, k string) string {
-	if o == nil {
-		return ""
-	}
-	if s, ok := field(o, k).(string); ok {
-		return s
-	}
-	return ""
+	s, _ := field(o, k).(string)
+	return s
 }
 
 func (c *Client) RegisterClient(ctx context.Context, authURL, redirectURI string) (string, error) {
@@ -354,7 +341,7 @@ func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTP
 	if f.ContentEncoding != "" {
 		req.Header.Set("Content-Encoding", f.ContentEncoding)
 	}
-	res, err := c.client().Do(req)
+	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return app.HTTPReply{}, err
 	}

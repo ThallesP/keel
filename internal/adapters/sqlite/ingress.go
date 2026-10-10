@@ -54,10 +54,3 @@ func (t *tx) IngressAnyEndpoint() (bool, error) {
 func (t *tx) IngressNodesWithDomain(name string) ([]string, error) {
 	return t.q.IngressListNodesWithDomain(t.ctx, &name)
 }
-
-func intOr0(p *int64) int {
-	if p == nil {
-		return 0
-	}
-	return int(*p)
-}

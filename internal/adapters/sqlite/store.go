@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -145,11 +144,6 @@ func noRow(err error) error {
 	return err
 }
 
-// IsUniqueViolation: a UNIQUE or PRIMARY KEY constraint failed (map it to NAME_TAKEN & co).
-func IsUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
-}
-
 // Small conversions shared by the area files.
 
 func b2i(b bool) int64 {
@@ -165,6 +159,13 @@ func ptrInt(p *int64) *int {
 	}
 	v := int(*p)
 	return &v
+}
+
+func intOr0(p *int64) int {
+	if p == nil {
+		return 0
+	}
+	return int(*p)
 }
 
 func ptrInt64(p *int) *int64 {

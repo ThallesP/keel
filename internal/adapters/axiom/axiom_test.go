@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ThallesP/keel/internal/app"
 )
@@ -40,7 +41,7 @@ func TestQueryTabular(t *testing.T) {
 			`"columns":[["a","b"],[1,null],[{"z":1,"y":[2]},"x"]]}]}`))
 	})
 	c := New()
-	rows, err := c.Query(context.Background(), app.AxiomTarget{Domain: srv.URL + "/", Token: "tok"}, app.AxiomQuery{APL: "['x'] | limit 1", StartTime: "s", EndTime: "e"})
+	rows, err := c.Query(context.Background(), app.AxiomTarget{Domain: srv.URL + "/", Token: "tok"}, app.AxiomQuery{APL: "['x'] | limit 1", StartTime: time.UnixMilli(1791460812345), EndTime: time.UnixMilli(0)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func TestQueryTabular(t *testing.T) {
 	}
 	var body map[string]string
 	_ = json.Unmarshal(s.body, &body)
-	if !reflect.DeepEqual(body, map[string]string{"apl": "['x'] | limit 1", "startTime": "s", "endTime": "e"}) {
+	if !reflect.DeepEqual(body, map[string]string{"apl": "['x'] | limit 1", "startTime": "2026-10-08T12:00:12.345Z", "endTime": "1970-01-01T00:00:00.000Z"}) {
 		t.Fatalf("body %s", s.body)
 	}
 	want := []app.AxiomRow{

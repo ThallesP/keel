@@ -18,11 +18,11 @@ import (
 )
 
 type Client struct {
-	HTTP *http.Client
+	http *http.Client
 }
 
 func New() *Client {
-	return &Client{HTTP: &http.Client{Timeout: time.Minute}}
+	return &Client{http: &http.Client{Timeout: time.Minute}}
 }
 
 func baseURL(domain string) string {
@@ -50,7 +50,7 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 	if orgID != "" {
 		req.Header.Set("X-Axiom-Org-Id", orgID)
 	}
-	res, err := c.HTTP.Do(req)
+	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +65,8 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 	return data, nil
 }
 
+func aplTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }
+
 type aplBody struct {
 	APL       string `json:"apl"`
 	StartTime string `json:"startTime"`
@@ -73,7 +75,7 @@ type aplBody struct {
 
 func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]app.AxiomRow, error) {
 	data, err := c.call(ctx, t, "", http.MethodPost, "/v1/datasets/_apl?format=tabular",
-		aplBody{APL: q.APL, StartTime: q.StartTime, EndTime: q.EndTime})
+		aplBody{APL: q.APL, StartTime: aplTime(q.StartTime), EndTime: aplTime(q.EndTime)})
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +215,7 @@ func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, bo
 		return 0, oauthReply{}, err
 	}
 	req.Header.Set("Content-Type", contentType)
-	res, err := c.HTTP.Do(req)
+	res, err := c.http.Do(req)
 	if err != nil {
 		return 0, oauthReply{}, err
 	}
@@ -281,7 +283,7 @@ func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTP
 	if f.ContentEncoding != "" {
 		req.Header.Set("Content-Encoding", f.ContentEncoding)
 	}
-	res, err := c.HTTP.Do(req)
+	res, err := c.http.Do(req)
 	if err != nil {
 		return app.HTTPReply{}, err
 	}
@@ -290,5 +292,5 @@ func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTP
 	if err != nil {
 		return app.HTTPReply{}, err
 	}
-	return app.HTTPReply{Status: res.StatusCode, ContentType: strings.TrimSpace(res.Header.Get("Content-Type")), Body: data}, nil
+	return app.HTTPReply{Status: res.StatusCode, ContentType: res.Header.Get("Content-Type"), Body: data}, nil
 }

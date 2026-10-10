@@ -34,7 +34,7 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 		t.Fatalf("tail %+v (service %s, tail %d)", tail, logs.service, logs.tail)
 	}
 
-	logs.tasksErr = errors.New("boom")
+	logs.tasks, logs.tasksErr = nil, errors.New("boom")
 	tail, _ = e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200)
 	if len(tail.Replicas) != 0 || len(tail.Lines) != 2 {
 		t.Fatalf("tasks error: %+v", tail)
@@ -101,9 +101,7 @@ func TestLogsAndTracesNeedAStore(t *testing.T) {
 	_, err = e.app.GetTrace(ctx, e.signedOut, "missing", "xyz", 0)
 	obsWantCode(t, err, domain.CodeInvalidInput, "Not a trace id")
 
-	old := obsTracesOn
-	old.Traces = ""
-	e.setSink(t, "org", old)
+	e.setSink(t, "org", obsTracesOld)
 	_, err = e.app.TraceOverview(ctx, e.member, "env", domain.Range15m, "", "")
 	obsWantCode(t, err, domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
 	around, err := e.app.TracesAround(ctx, e.member, "env", 5)

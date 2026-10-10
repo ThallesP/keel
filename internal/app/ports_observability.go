@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -31,8 +32,6 @@ type ObservabilityTx interface {
 	OTLPKeyOf(environmentID string) (string, error)
 	InsertOTLPKey(environmentID, key string, now int64) error
 	OTLPKeyOrganization(key string) (string, error)
-
-	TracingVariableKeys(nodeID string) ([]string, error)
 }
 
 type WorkerSink struct {
@@ -77,8 +76,8 @@ type AxiomTarget struct {
 
 type AxiomQuery struct {
 	APL       string
-	StartTime string
-	EndTime   string
+	StartTime time.Time
+	EndTime   time.Time
 }
 
 type AxiomDataset struct {

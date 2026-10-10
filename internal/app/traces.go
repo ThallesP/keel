@@ -26,11 +26,11 @@ func aplRoots(dataset string, serviceIDs []string, search string) string {
 		` | where tostring(ensure_field("resource.custom", typeof(dynamic))["keel.service_id"]) ` + aplIn(serviceIDs) + match
 }
 
-func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []string, search string, from, to float64) ([]domain.TraceSummary, error) {
+func (a *App) traceRequests(ctx context.Context, sink domain.LogSink, serviceIDs []string, search string, from, to int64) ([]domain.TraceSummary, error) {
 	if len(serviceIDs) == 0 {
 		return []domain.TraceSummary{}, nil
 	}
-	latest, err := a.axiomRows(ctx, cfg, aplRoots(cfg.Dataset, serviceIDs, search)+" | sort by _time desc | limit 100", from, to)
+	latest, err := a.axiomRows(ctx, sink, aplRoots(sink.Traces, serviceIDs, search)+" | sort by _time desc | limit 100", from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +44,9 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 	if len(ids) == 0 {
 		return out, nil
 	}
-	apl := aplDataset(cfg.Dataset) + " | where trace_id " + aplIn(ids) + " | extend failed = " + traceFailed +
+	apl := aplDataset(sink.Traces) + " | where trace_id " + aplIn(ids) + " | extend failed = " + traceFailed +
 		" | summarize spans = count(), errors = countif(failed) by trace_id"
-	counts, err := axiomRowsAs[axiomTraceCountRow](ctx, a, cfg, apl, from, a.axiomUntil())
+	counts, err := axiomRowsAs[axiomTraceCountRow](ctx, a, sink, apl, from, a.axiomUntil())
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +81,9 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 		}
 		ids = []string{nodeID}
 	}
-	cfg := axiomCfgOf(scope.Sink, scope.Sink.Traces)
-	fromMs, toMs := spec.Window(a.Now())
-	from, to := float64(fromMs), float64(toMs)
+	from, to := spec.Window(a.Now())
 	search = truncateRunes(search, 200)
-	statsAPL := aplRoots(cfg.Dataset, ids, search) + " | extend failed = " + traceFailed +
+	statsAPL := aplRoots(scope.Sink.Traces, ids, search) + " | extend failed = " + traceFailed +
 		" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)"
 
 	var totals, series []axiomStatsRow
@@ -93,11 +91,11 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	if len(ids) > 0 {
 		var wg sync.WaitGroup
 		var errs [3]error
-		wg.Go(func() { totals, errs[0] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, statsAPL, from, to) })
+		wg.Go(func() { totals, errs[0] = axiomRowsAs[axiomStatsRow](ctx, a, scope.Sink, statsAPL, from, to) })
 		wg.Go(func() {
-			series, errs[1] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, statsAPL+" by bin(_time, "+spec.Bin+")", from, to)
+			series, errs[1] = axiomRowsAs[axiomStatsRow](ctx, a, scope.Sink, statsAPL+" by bin(_time, "+spec.Bin+")", from, to)
 		})
-		wg.Go(func() { traces, errs[2] = a.traceRequests(ctx, cfg, ids, search, from, a.axiomUntil()) })
+		wg.Go(func() { traces, errs[2] = a.traceRequests(ctx, scope.Sink, ids, search, from, a.axiomUntil()) })
 		wg.Wait()
 		if err := cmp.Or(errs[:]...); err != nil {
 			return domain.TraceOverview{}, obsInvalid(err)
@@ -110,7 +108,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	}
 	buckets := make([]domain.TraceBucket, spec.Buckets)
 	for i := range buckets {
-		t := fromMs + int64(i)*spec.BinMs
+		t := from + int64(i)*spec.BinMs
 		buckets[i] = domain.TraceBucket{Time: float64(t), TraceStats: byBucket[t]}
 	}
 	stats := domain.TraceStats{}
@@ -118,7 +116,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 		stats = totals[0].stats()
 	}
 	return domain.TraceOverview{
-		Source: domain.LogSourceAxiom, From: from, To: to, BucketMs: float64(spec.BinMs),
+		Source: domain.LogSourceAxiom, From: float64(from), To: float64(to), BucketMs: float64(spec.BinMs),
 		Stats: stats, Buckets: buckets, Traces: traces,
 	}, nil
 }
@@ -135,15 +133,14 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 	if err != nil {
 		return domain.Trace{}, err
 	}
-	from, to := float64(a.Now()-(7*24*time.Hour).Milliseconds()), a.axiomUntil()
+	from, to := a.Now()-(7*24*time.Hour).Milliseconds(), a.axiomUntil()
 	spans := []domain.Span{}
 	if scope.Sink.Traces != "" {
 		since := from
 		if at != 0 {
-			since = at - float64(time.Hour.Milliseconds())
+			since = int64(at) - time.Hour.Milliseconds()
 		}
-		cfg := axiomCfgOf(scope.Sink, scope.Sink.Traces)
-		rows, err := a.axiomRows(ctx, cfg, aplDataset(cfg.Dataset)+" | where trace_id == "+aplLit(id)+" | sort by _time asc | limit 2000", since, to)
+		rows, err := a.axiomRows(ctx, scope.Sink, aplDataset(scope.Sink.Traces)+" | where trace_id == "+aplLit(id)+" | sort by _time asc | limit 2000", since, to)
 		if err != nil {
 			return domain.Trace{}, obsInvalid(err)
 		}
@@ -158,11 +155,11 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 		for _, s := range spans {
 			lo, hi = min(lo, s.Start), max(hi, s.Start+s.Duration)
 		}
-		from, to = lo-5_000, hi+5_000
+		from, to = int64(lo)-5_000, int64(hi)+5_000
 	case at != 0:
-		from, to = at-15*60_000, at+15*60_000
+		from, to = int64(at)-15*60_000, int64(at)+15*60_000
 	}
-	lines, err := a.axiomLines(ctx, axiomCfgOf(scope.Sink, scope.Sink.Dataset), scope.ServiceIDs, linesQuery{N: 500, Search: id, From: from, To: to, OldestFirst: true})
+	lines, err := a.axiomLines(ctx, scope.Sink, scope.ServiceIDs, linesQuery{N: 500, Search: id, From: from, To: to, OldestFirst: true})
 	if err != nil {
 		return domain.Trace{}, obsInvalid(err)
 	}
@@ -180,7 +177,7 @@ func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentI
 	if scope.Sink.Traces == "" {
 		return []domain.TraceSummary{}, nil
 	}
-	out, err := a.traceRequests(ctx, axiomCfgOf(scope.Sink, scope.Sink.Traces), scope.ServiceIDs, "", at-logsAroundMs, at+logsAroundMs)
+	out, err := a.traceRequests(ctx, scope.Sink, scope.ServiceIDs, "", int64(at)-logsAroundMs, int64(at)+logsAroundMs)
 	if err != nil {
 		return nil, obsInvalid(err)
 	}

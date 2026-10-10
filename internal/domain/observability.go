@@ -174,10 +174,12 @@ type Trace struct {
 	Logs    []EnvironmentLogLine `json:"logs"`
 }
 
+type TracesState string
+
 const (
-	TracesOff = "off"
-	TracesOld = "old"
-	TracesOn  = "on"
+	TracesOff TracesState = "off"
+	TracesOld TracesState = "old"
+	TracesOn  TracesState = "on"
 )
 
 type TracingEnvVar struct {

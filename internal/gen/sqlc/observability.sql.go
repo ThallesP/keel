@@ -301,33 +301,6 @@ func (q *Queries) ObsListSinks(ctx context.Context) ([]LogSink, error) {
 	return items, nil
 }
 
-const obsListVariableKeys = `-- name: ObsListVariableKeys :many
-SELECT key FROM variables WHERE node_id = ? ORDER BY rowid
-`
-
-func (q *Queries) ObsListVariableKeys(ctx context.Context, nodeID string) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, obsListVariableKeys, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			return nil, err
-		}
-		items = append(items, key)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const obsPurgePending = `-- name: ObsPurgePending :many
 DELETE FROM axiom_pending WHERE created_at <= ? RETURNING organization_id
 `

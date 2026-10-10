@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"math"
-	"sync"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -30,7 +29,7 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 		return domain.LogTail{}, err
 	}
 	if sink != nil {
-		return a.axiomTail(ctx, axiomCfgOf(*sink, sink.Dataset), nodeID, clampLogTail(tail))
+		return a.axiomTail(ctx, *sink, nodeID, clampLogTail(tail))
 	}
 	return a.dockerTail(ctx, nodeID, clampLogTail(tail))
 }
@@ -48,8 +47,8 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 	if err != nil {
 		return domain.EnvironmentLogs{}, err
 	}
-	lines, err := a.axiomLines(ctx, axiomCfgOf(scope.Sink, scope.Sink.Dataset), scope.ServiceIDs, linesQuery{
-		N: clampLogTail(tail), Search: truncateRunes(search, 200), From: float64(from), To: a.axiomUntil(),
+	lines, err := a.axiomLines(ctx, scope.Sink, scope.ServiceIDs, linesQuery{
+		N: clampLogTail(tail), Search: truncateRunes(search, 200), From: from, To: a.axiomUntil(),
 	})
 	if err != nil {
 		return domain.EnvironmentLogs{}, obsInvalid(err)
@@ -74,8 +73,8 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 	if err != nil {
 		return nil, err
 	}
-	lines, err := a.axiomLines(ctx, axiomCfgOf(scope.Sink, scope.Sink.Dataset), scope.ServiceIDs, linesQuery{
-		N: 500, From: at - logsAroundMs, To: at + logsAroundMs, OldestFirst: true,
+	lines, err := a.axiomLines(ctx, scope.Sink, scope.ServiceIDs, linesQuery{
+		N: 500, From: int64(at) - logsAroundMs, To: int64(at) + logsAroundMs, OldestFirst: true,
 	})
 	if err != nil {
 		return nil, obsInvalid(err)
@@ -85,21 +84,16 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 
 func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogTail, error) {
 	service := domain.ServicePrefix + nodeID
-	var body []byte
-	var found bool
-	var readErr error
-	var wg sync.WaitGroup
-	wg.Go(func() { body, found, readErr = a.Logs.ReadServiceLogs(ctx, service, n) })
-	tasks, err := a.Logs.ListLogReplicas(ctx, service)
+	body, found, err := a.Logs.ReadServiceLogs(ctx, service, n)
 	if err != nil {
-		tasks = nil
-	}
-	wg.Wait()
-	if readErr != nil {
-		return domain.LogTail{}, readErr
+		return domain.LogTail{}, err
 	}
 	if !found {
 		return domain.LogTail{Source: domain.LogSourceDocker, Lines: []domain.ServiceLogLine{}, Replicas: []domain.LogReplica{}}, nil
+	}
+	tasks, err := a.Logs.ListLogReplicas(ctx, service)
+	if err != nil {
+		a.Log.Warn("logs: list replicas", "service", service, "err", err)
 	}
 	replicas := make([]domain.LogReplica, len(tasks))
 	for i, t := range tasks {

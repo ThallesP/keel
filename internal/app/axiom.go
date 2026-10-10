@@ -20,15 +20,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-type axiomCfg struct {
-	AxiomTarget
-	Dataset string
-}
-
-func axiomCfgOf(s domain.LogSink, dataset string) axiomCfg {
-	return axiomCfg{AxiomTarget{Domain: s.Domain, Token: s.Token}, dataset}
-}
-
 func CompactDetail(body string) string { return compactText(body, 200) }
 
 func compactText(text string, maxRunes int) string {
@@ -61,22 +52,19 @@ func aplIn(values []string) string {
 
 func aplDataset(dataset string) string { return "['" + dataset + "']" }
 
-func aplTime(ms float64) string {
-	return time.UnixMilli(int64(ms)).UTC().Format("2006-01-02T15:04:05.000Z")
-}
+func (a *App) axiomUntil() int64 { return a.Now() + 60_000 }
 
-func (a *App) axiomUntil() float64 { return float64(a.Now() + 60_000) }
-
-func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, from, to float64) ([]AxiomRow, error) {
-	rows, err := a.Axiom.Query(ctx, cfg.AxiomTarget, AxiomQuery{APL: apl, StartTime: aplTime(from), EndTime: aplTime(to)})
+func (a *App) axiomRows(ctx context.Context, sink domain.LogSink, apl string, from, to int64) ([]AxiomRow, error) {
+	rows, err := a.Axiom.Query(ctx, AxiomTarget{Domain: sink.Domain, Token: sink.Token},
+		AxiomQuery{APL: apl, StartTime: time.UnixMilli(from), EndTime: time.UnixMilli(to)})
 	if axiomStatus(err) == http.StatusBadRequest && strings.Contains(err.Error(), "invalid field") {
 		return nil, nil
 	}
 	return rows, err
 }
 
-func axiomRowsAs[T any](ctx context.Context, a *App, cfg axiomCfg, apl string, from, to float64) ([]T, error) {
-	rows, err := a.axiomRows(ctx, cfg, apl, from, to)
+func axiomRowsAs[T any](ctx context.Context, a *App, sink domain.LogSink, apl string, from, to int64) ([]T, error) {
+	rows, err := a.axiomRows(ctx, sink, apl, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -149,16 +137,16 @@ var axiomDatasetDescriptions = map[string]string{
 	domain.DatasetTraces: "Keel OpenTelemetry traces",
 }
 
-func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
-	err := a.Axiom.CreateDataset(ctx, cfg.AxiomTarget, "", cfg.Dataset, axiomDatasetDescriptions[domain.DatasetLogs])
+func (a *App) axiomVerify(ctx context.Context, sink domain.LogSink, dataset string) error {
+	err := a.Axiom.CreateDataset(ctx, AxiomTarget{Domain: sink.Domain, Token: sink.Token}, "", dataset, axiomDatasetDescriptions[domain.DatasetLogs])
 	if status := axiomStatus(err); status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return err
 	}
-	return a.axiomCanQuery(ctx, cfg)
+	return a.axiomCanQuery(ctx, sink, dataset)
 }
 
-func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
-	_, err := a.axiomRows(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), a.axiomUntil())
+func (a *App) axiomCanQuery(ctx context.Context, sink domain.LogSink, dataset string) error {
+	_, err := a.axiomRows(ctx, sink, aplDataset(dataset)+" | limit 1", a.Now()-60_000, a.axiomUntil())
 	return err
 }
 
@@ -179,10 +167,10 @@ func (r axiomLogRow) line() domain.ServiceLogLine {
 	return domain.ServiceLogLine{Time: float64(r.Time), Text: r.Message, Stream: stream, Task: r.Task}
 }
 
-func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n int) (domain.LogTail, error) {
-	apl := aplDataset(cfg.Dataset) + " | where service_id == " + aplLit(serviceID) +
+func (a *App) axiomTail(ctx context.Context, sink domain.LogSink, serviceID string, n int) (domain.LogTail, error) {
+	apl := aplDataset(sink.Dataset) + " | where service_id == " + aplLit(serviceID) +
 		" | sort by _time desc | limit " + strconv.Itoa(n) + " | project _time, message, stream, task, replica"
-	rows, err := axiomRowsAs[axiomLogRow](ctx, a, cfg, apl, float64(a.Now()-axiomQueryWindowMs), a.axiomUntil())
+	rows, err := axiomRowsAs[axiomLogRow](ctx, a, sink, apl, a.Now()-axiomQueryWindowMs, a.axiomUntil())
 	if err != nil {
 		return domain.LogTail{}, err
 	}
@@ -210,11 +198,11 @@ func sortLogReplicas(rs []domain.LogReplica) {
 type linesQuery struct {
 	N           int
 	Search      string
-	From, To    float64
+	From, To    int64
 	OldestFirst bool
 }
 
-func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string, q linesQuery) ([]domain.EnvironmentLogLine, error) {
+func (a *App) axiomLines(ctx context.Context, sink domain.LogSink, serviceIDs []string, q linesQuery) ([]domain.EnvironmentLogLine, error) {
 	if len(serviceIDs) == 0 {
 		return []domain.EnvironmentLogLine{}, nil
 	}
@@ -226,9 +214,9 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	if q.OldestFirst {
 		order = "asc"
 	}
-	apl := aplDataset(cfg.Dataset) + " | where service_id " + aplIn(serviceIDs) + where +
+	apl := aplDataset(sink.Dataset) + " | where service_id " + aplIn(serviceIDs) + where +
 		" | sort by _time " + order + " | limit " + strconv.Itoa(q.N) + " | project _time, message, stream, task, service_id"
-	rows, err := axiomRowsAs[axiomLogRow](ctx, a, cfg, apl, q.From, q.To)
+	rows, err := axiomRowsAs[axiomLogRow](ctx, a, sink, apl, q.From, q.To)
 	if err != nil {
 		return nil, err
 	}
@@ -275,33 +263,20 @@ type axiomJWTClaims struct {
 	DefaultOrg string          `json:"axiomDefaultOrg"`
 }
 
-func axiomClaims(token string) (axiomJWTClaims, bool) {
+func axiomClaims(token string) axiomJWTClaims {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return axiomJWTClaims{}, false
+		return axiomJWTClaims{}
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return axiomJWTClaims{}, false
+		return axiomJWTClaims{}
 	}
 	var claims axiomJWTClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return axiomJWTClaims{}, false
+		return axiomJWTClaims{}
 	}
-	return claims, true
-}
-
-func axiomJWTAudience(token string) string {
-	claims, ok := axiomClaims(token)
-	if !ok {
-		return "(not a JWT)"
-	}
-	return cmp.Or(string(claims.Audience), "null")
-}
-
-func axiomChosenOrg(token string) string {
-	claims, _ := axiomClaims(token)
-	return claims.DefaultOrg
+	return claims
 }
 
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
@@ -311,7 +286,8 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 	}
 	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: cmp.Or(override, domain.AxiomDomains[0]), Token: token})
 	if err != nil {
-		return nil, fmt.Errorf("%w (Axiom API rejected the sign-in token, aud %s)", err, axiomJWTAudience(token))
+		a.Log.Warn("axiom: API rejected the sign-in token", "aud", string(axiomClaims(token).Audience), "err", err)
+		return nil, fmt.Errorf("%w (Axiom API rejected the sign-in token)", err)
 	}
 	orgs := make([]domain.AxiomOrg, len(infos))
 	for i, o := range infos {
@@ -346,7 +322,7 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 	}
 	for i, name := range missing {
 		if err := a.Axiom.CreateDataset(ctx, t, org.ID, name, axiomDatasetDescriptions[name]); err != nil {
-			return domain.LogSink{}, errors.New(datasetCapMessage(org, own, missing[i:], err))
+			return domain.LogSink{}, datasetCapError(org, own, missing[i:], err)
 		}
 		own = append(own, name)
 	}
@@ -366,12 +342,10 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 	}, nil
 }
 
-func datasetCapMessage(org domain.AxiomOrg, own, left []string, err error) string {
-	msg := err.Error()
+func datasetCapError(org domain.AxiomOrg, own, left []string, err error) error {
 	if org.MaxDatasets > 0 && axiomStatus(err) == http.StatusBadRequest && len(own) >= org.MaxDatasets {
-		return org.Name + " is at its Axiom plan's limit of " + strconv.Itoa(org.MaxDatasets) + " datasets (" +
-			strings.Join(own, ", ") + "). Keel needs " + strings.Join(left, " and ") + ": delete " +
-			strconv.Itoa(len(own)+len(left)-org.MaxDatasets) + " in Axiom or pick another org. (" + msg + ")"
+		return fmt.Errorf("%s is at its Axiom plan's limit of %d datasets (%s). Keel needs %s: delete %d in Axiom or pick another org. (%w)",
+			org.Name, org.MaxDatasets, strings.Join(own, ", "), strings.Join(left, " and "), len(own)+len(left)-org.MaxDatasets, err)
 	}
-	return "Creating " + left[0] + ": " + msg
+	return fmt.Errorf("Creating %s: %w", left[0], err)
 }

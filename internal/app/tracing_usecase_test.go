@@ -11,7 +11,11 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-var obsTracesOn = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-abcdefgh"}
+var (
+	obsTracesOn    = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-abcdefgh"}
+	obsTracesOld   = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Token: "xaat-abcdefgh"}
+	obsTracesOnOrg = domain.LogSink{Kind: domain.SinkKindAxiom, Domain: "api.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-abcdefgh", Org: "Acme Inc"}
+)
 
 func obsOTLPKeyOf(t *testing.T, e *obsEnv, env string) string {
 	t.Helper()
@@ -25,9 +29,7 @@ func TestSetNodeTracing(t *testing.T) {
 	e := newObsEnv(t, 1_000)
 
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true), domain.CodeTracesOff, "Connect Axiom to see traces")
-	old := obsTracesOn
-	old.Traces = ""
-	e.setSink(t, "org", old)
+	e.setSink(t, "org", obsTracesOld)
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true), domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
 	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || n.Dirty || obsOTLPKeyOf(t, e, "env") != "" {
 		t.Fatalf("refused switch changed something: %+v key=%q", n, obsOTLPKeyOf(t, e, "env"))
@@ -154,9 +156,7 @@ func TestLocalTracingEnv(t *testing.T) {
 	if err != nil || lt.Env != nil || lt.Reason != "Connect Axiom to see traces" {
 		t.Fatalf("no sink: %+v %v", lt, err)
 	}
-	old := obsTracesOn
-	old.Traces = ""
-	e.setSink(t, "org", old)
+	e.setSink(t, "org", obsTracesOld)
 	lt, _ = e.app.LocalTracingEnv(ctx, e.member, obsNodeAPI)
 	if lt.Env != nil || lt.Reason != "Sign in with Axiom again to turn on traces" || obsOTLPKeyOf(t, e, "env") != "" {
 		t.Fatalf("old sink: %+v", lt)

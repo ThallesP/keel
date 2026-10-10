@@ -139,7 +139,3 @@ func (t *tx) OTLPKeyOrganization(key string) (string, error) {
 	org, err := t.q.ObsGetOTLPKeyOrganization(t.ctx, key)
 	return org, noRow(err)
 }
-
-func (t *tx) TracingVariableKeys(nodeID string) ([]string, error) {
-	return t.q.ObsListVariableKeys(t.ctx, nodeID)
-}

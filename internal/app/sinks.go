@@ -82,7 +82,7 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 		return domain.Invalid("That does not look like an Axiom API token")
 	}
 	for _, d := range datasets {
-		if err := a.axiomVerify(ctx, axiomCfgOf(sink, d)); err != nil {
+		if err := a.axiomVerify(ctx, sink, d); err != nil {
 			return obsInvalid(err)
 		}
 	}
@@ -170,7 +170,7 @@ func (a *App) CompleteAxiomSignIn(ctx context.Context, actor domain.Actor, state
 	if len(orgs) == 0 {
 		return AxiomSignInResult{}, domain.Invalid("This Axiom account has no organization")
 	}
-	chosen := axiomChosenOrg(token)
+	chosen := axiomClaims(token).DefaultOrg
 	if i := slices.IndexFunc(orgs, func(o domain.AxiomOrg) bool { return len(orgs) == 1 || o.ID == chosen }); i >= 0 {
 		return a.provisionAxiom(ctx, actor, token, orgs[i])
 	}
@@ -276,13 +276,6 @@ func (a *App) CancelAxiomSignIn(ctx context.Context, actor domain.Actor) error {
 		return nil
 	}
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
-		_, err := tx.AxiomPendingOf(actor.OrganizationID)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
 		if err := tx.DeleteAxiomPending(actor.OrganizationID); err != nil {
 			return err
 		}
@@ -305,7 +298,7 @@ func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token stri
 		return AxiomSignInResult{}, obsInvalid(err)
 	}
 	for _, dataset := range []string{sink.Dataset, sink.Traces} {
-		if err := a.axiomCanQuery(ctx, axiomCfgOf(sink, dataset)); err != nil {
+		if err := a.axiomCanQuery(ctx, sink, dataset); err != nil {
 			return AxiomSignInResult{}, domain.Invalid("Querying %s: %s", dataset, err)
 		}
 	}

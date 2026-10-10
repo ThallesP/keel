@@ -17,19 +17,6 @@ func TestAPLLiteral(t *testing.T) {
 	}
 }
 
-func TestAPLTime(t *testing.T) {
-	for in, want := range map[float64]string{
-		0:               "1970-01-01T00:00:00.000Z",
-		1.7:             "1970-01-01T00:00:00.001Z",
-		1791460812345.9: "2026-10-08T12:00:12.345Z",
-		1791457320000:   "2026-10-08T11:02:00.000Z",
-	} {
-		if got := aplTime(in); got != want {
-			t.Errorf("aplTime(%v) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestClampTail(t *testing.T) {
 	for in, want := range map[float64]int{200: 200, 200.9: 200, 0: 1, -5: 1, 1000: 1000, 1001: 1000, 5000: 1000, 0.5: 1, math.NaN(): 1} {
 		if got := clampLogTail(in); got != want {
@@ -72,29 +59,18 @@ func TestCompactDetail(t *testing.T) {
 	}
 }
 
-func TestAxiomJWTAudience(t *testing.T) {
+func TestAxiomClaims(t *testing.T) {
 	for token, want := range map[string]string{
-		"h.eyJhdWQiOiJtY3AifQ.s":                 `"mcp"`,
-		"h.eyJhdWQiOlsiYSIsImIiXX0.s":            `["a","b"]`,
-		"h.e30.s":                                "null",
-		"opaque":                                 "(not a JWT)",
-		"h.!!.s":                                 "(not a JWT)",
-		"h.eyJheGlvbURlZmF1bHRPcmciOjV9.s":       "(not a JWT)",
-		"h.eyJhdWQiOiJtY3AiLCJ4IjoiPz8_In0.s":    `"mcp"`,
-		"h.eyJhdWQiOiJtY3AifQ==.s":               "(not a JWT)",
-		"h.eyJhdWQiOiJtY3AiLCJ4IjoiPz8/In0.s":    "(not a JWT)",
-		"h.eyJhdWQiOiJtY3AifQ":                   "(not a JWT)",
-		"h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9.sig": "null",
+		"h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9.sig":   "o1",
+		"h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9":       "",
+		"h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9==.sig": "",
+		"h.eyJheGlvbURlZmF1bHRPcmciOjV9.s":         "",
+		"h.!!.s":                                   "",
+		"opaque":                                   "",
 	} {
-		if got := axiomJWTAudience(token); got != want {
-			t.Errorf("axiomJWTAudience(%q) = %s, want %s", token, got, want)
+		if got := axiomClaims(token).DefaultOrg; got != want {
+			t.Errorf("axiomClaims(%q).DefaultOrg = %q, want %q", token, got, want)
 		}
-	}
-	if got := axiomChosenOrg("h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9.sig"); got != "o1" {
-		t.Errorf("axiomChosenOrg = %q", got)
-	}
-	if got := axiomChosenOrg("opaque"); got != "" {
-		t.Errorf("axiomChosenOrg(opaque) = %q", got)
 	}
 }
 

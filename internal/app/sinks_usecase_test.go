@@ -47,7 +47,7 @@ func TestLogSinkViewAndDisconnect(t *testing.T) {
 	if !reflect.DeepEqual(v, want) {
 		t.Fatalf("view %+v", v)
 	}
-	e.setSink(t, "org", obsTracesOnWithOrg())
+	e.setSink(t, "org", obsTracesOnOrg)
 	v, _ = e.app.LogSink(ctx, e.member)
 	if v.Traces == nil || *v.Traces != "keel-traces" || v.Org == nil || *v.Org != "Acme Inc" {
 		t.Fatalf("traces/org: %+v", v)
@@ -75,12 +75,6 @@ func TestLogSinkViewAndDisconnect(t *testing.T) {
 	}
 	obsWantCode(t, e.app.DisconnectLogSink(ctx, domain.Actor{UserID: "u3"}), domain.CodeNoOrganization, domain.MsgNoOrganization)
 	obsWantCode(t, e.app.DisconnectLogSink(ctx, e.signedOut), domain.CodeNotAuthenticated, "Not authenticated")
-}
-
-func obsTracesOnWithOrg() domain.LogSink {
-	s := obsTracesOn
-	s.Org = "Acme Inc"
-	return s
 }
 
 func TestConnectAxiom(t *testing.T) {
@@ -282,11 +276,7 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "Axiom sign-in failed: code expired")
 	ax.exchangeErr = nil
 	ax.orgsErr = &app.AxiomError{Status: 401, Detail: "bad audience"}
-	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud ["a","b"])`)
-	ax.token = "opaque"
-	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud (not a JWT))`)
-	ax.token = obsJWT(`{}`)
-	obsWantCode(t, complete(), domain.CodeInvalidInput, `Axiom 401: bad audience (Axiom API rejected the sign-in token, aud null)`)
+	obsWantCode(t, complete(), domain.CodeInvalidInput, "Axiom 401: bad audience (Axiom API rejected the sign-in token)")
 	ax.orgsErr = nil
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "This Axiom account has no organization")
 

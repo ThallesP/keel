@@ -73,9 +73,7 @@ func TestRelayTraces(t *testing.T) {
 	ax.forwardErr = nil
 
 	n := len(ax.forwarded)
-	old := obsTracesOn
-	old.Traces = ""
-	e.setSink(t, "org", old)
+	e.setSink(t, "org", obsTracesOld)
 	check(relay(key, "application/json", -1, "{}"), 200, "application/json", "{}")
 	check(relay(key, "application/x-protobuf", -1, "x"), 200, "application/x-protobuf", "")
 	if err := e.app.DisconnectLogSink(ctx, e.member); err != nil {
@@ -103,7 +101,7 @@ func TestWorkerConfigPerSink(t *testing.T) {
 	e.exec(t, `INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p3', 'org', 'Empty', 'empty', 3)`)
 	e.exec(t, `INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env3', 'p3', 'staging', 0, 3)`)
 	e.exec(t, `INSERT INTO nodes (id, environment_id, type, name, desired_image, desired_revision, desired_replicas, created_at) VALUES ('stagingapiffffffffff', 'env3', 'service', 'api', 'nginx', 1, 1, 9)`)
-	e.setSink(t, "org", obsTracesOnWithOrg())
+	e.setSink(t, "org", obsTracesOnOrg)
 	e.now++
 	e.setSink(t, "org2", obsTracesOn)
 	got, err = e.app.WorkerConfig(ctx)
@@ -111,7 +109,7 @@ func TestWorkerConfigPerSink(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []app.WorkerSink{
-		{ServiceIDs: []string{obsNodeAPI, obsNodeWorker, obsNodeDB, "stagingapiffffffffff"}, Sink: obsTracesOnWithOrg(), Since: 1_791_000_000_123},
+		{ServiceIDs: []string{obsNodeAPI, obsNodeWorker, obsNodeDB, "stagingapiffffffffff"}, Sink: obsTracesOnOrg, Since: 1_791_000_000_123},
 		{ServiceIDs: []string{obsNodeForeign}, Sink: obsTracesOn, Since: 1_791_000_000_124},
 	}
 	if !reflect.DeepEqual(got, want) {

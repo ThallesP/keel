@@ -69,6 +69,3 @@ SELECT p.organization_id FROM otlp_keys k
 JOIN environments e ON e.id = k.environment_id
 JOIN projects p ON p.id = e.project_id
 WHERE k.key = ?;
-
--- name: ObsListVariableKeys :many
-SELECT key FROM variables WHERE node_id = ? ORDER BY rowid;

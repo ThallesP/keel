@@ -1,9 +1,12 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAuthAttemptsWindow(t *testing.T) {
-	l := newAuthAttempts(3, 1000)
+	l := newAuthAttempts(3, time.Second)
 	steps := []struct {
 		key  string
 		at   int64

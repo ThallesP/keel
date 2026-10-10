@@ -33,12 +33,11 @@ func (a *App) limits() *authLimiters {
 	authLimiterMu.Lock()
 	defer authLimiterMu.Unlock()
 	if a.authLimits == nil {
-		w := AuthPerIPWindow.Milliseconds()
 		a.authLimits = &authLimiters{
-			signIn:      newAuthAttempts(SignInAttempts, SignInWindow.Milliseconds()),
-			perIP:       newAuthAttempts(AuthPerIP, w),
-			deviceStart: newAuthAttempts(DeviceStartPerIP, w),
-			devicePoll:  newAuthAttempts(DevicePollPerIP, w),
+			signIn:      newAuthAttempts(SignInAttempts, SignInWindow),
+			perIP:       newAuthAttempts(AuthPerIP, AuthPerIPWindow),
+			deviceStart: newAuthAttempts(DeviceStartPerIP, AuthPerIPWindow),
+			devicePoll:  newAuthAttempts(DevicePollPerIP, AuthPerIPWindow),
 		}
 	}
 	return a.authLimits
@@ -64,8 +63,8 @@ type authWindow struct {
 	n     int
 }
 
-func newAuthAttempts(limit int, window int64) *authAttempts {
-	return &authAttempts{limit: limit, window: window, hits: map[string]*authWindow{}}
+func newAuthAttempts(limit int, window time.Duration) *authAttempts {
+	return &authAttempts{limit: limit, window: window.Milliseconds(), hits: map[string]*authWindow{}}
 }
 
 func (l *authAttempts) take(key string, now int64) int64 {

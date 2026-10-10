@@ -18,13 +18,7 @@ func (s *Server) registerIngressRaw(mux *http.ServeMux) {
 
 func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 	if !ingressBearerOK(r, s.app.Config.WorkerToken) {
-		ingressText(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
-	var tooLarge *http.MaxBytesError
-	if errors.As(err, &tooLarge) {
-		ingressText(w, http.StatusRequestEntityTooLarge, "too large")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	var report struct {
@@ -32,17 +26,22 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 		Name  string `json:"name"`
 		Error string `json:"error"`
 	}
-	if err != nil || json.Unmarshal(body, &report) != nil || report.Name == "" ||
-		(report.Event != app.CertObtained && report.Event != app.CertFailed) {
-		ingressText(w, http.StatusBadRequest, "bad report")
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&report)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		http.Error(w, "too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if err != nil || report.Name == "" || (report.Event != app.CertObtained && report.Event != app.CertFailed) {
+		http.Error(w, "bad report", http.StatusBadRequest)
 		return
 	}
 	if err := s.app.ReportCert(r.Context(), report.Event, report.Name, report.Error); err != nil {
 		s.app.Log.Error("proxy cert report", "name", report.Name, "err", err)
-		ingressText(w, http.StatusInternalServerError, "server error")
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	ingressText(w, http.StatusOK, "ok")
+	_, _ = io.WriteString(w, "ok")
 }
 
 func ingressBearerOK(r *http.Request, expected string) bool {
@@ -52,10 +51,4 @@ func ingressBearerOK(r *http.Request, expected string) bool {
 	}
 	a, b := sha256.Sum256([]byte(strings.TrimSpace(got))), sha256.Sum256([]byte(expected))
 	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
-}
-
-func ingressText(w http.ResponseWriter, status int, body string) {
-	w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
-	w.WriteHeader(status)
-	_, _ = io.WriteString(w, body)
 }

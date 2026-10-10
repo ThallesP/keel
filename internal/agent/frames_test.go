@@ -153,6 +153,7 @@ func TestAxiomIngestURL(t *testing.T) {
 		{"api.axiom.co", "keel-logs", "https://api.axiom.co/v1/datasets/keel-logs/ingest"},
 		{"api.eu.axiom.co", "keel", "https://api.eu.axiom.co/v1/datasets/keel/ingest"},
 		{"eu-central-1.aws.edge.axiom.co", "keel-logs", "https://eu-central-1.aws.edge.axiom.co/v1/ingest/keel-logs"},
+		{"https://x.aws.edge.axiom.co/", "d", "https://x.aws.edge.axiom.co/v1/ingest/d"},
 		{"http://127.0.0.1:9999/", "keel", "http://127.0.0.1:9999/v1/datasets/keel/ingest"},
 		{"https://api.axiom.co//", "a b/c", "https://api.axiom.co/v1/datasets/a%20b%2Fc/ingest"},
 	}

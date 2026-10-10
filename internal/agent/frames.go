@@ -30,11 +30,7 @@ func (p *FrameParser) Push(chunk []byte) []Frame {
 		if off+8+n > len(buf) {
 			break
 		}
-		stream := "stdout"
-		if typ == 2 {
-			stream = "stderr"
-		}
-		out = append(out, Frame{Stream: stream, Text: string(buf[off+8 : off+8+n])})
+		out = append(out, Frame{Stream: [...]string{"stdout", "stdout", "stderr"}[typ], Text: string(buf[off+8 : off+8+n])})
 		off += 8 + n
 	}
 	p.carry = buf[off:]

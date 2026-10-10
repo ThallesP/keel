@@ -23,6 +23,10 @@ func (l *Logger) Log(scope, msg string) {
 	fmt.Fprintf(l.w, "%s [%s] %s\n", l.now().UTC().Format("2006-01-02T15:04:05.000Z"), scope, msg)
 }
 
+func (l *Logger) Logf(scope, format string, args ...any) {
+	l.Log(scope, fmt.Sprintf(format, args...))
+}
+
 func errorText(err error) string {
 	return truncate(strings.Join(strings.Fields(err.Error()), " "), 300)
 }

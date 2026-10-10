@@ -8,7 +8,7 @@ import (
 type Docker interface {
 	Info(ctx context.Context) (NodeInfo, error)
 	ListSwarmContainers(ctx context.Context) ([]Container, error)
-	Events(ctx context.Context, since string) (EventStream, error)
+	Events(ctx context.Context, since string) EventStream
 	ContainerLogs(ctx context.Context, id, since string) (io.ReadCloser, error)
 }
 

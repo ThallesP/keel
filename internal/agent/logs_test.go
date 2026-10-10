@@ -3,9 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -33,12 +34,7 @@ func newTestShipper(t *testing.T, d *fakeDocker, ss *sinkSet) (*Shipper, *State,
 func (s *Shipper) following() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var ids []string
-	for id := range s.followers {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
+	return slices.Sorted(maps.Keys(s.followers))
 }
 
 func (s *Shipper) isFinished(id string) bool {
@@ -102,8 +98,8 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 		events = append(events, b...)
 	}
 	want := []LogEvent{
-		{Time: "2024-01-01T00:00:01.000000001Z", Message: "hello", Stream: "stdout", ServiceID: "n1", Service: "svc-n1", Task: "task-a", Replica: 2, Node: "node-1", Container: "aaaaaaaaaaaa"},
-		{Time: "2024-01-01T00:00:02.5Z", Message: "oops", Stream: "stderr", ServiceID: "n1", Service: "svc-n1", Task: "task-a", Replica: 2, Node: "node-1", Container: "aaaaaaaaaaaa"},
+		{Time: time.Date(2024, 1, 1, 0, 0, 1, 1, time.UTC), Message: "hello", Stream: "stdout", ServiceID: "n1", Service: "svc-n1", Task: "task-a", Replica: 2, Node: "node-1", Container: "aaaaaaaaaaaa"},
+		{Time: time.Date(2024, 1, 1, 0, 0, 2, 500_000_000, time.UTC), Message: "oops", Stream: "stderr", ServiceID: "n1", Service: "svc-n1", Task: "task-a", Replica: 2, Node: "node-1", Container: "aaaaaaaaaaaa"},
 	}
 	if !slices.Equal(events, want) {
 		t.Fatalf("events = %+v\nwant %+v", events, want)
@@ -189,7 +185,7 @@ func TestShipperBatchesOf500(t *testing.T) {
 	c := task('a', "n1", "1", "exited")
 	var lines []string
 	for i := range 1200 {
-		lines = append(lines, "2024-01-01T00:00:01."+strconv.Itoa(100000000+i)+"Z line "+strconv.Itoa(i))
+		lines = append(lines, fmt.Sprintf("2024-01-01T00:00:01.%dZ line %d", 100000000+i, i))
 	}
 	d.setContainers(c)
 	d.script(c.ID, logScript{data: stamped(lines...), end: io.EOF})
@@ -222,12 +218,8 @@ func TestShipperBatchesOf500(t *testing.T) {
 func TestShipperBackPressure(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
-	var lines []string
-	for i := range 10 {
-		lines = append(lines, "2024-01-01T00:00:0"+strconv.Itoa(i)+"Z line "+strconv.Itoa(i))
-	}
 	d.setContainers(c)
-	d.script(c.ID, logScript{data: stamped(lines...)})
+	d.script(c.ID, logScript{data: numbered(10)})
 	ss := newSinkSet()
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.gate = gate }
@@ -245,7 +237,7 @@ func TestShipperBackPressure(t *testing.T) {
 	waitFor(t, func() bool { return len(sink.messages()) == 10 })
 	want := make([]string, 10)
 	for i := range want {
-		want[i] = "line " + strconv.Itoa(i)
+		want[i] = fmt.Sprintf("line %d", i)
 	}
 	if got := sink.messages(); !slices.Equal(got, want) {
 		t.Fatalf("messages = %v", got)
@@ -284,11 +276,7 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
 	d.setContainers(c)
-	var lines []string
-	for i := range 5 {
-		lines = append(lines, "2024-01-01T00:00:0"+strconv.Itoa(i)+"Z line "+strconv.Itoa(i))
-	}
-	d.script(c.ID, logScript{data: stamped(lines...)})
+	d.script(c.ID, logScript{data: numbered(5)})
 	rotated := sinkA
 	rotated.Token = "xaat-rotated"
 	ss := newSinkSet()
@@ -326,12 +314,8 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
-	var lines []string
-	for i := range 6 {
-		lines = append(lines, "2024-01-01T00:00:0"+strconv.Itoa(i)+"Z line "+strconv.Itoa(i))
-	}
 	d.setContainers(c)
-	d.script(c.ID, logScript{data: stamped(lines...)})
+	d.script(c.ID, logScript{data: numbered(6)})
 	ss := newSinkSet()
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.gate = gate }
@@ -598,7 +582,8 @@ func TestApplyConfigChanged(t *testing.T) {
 	if !strings.Contains(logs.String(), "config applied: sinks=1 services=2") {
 		t.Errorf("log = %s", logs.String())
 	}
-	if s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}}); len(s.queues) != 0 {
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}})
+	if len(s.queues) != 0 {
 		t.Fatalf("an unknown sink kind was routed: %v", s.queues)
 	}
 }
@@ -610,12 +595,13 @@ func TestShipperUnstampedLine(t *testing.T) {
 	d.script(c.ID, logScript{data: []byte("hello from a tty\n"), chunk: 64})
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
-	s.now = func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 123_456_789, time.UTC) }
+	now := time.Date(2026, 10, 8, 12, 0, 0, 123_456_789, time.UTC)
+	s.now = func() time.Time { return now }
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return len(ss.get(sinkA).messages()) == 1 })
 	e := ss.get(sinkA).sent()[0][0]
-	if e.Time != "2026-10-08T12:00:00.123456789Z" || e.Message != "hello from a tty" || e.Stream != "stdout" {
+	if !e.Time.Equal(now) || e.Message != "hello from a tty" || e.Stream != "stdout" {
 		t.Fatalf("event = %+v", e)
 	}
 	if _, ok := state.LogsSince(c.ID); ok || s.lastRead(c.ID) != "" {

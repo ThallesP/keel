@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,12 +24,11 @@ func NewAxiomSink(cfg SinkConfig, hc *http.Client, log *Logger) *AxiomSink {
 }
 
 func axiomIngestURL(domain, dataset string) string {
-	base := domain
+	base := strings.TrimRight(domain, "/")
 	if !strings.Contains(base, "://") {
 		base = "https://" + base
 	}
-	base = strings.TrimRight(base, "/")
-	if strings.HasSuffix(domain, ".edge.axiom.co") {
+	if strings.HasSuffix(base, ".edge.axiom.co") {
 		return base + "/v1/ingest/" + url.PathEscape(dataset)
 	}
 	return base + "/v1/datasets/" + url.PathEscape(dataset) + "/ingest"
@@ -45,23 +43,23 @@ func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
 	for attempt := range 5 {
 		status, text, err := s.post(ctx, body.Bytes())
 		switch {
-		case err == nil && status >= 200 && status <= 299:
+		case status >= 200 && status <= 299:
 			return true
-		case err == nil && status >= 400 && status <= 499 && status != 429:
-			s.log.Log("axiom", fmt.Sprintf("rejected %d, dropping %d events: %q", status, len(events), text))
+		case status >= 400 && status <= 499 && status != 429:
+			s.log.Logf("axiom", "rejected %d, dropping %d events: %q", status, len(events), text)
 			return true
 		case ctx.Err() != nil:
 			return false
 		case err == nil:
-			s.log.Log("axiom", fmt.Sprintf("ingest %d, retry %d: %q", status, attempt+1, text))
+			s.log.Logf("axiom", "ingest %d, retry %d: %q", status, attempt+1, text)
 		default:
-			s.log.Log("axiom", fmt.Sprintf("ingest failed (%s), retry %d", errorText(err), attempt+1))
+			s.log.Logf("axiom", "ingest failed (%s), retry %d", errorText(err), attempt+1)
 		}
 		if s.sleep(ctx, time.Second<<attempt) != nil {
 			return false
 		}
 	}
-	s.log.Log("axiom", fmt.Sprintf("unreachable, keeping %d events for a later attempt", len(events)))
+	s.log.Logf("axiom", "unreachable, keeping %d events for a later attempt", len(events))
 	return false
 }
 

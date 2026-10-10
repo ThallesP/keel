@@ -132,7 +132,7 @@ func TestAgentRun(t *testing.T) {
 	d.setContainers(c)
 	d.script(c.ID, logScript{data: stamped("2024-01-01T00:00:01.5Z listening on :8080")})
 	start := ev("container", "start", c.ID, c.Labels, 1704067200500000000)
-	d.streams = []eventScript{{events: []Event{start}}}
+	d.streams = []fakeEvents{{events: []Event{start}}}
 
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	cfg := Config{URL: cp.URL, Token: "tok", StatePath: statePath, ConfigPoll: time.Hour}
@@ -191,11 +191,11 @@ func TestAgentRunNeedsDocker(t *testing.T) {
 }
 
 func TestSignalName(t *testing.T) {
-	for cause, want := range map[string]string{"interrupt signal received": "SIGINT", "terminated signal received": "SIGTERM", "": "SIGTERM"} {
+	for cause, want := range map[error]string{errors.New("interrupt signal received"): "SIGINT", errors.New("terminated signal received"): "SIGTERM", nil: "SIGTERM"} {
 		ctx, cancel := context.WithCancelCause(context.Background())
-		cancel(errors.New(cause))
+		cancel(cause)
 		if got := signalName(ctx); got != want {
-			t.Errorf("signalName(%q) = %s, want %s", cause, got, want)
+			t.Errorf("signalName(%v) = %s, want %s", cause, got, want)
 		}
 	}
 }

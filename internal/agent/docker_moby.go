@@ -61,19 +61,13 @@ func (d *MobyDocker) ListSwarmContainers(ctx context.Context) ([]Container, erro
 	return out, nil
 }
 
-func (d *MobyDocker) Events(ctx context.Context, since string) (EventStream, error) {
+func (d *MobyDocker) Events(ctx context.Context, since string) EventStream {
 	ctx, cancel := context.WithCancel(ctx)
 	res := d.cli.Events(ctx, client.EventsListOptions{
 		Since:   since,
 		Filters: make(client.Filters).Add("type", "container", "service", "node"),
 	})
-	select {
-	case err := <-res.Err:
-		cancel()
-		return nil, err
-	default:
-	}
-	return &mobyEvents{res: res, cancel: cancel}, nil
+	return &mobyEvents{res: res, cancel: cancel}
 }
 
 type mobyEvents struct {

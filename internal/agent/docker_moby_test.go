@@ -59,14 +59,15 @@ func (a *dockerAPI) requests() []string {
 	return slices.Clone(a.reqs)
 }
 
-func (a *dockerAPI) find(prefix string) url.Values {
+func (a *dockerAPI) queries(prefix string) []url.Values {
+	var out []url.Values
 	for _, r := range a.requests() {
 		if query, ok := strings.CutPrefix(r, prefix+"?"); ok {
 			q, _ := url.ParseQuery(query)
-			return q
+			out = append(out, q)
 		}
 	}
-	return nil
+	return out
 }
 
 func newTestMoby(t *testing.T) (*MobyDocker, *dockerAPI) {
@@ -105,7 +106,7 @@ func TestMobyInfoAndContainers(t *testing.T) {
 	if len(cs) != 1 || cs[0].ID != "c1" || cs[0].State != "exited" || cs[0].Labels[labelServiceName] != "svc-n1" {
 		t.Fatalf("containers = %+v", cs)
 	}
-	q := api.find("GET /containers/json")
+	q := api.queries("GET /containers/json")[0]
 	if q.Get("all") != "1" {
 		t.Errorf("all = %q", q.Get("all"))
 	}
@@ -129,13 +130,7 @@ func TestMobyContainerLogsQuery(t *testing.T) {
 			t.Fatalf("frames = %+v", f)
 		}
 	}
-	var logs []url.Values
-	for _, r := range api.requests() {
-		if query, ok := strings.CutPrefix(r, "GET /containers/c1/logs?"); ok {
-			q, _ := url.ParseQuery(query)
-			logs = append(logs, q)
-		}
-	}
+	logs := api.queries("GET /containers/c1/logs")
 	if len(logs) != 2 {
 		t.Fatalf("log requests = %v", api.requests())
 	}
@@ -156,10 +151,7 @@ func TestMobyContainerLogsQuery(t *testing.T) {
 
 func TestMobyEvents(t *testing.T) {
 	d, api := newTestMoby(t)
-	s, err := d.Events(context.Background(), "1704067200.000000001")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := d.Events(context.Background(), "1704067200.000000001")
 	defer s.Close()
 	e1, err := s.Next()
 	if err != nil {
@@ -185,13 +177,26 @@ func TestMobyEvents(t *testing.T) {
 	if _, err := s.Next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("end = %v, want io.EOF", err)
 	}
-	q := api.find("GET /events")
+	q := api.queries("GET /events")[0]
 	if q.Get("since") != "1704067200.000000001" {
 		t.Errorf("since = %q", q.Get("since"))
 	}
 	want := map[string]map[string]bool{"type": {"container": true, "service": true, "node": true}}
 	if got := filtersOf(t, q); !reflect.DeepEqual(got, want) {
 		t.Errorf("filters = %v", got)
+	}
+}
+
+func TestMobyEventsDockerDown(t *testing.T) {
+	d, err := NewMobyDocker(filepath.Join(t.TempDir(), "missing.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	s := d.Events(context.Background(), "")
+	defer s.Close()
+	if _, err := s.Next(); err == nil || errors.Is(err, io.EOF) {
+		t.Fatalf("first Next = %v, want the connect error", err)
 	}
 }
 

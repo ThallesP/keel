@@ -26,10 +26,7 @@ func (s *eventsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	s.mu.Lock()
 	s.posts = append(s.posts, recordedPost{string(body), r.Header.Get("X-Keel-Resync"), r.Header.Get("Authorization"), r.Header.Get("Content-Type")})
-	status := s.statuses[0]
-	if len(s.statuses) > 1 {
-		s.statuses = s.statuses[1:]
-	}
+	status := next(&s.statuses, http.StatusOK)
 	s.mu.Unlock()
 	if r.Method != http.MethodPost || r.URL.Path != "/worker/events" {
 		status = http.StatusNotFound
@@ -105,7 +102,7 @@ func TestPostEventsAccepted(t *testing.T) {
 	}
 	want := []recordedPost{
 		{"[]", "1", "Bearer tok", "application/json"},
-		{`{"Type":"node"}`, "0", "Bearer tok", "application/json"},
+		{`{"Type":"node"}`, "", "Bearer tok", "application/json"},
 	}
 	if got := es.all(); !slices.Equal(got, want) {
 		t.Fatalf("posts = %+v, want %+v", got, want)
@@ -148,7 +145,7 @@ func TestPostEventsRetries(t *testing.T) {
 		t.Fatalf("sleeps = %v, want %v", *sleeps, wantSleeps)
 	}
 	posts := es.all()
-	if posts[0].resync != "0" {
+	if posts[0].resync != "" {
 		t.Errorf("first attempt resync = %q", posts[0].resync)
 	}
 	for _, p := range posts[1:] {

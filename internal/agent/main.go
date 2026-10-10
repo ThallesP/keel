@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -21,7 +20,7 @@ func Main(ctx context.Context) error {
 	}
 	defer docker.Close()
 	m, err := mesh.Open(ctx, mesh.OptionsFromEnv(func(format string, args ...any) {
-		log.Log("mesh", fmt.Sprintf(format, args...))
+		log.Logf("mesh", format, args...)
 	}))
 	if err != nil {
 		return err

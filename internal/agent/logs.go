@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"maps"
 	"slices"
@@ -113,14 +112,14 @@ func (s *Shipper) ApplyConfig(routes []SinkRoute) {
 			continue
 		}
 		if len(q.entries) > 0 {
-			s.log.Log("logs", "dropping "+strconv.Itoa(len(q.entries))+" queued lines for a removed sink")
+			s.log.Logf("logs", "dropping %d queued lines for a removed sink", len(q.entries))
 		}
 		q.entries = nil
 		wakeRoom(q)
 	}
 	s.queues, s.queueByService, s.sinceByService = queues, byService, since
 	if changed {
-		s.log.Log("logs", fmt.Sprintf("config applied: sinks=%d services=%d", len(queues), len(byService)))
+		s.log.Logf("logs", "config applied: sinks=%d services=%d", len(queues), len(byService))
 	}
 }
 
@@ -250,7 +249,7 @@ func (s *Shipper) follow(ctx context.Context, c Container, serviceID string) {
 		if errors.Is(err, errUnrouted) || ctx.Err() != nil {
 			return
 		}
-		s.log.Log("logs", "follow "+shortID(c.ID)+" failed ("+errorText(err)+"), retry in 3s")
+		s.log.Logf("logs", "follow %s failed (%s), retry in 3s", shortID(c.ID), errorText(err))
 		if sleepCtx(ctx, s.followRetry) != nil {
 			return
 		}
@@ -264,7 +263,7 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 	}
 	defer rc.Close()
 	service := c.Labels[labelServiceName]
-	s.log.Log("logs", "following "+service+" ("+shortID(c.ID)+") since "+cmp.Or(since, "now"))
+	s.log.Logf("logs", "following %s (%s) since %s", service, shortID(c.ID), cmp.Or(since, "now"))
 	base := LogEvent{
 		ServiceID: serviceID,
 		Service:   service,
@@ -294,12 +293,11 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 }
 
 func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, ev LogEvent, line Line) bool {
-	ev.Message, ev.Stream = line.Text, line.Stream
-	at, since := s.now(), ""
+	ev.Message, ev.Stream, ev.Time = line.Text, line.Stream, cmp.Or(line.Time, s.now()).UTC()
+	since := ""
 	if !line.Time.IsZero() {
-		at, since = line.Time, dockerTime(line.Time.Add(time.Nanosecond))
+		since = dockerTime(line.Time.Add(time.Nanosecond))
 	}
-	ev.Time = at.UTC().Format(time.RFC3339Nano)
 	for {
 		s.mu.Lock()
 		q := s.queueByService[serviceID]
@@ -340,7 +338,9 @@ func (s *Shipper) enqueueLocked(q *queue, e entry) {
 	q.entries = append(q.entries, e)
 	if len(q.entries) >= s.flushLines {
 		s.flushLocked()
-	} else if s.flushTimer == nil && !s.closed {
+		return
+	}
+	if s.flushTimer == nil && !s.closed {
 		s.flushTimer = time.AfterFunc(s.flushEvery, s.flush)
 	}
 }
@@ -455,11 +455,9 @@ func serviceIDOf(labels map[string]string) (string, bool) {
 }
 
 func replicaOf(taskName string) int {
-	parts := strings.Split(taskName, ".")
-	if len(parts) < 2 {
-		return 0
-	}
-	n, _ := strconv.Atoi(parts[1])
+	_, rest, _ := strings.Cut(taskName, ".")
+	slot, _, _ := strings.Cut(rest, ".")
+	n, _ := strconv.Atoi(slot)
 	return n
 }
 

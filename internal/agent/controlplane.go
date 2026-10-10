@@ -57,10 +57,8 @@ func (c *ControlPlane) FetchConfig(ctx context.Context) (WorkerConfig, error) {
 		return WorkerConfig{}, fmt.Errorf("config %d", res.StatusCode)
 	}
 	var cfg WorkerConfig
-	if err := json.NewDecoder(res.Body).Decode(&cfg); err != nil {
-		return WorkerConfig{}, err
-	}
-	return cfg, nil
+	err = json.NewDecoder(res.Body).Decode(&cfg)
+	return cfg, err
 }
 
 func (c *ControlPlane) PostEvents(ctx context.Context, body []byte, resync bool) bool {
@@ -68,17 +66,17 @@ func (c *ControlPlane) PostEvents(ctx context.Context, body []byte, resync bool)
 		status, err := c.postEventsOnce(ctx, body, resync)
 		wait := time.Duration(n*5+5) * time.Second
 		switch {
-		case err == nil && status >= 200 && status <= 299:
+		case status >= 200 && status <= 299:
 			return true
-		case err == nil && status >= 400 && status <= 499:
-			c.Log.Log("events", fmt.Sprintf("rejected %d, skipping %q", status, truncate(string(body), 120)))
+		case status >= 400 && status <= 499:
+			c.Log.Logf("events", "rejected %d, skipping %q", status, truncate(string(body), 120))
 			return false
 		case ctx.Err() != nil:
 			return false
 		case err == nil:
-			c.Log.Log("events", fmt.Sprintf("post failed %d, retry in %s", status, wait))
+			c.Log.Logf("events", "post failed %d, retry in %s", status, wait)
 		default:
-			c.Log.Log("events", fmt.Sprintf("post failed (%s), retry in %s", errorText(err), wait))
+			c.Log.Logf("events", "post failed (%s), retry in %s", errorText(err), wait)
 		}
 		resync = true
 		if c.sleep(ctx, wait) != nil {
@@ -96,11 +94,9 @@ func (c *ControlPlane) postEventsOnce(ctx context.Context, body []byte, resync b
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
-	flag := "0"
 	if resync {
-		flag = "1"
+		req.Header.Set("X-Keel-Resync", "1")
 	}
-	req.Header.Set("X-Keel-Resync", flag)
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return 0, err

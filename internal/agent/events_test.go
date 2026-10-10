@@ -26,14 +26,7 @@ func (p *fakePoster) PostEvents(_ context.Context, body []byte, resync bool) boo
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.posts = append(p.posts, post{string(body), resync})
-	ok := true
-	if len(p.results) > 0 {
-		ok = p.results[0]
-		if len(p.results) > 1 {
-			p.results = p.results[1:]
-		}
-	}
-	return ok
+	return next(&p.results, true)
 }
 
 func (p *fakePoster) all() []post {
@@ -48,7 +41,7 @@ func ev(typ, action, actor string, attrs map[string]string, timeNano int64) Even
 }
 
 func svcAttrs(service string) map[string]string {
-	return map[string]string{labelServiceName: service, labelTaskName: service + ".1.t"}
+	return map[string]string{labelServiceName: service}
 }
 
 func TestRelevant(t *testing.T) {
@@ -76,12 +69,12 @@ func TestRelevant(t *testing.T) {
 
 type containerHook struct{ action, id string }
 
-func newTestForwarder(d *fakeDocker, p *fakePoster, state *State) (*Forwarder, *syncBuffer, *[]containerHook, *sync.Mutex) {
-	buf := &syncBuffer{}
+func newTestForwarder(d *fakeDocker, p EventPoster, state *State) (*Forwarder, *syncBuffer, func() []containerHook) {
+	logs := &syncBuffer{}
 	var mu sync.Mutex
 	var hooks []containerHook
 	f := &Forwarder{
-		Docker: d, Poster: p, State: state, Log: NewLogger(buf),
+		Docker: d, Poster: p, State: state, Log: NewLogger(logs),
 		OnContainer: func(action, id string, _ map[string]string) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -89,12 +82,26 @@ func newTestForwarder(d *fakeDocker, p *fakePoster, state *State) (*Forwarder, *
 		},
 		reconnect: time.Millisecond,
 	}
-	return f, buf, &hooks, &mu
+	return f, logs, func() []containerHook {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(hooks)
+	}
+}
+
+func runUntil(t *testing.T, f *Forwarder, cond func() bool) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Go(func() { f.Run(ctx) })
+	waitFor(t, cond)
+	cancel()
+	wg.Wait()
 }
 
 func TestForwarderStream(t *testing.T) {
 	d := newFakeDocker()
-	d.streams = []eventScript{{
+	d.streams = []fakeEvents{{
 		events: []Event{
 			ev("container", "start", "c1", svcAttrs("svc-a"), 1704067200000000001),
 			ev("container", "exec_start: sh", "c1", svcAttrs("svc-a"), 1704067200000000002),
@@ -108,16 +115,8 @@ func TestForwarderStream(t *testing.T) {
 	}}
 	p := &fakePoster{}
 	state := LoadState(t.TempDir() + "/state.json")
-	f, logs, hooks, mu := newTestForwarder(d, p, state)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		f.Run(ctx)
-		close(done)
-	}()
-	waitFor(t, func() bool { return len(d.sinces()) >= 2 })
-	cancel()
-	<-done
+	f, logs, hooks := newTestForwarder(d, p, state)
+	runUntil(t, f, func() bool { return len(d.sinces()) >= 2 })
 
 	want := []post{
 		{"[]", true},
@@ -129,12 +128,10 @@ func TestForwarderStream(t *testing.T) {
 	if got := p.all(); !slices.Equal(got, want) {
 		t.Fatalf("posts = %+v\nwant %+v", got, want)
 	}
-	mu.Lock()
 	wantHooks := []containerHook{{"start", "c1"}, {"exec_start: sh", "c1"}, {"health_status: healthy", "c1"}, {"start", "c9"}}
-	if !slices.Equal(*hooks, wantHooks) {
-		t.Errorf("container hooks = %v, want %v", *hooks, wantHooks)
+	if got := hooks(); !slices.Equal(got, wantHooks) {
+		t.Errorf("container hooks = %v, want %v", got, wantHooks)
 	}
-	mu.Unlock()
 	if s := d.sinces(); s[0] != "" || s[1] != "1704067201.000000000" {
 		t.Errorf("events since = %v", s)
 	}
@@ -143,7 +140,7 @@ func TestForwarderStream(t *testing.T) {
 	}
 	out := logs.String()
 	for _, w := range []string{
-		"[events] streaming docker events\n",
+		"[events] streaming docker events since now\n",
 		"[events] docker events stream ended, reconnecting in 2s\n",
 		"[events] streaming docker events since 1704067201.000000000\n",
 	} {
@@ -155,7 +152,7 @@ func TestForwarderStream(t *testing.T) {
 
 func TestForwarderResyncAfterFailure(t *testing.T) {
 	d := newFakeDocker()
-	d.streams = []eventScript{{
+	d.streams = []fakeEvents{{
 		events: []Event{
 			ev("node", "update", "n", nil, 0),
 			ev("node", "update", "n", nil, 0),
@@ -165,16 +162,8 @@ func TestForwarderResyncAfterFailure(t *testing.T) {
 		end: errors.New("unexpected EOF"),
 	}}
 	p := &fakePoster{results: []bool{false, true, false, true, true}}
-	f, logs, _, _ := newTestForwarder(d, p, LoadState(t.TempDir()+"/s.json"))
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		f.Run(ctx)
-		close(done)
-	}()
-	waitFor(t, func() bool { return len(p.all()) >= 5 })
-	cancel()
-	<-done
+	f, logs, _ := newTestForwarder(d, p, LoadState(t.TempDir()+"/s.json"))
+	runUntil(t, f, func() bool { return len(p.all()) >= 5 })
 	got := p.all()[:5]
 	want := []bool{true, true, false, true, false}
 	for i, w := range want {
@@ -204,39 +193,15 @@ func (p *cancellingPoster) PostEvents(ctx context.Context, _ []byte, _ bool) boo
 
 func TestForwarderShutdownMidPostKeepsTheEvent(t *testing.T) {
 	d := newFakeDocker()
-	d.streams = []eventScript{{events: []Event{
+	d.streams = []fakeEvents{{events: []Event{
 		ev("node", "update", "n", nil, 1704067200000000001),
 		ev("node", "update", "n", nil, 1704067200000000005),
 	}}}
 	state := LoadState(t.TempDir() + "/s.json")
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &cancellingPoster{cancel: cancel}
-	f, _, _, _ := newTestForwarder(d, nil, state)
-	f.Poster = p
+	f, _, _ := newTestForwarder(d, &cancellingPoster{cancel: cancel}, state)
 	f.Run(ctx)
 	if got := state.EventsSince(); got != "1704067200.000000002" {
 		t.Fatalf("eventsSince = %q, want just after the delivered event", got)
-	}
-}
-
-func TestForwarderDockerDown(t *testing.T) {
-	d := newFakeDocker()
-	d.streams = []eventScript{{err: errors.New("connect: no such file or directory")}}
-	p := &fakePoster{}
-	f, logs, _, _ := newTestForwarder(d, p, LoadState(t.TempDir()+"/s.json"))
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		f.Run(ctx)
-		close(done)
-	}()
-	waitFor(t, func() bool { return len(p.all()) >= 1 })
-	cancel()
-	<-done
-	if !strings.Contains(logs.String(), "[events] stream error: connect: no such file or directory, reconnecting in 2s") {
-		t.Fatalf("log = %s", logs.String())
-	}
-	if got := p.all(); got[0] != (post{"[]", true}) {
-		t.Fatalf("a failed GET /events posted %+v first", got)
 	}
 }

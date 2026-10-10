@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+type EventPoster interface {
+	PostEvents(ctx context.Context, body []byte, resync bool) bool
+}
+
 type Forwarder struct {
-	Docker Docker
-	Poster interface {
-		PostEvents(ctx context.Context, body []byte, resync bool) bool
-	}
+	Docker      Docker
+	Poster      EventPoster
 	State       *State
 	Log         *Logger
 	OnContainer func(action, containerID string, attrs map[string]string)
@@ -22,41 +24,32 @@ type Forwarder struct {
 
 func (f *Forwarder) Run(ctx context.Context) {
 	reconnect := cmp.Or(f.reconnect, 2*time.Second)
-	for ctx.Err() == nil {
-		f.stream(ctx)
+	for {
+		err := f.stream(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		msg := "stream error: " + errorText(err)
+		if errors.Is(err, io.EOF) {
+			msg = "docker events stream ended"
+		}
+		f.Log.Log("events", msg+", reconnecting in 2s")
 		if sleepCtx(ctx, reconnect) != nil {
 			return
 		}
 	}
 }
 
-func (f *Forwarder) stream(ctx context.Context) {
+func (f *Forwarder) stream(ctx context.Context) error {
 	since := f.State.EventsSince()
-	s, err := f.Docker.Events(ctx, since)
-	if err != nil {
-		if ctx.Err() == nil {
-			f.Log.Log("events", "stream error: "+err.Error()+", reconnecting in 2s")
-		}
-		return
-	}
+	s := f.Docker.Events(ctx, since)
 	defer s.Close()
-	if since != "" {
-		f.Log.Log("events", "streaming docker events since "+since)
-	} else {
-		f.Log.Log("events", "streaming docker events")
-	}
+	f.Log.Log("events", "streaming docker events since "+cmp.Or(since, "now"))
 	resync := !f.Poster.PostEvents(ctx, []byte("[]"), true)
 	for {
 		e, err := s.Next()
 		if err != nil {
-			switch {
-			case ctx.Err() != nil:
-			case errors.Is(err, io.EOF):
-				f.Log.Log("events", "docker events stream ended, reconnecting in 2s")
-			default:
-				f.Log.Log("events", "stream error: "+err.Error()+", reconnecting in 2s")
-			}
-			return
+			return err
 		}
 		if e.Type == "container" && e.ActorID != "" {
 			f.OnContainer(e.Action, e.ActorID, e.Attributes)
@@ -64,7 +57,7 @@ func (f *Forwarder) stream(ctx context.Context) {
 		if relevant(e) {
 			resync = !f.Poster.PostEvents(ctx, e.Raw, resync)
 			if ctx.Err() != nil {
-				return
+				return ctx.Err()
 			}
 		}
 		if e.TimeNano != 0 {

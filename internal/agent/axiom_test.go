@@ -27,13 +27,7 @@ func (s *axiomServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.bodies = append(s.bodies, string(body))
 	s.paths = append(s.paths, r.URL.EscapedPath())
 	s.headers = append(s.headers, r.Header.Clone())
-	status := 200
-	if len(s.statuses) > 0 {
-		status = s.statuses[0]
-		if len(s.statuses) > 1 {
-			s.statuses = s.statuses[1:]
-		}
-	}
+	status := next(&s.statuses, 200)
 	s.mu.Unlock()
 	w.WriteHeader(status)
 	io.WriteString(w, s.reply)
@@ -47,8 +41,8 @@ func (s *axiomServer) requests() []string {
 
 func testEvents() []LogEvent {
 	return []LogEvent{
-		{Time: "2024-01-01T00:00:00.000000001Z", Message: "hello", Stream: "stdout", ServiceID: "n1", Service: "svc-n1", Task: "t1", Replica: 1, Node: "node1", Container: "abcdef123456"},
-		{Time: "2024-01-01T00:00:01Z", Message: `say "hi" <b>`, Stream: "stderr", ServiceID: "n1", Service: "svc-n1", Task: "t1", Replica: 1, Node: "node1", Container: "abcdef123456"},
+		{Time: time.Date(2024, 1, 1, 0, 0, 0, 1, time.UTC), Message: "hello", Stream: "stdout", ServiceID: "n1", Service: "svc-n1", Task: "t1", Replica: 1, Node: "node1", Container: "abcdef123456"},
+		{Time: time.Date(2024, 1, 1, 0, 0, 1, 0, time.UTC), Message: `say "hi" <b>`, Stream: "stderr", ServiceID: "n1", Service: "svc-n1", Task: "t1", Replica: 1, Node: "node1", Container: "abcdef123456"},
 	}
 }
 

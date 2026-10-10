@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -18,7 +19,7 @@ type fakeDocker struct {
 	afterList   func()
 	logs        map[string][]logScript
 	logCalls    []logCall
-	streams     []eventScript
+	streams     []fakeEvents
 	eventsSince []string
 }
 
@@ -28,12 +29,6 @@ type logScript struct {
 	data  []byte
 	end   error
 	chunk int
-}
-
-type eventScript struct {
-	err    error
-	events []Event
-	end    error
 }
 
 func newFakeDocker() *fakeDocker {
@@ -68,13 +63,8 @@ func (d *fakeDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 	d.mu.Lock()
 	d.logCalls = append(d.logCalls, logCall{id, since})
 	scripts := d.logs[id]
-	var s logScript
-	if len(scripts) > 0 {
-		s = scripts[0]
-		if len(scripts) > 1 {
-			d.logs[id] = scripts[1:]
-		}
-	}
+	s := next(&scripts, logScript{})
+	d.logs[id] = scripts
 	d.mu.Unlock()
 	return &scriptedReader{ctx: ctx, data: s.data, end: s.end, chunk: cmp.Or(s.chunk, 7), closed: make(chan struct{})}, nil
 }
@@ -95,22 +85,16 @@ func (d *fakeDocker) callsFor(id string) []string {
 	return out
 }
 
-func (d *fakeDocker) Events(ctx context.Context, since string) (EventStream, error) {
+func (d *fakeDocker) Events(ctx context.Context, since string) EventStream {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.eventsSince = append(d.eventsSince, since)
-	var s *eventScript
+	var s fakeEvents
 	if len(d.streams) > 0 {
-		s = &d.streams[0]
-		d.streams = d.streams[1:]
+		s, d.streams = d.streams[0], d.streams[1:]
 	}
-	d.mu.Unlock()
-	if s == nil {
-		return &fakeEvents{ctx: ctx}, nil
-	}
-	if s.err != nil {
-		return nil, s.err
-	}
-	return &fakeEvents{ctx: ctx, events: s.events, end: s.end}, nil
+	s.ctx = ctx
+	return &s
 }
 
 func (d *fakeDocker) sinces() []string {
@@ -190,14 +174,7 @@ func (s *fakeSink) Send(ctx context.Context, events []LogEvent) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.batches = append(s.batches, slices.Clone(events))
-	ok := true
-	if len(s.results) > 0 {
-		ok = s.results[0]
-		if len(s.results) > 1 {
-			s.results = s.results[1:]
-		}
-	}
-	return ok
+	return next(&s.results, true)
 }
 
 func (s *fakeSink) sent() [][]LogEvent {
@@ -246,12 +223,31 @@ func (ss *sinkSet) get(cfg SinkConfig) *fakeSink {
 	return ss.sinks[cfg]
 }
 
+func next[T any](script *[]T, whenEmpty T) T {
+	if len(*script) == 0 {
+		return whenEmpty
+	}
+	v := (*script)[0]
+	if len(*script) > 1 {
+		*script = (*script)[1:]
+	}
+	return v
+}
+
 func stamped(lines ...string) []byte {
 	var out []byte
 	for _, l := range lines {
 		out = append(out, frame(1, l+"\n")...)
 	}
 	return out
+}
+
+func numbered(n int) []byte {
+	var lines []string
+	for i := range n {
+		lines = append(lines, fmt.Sprintf("2024-01-01T00:00:%02dZ line %d", i, i))
+	}
+	return stamped(lines...)
 }
 
 func containerID(c byte) string { return strings.Repeat(string(c), 64) }

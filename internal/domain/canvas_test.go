@@ -177,7 +177,7 @@ func TestCanvasRandomSecret(t *testing.T) {
 }
 
 func TestCanvasUTF16LenAndTrimJS(t *testing.T) {
-	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, "a😀b": 4}
+	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, "a😀b": 4, string([]byte{0xff, 'a'}): 2}
 	for in, want := range cases {
 		if got := UTF16Len(in); got != want {
 			t.Errorf("UTF16Len(%q) = %d, want %d", in, got, want)

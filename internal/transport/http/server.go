@@ -103,11 +103,6 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(s.opts.ConfigJS))
 	})
-	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(s.app.Config.Version + "\n"))
-	})
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, &api.Problem{Status: 404, Title: "Not Found", Detail: "No such API route", Code: domain.CodeNotFound})
 	})

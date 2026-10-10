@@ -1,4 +1,4 @@
--- Keel's control-plane database. Ported from convex/schema.ts plus Better Auth's tables.
+-- Keel's control-plane database.
 -- Times are unix milliseconds. Booleans are INTEGER 0/1. Ids are domain.NewID() strings.
 
 -- ── Accounts ────────────────────────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ CREATE TABLE sessions (
 );
 CREATE INDEX sessions_by_user ON sessions(user_id);
 
--- One per install for now, founded by the first account (projects.ensureDefault).
+-- One per install for now, founded by the first account when it signs up.
 CREATE TABLE organizations (
   id         TEXT PRIMARY KEY,
   name       TEXT NOT NULL,
@@ -130,11 +130,11 @@ CREATE INDEX nodes_by_environment ON nodes(environment_id);
 -- the same message.
 CREATE UNIQUE INDEX nodes_environment_name ON nodes(environment_id, name);
 
--- nodes.endpoints in Convex. Uniqueness that Convex enforced in code is enforced here too.
+-- A node's public endpoints. Domains and public ports are unique across the install.
 CREATE TABLE endpoints (
   id           TEXT PRIMARY KEY,
   node_id      TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-  ord          INTEGER NOT NULL, -- order within the node, as the Convex array kept it
+  ord          INTEGER NOT NULL, -- order within the node
   protocol     TEXT NOT NULL CHECK (protocol IN ('http', 'tcp', 'udp')),
   port         INTEGER NOT NULL,
   pinned_port  INTEGER NOT NULL DEFAULT 0,

@@ -116,9 +116,6 @@ func TestServeOn(t *testing.T) {
 	if resp, body = get("/assets/app.js"); resp.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" || body != "console.log(1)" {
 		t.Fatalf("/assets: %v %s", resp.Header, body)
 	}
-	if resp, body = get("/version"); resp.StatusCode != 200 || body != "1.2.3\n" || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
-		t.Fatalf("/version: %d %v %q", resp.StatusCode, resp.Header, body)
-	}
 
 	fake.mu.Lock()
 	a := fake.app

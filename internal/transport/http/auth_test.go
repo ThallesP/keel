@@ -291,7 +291,7 @@ func TestAuthHTTPSignInRateLimit(t *testing.T) {
 	}
 	r := h.do(authReq{method: "POST", path: "/api/auth/sign-in", body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery"}})
 	authExpect(t, r, 429, "RATE_LIMITED", "Too many requests. Please try again later.")
-	if r.header.Get("Retry-After") != "300" || r.header.Get("X-Retry-After") != "300" {
+	if r.header.Get("Retry-After") != "300" {
 		t.Fatalf("retry headers: %v", r.header)
 	}
 }

@@ -119,7 +119,7 @@ func authOp[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Con
 			p := &api.Problem{Status: http.StatusTooManyRequests, Title: http.StatusText(http.StatusTooManyRequests),
 				Detail: domain.MsgTooManyRequests, Code: domain.CodeRateLimited}
 			after := strconv.FormatInt(limited.RetryAfterSeconds, 10)
-			return nil, huma.ErrorWithHeaders(p, http.Header{"Retry-After": {after}, "X-Retry-After": {after}})
+			return nil, huma.ErrorWithHeaders(p, http.Header{"Retry-After": {after}})
 		}
 		return nil, problemOf(err)
 	})

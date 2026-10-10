@@ -258,7 +258,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 	if moved {
-		deployProxySync(a)
+		a.ScheduleProxySync()
 	}
 	a.scheduleObserve(record, id, observeDebounce, 0)
 }

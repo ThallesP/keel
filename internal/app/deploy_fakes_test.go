@@ -280,7 +280,6 @@ type world struct {
 	member   domain.Actor
 	outsider domain.Actor
 	follows  []int
-	syncs    int
 	envVars  map[string]map[string]string
 	created  int64
 }
@@ -323,7 +322,6 @@ func newWorld(t *testing.T) *world {
 			w.follows = append(w.follows, port)
 			return port == 9999, nil
 		},
-		ProxySync: func() { w.syncs++ },
 	})
 	return w
 }
@@ -426,8 +424,6 @@ func stepStatuses(d domain.Deployment) string {
 	}
 	return strings.Join(out, " ")
 }
-
-func sortedCopy(in []string) []string { return slices.Sorted(slices.Values(in)) }
 
 func codeAndMessage(err error) string {
 	var de *domain.Error

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -294,9 +295,9 @@ func TestApplyFailures(t *testing.T) {
 		w := newWorld(t)
 		w.addNode("api", port(9999))
 		w.ship(app.ShipOptions{})
-		w.jobs.run()
-		if w.syncs != 1 {
-			t.Fatalf("proxy syncs: %d", w.syncs)
+		w.jobs.runOne(t, "apply:")
+		if w.jobs.count("proxy:sync") != 1 {
+			t.Fatalf("jobs: %v", w.jobs.keys())
 		}
 	})
 }
@@ -514,7 +515,8 @@ func TestIngestEventsDebounce(t *testing.T) {
 		t.Fatalf("not coalesced: %v", w.jobs.keys())
 	}
 	w.jobs.advance(300 * time.Millisecond)
-	if got := sortedCopy(w.swarm.observed); !reflect.DeepEqual(got, sortedCopy([]string{a.ID, b.ID})) {
+	slices.Sort(w.swarm.observed)
+	if !slices.Equal(w.swarm.observed, []string{min(a.ID, b.ID), max(a.ID, b.ID)}) {
 		t.Fatalf("observed: %v", w.swarm.observed)
 	}
 

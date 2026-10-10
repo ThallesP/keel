@@ -37,7 +37,6 @@ var errApplySuperseded = errors.New("superseded by a newer revision")
 var (
 	deployComputeEnv = computeEnv
 	deployFollowPort = followPort
-	deployProxySync  = (*App).ScheduleProxySync
 )
 
 const (

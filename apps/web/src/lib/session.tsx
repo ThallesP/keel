@@ -78,11 +78,6 @@ export type AuthActions = {
   signOut: () => Promise<void>;
   /** `POST /api/invitations/{id}/accept` for the signed-in user. */
   acceptInvitation: (invitationId: string) => Promise<AcceptedInvitation>;
-  /**
-   * For any other write that changed who the caller is or which organization they are in (e.g.
-   * `ensureDefaultProject` founding the organization): resets the cache and the socket.
-   */
-  refreshSession: () => Promise<Me>;
 };
 
 /**
@@ -129,7 +124,6 @@ export function useAuth(): AuthActions {
         await changed();
         return res;
       },
-      refreshSession: changed,
     } satisfies AuthActions;
   }, [queryClient, reconnect]);
 }

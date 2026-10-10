@@ -65,13 +65,12 @@
 7 apps/web/src/lib/panel-write.ts
 52 apps/web/src/lib/query.ts
 34 apps/web/src/lib/realtime.tsx
-35 apps/web/src/lib/session.tsx
+31 apps/web/src/lib/session.tsx
 2 apps/web/src/main.tsx
 1 apps/web/src/routes/__root.tsx
 2 apps/web/src/routes/_auth/axiom/callback.tsx
 10 apps/web/src/routes/_auth/device.tsx
 10 apps/web/src/routes/_auth/p/$projectId.tsx
 1 apps/web/src/routes/_auth/route.tsx
-7 apps/web/src/routes/index.tsx
 10 apps/web/src/routes/invite.$invitationId.tsx
 7 apps/web/vite.config.ts

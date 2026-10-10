@@ -126,7 +126,8 @@ func NameFromImage(image, fallback string) string {
 }
 
 func NextPosition(nodes []Node) Position {
-	var at *Position
+	var at Position
+	found := false
 	for _, n := range nodes {
 		if n.ParentID != "" {
 			continue
@@ -135,15 +136,11 @@ func NextPosition(nodes []Node) Position {
 		if n.Config.Width != nil {
 			w = *n.Config.Width
 		}
-		x := n.Position.X + w + 60
-		if at == nil || x > at.X {
-			at = &Position{X: x, Y: n.Position.Y}
+		if x := n.Position.X + w + 60; !found || x > at.X {
+			at, found = Position{X: x, Y: n.Position.Y}, true
 		}
 	}
-	if at == nil {
-		return Position{}
-	}
-	return *at
+	return at
 }
 
 func ValidPort(p *int) error {

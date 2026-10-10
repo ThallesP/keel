@@ -35,7 +35,6 @@ type LogLine struct {
 type Deployment struct {
 	ID            string
 	EnvironmentID string
-	Sha           string
 	Message       string
 	Status        DeploymentStatus
 	StartedAt     int64

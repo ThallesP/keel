@@ -63,14 +63,13 @@ func (q *Queries) DeployHasRunning(ctx context.Context, environmentID string) (i
 }
 
 const deployInsert = `-- name: DeployInsert :exec
-INSERT INTO deployments (id, environment_id, sha, message, status, started_at, finished_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO deployments (id, environment_id, message, status, started_at, finished_at)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type DeployInsertParams struct {
 	ID            string
 	EnvironmentID string
-	Sha           *string
 	Message       string
 	Status        string
 	StartedAt     int64
@@ -81,7 +80,6 @@ func (q *Queries) DeployInsert(ctx context.Context, arg DeployInsertParams) erro
 	_, err := q.db.ExecContext(ctx, deployInsert,
 		arg.ID,
 		arg.EnvironmentID,
-		arg.Sha,
 		arg.Message,
 		arg.Status,
 		arg.StartedAt,

@@ -17,7 +17,6 @@ func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, err
 	d := domain.Deployment{
 		ID:            r.ID,
 		EnvironmentID: r.EnvironmentID,
-		Sha:           str(r.Sha),
 		Message:       r.Message,
 		Status:        domain.DeploymentStatus(r.Status),
 		StartedAt:     r.StartedAt,
@@ -42,10 +41,10 @@ func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, err
 	return d, nil
 }
 
-func (t *tx) deployFillAll(rows []sqlc.Deployment, withLog bool) ([]domain.Deployment, error) {
+func (t *tx) deployFillAll(rows []sqlc.Deployment) ([]domain.Deployment, error) {
 	out := make([]domain.Deployment, 0, len(rows))
 	for _, r := range rows {
-		d, err := t.deployFill(r, withLog)
+		d, err := t.deployFill(r, false)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +81,6 @@ func (t *tx) InsertDeployment(d domain.Deployment) error {
 	err := t.q.DeployInsert(t.ctx, sqlc.DeployInsertParams{
 		ID:            d.ID,
 		EnvironmentID: d.EnvironmentID,
-		Sha:           nullStr(d.Sha),
 		Message:       d.Message,
 		Status:        string(d.Status),
 		StartedAt:     d.StartedAt,
@@ -115,7 +113,7 @@ func (t *tx) RecentDeployments(environmentID string, limit int) ([]domain.Deploy
 	if err != nil {
 		return nil, err
 	}
-	return t.deployFillAll(rows, false)
+	return t.deployFillAll(rows)
 }
 
 func (t *tx) DeploymentLog(id string) ([]domain.LogLine, error) {
@@ -135,7 +133,7 @@ func (t *tx) RunningDeployments(environmentID string) ([]domain.Deployment, erro
 	if err != nil {
 		return nil, err
 	}
-	return t.deployFillAll(rows, true)
+	return t.deployFillAll(rows)
 }
 
 func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) error {

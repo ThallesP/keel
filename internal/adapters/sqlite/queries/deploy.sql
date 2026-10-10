@@ -5,8 +5,8 @@
 SELECT COUNT(*) FROM deployments WHERE environment_id = ? AND status = 'running';
 
 -- name: DeployInsert :exec
-INSERT INTO deployments (id, environment_id, sha, message, status, started_at, finished_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO deployments (id, environment_id, message, status, started_at, finished_at)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: DeployUpdate :execrows
 UPDATE deployments SET status = ?2, finished_at = ?3 WHERE id = ?1;

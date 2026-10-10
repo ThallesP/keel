@@ -46,7 +46,6 @@ func DeploymentOf(d domain.Deployment) Deployment {
 	out := Deployment{
 		ID:            d.ID,
 		EnvironmentID: d.EnvironmentID,
-		Sha:           d.Sha,
 		Message:       d.Message,
 		Status:        string(d.Status),
 		StartedAt:     d.StartedAt,

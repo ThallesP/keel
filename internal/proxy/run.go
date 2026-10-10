@@ -3,7 +3,6 @@
 package proxy
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,8 +26,6 @@ import (
 	_ "github.com/mholt/caddy-l4/modules/l4proxy"
 )
 
-const DefaultSocket = "/run/keel-proxy/admin.sock"
-
 type Options struct {
 	Socket     string
 	ConfigFile string
@@ -37,7 +34,6 @@ type Options struct {
 
 func Run(ctx context.Context, opts Options) error {
 	prepareACME()
-	opts.Socket = cmp.Or(opts.Socket, DefaultSocket)
 	config, resumed, err := initialConfig(opts)
 	if err != nil {
 		return err

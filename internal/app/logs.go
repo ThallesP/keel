@@ -22,7 +22,7 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 		if err != nil {
 			return err
 		}
-		sink, err = orgSinkOf(tx, scope.Org)
+		sink, err = orgSinkOf(tx, scope.Project.OrganizationID)
 		return err
 	})
 	if err != nil {

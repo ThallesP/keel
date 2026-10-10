@@ -121,7 +121,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 				return err
 			}
 		}
-		if err := canvasTouch(tx, ch, scope.Org, environmentID); err != nil {
+		if err := canvasTouch(tx, ch, scope.Project.OrganizationID, environmentID); err != nil {
 			return err
 		}
 		out.ID = node.ID
@@ -201,7 +201,7 @@ func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u N
 				return err
 			}
 		}
-		return canvasTouch(tx, ch, scope.Org, node.EnvironmentID)
+		return canvasTouch(tx, ch, scope.Project.OrganizationID, node.EnvironmentID)
 	})
 }
 
@@ -298,7 +298,7 @@ func (a *App) MoveNode(ctx context.Context, actor domain.Actor, id string, pos d
 		if err := tx.UpdateNode(scope.Node); err != nil {
 			return err
 		}
-		ch.Add(scope.Org, "/api/environments/"+scope.Environment.ID+"/nodes")
+		ch.Add(scope.Project.OrganizationID, "/api/environments/"+scope.Environment.ID+"/nodes")
 		return nil
 	})
 }
@@ -347,7 +347,7 @@ func (a *App) DuplicateNode(ctx context.Context, actor domain.Actor, id string) 
 			return err
 		}
 		copyID = dup.ID
-		return canvasTouch(tx, ch, scope.Org, n.EnvironmentID)
+		return canvasTouch(tx, ch, scope.Project.OrganizationID, n.EnvironmentID)
 	})
 	return copyID, err
 }
@@ -371,7 +371,7 @@ func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (str
 		if err := tx.UpdateNode(node); err != nil {
 			return err
 		}
-		if err := canvasTouch(tx, ch, scope.Org, node.EnvironmentID); err != nil {
+		if err := canvasTouch(tx, ch, scope.Project.OrganizationID, node.EnvironmentID); err != nil {
 			return err
 		}
 		deploymentID, err = canvasShip(a, tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: verb})
@@ -398,7 +398,7 @@ func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (stri
 		if err := tx.UpdateNode(node); err != nil {
 			return err
 		}
-		if err := canvasTouch(tx, ch, scope.Org, node.EnvironmentID); err != nil {
+		if err := canvasTouch(tx, ch, scope.Project.OrganizationID, node.EnvironmentID); err != nil {
 			return err
 		}
 		deploymentID, err = canvasShip(a, tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: "stop"})
@@ -436,10 +436,10 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 		if err := tx.DeleteNode(id); err != nil {
 			return err
 		}
-		if err := canvasTouch(tx, ch, scope.Org, node.EnvironmentID); err != nil {
+		if err := canvasTouch(tx, ch, scope.Project.OrganizationID, node.EnvironmentID); err != nil {
 			return err
 		}
-		ch.Node(scope.Org, node.EnvironmentID, id)
+		ch.Node(scope.Project.OrganizationID, node.EnvironmentID, id)
 		ch.AfterCommit(func() {
 			s := canvasSchedulers(a)
 			if len(node.Endpoints) > 0 {

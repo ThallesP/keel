@@ -48,7 +48,7 @@ func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentI
 		if err != nil {
 			return err
 		}
-		sink, err := orgSinkOf(tx, scope.Org)
+		sink, err := orgSinkOf(tx, scope.Project.OrganizationID)
 		if err != nil {
 			return err
 		}

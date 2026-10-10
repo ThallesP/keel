@@ -245,7 +245,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			if err := tx.UpdateNode(n); err != nil {
 				return err
 			}
-			ch.Environment(scope.Org, n.EnvironmentID)
+			ch.Environment(scope.Project.OrganizationID, n.EnvironmentID)
 		}
 		if in.desired.Port == 0 {
 			return nil

@@ -97,7 +97,7 @@ func tracingScope(tx Tx, actor domain.Actor, nodeID string) (NodeScope, domain.T
 	if scope.Node.Type != domain.NodeService || scope.Node.Desired == nil {
 		return NodeScope{}, "", domain.Invalid("Only services can be traced")
 	}
-	state, err := orgTracesState(tx, scope.Org)
+	state, err := orgTracesState(tx, scope.Project.OrganizationID)
 	return scope, state, err
 }
 
@@ -124,8 +124,8 @@ func (a *App) SetNodeTracing(ctx context.Context, actor domain.Actor, nodeID str
 		if err := tx.UpdateNode(node); err != nil {
 			return err
 		}
-		ch.Environment(scope.Org, node.EnvironmentID)
-		ch.Node(scope.Org, node.EnvironmentID, node.ID)
+		ch.Environment(scope.Project.OrganizationID, node.EnvironmentID)
+		ch.Node(scope.Project.OrganizationID, node.EnvironmentID, node.ID)
 		return nil
 	})
 }
@@ -153,7 +153,7 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 		for i, v := range vars {
 			own[i] = v.Key
 		}
-		state, err := orgTracesState(tx, scope.Org)
+		state, err := orgTracesState(tx, scope.Project.OrganizationID)
 		if err != nil {
 			return err
 		}

@@ -27,13 +27,13 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	if err := tx.InsertOTLPKey(scope.Environment.ID, key, a.Now()); err != nil {
 		return "", err
 	}
-	ch.Environment(scope.Org, scope.Environment.ID)
+	ch.Environment(scope.Project.OrganizationID, scope.Environment.ID)
 	nodes, err := tx.Nodes(scope.Environment.ID)
 	if err != nil {
 		return "", err
 	}
 	for _, n := range nodes {
-		ch.Node(scope.Org, n.EnvironmentID, n.ID)
+		ch.Node(scope.Project.OrganizationID, n.EnvironmentID, n.ID)
 	}
 	return key, nil
 }

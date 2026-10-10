@@ -7,7 +7,6 @@ import (
 )
 
 type EnvScope struct {
-	Org         string
 	Project     domain.Project
 	Environment domain.Environment
 }
@@ -32,7 +31,7 @@ func ownedEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, bool, err
 	if !actor.System && p.OrganizationID != actor.OrganizationID {
 		return EnvScope{}, false, nil
 	}
-	return EnvScope{Org: p.OrganizationID, Project: p, Environment: env}, true, nil
+	return EnvScope{Project: p, Environment: env}, true, nil
 }
 
 func ownedNode(tx Tx, actor domain.Actor, id string) (NodeScope, bool, error) {

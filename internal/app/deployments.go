@@ -81,8 +81,8 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	if err := tx.InsertDeployment(d); err != nil {
 		return "", err
 	}
-	ch.Environment(scope.Org, envID)
-	deploymentChanged(ch, scope.Org, d)
+	ch.Environment(scope.Project.OrganizationID, envID)
+	deploymentChanged(ch, scope.Project.OrganizationID, d)
 	ch.AfterCommit(func() {
 		for _, n := range affected {
 			a.scheduleApply(applyRequest{nodeID: n.ID, deploymentID: d.ID, revision: n.Desired.Revision, pull: opts.Refresh})

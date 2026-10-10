@@ -109,7 +109,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 		if err := tx.ReplaceEndpoints(node.ID, append(rest, wanted)); err != nil {
 			return err
 		}
-		ch.Environment(scope.Org, scope.Environment.ID)
+		ch.Environment(scope.Project.OrganizationID, scope.Environment.ID)
 		ch.AfterCommit(a.ScheduleProxySync)
 		out = wanted
 		return nil
@@ -148,7 +148,7 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 		if err := tx.ReplaceEndpoints(node.ID, keep); err != nil {
 			return err
 		}
-		ch.Environment(scope.Org, scope.Environment.ID)
+		ch.Environment(scope.Project.OrganizationID, scope.Environment.ID)
 		ch.AfterCommit(a.ScheduleProxySync)
 		return nil
 	})
@@ -214,6 +214,6 @@ func followPort(tx Tx, ch *Changes, scope NodeScope, port int, now int64) (bool,
 	if err := tx.ReplaceEndpoints(scope.Node.ID, eps); err != nil {
 		return false, err
 	}
-	ch.Environment(scope.Org, scope.Environment.ID)
+	ch.Environment(scope.Project.OrganizationID, scope.Environment.ID)
 	return true, nil
 }

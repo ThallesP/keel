@@ -51,7 +51,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 		if !ok {
 			return domain.Invalid("Unknown node type")
 		}
-		runtime := def.Image != ""
+		runtime := in.Type.Deployable()
 		if in.Image != nil && in.Type != domain.NodeService {
 			return domain.Invalid("Only services take a custom image")
 		}
@@ -59,10 +59,10 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			return domain.Invalid("This node type has no runtime settings")
 		}
 		image, port := def.Image, def.Port
-		if in.Engine != "" {
-			spec, ok := domain.Engines[in.Engine]
+		if engine := cmp.Or(in.Engine, def.Engine); engine != "" {
+			spec, ok := domain.Engines[engine]
 			if !ok || spec.Type != in.Type {
-				return domain.Invalid("%s is not a %s", in.Engine, in.Type)
+				return domain.Invalid("%s is not a %s", engine, in.Type)
 			}
 			image, port = spec.Image, spec.Port
 		}

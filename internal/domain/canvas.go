@@ -11,15 +11,16 @@ import (
 )
 
 type NodeDefault struct {
-	Name  string
-	Image string
-	Port  int
+	Name   string
+	Image  string
+	Port   int
+	Engine Engine
 }
 
 var NodeDefaults = map[NodeType]NodeDefault{
 	NodeService:  {Name: "service", Image: "nginx:alpine", Port: 80},
-	NodeDatabase: {Name: "postgres", Image: "postgres:16", Port: 5432},
-	NodeCache:    {Name: "redis", Image: "redis:7", Port: 6379},
+	NodeDatabase: {Name: "postgres", Engine: EnginePostgres},
+	NodeCache:    {Name: "redis", Engine: EngineRedis},
 	NodeVolume:   {Name: "data"},
 	NodeGroup:    {Name: "group"},
 }

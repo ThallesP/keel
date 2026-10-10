@@ -1,14 +1,15 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { useSuspenseQueries } from "@tanstack/react-query";
 import { useReactFlow } from "@xyflow/react";
 import { Braces, Eye, EyeOff, Link2, Lock, LockOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import {
+  listReferenceableVariablesSuspenseQueryOptions,
+  listVariablesSuspenseQueryOptions,
   type ReferenceKey,
   type ReferenceSource,
   useDeleteVariable,
-  useListReferenceableVariablesSuspense,
-  useListVariablesSuspense,
   useSetVariable,
   type VariableRef,
   type VariableView,
@@ -308,12 +309,19 @@ function Row({
 
 export function VariablesTab({ node }: { node: InfraNode }) {
   const path = { id: node.id };
-  const {
-    data: { variables },
-  } = useListVariablesSuspense({ path });
-  const {
-    data: { sources, suggestions },
-  } = useListReferenceableVariablesSuspense({ path });
+  const [
+    {
+      data: { variables },
+    },
+    {
+      data: { sources, suggestions },
+    },
+  ] = useSuspenseQueries({
+    queries: [
+      listVariablesSuspenseQueryOptions({ path }),
+      listReferenceableVariablesSuspenseQueryOptions({ path }),
+    ],
+  });
   const setVariable = useSetVariable();
   const deleteVariable = useDeleteVariable();
   const [editing, setEditing] = useState<string | null>(null);

@@ -122,7 +122,7 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 				}
 			}
 			for _, row := range own {
-				keys = append(keys, ReferenceKey{Key: row.Key, As: row.Key, Secret: row.Secret})
+				keys = append(keys, ReferenceKey{Key: row.Key, As: domain.SuggestedKey(n.Name, row.Key), Secret: row.Secret})
 			}
 			out.Sources = append(out.Sources, ReferenceSource{NodeID: n.ID, Name: n.Name, Type: n.Type, Image: n.Desired.Image, Keys: keys})
 			if suggest && !referenced[n.ID] {

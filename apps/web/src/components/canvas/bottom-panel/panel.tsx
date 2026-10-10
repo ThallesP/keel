@@ -102,6 +102,7 @@ export function BottomPanel() {
     >
       <ErrorBoundary
         key={node.id}
+        resetKeys={[tab]}
         onReset={reset}
         fallbackRender={({ error, resetErrorBoundary }) => (
           <p className="px-5 py-4 text-xs text-danger">

@@ -71,7 +71,7 @@ func TestCanvasReferenceable(t *testing.T) {
 			{Key: "PORT", As: "REDIS_PORT", Provided: true}, {Key: "REDIS_PASSWORD", As: "REDIS_PASSWORD", Secret: true},
 		}},
 		{NodeID: web, Name: "web", Type: domain.NodeService, Image: "nginx:alpine", Keys: []app.ReferenceKey{
-			{Key: "URL", As: "WEB_URL", Provided: true}, {Key: "PORT", As: "WEB_PORT", Provided: true}, {Key: "HOST", As: "HOST"}, {Key: "A", As: "A"},
+			{Key: "URL", As: "WEB_URL", Provided: true}, {Key: "PORT", As: "WEB_PORT", Provided: true}, {Key: "HOST", As: "WEB_HOST"}, {Key: "A", As: "A"},
 		}},
 	}
 	if !reflect.DeepEqual(ref.Sources, want) {

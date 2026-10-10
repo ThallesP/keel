@@ -12,7 +12,7 @@ count() {
     while read -r f; do
       [ -f "$f" ] || continue
       head -5 "$f" | grep -qE 'Code generated|@generated' && continue
-      n=$(grep -E '^\s*(//|/\*|\*|\{/\*)|\S\s+//\s' "$f" |
+      n=$(grep -E '^\s*(//|/\*|\*(\s|/|$)|\{/\*)|\S\s+//\s' "$f" |
         grep -cvE '//(go:|nolint|export |line )|// \+build|(eslint|oxlint|biome)-(disable|ignore)|@ts-(expect-error|ignore)|/// <reference|@vite-ignore|@jsx' || true)
       if [ "$n" -gt 0 ]; then echo "$n $f"; fi
     done

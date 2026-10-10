@@ -78,6 +78,10 @@ ensure_docker() {
   fi
   docker info >/dev/null 2>&1 || die "the Docker daemon is not running" "systemctl enable --now docker"
   docker compose version >/dev/null 2>&1 || die "the Docker Compose plugin is missing" "install docker-compose-plugin, or reinstall Docker from https://get.docker.com"
+  if docker volume inspect keel_convex-data >/dev/null 2>&1; then
+    die "this server runs the Convex-era Keel (volume keel_convex-data), which does not upgrade to this one" \
+      "move your services off it, then remove it: docker compose -p keel down; docker service rm keel-worker; docker volume rm keel_convex-data"
+  fi
 }
 
 ensure_tailscale() {

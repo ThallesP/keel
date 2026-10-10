@@ -47,6 +47,8 @@ Swarm's ports (2377, 7946, 4789) are on the tailnet as well. The proxy binds the
 
 Re-run the install command. It is idempotent: secrets are kept, the image is pulled again, and `keel serve` updates the agent on every server itself.
 
+The Convex-era Keel does not upgrade to this one. On a server that still has its `keel_convex-data` volume, the installer stops before changing anything, and its `fix:` line says how to remove the old install once your services are off it.
+
 Pin a version with `KEEL_VERSION` (an image tag such as `1.2.3` or `sha-abc1234`). The pin is remembered by later runs.
 
 ### Options

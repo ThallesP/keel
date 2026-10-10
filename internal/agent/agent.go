@@ -46,7 +46,7 @@ func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 }
 
 type Agent struct {
-	cfg       Config
+	poll      time.Duration
 	docker    Docker
 	log       *slog.Logger
 	state     *State
@@ -57,9 +57,9 @@ type Agent struct {
 }
 
 func New(cfg Config, docker Docker, controlPlane *http.Client, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, docker: docker, log: log, wake: make(chan struct{}, 1)}
+	a := &Agent{poll: cfg.ConfigPoll, docker: docker, log: log, wake: make(chan struct{}, 1)}
 	a.state = LoadState(cfg.StatePath)
-	a.cp = NewControlPlane(cfg.URL, cfg.Token, controlPlane, log)
+	a.cp = &ControlPlane{URL: cfg.URL, Token: cfg.Token, HTTP: controlPlane, Log: log, sleep: sleepCtx}
 	a.shipper = NewShipper(docker, a.state, log, NewSinkFactory(log), a.refreshConfig)
 	a.forwarder = &Forwarder{
 		Docker: docker, Poster: a.cp, State: a.state, Log: log,
@@ -115,7 +115,7 @@ func (a *Agent) pollConfig(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(a.cfg.ConfigPoll):
+		case <-time.After(a.poll):
 		case <-a.wake:
 		}
 	}

@@ -46,12 +46,11 @@ func (s *eventsServer) all() []recordedPost {
 func newTestControlPlane(t *testing.T, url string) (*ControlPlane, *syncBuffer, *[]time.Duration) {
 	t.Helper()
 	log, buf := testLogger()
-	cp := NewControlPlane(url, "tok", &http.Client{}, log)
 	var sleeps []time.Duration
-	cp.sleep = func(ctx context.Context, d time.Duration) error {
+	cp := &ControlPlane{URL: url, Token: "tok", HTTP: &http.Client{}, Log: log, sleep: func(ctx context.Context, d time.Duration) error {
 		sleeps = append(sleeps, d)
 		return ctx.Err()
-	}
+	}}
 	return cp, buf, &sleeps
 }
 

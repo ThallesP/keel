@@ -21,10 +21,6 @@ type ControlPlane struct {
 	sleep func(context.Context, time.Duration) error
 }
 
-func NewControlPlane(url, token string, hc *http.Client, log *slog.Logger) *ControlPlane {
-	return &ControlPlane{URL: url, Token: token, HTTP: hc, Log: log, sleep: sleepCtx}
-}
-
 type SinkRoute struct {
 	ServiceIDs []string   `json:"serviceIds"`
 	Sink       SinkConfig `json:"sink"`

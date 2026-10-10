@@ -209,7 +209,7 @@ func canvasVariablesChanged(tx Tx, ch *Changes, scope NodeScope) error {
 	if err := tx.CanvasMarkDirty(scope.Node.ID); err != nil {
 		return err
 	}
-	if err := markReferrersDirty(tx, ch, scope.Org, scope.Node); err != nil {
+	if err := markReferrersDirty(tx, scope.Node); err != nil {
 		return err
 	}
 	return canvasTouch(tx, ch, scope.Org, scope.Node.EnvironmentID)
@@ -246,7 +246,7 @@ func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
 	return env, nil
 }
 
-func markReferrersDirty(tx Tx, ch *Changes, org string, node domain.Node) error {
+func markReferrersDirty(tx Tx, node domain.Node) error {
 	nodes, err := tx.Nodes(node.EnvironmentID)
 	if err != nil {
 		return err
@@ -255,14 +255,10 @@ func markReferrersDirty(tx Tx, ch *Changes, org string, node domain.Node) error 
 	if err != nil {
 		return err
 	}
-	marked := domain.Referrers(nodes, vars, node.ID)
-	for _, id := range marked {
+	for _, id := range domain.Referrers(nodes, vars, node.ID) {
 		if err := tx.CanvasMarkDirty(id); err != nil {
 			return err
 		}
-	}
-	if len(marked) > 0 {
-		return canvasTouch(tx, ch, org, node.EnvironmentID)
 	}
 	return nil
 }

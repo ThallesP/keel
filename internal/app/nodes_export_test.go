@@ -30,15 +30,11 @@ func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[stri
 }
 
 func (a *App) CanvasMarkReferrersDirty(ctx context.Context, nodeID string) error {
-	return a.write(ctx, func(tx Tx, ch *Changes) error {
+	return a.write(ctx, func(tx Tx, _ *Changes) error {
 		n, err := tx.Node(nodeID)
 		if err != nil {
 			return err
 		}
-		org, err := tx.OrganizationOfEnvironment(n.EnvironmentID)
-		if err != nil {
-			return err
-		}
-		return markReferrersDirty(tx, ch, org, n)
+		return markReferrersDirty(tx, n)
 	})
 }

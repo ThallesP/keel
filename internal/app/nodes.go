@@ -197,7 +197,7 @@ func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u N
 			return err
 		}
 		if runtime {
-			if err := markReferrersDirty(tx, ch, scope.Org, node); err != nil {
+			if err := markReferrersDirty(tx, node); err != nil {
 				return err
 			}
 		}
@@ -417,7 +417,7 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 			return err
 		}
 		node := scope.Node
-		if err := markReferrersDirty(tx, ch, scope.Org, node); err != nil {
+		if err := markReferrersDirty(tx, node); err != nil {
 			return err
 		}
 		siblings, err := tx.Nodes(node.EnvironmentID)

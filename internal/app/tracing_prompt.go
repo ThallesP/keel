@@ -1,81 +1,23 @@
 package app
 
-import "strings"
+import (
+	_ "embed"
+	"strings"
+)
+
+//go:embed tracing_prompt.md
+var agentPromptTemplate string
 
 func agentPrompt(service, project string) string {
-	svc := service
-	if svc == "" {
-		svc = "<service>"
+	inProject := ""
+	if project != "" {
+		inProject = " in the project `" + project + "`"
 	}
-	var where string
+	svc := "<service>"
+	where := "It runs on Keel" + inProject + "; find which service it is with `keel service list` and use that name wherever this says `<service>`."
 	if service != "" {
-		where = "It runs on Keel as the service `" + service + "`"
-		if project != "" {
-			where += " in the project `" + project + "`"
-		}
-		where += "."
-	} else {
-		where = "It runs on Keel"
-		if project != "" {
-			where += " in the project `" + project + "`"
-		}
-		where += "; find which service it is with `keel service list` and use that name wherever this says `<service>`."
+		svc = service
+		where = "It runs on Keel as the service `" + service + "`" + inProject + "."
 	}
 	return strings.NewReplacer("{{WHERE}}", where, "{{SVC}}", svc).Replace(agentPromptTemplate)
 }
-
-const agentPromptTemplate = `# Set up OpenTelemetry tracing for Keel
-
-Instrument this repo with OpenTelemetry so each request it serves becomes a trace in Keel, then prove it works locally before anything ships. {{WHERE}}
-
-Keel provides the exporter configuration through environment variables at run time. Your job is the code, and checking that spans arrive.
-
-## What Keel sets
-
-When tracing is on for a service, and under ` + "`" + `keel run` + "`" + `, the process gets:
-
-- ` + "`" + `OTEL_EXPORTER_OTLP_ENDPOINT` + "`" + `, ` + "`" + `OTEL_EXPORTER_OTLP_HEADERS` + "`" + `, ` + "`" + `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` + "`" + `
-- ` + "`" + `OTEL_SERVICE_NAME` + "`" + `, ` + "`" + `OTEL_RESOURCE_ATTRIBUTES` + "`" + ` (the Keel service, the environment, ` + "`" + `deployment.environment.name` + "`" + `)
-- ` + "`" + `OTEL_TRACES_EXPORTER=otlp` + "`" + `, ` + "`" + `OTEL_METRICS_EXPORTER=none` + "`" + `, ` + "`" + `OTEL_LOGS_EXPORTER=none` + "`" + `
-
-## Rules
-
-1. Use the official OpenTelemetry SDK for this language, with auto-instrumentation for the HTTP server, outgoing HTTP calls, and the database and cache clients this app uses. No vendor SDKs, and no Keel-specific code.
-2. Configure the SDK only from those variables. Do not hardcode an endpoint, headers, a service name or an exporter, and do not add a console exporter.
-3. Export traces only, over OTLP/HTTP with protobuf. Keel does not take OTLP logs or metrics.
-4. Start the SDK only when ` + "`" + `OTEL_EXPORTER_OTLP_ENDPOINT` + "`" + ` is set, so that without it (tests, plain dev scripts) the app runs exactly as before.
-5. Initialize it before the app loads anything it instruments: a preload, ` + "`" + `--import` + "`" + `, or a wrapper command. Otherwise auto-instrumentation silently patches nothing.
-6. On SIGTERM, flush and shut the SDK down, then exit. Keel stops containers with SIGTERM and kills them 10 seconds later, and in a container a SIGTERM handler replaces the default exit, so a handler that only flushes leaves the process hanging.
-7. Name each request's server span ` + "`" + `METHOD route` + "`" + ` (` + "`" + `GET /users/:id` + "`" + `, not ` + "`" + `GET` + "`" + ` or ` + "`" + `GET /users/42` + "`" + `) and set ` + "`" + `http.route` + "`" + `. Framework instrumentations do this. Where the app routes by hand (plain ` + "`" + `node:http` + "`" + `, ` + "`" + `Bun.serve` + "`" + `, a hand-written router), set ` + "`" + `http.route` + "`" + ` on the active span and rename it where the route is matched. A request that matches no route keeps the bare method: never put the raw path in the name.
-8. Keep logging to stdout and stderr, as one JSON object per line that carries the active span's ` + "`" + `trace_id` + "`" + ` and ` + "`" + `span_id` + "`" + ` (lowercase hex, as OpenTelemetry formats them). Keel ships stdout and links each line to its trace by that id. Where the logger has an OpenTelemetry integration, use it rather than adding the ids by hand.
-9. Add spans by hand only around work no request covers, such as queue consumers, cron jobs and startup tasks. Name spans after the operation, not the data, and never put secrets or personal data in attributes.
-10. Keep the new dependencies few, and pin them the way this repo pins everything else.
-
-## Per stack
-
-- **Node.js** (Express, Fastify, Hono, NestJS…): ` + "`" + `@opentelemetry/api` + "`" + `, ` + "`" + `@opentelemetry/sdk-node` + "`" + `, ` + "`" + `@opentelemetry/auto-instrumentations-node` + "`" + `, ` + "`" + `@opentelemetry/exporter-trace-otlp-proto` + "`" + `, and ` + "`" + `@opentelemetry/instrumentation` + "`" + ` for the ESM hook below. Put the setup in its own file and load it with ` + "`" + `node --import ./instrumentation.mjs` + "`" + ` (ESM) or ` + "`" + `--require` + "`" + ` (CommonJS), in both the dev script and the Dockerfile ` + "`" + `CMD` + "`" + `. In an ESM app that file must also register OpenTelemetry's loader hook (` + "`" + `register("@opentelemetry/instrumentation/hook.mjs", import.meta.url)` + "`" + ` from ` + "`" + `node:module` + "`" + `) before the SDK starts; without it, modules loaded with ` + "`" + `import` + "`" + ` are not patched. Turn off the ` + "`" + `fs` + "`" + `, ` + "`" + `dns` + "`" + ` and ` + "`" + `net` + "`" + ` instrumentations: they add a span per file read and lookup. For logs, use pino or winston: their instrumentations (included in auto-instrumentations) add ` + "`" + `trace_id` + "`" + ` and ` + "`" + `span_id` + "`" + ` to each line.
-- **Next.js**: the ` + "`" + `instrumentation.ts` + "`" + ` hook with the same packages, or ` + "`" + `registerOTel` + "`" + ` from ` + "`" + `@vercel/otel` + "`" + ` (it reads the same variables).
-- **Bun**: the Node SDK covers outgoing calls and many clients, but ` + "`" + `Bun.serve` + "`" + ` is not auto-instrumented. Wrap the fetch handler in a SERVER span yourself, with ` + "`" + `http.request.method` + "`" + `, ` + "`" + `url.path` + "`" + `, ` + "`" + `http.route` + "`" + ` and ` + "`" + `http.response.status_code` + "`" + `, and status ERROR on 5xx and on thrown errors. Continue an incoming ` + "`" + `traceparent` + "`" + ` with the W3C propagator.
-- **Python**: ` + "`" + `opentelemetry-distro` + "`" + ` and ` + "`" + `opentelemetry-exporter-otlp-proto-http` + "`" + `, then ` + "`" + `opentelemetry-bootstrap -a install` + "`" + ` for the libraries present. Run the app under ` + "`" + `opentelemetry-instrument` + "`" + ` in both the dev command and the Dockerfile. For logs, ` + "`" + `opentelemetry-instrumentation-logging` + "`" + ` puts ` + "`" + `otelTraceID` + "`" + ` and ` + "`" + `otelSpanID` + "`" + ` on each record; write them as JSON.
-- **Go**: the ` + "`" + `go.opentelemetry.io/otel` + "`" + ` SDK with ` + "`" + `otlptracehttp` + "`" + ` (it reads the ` + "`" + `OTEL_EXPORTER_OTLP_*` + "`" + ` variables) and ` + "`" + `resource.WithFromEnv()` + "`" + `. Wrap the server handler and HTTP clients in ` + "`" + `otelhttp` + "`" + `, and use the contrib packages for the database drivers. For logs, a ` + "`" + `slog` + "`" + ` JSON handler that adds ` + "`" + `trace_id` + "`" + ` and ` + "`" + `span_id` + "`" + ` from ` + "`" + `trace.SpanContextFromContext(ctx)` + "`" + `.
-- **Anything else**: the official SDK and its OTLP/HTTP protobuf trace exporter, configured from the environment.
-
-## Test it locally before shipping
-
-The Keel CLI is ` + "`" + `keel` + "`" + `. Check it with ` + "`" + `keel whoami` + "`" + `. If it is missing or not logged in, stop and ask me, the human: logging in needs my approval in the dashboard.
-
-1. Run the app the way you would in development, through Keel: ` + "`" + `keel run {{SVC}} -- <dev command>` + "`" + `, in the background. Prefer the real command (` + "`" + `node --import ./instrumentation.mjs server.mjs` + "`" + `) over a package-manager script, so the process you stop is the app. That adds this service's variables and Keel's tracing variables for a local run (` + "`" + `deployment.environment.name=local` + "`" + `). Anything already set in your shell wins.
-2. Make a few requests to it: a page, an API route, one that touches the database or another service if it has one, and one that fails if you can.
-3. Run ` + "`" + `keel traces {{SVC}} --since 15m --json` + "`" + `. Spans are batched for up to 5 seconds, so retry for about 30 seconds. You should see your requests with ` + "`" + `"local": true` + "`" + `, route-shaped names (` + "`" + `GET /users/:id` + "`" + `, not ` + "`" + `GET` + "`" + `, except for paths no route matches), the right status, and child spans for database and outgoing calls (` + "`" + `"spans"` + "`" + ` above 1).
-4. Check that a log line written during one of those requests carries the same ` + "`" + `trace_id` + "`" + `.
-5. If nothing arrives, check that the SDK actually started (the variable was set when it initialized, and the preload was loaded), that the exporter is OTLP/HTTP protobuf, and that the process did not exit before flushing. If ` + "`" + `keel traces` + "`" + ` fails with ` + "`" + `TRACES_OFF` + "`" + `, the Keel organization has no traces store yet: ask me to open Observability in the dashboard and sign in with Axiom. Do not move on until your requests show up.
-
-## Turn it on in Keel
-
-Tracing is a per-service switch, staged like a variable change. Once this change is merged and its image is published:
-
-    keel tracing enable {{SVC}}
-    keel redeploy {{SVC}}
-
-` + "`" + `redeploy` + "`" + ` pulls the image again and applies the staged switch, and works for a first deploy too. If you are not the one who deploys, list these two commands in your summary as the last step.
-`

@@ -1,8 +1,8 @@
 package app
 
 import (
+	"cmp"
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -23,10 +23,7 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 	seen := map[string]bool{}
 	for _, e := range events {
 		if e.Type == "node" {
-			if !seen["node"] {
-				seen["node"] = true
-				a.Jobs.After("observe:servers", 0, a.observeServers)
-			}
+			a.Jobs.After("observe:servers", 0, a.observeServers)
 			continue
 		}
 		if e.Type != "container" && e.Type != "service" {
@@ -36,23 +33,12 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 		if e.Type == "container" {
 			name = e.ServiceName
 		}
-		if !strings.HasPrefix(name, domain.ServicePrefix) {
-			continue
-		}
-		id := strings.TrimPrefix(name, domain.ServicePrefix)
-		if id == "" || seen[id] {
+		id, ok := strings.CutPrefix(name, domain.ServicePrefix)
+		if !ok || id == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
 		scheduled, _ := a.scheduleObserve(ctx, id, observeDebounce, 0)
-		label := e.ServiceName
-		if label == "" {
-			label = e.Name
-		}
-		verdict := "skipped"
-		if scheduled {
-			verdict = "scheduled"
-		}
-		a.Log.Info(fmt.Sprintf("event %s %s %s → observeNode %s", e.Type, e.Action, label, verdict))
+		a.Log.Info("event", "type", e.Type, "action", e.Action, "name", cmp.Or(e.ServiceName, e.Name), "observeScheduled", scheduled)
 	}
 }

@@ -2,6 +2,8 @@ package swarm
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/swarm"
@@ -11,57 +13,43 @@ import (
 )
 
 func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (*app.SwarmService, []app.SwarmTask, error) {
-	type inspected struct {
-		svc *app.SwarmService
-		err error
-	}
-	done := make(chan inspected, 1)
-	go func() {
+	var svc *app.SwarmService
+	var inspectErr error
+	var wg sync.WaitGroup
+	wg.Go(func() {
 		res, err := s.cli.ServiceInspect(ctx, serviceName(nodeID), client.ServiceInspectOptions{})
-		switch {
-		case cerrdefs.IsNotFound(err):
-			done <- inspected{}
-		case err != nil:
-			done <- inspected{err: err}
-		default:
-			svc := serviceOf(res.Service)
-			done <- inspected{svc: &svc}
+		if cerrdefs.IsNotFound(err) {
+			return
 		}
-	}()
+		if err != nil {
+			inspectErr = err
+			return
+		}
+		svc = new(serviceOf(res.Service))
+	})
 	list, err := s.cli.TaskList(ctx, client.TaskListOptions{
 		Filters: make(client.Filters).Add("label", labelService+"="+nodeID),
 	})
-	in := <-done
-	if err != nil {
+	wg.Wait()
+	if err := errors.Join(err, inspectErr); err != nil {
 		return nil, nil, err
 	}
-	if in.err != nil {
-		return nil, nil, in.err
-	}
-	return in.svc, tasksOf(list.Items), nil
+	return svc, tasksOf(list.Items), nil
 }
 
 func (s *Swarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []app.SwarmTask, error) {
-	filter := func() client.Filters { return make(client.Filters).Add("label", labelService) }
-	type listed struct {
-		items []swarm.Service
-		err   error
-	}
-	done := make(chan listed, 1)
-	go func() {
-		res, err := s.cli.ServiceList(ctx, client.ServiceListOptions{Filters: filter()})
-		done <- listed{res.Items, err}
-	}()
-	tasks, err := s.cli.TaskList(ctx, client.TaskListOptions{Filters: filter()})
-	services := <-done
-	if err != nil {
+	filter := make(client.Filters).Add("label", labelService)
+	var services client.ServiceListResult
+	var listErr error
+	var wg sync.WaitGroup
+	wg.Go(func() { services, listErr = s.cli.ServiceList(ctx, client.ServiceListOptions{Filters: filter}) })
+	tasks, err := s.cli.TaskList(ctx, client.TaskListOptions{Filters: filter})
+	wg.Wait()
+	if err := errors.Join(err, listErr); err != nil {
 		return nil, nil, err
 	}
-	if services.err != nil {
-		return nil, nil, services.err
-	}
-	out := make([]app.SwarmService, 0, len(services.items))
-	for _, svc := range services.items {
+	out := make([]app.SwarmService, 0, len(services.Items))
+	for _, svc := range services.Items {
 		out = append(out, serviceOf(svc))
 	}
 	return out, tasksOf(tasks.Items), nil

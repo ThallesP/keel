@@ -20,11 +20,10 @@ func task(r, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
 func onNode(id string) func(*SwarmTask) { return func(t *SwarmTask) { t.NodeID = id } }
 func withErr(e string) func(*SwarmTask) { return func(t *SwarmTask) { t.Err = e } }
 func at(ms int64) func(*SwarmTask)      { return func(t *SwarmTask) { t.Timestamp = ms } }
-func noLabel() func(*SwarmTask)         { return func(t *SwarmTask) { t.Labels = map[string]string{} } }
 func iptr(i int) *int                   { return &i }
 func i64(i int64) *int64                { return &i }
-func svc(r, update, msg string) *SwarmService {
-	return &SwarmService{Name: "svc-x", Labels: rev(r), UpdateState: update, UpdateMessage: msg}
+func svc(r, update, msg string) SwarmService {
+	return SwarmService{Name: "svc-x", Labels: rev(r), UpdateState: update, UpdateMessage: msg}
 }
 
 func TestSummarizeTasks(t *testing.T) {
@@ -32,10 +31,10 @@ func TestSummarizeTasks(t *testing.T) {
 	cases := []struct {
 		name  string
 		tasks []SwarmTask
-		svc   *SwarmService
+		svc   SwarmService
 		want  domain.Observed
 	}{
-		{"gone", nil, nil,
+		{"gone", nil, SwarmService{},
 			domain.Observed{Revision: 0, Running: 0, State: domain.ObservedOK, NodeIDs: []string{}, At: now}},
 		{"fresh create, running", []SwarmTask{task("1", "running", "running", onNode("n1"))}, svc("1", "", ""),
 			domain.Observed{Revision: 1, Running: 1, State: domain.ObservedOK, NodeIDs: []string{"n1"}, At: now}},
@@ -80,19 +79,19 @@ func TestSummarizeTasks(t *testing.T) {
 			task("4", "shutdown", "complete", at(900)),
 		}, svc("5", "", ""),
 			domain.Observed{Revision: 5, Running: 0, Completed: iptr(2), FinishedAt: i64(700), State: domain.ObservedCompleted, NodeIDs: []string{}, At: now}},
-		{"one-shot with an unknown timestamp", []SwarmTask{task("1", "shutdown", "complete")}, nil,
+		{"one-shot with an unknown timestamp", []SwarmTask{task("1", "shutdown", "complete")}, SwarmService{},
 			domain.Observed{Revision: 1, Running: 0, Completed: iptr(1), FinishedAt: i64(0), State: domain.ObservedCompleted, NodeIDs: []string{}, At: now}},
 		{"completed beside a failure is not one-shot", []SwarmTask{
 			task("1", "shutdown", "complete"), task("1", "shutdown", "failed"),
-		}, nil,
+		}, SwarmService{},
 			domain.Observed{Revision: 1, Running: 0, State: domain.ObservedOK, NodeIDs: []string{}, At: now}},
 		{"old revisions are ignored", []SwarmTask{
 			task("1", "shutdown", "failed", withErr("old")),
 			task("2", "running", "running", onNode("n2")),
 		}, svc("2", "", ""),
 			domain.Observed{Revision: 2, Running: 1, State: domain.ObservedOK, NodeIDs: []string{"n2"}, At: now}},
-		{"tasks without a revision label are not current", []SwarmTask{
-			task("", "running", "running", noLabel(), onNode("n1")),
+		{"tasks without a revision are not current", []SwarmTask{
+			task("", "running", "running", onNode("n1")),
 		}, svc("2", "", ""),
 			domain.Observed{Revision: 2, Running: 0, State: domain.ObservedOK, NodeIDs: []string{}, At: now}},
 		{"node ids distinct, first seen first, empty skipped", []SwarmTask{
@@ -100,7 +99,7 @@ func TestSummarizeTasks(t *testing.T) {
 			task("1", "running", "running", onNode("a")),
 			task("1", "running", "running", onNode("b")),
 			task("1", "running", "running"),
-		}, nil,
+		}, SwarmService{},
 			domain.Observed{Revision: 1, Running: 4, State: domain.ObservedOK, NodeIDs: []string{"b", "a"}, At: now}},
 		{"stopped service keeps its spec revision", nil, svc("7", "completed", ""),
 			domain.Observed{Revision: 7, Running: 0, State: domain.ObservedOK, NodeIDs: []string{}, At: now}},
@@ -121,8 +120,8 @@ func TestTaskRevision(t *testing.T) {
 	}{
 		{nil, 0, false},
 		{rev("3"), 3, true},
-		{rev(" 4 "), 4, true},
-		{rev(""), 0, true},
+		{rev(" 4 "), 0, false},
+		{rev(""), 0, false},
 		{rev("x"), 0, false},
 		{rev("1.5"), 0, false},
 	}

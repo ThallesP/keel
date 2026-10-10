@@ -11,42 +11,33 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-const (
-	overlayNetwork = "keel"
-	labelService   = "keel.service"
-	labelRevision  = "keel.revision"
-)
+const labelService = "keel.service"
 
 func serviceName(nodeID string) string { return domain.ServicePrefix + nodeID }
 
 func toSpec(s app.ServiceSpec) swarm.ServiceSpec {
-	labels := func() map[string]string {
-		return map[string]string{labelService: s.NodeID, labelRevision: strconv.Itoa(s.Revision)}
-	}
-	delay := 5 * time.Second
-	attempts := uint64(5)
-	replicas := uint64(max(s.Replicas, 0))
+	labels := map[string]string{labelService: s.NodeID, "keel.revision": strconv.Itoa(s.Revision)}
 	failure := swarm.UpdateFailureActionRollback
 	if s.OneShot {
 		failure = swarm.UpdateFailureActionContinue
 	}
 	return swarm.ServiceSpec{
-		Annotations: swarm.Annotations{Name: serviceName(s.NodeID), Labels: labels()},
+		Annotations: swarm.Annotations{Name: serviceName(s.NodeID), Labels: labels},
 		TaskTemplate: swarm.TaskSpec{
 			ContainerSpec: &swarm.ContainerSpec{
 				Image:  s.Image,
 				Env:    s.Env,
 				Args:   engineArgs(s.Image, s.Env),
-				Labels: labels(),
+				Labels: labels,
 			},
 			RestartPolicy: &swarm.RestartPolicy{
 				Condition:   swarm.RestartPolicyConditionOnFailure,
-				Delay:       &delay,
-				MaxAttempts: &attempts,
+				Delay:       new(5 * time.Second),
+				MaxAttempts: new(uint64(5)),
 			},
-			Networks: []swarm.NetworkAttachmentConfig{{Target: overlayNetwork}},
+			Networks: []swarm.NetworkAttachmentConfig{{Target: "keel"}},
 		},
-		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: &replicas}},
+		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: new(uint64(max(s.Replicas, 0)))}},
 		UpdateConfig: &swarm.UpdateConfig{
 			Parallelism:   1,
 			Order:         swarm.UpdateOrderStartFirst,
@@ -70,15 +61,4 @@ func engineArgs(image string, env []string) []string {
 	return nil
 }
 
-func imageEngine(image string) string {
-	ref, _, _ := strings.Cut(image, "@")
-	if i := strings.LastIndex(ref, "/"); i >= 0 {
-		ref = ref[i+1:]
-	}
-	repo, _, _ := strings.Cut(ref, ":")
-	switch repo {
-	case "postgres", "mysql", "mongo", "redis":
-		return repo
-	}
-	return ""
-}
+func imageEngine(image string) string { return string(domain.EngineOf(image)) }

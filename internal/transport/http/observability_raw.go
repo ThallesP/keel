@@ -1,10 +1,9 @@
 package http
 
 import (
-	"crypto/subtle"
+	"cmp"
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
@@ -23,23 +22,9 @@ func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {
 		ContentEncoding: r.Header.Get("Content-Encoding"),
 		Body:            r.Body,
 	})
-	ct := res.ContentType
-	if ct == "" {
-		ct = "text/plain; charset=utf-8"
-	}
-	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Type", cmp.Or(res.ContentType, "text/plain; charset=utf-8"))
 	w.WriteHeader(res.Status)
 	_, _ = w.Write(res.Body)
-}
-
-func (s *Server) obsWorkerAuthorized(r *http.Request) bool {
-	expected := s.app.Config.WorkerToken
-	header := r.Header.Get("Authorization")
-	if expected == "" || !strings.HasPrefix(header, "Bearer ") {
-		return false
-	}
-	got := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
 }
 
 type obsWorkerConfigBody struct {
@@ -54,18 +39,14 @@ type obsWorkerConfigSink struct {
 }
 
 func (s *Server) obsWorkerConfig(w http.ResponseWriter, r *http.Request) {
-	if !s.obsWorkerAuthorized(r) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte("unauthorized"))
+	if !s.workerAuthorized(r) {
+		writeText(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	entries, err := s.app.WorkerConfig(r.Context())
 	if err != nil {
 		s.app.Log.Error("worker config", "err", err)
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("internal error"))
+		writeText(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	body := obsWorkerConfigBody{Sinks: make([]obsWorkerConfigSink, len(entries))}

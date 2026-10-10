@@ -188,19 +188,19 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 		status int
 		answer string
 	}{
-		{"no token", good, "", 401, "unauthorized\n"},
-		{"wrong token", good, "Bearer s3cre", 401, "unauthorized\n"},
-		{"longer token", good, "Bearer s3cret2", 401, "unauthorized\n"},
-		{"not a bearer", good, "Basic s3cret", 401, "unauthorized\n"},
-		{"too large", `{"event":"cert_failed","name":"x","error":"` + strings.Repeat("a", 256<<10) + `"}`, "Bearer s3cret", 413, "too large\n"},
-		{"bad json", `{"event":`, "Bearer s3cret", 400, "bad report\n"},
-		{"empty body", ``, "Bearer s3cret", 400, "bad report\n"},
-		{"bad event", `{"event":"cert_renewed","name":"x"}`, "Bearer s3cret", 400, "bad report\n"},
-		{"name not a string", `{"event":"cert_obtained","name":1}`, "Bearer s3cret", 400, "bad report\n"},
-		{"error not a string", `{"event":"cert_failed","name":"x","error":1}`, "Bearer s3cret", 400, "bad report\n"},
-		{"empty name", `{"event":"cert_obtained","name":""}`, "Bearer s3cret", 400, "bad report\n"},
-		{"not an object", `[1,2]`, "Bearer s3cret", 400, "bad report\n"},
-		{"null", `null`, "Bearer s3cret", 400, "bad report\n"},
+		{"no token", good, "", 401, "unauthorized"},
+		{"wrong token", good, "Bearer s3cre", 401, "unauthorized"},
+		{"longer token", good, "Bearer s3cret2", 401, "unauthorized"},
+		{"not a bearer", good, "Basic s3cret", 401, "unauthorized"},
+		{"too large", `{"event":"cert_failed","name":"x","error":"` + strings.Repeat("a", 256<<10) + `"}`, "Bearer s3cret", 413, "too large"},
+		{"bad json", `{"event":`, "Bearer s3cret", 400, "bad report"},
+		{"empty body", ``, "Bearer s3cret", 400, "bad report"},
+		{"bad event", `{"event":"cert_renewed","name":"x"}`, "Bearer s3cret", 400, "bad report"},
+		{"name not a string", `{"event":"cert_obtained","name":1}`, "Bearer s3cret", 400, "bad report"},
+		{"error not a string", `{"event":"cert_failed","name":"x","error":1}`, "Bearer s3cret", 400, "bad report"},
+		{"empty name", `{"event":"cert_obtained","name":""}`, "Bearer s3cret", 400, "bad report"},
+		{"not an object", `[1,2]`, "Bearer s3cret", 400, "bad report"},
+		{"null", `null`, "Bearer s3cret", 400, "bad report"},
 		{"unknown name is fine", `{"event":"cert_obtained","name":"nobody.example.com"}`, "Bearer s3cret", 200, "ok"},
 		{"padded token", good, "Bearer  s3cret ", 200, "ok"},
 	}
@@ -225,7 +225,7 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 
 	h.app.Config.WorkerToken = ""
 	h.auth = "Bearer "
-	if status, body := h.do("POST", "/proxy/events", good); status != 401 || body != "unauthorized\n" {
+	if status, body := h.do("POST", "/proxy/events", good); status != 401 || body != "unauthorized" {
 		t.Fatalf("unset token: %d %q", status, body)
 	}
 }

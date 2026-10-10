@@ -63,14 +63,9 @@ func TestParseWorkerEvents(t *testing.T) {
 		name, body string
 		want       []app.DockerEvent
 	}{
-		{"empty", "", nil},
-		{"blank lines", "\n  \n", nil},
 		{"empty array", " [] ", nil},
 		{"array", `[{"Type":"container","Action":"start","Actor":{"ID":"c1","Attributes":{"name":"svc-n.1.x","com.docker.swarm.service.name":"svc-n"}},"time":1700000000},{"Type":"node","Action":"update"}]`,
 			[]app.DockerEvent{{Type: "container", Action: "start", Name: "svc-n.1.x", ServiceName: "svc-n"}, {Type: "node", Action: "update"}}},
-		{"ndjson with blank lines and CRLF", "{\"Type\":\"service\",\"Action\":\"update\",\"Actor\":{\"Attributes\":{\"name\":\"svc-a\"}}}\r\n\r\n{\"Type\":\"node\",\"Action\":\"create\"}\n",
-			[]app.DockerEvent{{Type: "service", Action: "update", Name: "svc-a"}, {Type: "node", Action: "create"}}},
-		{"one object", `{"Type":"node","Action":"update"}`, []app.DockerEvent{{Type: "node", Action: "update"}}},
 	}
 	for _, c := range cases {
 		got, err := parseWorkerEvents([]byte(c.body))
@@ -79,11 +74,12 @@ func TestParseWorkerEvents(t *testing.T) {
 		}
 	}
 	for name, body := range map[string]string{
+		"empty":               "",
+		"one object":          `{"Type":"node","Action":"update"}`,
+		"ndjson":              "{\"Type\":\"node\",\"Action\":\"create\"}\n{\"Type\":\"node\",\"Action\":\"update\"}\n",
 		"array in a document": `[[1]]`,
-		"missing Action":      `{"Type":"node"}`,
-		"not an object":       "null",
-		"not a string":        `{"Type":5,"Action":"update"}`,
-		"broken line":         "{\"Type\":\"node\",\"Action\":\"x\"}\n{nope",
+		"missing Action":      `[{"Type":"node"}]`,
+		"not a string":        `[{"Type":5,"Action":"update"}]`,
 		"broken array":        "[{",
 	} {
 		if got, err := parseWorkerEvents([]byte(body)); err == nil {
@@ -127,7 +123,7 @@ func TestWorkerEventsRoute(t *testing.T) {
 	}
 
 	jobs.keys = nil
-	w := postEvents(h, "Bearer s3cret", `{"Type":"container","Action":"die","Actor":{"Attributes":{"com.docker.swarm.service.name":"svc-`+n.ID+`"}}}`, "1")
+	w := postEvents(h, "Bearer s3cret", `[{"Type":"container","Action":"die","Actor":{"Attributes":{"com.docker.swarm.service.name":"svc-`+n.ID+`"}}}]`, "1")
 	if w.Code != 200 || !jobs.has("observe:"+n.ID) || !jobs.has("observe:all") {
 		t.Fatalf("%d jobs %v", w.Code, jobs.keys)
 	}

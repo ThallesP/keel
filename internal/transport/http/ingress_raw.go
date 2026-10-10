@@ -1,13 +1,9 @@
 package http
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/ThallesP/keel/internal/app"
 )
@@ -17,8 +13,8 @@ func (s *Server) registerIngressRaw(mux *http.ServeMux) {
 }
 
 func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
-	if !ingressBearerOK(r, s.app.Config.WorkerToken) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !s.workerAuthorized(r) {
+		writeText(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	var report struct {
@@ -29,26 +25,17 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&report)
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		http.Error(w, "too large", http.StatusRequestEntityTooLarge)
+		writeText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
 	if err != nil || report.Name == "" || (report.Event != app.CertObtained && report.Event != app.CertFailed) {
-		http.Error(w, "bad report", http.StatusBadRequest)
+		writeText(w, http.StatusBadRequest, "bad report")
 		return
 	}
 	if err := s.app.ReportCert(r.Context(), report.Event, report.Name, report.Error); err != nil {
 		s.app.Log.Error("proxy cert report", "name", report.Name, "err", err)
-		http.Error(w, "server error", http.StatusInternalServerError)
+		writeText(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	_, _ = io.WriteString(w, "ok")
-}
-
-func ingressBearerOK(r *http.Request, expected string) bool {
-	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if expected == "" || !ok {
-		return false
-	}
-	a, b := sha256.Sum256([]byte(strings.TrimSpace(got))), sha256.Sum256([]byte(expected))
-	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
+	writeText(w, http.StatusOK, "ok")
 }

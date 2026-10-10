@@ -1,6 +1,8 @@
 package http
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
@@ -24,6 +26,21 @@ func jsonEncode(w io.Writer, v any) error {
 }
 
 var jsonFormat = huma.Format{Marshal: jsonEncode, Unmarshal: json.Unmarshal}
+
+func (s *Server) workerAuthorized(r *http.Request) bool {
+	token, isBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !isBearer || s.app.Config.WorkerToken == "" {
+		return false
+	}
+	got, want := sha256.Sum256([]byte(strings.TrimSpace(token))), sha256.Sum256([]byte(s.app.Config.WorkerToken))
+	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
+}
+
+func writeText(w http.ResponseWriter, status int, text string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, text)
+}
 
 func spa(web fs.FS) http.Handler {
 	files := http.FileServer(http.FS(web))

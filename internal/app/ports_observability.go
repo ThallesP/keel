@@ -14,8 +14,7 @@ type ObservabilityTx interface {
 	LogSinkOf(organizationID string) (SinkRecord, error)
 	ReplaceLogSink(organizationID string, sink domain.LogSink, connectedAt int64) error
 	DeleteLogSink(organizationID string) error
-	AnyLogSink() (bool, error)
-	WorkerSinkProjects() ([]WorkerProject, error)
+	WorkerSinks() ([]WorkerSink, error)
 	SinkOrganizationSlug(organizationID string) (string, error)
 
 	AxiomClientFor(redirectURI string) (string, error)
@@ -43,10 +42,10 @@ type SinkRecord struct {
 	ConnectedAt    int64
 }
 
-type WorkerProject struct {
-	ProjectID      string
-	OrganizationID string
-	ServiceIDs     []string
+type WorkerSink struct {
+	ServiceIDs []string       `json:"serviceIds"`
+	Sink       domain.LogSink `json:"sink"`
+	Since      int64          `json:"since"`
 }
 
 type AxiomSignIn struct {

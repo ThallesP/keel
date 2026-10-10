@@ -356,42 +356,11 @@ func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token stri
 	return sink.Dataset, org.Name, nil
 }
 
-type WorkerSinkEntry struct {
-	ProjectID  string
-	ServiceIDs []string
-	Sink       domain.LogSink
-	Since      int64
-}
-
-func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSinkEntry, error) {
-	out := []WorkerSinkEntry{}
-	err := a.read(ctx, func(tx Tx) error {
-		hasSink, err := tx.AnyLogSink()
-		if err != nil || !hasSink {
-			return err
-		}
-		projects, err := tx.WorkerSinkProjects()
-		if err != nil {
-			return err
-		}
-		sinks := map[string]*SinkRecord{}
-		for _, p := range projects {
-			if p.OrganizationID == "" {
-				continue
-			}
-			rec, seen := sinks[p.OrganizationID]
-			if !seen {
-				if rec, err = orgSinkOf(tx, p.OrganizationID); err != nil {
-					return err
-				}
-				sinks[p.OrganizationID] = rec
-			}
-			if rec == nil {
-				continue
-			}
-			out = append(out, WorkerSinkEntry{ProjectID: p.ProjectID, ServiceIDs: p.ServiceIDs, Sink: rec.Sink, Since: rec.ConnectedAt})
-		}
-		return nil
+func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSink, error) {
+	var sinks []WorkerSink
+	err := a.read(ctx, func(tx Tx) (err error) {
+		sinks, err = tx.WorkerSinks()
+		return err
 	})
-	return out, err
+	return sinks, err
 }

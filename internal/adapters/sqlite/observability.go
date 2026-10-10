@@ -14,13 +14,11 @@ func (t *tx) LogSinkOf(organizationID string) (app.SinkRecord, error) {
 	if err != nil {
 		return app.SinkRecord{}, noRow(err)
 	}
-	return app.SinkRecord{
-		OrganizationID: r.OrganizationID,
-		Sink: domain.LogSink{
-			Kind: r.Kind, Domain: r.Domain, Dataset: r.Dataset, Traces: str(r.Traces), Token: r.Token, Org: str(r.Org),
-		},
-		ConnectedAt: r.CreatedAt,
-	}, nil
+	return app.SinkRecord{OrganizationID: r.OrganizationID, Sink: sinkOf(r), ConnectedAt: r.CreatedAt}, nil
+}
+
+func sinkOf(r sqlc.LogSink) domain.LogSink {
+	return domain.LogSink{Kind: r.Kind, Domain: r.Domain, Dataset: r.Dataset, Traces: str(r.Traces), Token: r.Token, Org: str(r.Org)}
 }
 
 func (t *tx) ReplaceLogSink(organizationID string, sink domain.LogSink, connectedAt int64) error {
@@ -44,31 +42,22 @@ func (t *tx) DeleteLogSink(organizationID string) error {
 	return t.q.ObsDeleteSink(t.ctx, organizationID)
 }
 
-func (t *tx) AnyLogSink() (bool, error) {
-	n, err := t.q.ObsCountSinks(t.ctx)
-	return n > 0, err
-}
-
-func (t *tx) WorkerSinkProjects() ([]app.WorkerProject, error) {
-	projects, err := t.q.ObsListProjects(t.ctx)
+func (t *tx) WorkerSinks() ([]app.WorkerSink, error) {
+	sinks, err := t.q.ObsListSinks(t.ctx)
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := t.q.ObsListDesiredNodes(t.ctx)
+	services, err := t.q.ObsListSinkServices(t.ctx)
 	if err != nil {
 		return nil, err
 	}
-	byProject := map[string][]string{}
-	for _, n := range nodes {
-		byProject[n.ProjectID] = append(byProject[n.ProjectID], n.ID)
+	byOrganization := map[string][]string{}
+	for _, s := range services {
+		byOrganization[s.OrganizationID] = append(byOrganization[s.OrganizationID], s.ID)
 	}
-	out := make([]app.WorkerProject, 0, len(projects))
-	for _, p := range projects {
-		ids := byProject[p.ID]
-		if ids == nil {
-			ids = []string{}
-		}
-		out = append(out, app.WorkerProject{ProjectID: p.ID, OrganizationID: p.OrganizationID, ServiceIDs: ids})
+	out := make([]app.WorkerSink, len(sinks))
+	for i, s := range sinks {
+		out[i] = app.WorkerSink{ServiceIDs: byOrganization[s.OrganizationID], Sink: sinkOf(s), Since: s.CreatedAt}
 	}
 	return out, nil
 }

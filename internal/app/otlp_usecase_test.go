@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/ThallesP/keel/internal/app"
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 func TestRelayTraces(t *testing.T) {
@@ -95,28 +94,28 @@ func TestRelayTraces(t *testing.T) {
 	check(relay("Bearer "+key, "application/json", -1, "{}"), 401, "", "unauthorized")
 }
 
-func TestWorkerConfigPerProject(t *testing.T) {
+func TestWorkerConfigPerSink(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_791_000_000_123)
 	got, err := e.app.WorkerConfig(ctx)
-	if err != nil || got == nil || len(got) != 0 {
+	if err != nil || len(got) != 0 {
 		t.Fatalf("no sinks: %v %v", got, err)
 	}
 	e.exec(t, `INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('p3', 'org', 'Empty', 'empty', 3)`)
-	e.exec(t, `INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env3', 'p', 'staging', 0, 3)`)
+	e.exec(t, `INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('env3', 'p3', 'staging', 0, 3)`)
 	e.exec(t, `INSERT INTO nodes (id, environment_id, type, name, desired_image, desired_revision, desired_replicas, created_at) VALUES ('stagingapiffffffffff', 'env3', 'service', 'api', 'nginx', 1, 1, 9)`)
 	e.setSink(t, "org", obsTracesOnWithOrg())
+	e.now++
+	e.setSink(t, "org2", obsTracesOn)
 	got, err = e.app.WorkerConfig(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sink := obsTracesOnWithOrg()
-	want := []app.WorkerSinkEntry{
-		{ProjectID: "p", ServiceIDs: []string{obsNodeAPI, obsNodeWorker, obsNodeDB, "stagingapiffffffffff"}, Sink: sink, Since: 1_791_000_000_123},
-		{ProjectID: "p3", ServiceIDs: []string{}, Sink: sink, Since: 1_791_000_000_123},
+	want := []app.WorkerSink{
+		{ServiceIDs: []string{obsNodeAPI, obsNodeWorker, obsNodeDB, "stagingapiffffffffff"}, Sink: obsTracesOnWithOrg(), Since: 1_791_000_000_123},
+		{ServiceIDs: []string{obsNodeForeign}, Sink: obsTracesOn, Since: 1_791_000_000_124},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("config\n got %+v\nwant %+v", got, want)
 	}
-	_ = domain.SinkKindAxiom
 }

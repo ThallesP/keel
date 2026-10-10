@@ -9,17 +9,6 @@ import (
 	"context"
 )
 
-const obsCountSinks = `-- name: ObsCountSinks :one
-SELECT COUNT(*) FROM log_sinks
-`
-
-func (q *Queries) ObsCountSinks(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, obsCountSinks)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const obsDeletePending = `-- name: ObsDeletePending :exec
 DELETE FROM axiom_pending WHERE organization_id = ?
 `
@@ -247,27 +236,29 @@ func (q *Queries) ObsInsertSink(ctx context.Context, arg ObsInsertSinkParams) er
 	return err
 }
 
-const obsListDesiredNodes = `-- name: ObsListDesiredNodes :many
-SELECT n.id, e.project_id FROM nodes n JOIN environments e ON e.id = n.environment_id
+const obsListSinkServices = `-- name: ObsListSinkServices :many
+SELECT p.organization_id, n.id FROM nodes n
+JOIN environments e ON e.id = n.environment_id
+JOIN projects p ON p.id = e.project_id
 WHERE n.desired_image IS NOT NULL
 ORDER BY n.created_at, n.id
 `
 
-type ObsListDesiredNodesRow struct {
-	ID        string
-	ProjectID string
+type ObsListSinkServicesRow struct {
+	OrganizationID string
+	ID             string
 }
 
-func (q *Queries) ObsListDesiredNodes(ctx context.Context) ([]ObsListDesiredNodesRow, error) {
-	rows, err := q.db.QueryContext(ctx, obsListDesiredNodes)
+func (q *Queries) ObsListSinkServices(ctx context.Context) ([]ObsListSinkServicesRow, error) {
+	rows, err := q.db.QueryContext(ctx, obsListSinkServices)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ObsListDesiredNodesRow{}
+	items := []ObsListSinkServicesRow{}
 	for rows.Next() {
-		var i ObsListDesiredNodesRow
-		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+		var i ObsListSinkServicesRow
+		if err := rows.Scan(&i.OrganizationID, &i.ID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -281,25 +272,30 @@ func (q *Queries) ObsListDesiredNodes(ctx context.Context) ([]ObsListDesiredNode
 	return items, nil
 }
 
-const obsListProjects = `-- name: ObsListProjects :many
-SELECT id, organization_id FROM projects ORDER BY created_at, id
+const obsListSinks = `-- name: ObsListSinks :many
+SELECT id, organization_id, kind, domain, dataset, traces, token, org, created_at FROM log_sinks ORDER BY created_at, organization_id
 `
 
-type ObsListProjectsRow struct {
-	ID             string
-	OrganizationID string
-}
-
-func (q *Queries) ObsListProjects(ctx context.Context) ([]ObsListProjectsRow, error) {
-	rows, err := q.db.QueryContext(ctx, obsListProjects)
+func (q *Queries) ObsListSinks(ctx context.Context) ([]LogSink, error) {
+	rows, err := q.db.QueryContext(ctx, obsListSinks)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ObsListProjectsRow{}
+	items := []LogSink{}
 	for rows.Next() {
-		var i ObsListProjectsRow
-		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
+		var i LogSink
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Kind,
+			&i.Domain,
+			&i.Dataset,
+			&i.Traces,
+			&i.Token,
+			&i.Org,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -11,14 +11,13 @@ DELETE FROM log_sinks WHERE organization_id = ?;
 INSERT INTO log_sinks (id, organization_id, kind, domain, dataset, traces, token, org, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
--- name: ObsCountSinks :one
-SELECT COUNT(*) FROM log_sinks;
+-- name: ObsListSinks :many
+SELECT * FROM log_sinks ORDER BY created_at, organization_id;
 
--- name: ObsListProjects :many
-SELECT id, organization_id FROM projects ORDER BY created_at, id;
-
--- name: ObsListDesiredNodes :many
-SELECT n.id, e.project_id FROM nodes n JOIN environments e ON e.id = n.environment_id
+-- name: ObsListSinkServices :many
+SELECT p.organization_id, n.id FROM nodes n
+JOIN environments e ON e.id = n.environment_id
+JOIN projects p ON p.id = e.project_id
 WHERE n.desired_image IS NOT NULL
 ORDER BY n.created_at, n.id;
 

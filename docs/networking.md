@@ -76,19 +76,13 @@ An endpoint dials the node's port unless Expose was given another one (`pinnedPo
 
 Status after a load: tcp/udp `live`; https `live` when `GET /keel/certs` reports a valid certificate, `failed` when it reports the last obtain error, else `starting`. From then on **certificates report themselves**: the `keel` event handler (`internal/proxy/keel.go`) POSTs `/proxy/events` (worker bearer token, dialled from the host namespace; `KEEL_PROXY_REPORT_URL`) and `ReportCert` (`internal/app/proxy.go`) flips the endpoint. No polling. Errors are rewritten into the next step (`domain.CertHint`): a `connection` problem says to open 80 and 443, a `dns` one says which IP the A record must point at. Caddy keeps retrying with backoff, so opening the port later turns the endpoint live by itself. An attempt cancelled by a config reload is not reported.
 
-## Upgrades from the Quick Tunnel
-
-On the Convex control plane, `migrations.run` (run after every deploy) gave a node with the old `public`/`ingress` fields an https endpoint on its default domain (services with a port, when `KEEL_PUBLIC_IP` is known) and cleared both fields; `swarm.removeLegacyTunnels` removed every Swarm service labelled `keel.ingress`. Without `KEEL_PUBLIC_IP` such a service got no endpoint and went private, on purpose: a tunnel left running would be public with nothing in Keel to show or stop it. Expose it again once the IP is set.
-
-In Go the SQLite schema has no such fields. `keel import-convex` (`internal/adapters/convexexport`) does not convert them: a node that still carries them (an install that never ran `migrations.run`) is imported private, with a warning to expose it again. Every `keel serve` start still removes services labelled `keel.ingress` (`removeLegacyTunnels` in `internal/app/reconcile.go`, `RemoveLegacyTunnels` in `internal/adapters/swarm/apply.go`).
-
 ## Limits
 
 - **The user opens ports.** Behind CGNAT with no port-forward, nothing public works. Homelabs need router forwards for 80, 443 and each TCP/UDP port.
 - **sslip.io and Let's Encrypt.** sslip.io is not on the Public Suffix List, so every sslip.io user shares one (raised) Let's Encrypt quota; it has run out before. With `KEEL_ACME_EMAIL` set, Caddy falls back to ZeroSSL; without it, default domains wait until the quota frees up. A custom domain gets its own quota and is the production answer.
 - One public IPv4 per install (`KEEL_PUBLIC_IP`); the proxy also binds global IPv6 addresses it finds, but default domains are IPv4.
 - The control plane carries all public traffic. Fine for a small cluster; a second proxy on a worker is the scaling path, not built.
-- Raw TCP/UDP endpoints are unauthenticated beyond what the service does. Every database and cache Keel creates gets a generated password (Redis included: `REDIS_PASSWORD`, run as `--requirepass`; `keel serve`'s start-up pass (`recoverCanvas` in `internal/app/canvas_recover.go`) backfills older Redis nodes and marks them and their referrers dirty, so they ship together; until that Ship, Expose refuses the Redis).
+- Raw TCP/UDP endpoints are unauthenticated beyond what the service does. Every database and cache Keel creates gets a generated password (Redis included: `REDIS_PASSWORD`, run as `--requirepass`; Expose refuses a Redis until a Ship has applied its password).
 
 ## History
 

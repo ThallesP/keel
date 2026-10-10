@@ -80,7 +80,8 @@ func (a *App) RenameNode(ctx context.Context, actor domain.Actor, id string, nam
 - Background work (Convex `scheduler.runAfter`, crons) goes through the `Jobs` port:
   `After(key, delay, fn)` coalesces by key (a pending job with the same key wins), `Every(name,
   interval, fn)`. On start, `serve` runs the recovery pass: observe every service, observe Swarm
-  nodes, proxy sync, data migrations. That replaces durable scheduling until workflows land.
+  nodes, re-arm deployment timeouts, proxy sync. That replaces durable scheduling until workflows
+  land.
 
 ## Errors
 
@@ -107,8 +108,7 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 - Auth: cookie `keel_session` (dashboard, HttpOnly, SameSite=Lax, Secure on https) or
   `Authorization: Bearer <session token>` (CLI). Middleware resolves `domain.Actor`; handlers
   pass it to `app`. Same origin for dashboard, API and WebSocket: no CORS.
-- Raw (non-Huma) routes, paths unchanged from Convex so deployed workers and services keep
-  working across the switch: `POST /worker/events`, `GET /worker/config`, `POST /proxy/events`
+- Raw (non-Huma) routes: `POST /worker/events`, `GET /worker/config`, `POST /proxy/events`
   (bearer `KEEL_WORKER_TOKEN`), `POST /otlp/v1/traces` (environment ingest key).
 - `GET /config.js` stays (runtime config for the dashboard); `GET /api/meta` is what the CLI
   discovers an install with.
@@ -212,4 +212,3 @@ Where the specs disagree (critic addenda W1, C1, C2), this table wins.
 | Ingress | `POST /api/nodes/{id}/expose {protocol?, domain?, port?, publicPort?}` → `EndpointView`; `POST /api/nodes/{id}/unexpose {protocol?, domain?, publicPort?}` (no selector = all); `GET /api/control-plane` → `{publicIp: string \| null}` (signed in). |
 | Traces | One route: `GET /api/environments/{id}/traces?range=&search=&nodeId=`. |
 | Env names | `KEEL_SITE_URL` (fallback `SITE_URL`); `BETTER_AUTH_SECRET` is gone (cookies are opaque random tokens, not signed); `KEEL_LISTEN` `:8080`; `KEEL_DATA_DIR` `/data`; `KEEL_PROXY_SOCKET` and `KEEL_PROXY_REPORT_URL` stay (the edge is a separate container, proxy-ingress.md §12.4 option 1); `DOCKER_HOST`. Agent env names are unchanged. |
-| IDs on import | Imported Convex ids are kept verbatim (they appear in `svc-<id>`, labels, sslip hashes, OTel attributes). New rows get `domain.NewID()`. |

@@ -70,15 +70,15 @@ What agents rely on. Fields and codes are only ever added.
 
 ## Auth and context
 
-`keel login <dashboard-url>` first checks the URL is a Keel install (`GET /api/meta`; an install from before the Go control plane gets `DISCOVERY_FAILED` with the upgrade command). Then it uses device authorization (RFC 8628: `POST /api/auth/device/code`, then `POST /api/auth/device/token` until approved). It prints a link to the dashboard's `/device` page with a code (`ABCD-EFGH`, valid 30 minutes). Whoever opens it, signed in, sees the code and approves or denies; approving gives the CLI a session as their account. No password ever reaches the CLI.
+`keel login <dashboard-url>` first checks the URL is a Keel install (`GET /api/meta`; anything else is `DISCOVERY_FAILED`). Then it uses device authorization (RFC 8628: `POST /api/auth/device/code`, then `POST /api/auth/device/token` until approved). It prints a link to the dashboard's `/device` page with a code (`ABCD-EFGH`, valid 30 minutes). Whoever opens it, signed in, sees the code and approves or denies; approving gives the CLI a session as their account. No password ever reaches the CLI.
 
 - **With a terminal** it waits for the approval (Ctrl-C stops waiting; the link stays valid).
 - **Without one, or with `--json` / `--no-wait`**, it returns at once: `{"ok":true,"status":"pending","approvalUrl":"…","code":"ABCD-EFGH","expiresAt":"…","next":"…"}`. The agent sends `approvalUrl` to its human and carries on. The first command after the approval finishes the login and runs; before it, commands fail with `AUTHORIZATION_PENDING` (exit 4) and the link in `fix`. `keel login --wait` blocks until approved instead.
 - **Re-running** `keel login` while the link is valid prints the same link; when already logged in it prints `"status":"loggedIn"` and changes nothing. `keel logout` first to switch accounts.
 
-The session token comes straight from the device token poll, handed out once, and is saved in `~/.config/keel/config.json` (0600; `KEEL_CONFIG_DIR` moves it), along with a pending login's device code. Every API call sends it as `Authorization: Bearer <token>`; each signed-in command first checks it with `GET /api/me` (a session the install no longer knows is `NOT_AUTHENTICATED`, "Session expired or signed out"; a URL that doesn't answer as Keel's API, such as `KEEL_URL` pointing at an older install, is `DISCOVERY_FAILED` as in `keel login`). `keel logout` revokes it with `POST /api/auth/sign-out`. Sessions last 7 days and renew while used. Config files from the Convex-era CLI still load (their Convex URLs are ignored), and sessions imported with the install (`keel import-convex`) keep working.
+The session token comes straight from the device token poll, handed out once, and is saved in `~/.config/keel/config.json` (0600; `KEEL_CONFIG_DIR` moves it), along with a pending login's device code. Every API call sends it as `Authorization: Bearer <token>`; each signed-in command first checks it with `GET /api/me` (a session the install no longer knows is `NOT_AUTHENTICATED`, "Session expired or signed out"; a URL that doesn't answer as Keel's API is `DISCOVERY_FAILED` as in `keel login`). `keel logout` revokes it with `POST /api/auth/sign-out`. Sessions last 7 days and renew while used.
 
-Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). Dashboard and API share one origin, so the dashboard URL is all the CLI needs, a dev one too (Vite proxies `/api` to `keel serve`). `--convex-url` / `--convex-site-url` and `KEEL_CONVEX_URL` / `KEEL_CONVEX_SITE_URL` are still accepted and ignored.
+Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). Dashboard and API share one origin, so the dashboard URL is all the CLI needs, a dev one too (Vite proxies `/api` to `keel serve`).
 
 - **Install:** `KEEL_URL`, else `--instance` / `KEEL_INSTANCE`, else the directory's link, else the last login.
 - **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`; none at all is `NO_PROJECTS`. On a fresh install the first account founds the organization with its first `keel project create`, if it never opened the dashboard's home page.
@@ -90,7 +90,7 @@ Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel t
 ```
 cmd/keel/                 main: signals, then cli.Execute
 internal/cli/             root.go: global flags, error funnel, exit codes, the server subcommands
-                          (serve, openapi; proxy, agent, import-convex through Extra);
+                          (serve, openapi; proxy, agent through Extra);
                           one file per noun; commands resolve the target, call, print
 internal/cli/output/      the contract above: printer, error codes, exit codes
 internal/cli/config/      config.json: installs and directory links

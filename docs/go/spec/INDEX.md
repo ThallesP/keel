@@ -1,5 +1,7 @@
 # Porting spec index
 
+> The Convex import these specs describe (`keel import-convex`: data, credentials and sessions carried over from a Convex-era install) was dropped on 2026-10-10; Keel in Go starts from an empty database.
+
 Where each piece of today's backend (`packages/backend/convex`, Better Auth, `apps/worker`,
 `apps/proxy`) is specified for the Go rewrite. "Primary" is the spec that owns the full contract
 (args, return shape, access rule, validation order, exact errors, side effects); "Also" lists

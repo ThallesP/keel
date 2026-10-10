@@ -92,7 +92,7 @@ func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (in applyInp
 		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.nodeID && s.AppliedAt != nil }) {
 			return nil
 		}
-		env, err := deployComputeEnv(tx, n)
+		env, err := computeEnv(tx, n)
 		if err != nil {
 			return err
 		}
@@ -251,7 +251,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		if in.desired.Port == 0 {
 			return nil
 		}
-		moved, err = deployFollowPort(tx, ch, scope, in.desired.Port, a.Now())
+		moved, err = followPort(tx, ch, scope, in.desired.Port, a.Now())
 		return err
 	})
 	if err != nil {

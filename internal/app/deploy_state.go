@@ -34,11 +34,6 @@ type runningApply struct {
 
 var errApplySuperseded = errors.New("superseded by a newer revision")
 
-var (
-	deployComputeEnv = computeEnv
-	deployFollowPort = followPort
-)
-
 const (
 	deployTimeout      = 5 * time.Minute
 	observeDebounce    = 500 * time.Millisecond

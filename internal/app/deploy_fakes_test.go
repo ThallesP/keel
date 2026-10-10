@@ -274,8 +274,6 @@ type world struct {
 	clock    *int64
 	member   domain.Actor
 	outsider domain.Actor
-	follows  []int
-	envVars  map[string]map[string]string
 	created  int64
 }
 
@@ -306,18 +304,8 @@ func newWorld(t *testing.T) *world {
 		pub:      &recorder{topics: map[string][]string{}},
 		member:   domain.Actor{UserID: "u1", OrganizationID: "org", Role: domain.RoleOwner},
 		outsider: domain.Actor{UserID: "u2", OrganizationID: "org2", Role: domain.RoleOwner},
-		envVars:  map[string]map[string]string{},
 	}
 	w.app = w.newApp(app.Config{})
-	app.UseDeploySeams(t, app.DeploySeams{
-		ComputeEnv: func(_ app.Tx, n domain.Node) (map[string]string, error) {
-			return w.envVars[n.ID], nil
-		},
-		FollowPort: func(_ app.Tx, _ *app.Changes, _ app.NodeScope, port int, _ int64) (bool, error) {
-			w.follows = append(w.follows, port)
-			return port == 9999, nil
-		},
-	})
 	return w
 }
 

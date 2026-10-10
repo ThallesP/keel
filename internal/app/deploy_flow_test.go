@@ -179,7 +179,18 @@ func TestDeploymentReads(t *testing.T) {
 func TestApplyHappyPath(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", port(8080))
-	w.envVars[a.ID] = map[string]string{"PORT": "8080", "DATABASE_URL": "postgres://x"}
+	err := w.store.Write(context.Background(), func(tx app.Tx) error {
+		for _, v := range []domain.Variable{{Key: "PORT", Value: "8080"}, {Key: "DATABASE_URL", Value: "postgres://x"}} {
+			v.ID, v.NodeID = domain.NewID(), a.ID
+			if err := tx.CanvasInsertVariable(v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	*w.clock++
 	id := w.ship(app.ShipOptions{})
 	w.jobs.run()
@@ -196,9 +207,6 @@ func TestApplyHappyPath(t *testing.T) {
 	}
 	if s := d.Steps[0]; s.Status != domain.StepRunning || s.StartedAt == nil || s.AppliedAt == nil {
 		t.Fatalf("step: %+v", s)
-	}
-	if !reflect.DeepEqual(w.follows, []int{8080}) {
-		t.Fatalf("followPort: %v", w.follows)
 	}
 	w.jobs.advance(499 * time.Millisecond)
 	if len(w.swarm.observed) != 0 {
@@ -293,11 +301,18 @@ func TestApplyFailures(t *testing.T) {
 	})
 	t.Run("port moves endpoints and syncs the proxy", func(t *testing.T) {
 		w := newWorld(t)
-		w.addNode("api", port(9999))
+		a := w.addNode("api", port(9999))
+		err := w.store.Write(context.Background(), func(tx app.Tx) error {
+			return tx.ReplaceEndpoints(a.ID, []domain.Endpoint{{Protocol: domain.ProtocolHTTP, Port: 80, Domain: "api.example.com",
+				Status: domain.EndpointStatus{State: domain.EndpointLive}}})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 		w.ship(app.ShipOptions{})
 		w.jobs.runOne(t, "apply:")
-		if w.jobs.count("proxy:sync") != 1 {
-			t.Fatalf("jobs: %v", w.jobs.keys())
+		if w.jobs.count("proxy:sync") != 1 || w.node(a.ID).Endpoints[0].Port != 9999 {
+			t.Fatalf("jobs: %v endpoints %+v", w.jobs.keys(), w.node(a.ID).Endpoints)
 		}
 	})
 }

@@ -13,8 +13,8 @@ func agentCmd() *cobra.Command {
 		Long: "Runs on every Swarm node as a global service. Outbound only, read-only on Docker.\n\n" +
 			"Environment: KEEL_URL (required), KEEL_WORKER_TOKEN or /run/secrets/keel_worker_token,\n" +
 			"KEEL_STATE (/var/lib/keel-agent/state.json), KEEL_CONFIG_POLL_MS (30000),\n" +
-			"DOCKER_SOCKET (/var/run/docker.sock), KEEL_TS_AUTHKEY (optional: reach KEEL_URL through\n" +
-			"an embedded, ephemeral Tailscale node keel-agent-<hostname> instead of the host network).",
+			"KEEL_TS_AUTHKEY (optional: reach KEEL_URL through an embedded, ephemeral Tailscale node\n" +
+			"keel-agent-<hostname> instead of the host network).",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return agent.Main(cmd.Context())

@@ -90,7 +90,6 @@ func TestSwarmIT(t *testing.T) {
 		t.Skip("set KEEL_IT_DOCKER_HOST to a disposable Swarm manager to run")
 	}
 	t.Setenv("DOCKER_HOST", host)
-	t.Setenv("DOCKER_SOCKET", "")
 	saved := adapters
 	adapters = []adapter{{"passwords", wirePasswords}, {"swarm", wireSwarm}}
 	t.Cleanup(func() { adapters = saved })

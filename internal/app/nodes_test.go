@@ -371,9 +371,9 @@ func TestCanvasStartStop(t *testing.T) {
 	}
 	k.exec(`UPDATE nodes SET desired_revision = 1, dirty = 0 WHERE id = ?`, api)
 
-	did, ok, err := k.app.StopNode(k.ctx, m, api)
-	if err != nil || !ok || did != "dep-"+env {
-		t.Fatalf("stop: %q %v %v", did, ok, err)
+	did, err := k.app.StopNode(k.ctx, m, api)
+	if err != nil || did != "dep-"+env {
+		t.Fatalf("stop: %q %v", did, err)
 	}
 	if got := k.ships[1]; !reflect.DeepEqual(got, app.ShipOptions{Only: []string{api}, Verb: "stop"}) {
 		t.Errorf("stop ship %+v", got)
@@ -381,8 +381,8 @@ func TestCanvasStartStop(t *testing.T) {
 	if n := k.node(api); n.Desired.Replicas != 0 || !n.Dirty {
 		t.Errorf("after stop %+v", n.Desired)
 	}
-	if did, ok, err := k.app.StopNode(k.ctx, m, api); err != nil || ok || did != "" || len(k.ships) != 2 {
-		t.Fatalf("stop again: %q %v %v", did, ok, err)
+	if did, err := k.app.StopNode(k.ctx, m, api); err != nil || did != "" || len(k.ships) != 2 {
+		t.Fatalf("stop again: %q %v", did, err)
 	}
 	if _, err := k.app.StartNode(k.ctx, m, api); err != nil {
 		t.Fatal(err)
@@ -392,7 +392,7 @@ func TestCanvasStartStop(t *testing.T) {
 	}
 	k.exec(`UPDATE nodes SET dirty = 0 WHERE id = ?`, api)
 	k.shipErr = domain.E(domain.CodeDeploymentRunning, "A deployment is already running")
-	_, _, err = k.app.StopNode(k.ctx, m, api)
+	_, err = k.app.StopNode(k.ctx, m, api)
 	canvasWantErr(t, err, domain.CodeDeploymentRunning, "A deployment is already running")
 	if n := k.node(api); n.Desired.Replicas != 1 || n.Dirty {
 		t.Errorf("stop not rolled back: %+v dirty %v", n.Desired, n.Dirty)
@@ -401,7 +401,7 @@ func TestCanvasStartStop(t *testing.T) {
 
 	_, err = k.app.StartNode(k.ctx, m, vol)
 	canvasWantErr(t, err, domain.CodeInvalidInput, "This node type cannot be started")
-	_, _, err = k.app.StopNode(k.ctx, m, vol)
+	_, err = k.app.StopNode(k.ctx, m, vol)
 	canvasWantErr(t, err, domain.CodeInvalidInput, "This node type cannot be stopped")
 	_, err = k.app.StartNode(k.ctx, m, "nope")
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
@@ -526,7 +526,7 @@ func TestCanvasOtherOrganization(t *testing.T) {
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
 	_, err = k.app.StartNode(k.ctx, b, api)
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
-	_, _, err = k.app.StopNode(k.ctx, b, api)
+	_, err = k.app.StopNode(k.ctx, b, api)
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
 	canvasWantErr(t, k.app.SetVariable(k.ctx, b, api, app.SetVariableInput{Key: "KEY", Value: "x"}), domain.CodeServiceNotFound, "Node not found")
 	canvasWantErr(t, k.app.RemoveVariable(k.ctx, b, api, "KEY"), domain.CodeServiceNotFound, "Node not found")

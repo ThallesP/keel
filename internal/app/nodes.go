@@ -380,7 +380,7 @@ func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (str
 	return deploymentID, err
 }
 
-func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (string, bool, error) {
+func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (string, error) {
 	var deploymentID string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, id)
@@ -404,10 +404,7 @@ func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (stri
 		deploymentID, err = canvasShip(a, tx, ch, scope.EnvScope, ShipOptions{Only: []string{id}, Verb: "stop"})
 		return err
 	})
-	if err != nil {
-		return "", false, err
-	}
-	return deploymentID, deploymentID != "", nil
+	return deploymentID, err
 }
 
 func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) error {

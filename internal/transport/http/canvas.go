@@ -212,12 +212,12 @@ func (s *Server) registerCanvas(h huma.API) {
 	op(h, operation("stopNode", http.MethodPost, "/api/nodes/{id}/stop",
 		"Scale to 0 and ship that"),
 		func(ctx context.Context, in *canvasIDInput) (*canvasStoppedOut, error) {
-			id, ok, err := s.app.StopNode(ctx, ActorFrom(ctx), in.ID)
+			id, err := s.app.StopNode(ctx, ActorFrom(ctx), in.ID)
 			if err != nil {
 				return nil, err
 			}
 			out := &canvasStoppedOut{}
-			if ok {
+			if id != "" {
 				out.Body.DeploymentID = &id
 			}
 			return out, nil

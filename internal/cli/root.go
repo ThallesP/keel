@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -23,15 +24,16 @@ var Version = "dev"
 var extra []func() *cobra.Command
 
 type app struct {
+	web          fs.FS
 	out          *output.Printer
 	json         bool
 	instanceFlag string
 	projectFlag  string
 }
 
-func Execute(ctx context.Context) int {
+func Execute(ctx context.Context, web fs.FS) int {
 	client.UserAgent = "keel-cli/" + Version
-	return (&app{}).execute(ctx, os.Args[1:])
+	return (&app{web: web}).execute(ctx, os.Args[1:])
 }
 
 func (a *app) execute(ctx context.Context, args []string) int {
@@ -122,7 +124,7 @@ keel agent (on every Swarm node).`,
 		cmd.GroupID = "cli"
 		root.AddCommand(cmd)
 	}
-	server := serverCommands()
+	server := serverCommands(a.web)
 	for _, mk := range extra {
 		server = append(server, mk())
 	}
@@ -133,13 +135,13 @@ keel agent (on every Swarm node).`,
 	return root
 }
 
-func serverCommands() []*cobra.Command {
+func serverCommands(web fs.FS) []*cobra.Command {
 	serveCmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the control plane (API, dashboard, Swarm driver)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return serve.Run(cmd.Context(), serve.Options{Version: Version, Web: WebFS})
+			return serve.Run(cmd.Context(), serve.Options{Version: Version, Web: web})
 		},
 	}
 	openapiCmd := &cobra.Command{

@@ -11,9 +11,8 @@ import (
 )
 
 func main() {
-	cli.WebFS = web.Dist()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := cli.Execute(ctx)
+	code := cli.Execute(ctx, web.Dist())
 	stop()
 	os.Exit(code)
 }

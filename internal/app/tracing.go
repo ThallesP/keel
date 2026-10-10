@@ -157,7 +157,7 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 		if err != nil {
 			return err
 		}
-		view = &domain.TracingView{Enabled: node.Desired.Tracing, Traces: string(state), Env: []domain.TracingEnvVar{}}
+		view = &domain.TracingView{Enabled: node.Desired.Tracing, Traces: state, Env: []domain.TracingEnvVar{}}
 		for _, v := range tracingEnv(a.otlpEndpoint(), node, scope.Environment, domain.MaskOTLPKey(key), false) {
 			view.Env = append(view.Env, domain.TracingEnvVar{
 				Key: v.Key, Value: v.Value, Secret: v.Key == otelHeaders, Overridden: tracingOverridden(own, v.Key),

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ThallesP/keel/internal/api"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type Service struct {
@@ -71,9 +72,9 @@ type Traces struct {
 }
 
 type Tracing struct {
-	Enabled bool                `json:"enabled"`
-	Store   string              `json:"store"`
-	Env     []api.TracingEnvVar `json:"env"`
+	Enabled bool                   `json:"enabled"`
+	Store   domain.TracesState     `json:"store"`
+	Env     []domain.TracingEnvVar `json:"env"`
 }
 
 type Deployment struct {

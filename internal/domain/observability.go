@@ -202,7 +202,7 @@ type TracingEnvVar struct {
 type TracingView struct {
 	_       struct{}        `nullable:"true"`
 	Enabled bool            `json:"enabled"`
-	Traces  string          `json:"traces" enum:"off,old,on"`
+	Traces  TracesState     `json:"traces" enum:"off,old,on"`
 	Env     []TracingEnvVar `json:"env"`
 }
 

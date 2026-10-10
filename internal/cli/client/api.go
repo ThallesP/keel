@@ -9,6 +9,7 @@ import (
 
 	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/output"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 func (c *Client) Projects(ctx context.Context) ([]api.ProjectSummary, error) {
@@ -99,7 +100,7 @@ func (c *Client) RemoveVariable(ctx context.Context, serviceID, key string) erro
 }
 
 func (c *Client) Tail(ctx context.Context, serviceID string, lines int) (*Tail, error) {
-	var t api.LogTail
+	var t domain.LogTail
 	q := url.Values{"tail": {strconv.Itoa(lines)}}
 	if err := c.call(ctx, http.MethodGet, apiPath("/api/nodes/%s/logs", serviceID), q, nil, &t); err != nil {
 		return nil, err
@@ -119,7 +120,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 	if search != "" {
 		q.Set("search", search)
 	}
-	var o api.TraceOverview
+	var o domain.TraceOverview
 	if err := c.call(ctx, http.MethodGet, apiPath("/api/environments/%s/traces", environmentID), q, nil, &o); err != nil {
 		return nil, err
 	}

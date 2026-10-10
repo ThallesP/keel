@@ -2,12 +2,6 @@ package api
 
 import "github.com/ThallesP/keel/internal/domain"
 
-type (
-	LogTail       = domain.LogTail
-	TraceOverview = domain.TraceOverview
-	TracingEnvVar = domain.TracingEnvVar
-)
-
 type LogSinkEnvelope struct {
 	Sink *domain.LogSinkView `json:"sink" doc:"null when the organization has no sink (Docker default)"`
 }

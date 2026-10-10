@@ -29,12 +29,12 @@ type (
 	obsCompleteSignInOut  struct{ Body api.CompleteAxiomSignInResult }
 	obsChooseOrgIn        struct{ Body api.ChooseAxiomOrgRequest }
 	obsChooseOrgOut       struct{ Body api.AxiomSinkResult }
-	obsLogTailOut         struct{ Body api.LogTail }
-	obsEnvironmentLogsOut struct{ Body api.EnvironmentLogs }
-	obsLogsAroundOut      struct{ Body []api.EnvironmentLogLine }
-	obsTraceOverviewOut   struct{ Body api.TraceOverview }
-	obsTraceOut           struct{ Body api.Trace }
-	obsTracesAroundOut    struct{ Body []api.TraceSummary }
+	obsLogTailOut         struct{ Body domain.LogTail }
+	obsEnvironmentLogsOut struct{ Body domain.EnvironmentLogs }
+	obsLogsAroundOut      struct{ Body []domain.EnvironmentLogLine }
+	obsTraceOverviewOut   struct{ Body domain.TraceOverview }
+	obsTraceOut           struct{ Body domain.Trace }
+	obsTracesAroundOut    struct{ Body []domain.TraceSummary }
 	obsTracingOut         struct{ Body api.TracingEnvelope }
 	obsLocalTracingEnvOut struct{ Body api.LocalTracingEnv }
 	obsTracingPromptOut   struct{ Body api.TracingPrompt }
@@ -95,13 +95,11 @@ func (s *Server) registerObservability(h huma.API) {
 		Summary: "Connect a pasted Axiom API token as the organization's sink",
 	}, func(ctx context.Context, in *obsConnectAxiomIn) (*obsConnectAxiomOut, error) {
 		b := in.Body
-		dataset, traces, err := s.app.ConnectAxiom(ctx, ActorFrom(ctx), app.ConnectAxiomInput{
-			Domain: b.Domain, Dataset: b.Dataset, Traces: b.Traces, Token: b.Token,
-		})
+		err := s.app.ConnectAxiom(ctx, ActorFrom(ctx), app.ConnectAxiomInput{Domain: b.Domain, Dataset: b.Dataset, Traces: b.Traces, Token: b.Token})
 		if err != nil {
 			return nil, err
 		}
-		return &obsConnectAxiomOut{Body: api.ConnectAxiomResult{Dataset: dataset, Traces: traces}}, nil
+		return &obsConnectAxiomOut{Body: api.ConnectAxiomResult{Dataset: b.Dataset, Traces: b.Traces}}, nil
 	})
 	op(h, huma.Operation{
 		OperationID: "listPendingAxiomOrgs", Method: http.MethodGet, Path: "/api/organization/axiom/pending-orgs", Tags: obsTags,
@@ -143,11 +141,11 @@ func (s *Server) registerObservability(h huma.API) {
 		OperationID: "chooseAxiomOrg", Method: http.MethodPost, Path: "/api/organization/axiom/choose", Tags: obsTags,
 		Summary: "Pick the Axiom org of a pending sign-in",
 	}, func(ctx context.Context, in *obsChooseOrgIn) (*obsChooseOrgOut, error) {
-		dataset, org, err := s.app.ChooseAxiomOrg(ctx, ActorFrom(ctx), in.Body.OrgID)
+		r, err := s.app.ChooseAxiomOrg(ctx, ActorFrom(ctx), in.Body.OrgID)
 		if err != nil {
 			return nil, err
 		}
-		return &obsChooseOrgOut{Body: api.AxiomSinkResult{Dataset: dataset, Org: org}}, nil
+		return &obsChooseOrgOut{Body: api.AxiomSinkResult{Dataset: r.Dataset, Org: r.Org}}, nil
 	})
 
 	op(h, huma.Operation{

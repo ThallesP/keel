@@ -18,26 +18,21 @@ import (
 )
 
 type Client struct {
-	HTTP    *http.Client
-	Timeout time.Duration
+	HTTP *http.Client
 }
-
-var _ app.Axiom = (*Client)(nil)
 
 func New() *Client {
-	return &Client{HTTP: &http.Client{}, Timeout: 60 * time.Second}
+	return &Client{HTTP: &http.Client{Timeout: time.Minute}}
 }
 
-func (c *Client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if c.Timeout > 0 {
-		return context.WithTimeout(ctx, c.Timeout)
+func baseURL(domain string) string {
+	if !strings.Contains(domain, "://") {
+		domain = "https://" + domain
 	}
-	return context.WithCancel(ctx)
+	return strings.TrimRight(domain, "/")
 }
 
 func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, path string, body any) ([]byte, error) {
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -46,7 +41,7 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, app.AxiomBaseURL(t.Domain)+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, baseURL(t.Domain)+path, rd)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +95,7 @@ func tabularRows(data []byte) ([]app.AxiomRow, error) {
 		return nil, fmt.Errorf("Axiom query: %w", err)
 	}
 	if len(result.Tables) == 0 || len(result.Tables[0].Columns) == 0 {
-		return []app.AxiomRow{}, nil
+		return nil, nil
 	}
 	table := result.Tables[0]
 	count := len(table.Columns[0])
@@ -213,8 +208,6 @@ func (r oauthReply) failure(status int) *app.OAuthError {
 }
 
 func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, body []byte) (int, oauthReply, error) {
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return 0, oauthReply{}, err
@@ -225,9 +218,8 @@ func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, bo
 		return 0, oauthReply{}, err
 	}
 	defer res.Body.Close()
-	data, _ := io.ReadAll(res.Body)
 	var reply oauthReply
-	_ = json.Unmarshal(data, &reply)
+	_ = json.NewDecoder(res.Body).Decode(&reply)
 	return res.StatusCode, reply, nil
 }
 
@@ -261,12 +253,13 @@ func (c *Client) RegisterClient(ctx context.Context, authURL, redirectURI string
 }
 
 func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCodeExchange) (string, error) {
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("code", x.Code)
-	form.Set("code_verifier", x.Verifier)
-	form.Set("redirect_uri", x.RedirectURI)
-	form.Set("client_id", x.ClientID)
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {x.Code},
+		"code_verifier": {x.Verifier},
+		"redirect_uri":  {x.RedirectURI},
+		"client_id":     {x.ClientID},
+	}
 	status, reply, err := c.oauthPost(ctx, authURL+"/oauth2/token", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	if err != nil {
 		return "", err
@@ -278,7 +271,7 @@ func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCo
 }
 
 func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTPReply, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, app.AxiomBaseURL(f.Domain)+"/v1/traces", bytes.NewReader(f.Body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL(f.Domain)+"/v1/traces", bytes.NewReader(f.Body))
 	if err != nil {
 		return app.HTTPReply{}, err
 	}

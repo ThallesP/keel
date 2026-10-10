@@ -16,11 +16,10 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 	}
 	var view *domain.LogSinkView
 	err := a.read(ctx, func(tx Tx) error {
-		rec, err := orgSinkOf(tx, actor.OrganizationID)
-		if err != nil || rec == nil {
+		s, err := orgSinkOf(tx, actor.OrganizationID)
+		if err != nil || s == nil {
 			return err
 		}
-		s := rec.Sink
 		view = &domain.LogSinkView{Kind: s.Kind, Domain: s.Domain, Dataset: s.Dataset, TokenHint: domain.TokenHint(s.Token)}
 		if s.Traces != "" {
 			view.Traces = &s.Traces
@@ -34,9 +33,6 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 }
 
 func (a *App) saveSink(ctx context.Context, actor domain.Actor, sink domain.LogSink) error {
-	if err := actor.RequireMember(); err != nil {
-		return err
-	}
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		if err := tx.ReplaceLogSink(actor.OrganizationID, sink, a.Now()); err != nil {
 			return err
@@ -66,62 +62,47 @@ type ConnectAxiomInput struct {
 	Token   string
 }
 
-func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAxiomInput) (string, *string, error) {
+func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAxiomInput) error {
 	if err := actor.RequireMember(); err != nil {
-		return "", nil, err
+		return err
 	}
 	if !slices.Contains(domain.AxiomDomains, in.Domain) && !(a.Config.AllowLocalSinks && strings.Contains(in.Domain, "://")) {
-		return "", nil, domain.Invalid(msgRegion)
+		return domain.Invalid("Region must be US or EU")
 	}
-	names := []string{in.Dataset}
-	if in.Traces != nil {
-		names = append(names, *in.Traces)
-	}
-	for _, n := range names {
-		if !domain.ValidDataset(n) {
-			return "", nil, domain.Invalid(msgDataset)
-		}
-	}
-	token := strings.TrimSpace(in.Token)
-	if len([]rune(token)) < 8 {
-		return "", nil, domain.Invalid(msgNotAToken)
-	}
-	cfg := axiomCfg{Domain: in.Domain, Dataset: in.Dataset, Token: token}
-	if err := a.axiomVerify(ctx, cfg); err != nil {
-		return "", nil, obsInvalid(err)
-	}
-	sink := domain.LogSink{Kind: domain.SinkKindAxiom, Domain: in.Domain, Dataset: in.Dataset, Token: token}
+	sink := domain.LogSink{Kind: domain.SinkKindAxiom, Domain: in.Domain, Dataset: in.Dataset, Token: strings.TrimSpace(in.Token)}
+	datasets := []string{in.Dataset}
 	if in.Traces != nil {
 		sink.Traces = *in.Traces
-		if *in.Traces != "" {
-			tcfg := cfg
-			tcfg.Dataset = *in.Traces
-			if err := a.axiomVerify(ctx, tcfg); err != nil {
-				return "", nil, obsInvalid(err)
-			}
+		datasets = append(datasets, sink.Traces)
+	}
+	if slices.ContainsFunc(datasets, func(d string) bool { return !domain.ValidDataset(d) }) {
+		return domain.Invalid("Dataset: letters, digits, - _ . only")
+	}
+	if len(sink.Token) < 8 {
+		return domain.Invalid("That does not look like an Axiom API token")
+	}
+	for _, d := range datasets {
+		if err := a.axiomVerify(ctx, axiomCfgOf(sink, d)); err != nil {
+			return obsInvalid(err)
 		}
 	}
-	if err := a.saveSink(ctx, actor, sink); err != nil {
-		return "", nil, err
-	}
-	return in.Dataset, in.Traces, nil
+	return a.saveSink(ctx, actor, sink)
 }
 
 func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirectURI string) (string, error) {
 	u, err := url.Parse(redirectURI)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.EscapedPath() != "/axiom/callback" {
-		return "", domain.Invalid(msgBadRedirect)
+		return "", domain.Invalid("Bad redirect URI")
 	}
 	if err := actor.RequireMember(); err != nil {
 		return "", err
 	}
 	var clientID string
-	err = a.read(ctx, func(tx Tx) error {
-		id, err := tx.AxiomClientFor(redirectURI)
+	err = a.read(ctx, func(tx Tx) (err error) {
+		clientID, err = tx.AxiomClientFor(redirectURI)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
-		clientID = id
 		return err
 	})
 	if err != nil {
@@ -129,11 +110,11 @@ func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirect
 	}
 	if clientID == "" {
 		id, err := a.Axiom.RegisterClient(ctx, a.axiomAuthURL(), redirectURI)
+		var oe *OAuthError
+		if errors.As(err, &oe) {
+			return "", domain.Invalid("Axiom refused to register Keel: %s", oe)
+		}
 		if err != nil {
-			var oe *OAuthError
-			if errors.As(err, &oe) {
-				return "", obsErr(domain.CodeInvalidInput, "Axiom refused to register Keel: "+oe.Error())
-			}
 			return "", obsInvalid(err)
 		}
 		clientID = id
@@ -162,21 +143,24 @@ type AxiomSignInResult struct {
 }
 
 func (a *App) CompleteAxiomSignIn(ctx context.Context, actor domain.Actor, state, code string) (AxiomSignInResult, error) {
+	if err := actor.RequireMember(); err != nil {
+		return AxiomSignInResult{}, err
+	}
 	started, err := a.takeSignIn(ctx, actor, state)
 	if err != nil {
 		return AxiomSignInResult{}, err
 	}
 	if started == nil {
-		return AxiomSignInResult{}, domain.Invalid(msgSignInExpired)
+		return AxiomSignInResult{}, domain.Invalid("Axiom sign-in expired, try again")
 	}
 	token, err := a.Axiom.ExchangeCode(ctx, a.axiomAuthURL(), AxiomCodeExchange{
 		ClientID: started.ClientID, Code: code, Verifier: started.Verifier, RedirectURI: started.RedirectURI,
 	})
+	var oe *OAuthError
+	if errors.As(err, &oe) {
+		return AxiomSignInResult{}, domain.Invalid("Axiom sign-in failed: %s", oe)
+	}
 	if err != nil {
-		var oe *OAuthError
-		if errors.As(err, &oe) {
-			return AxiomSignInResult{}, obsErr(domain.CodeInvalidInput, "Axiom sign-in failed: "+oe.Error())
-		}
 		return AxiomSignInResult{}, obsInvalid(err)
 	}
 	orgs, err := a.axiomOrgs(ctx, token)
@@ -184,28 +168,11 @@ func (a *App) CompleteAxiomSignIn(ctx context.Context, actor domain.Actor, state
 		return AxiomSignInResult{}, obsInvalid(err)
 	}
 	if len(orgs) == 0 {
-		return AxiomSignInResult{}, domain.Invalid(msgNoAxiomOrg)
+		return AxiomSignInResult{}, domain.Invalid("This Axiom account has no organization")
 	}
-	var org *domain.AxiomOrg
-	if len(orgs) == 1 {
-		org = &orgs[0]
-	} else if chosen := axiomChosenOrg(token); chosen != "" {
-		for i := range orgs {
-			if orgs[i].ID == chosen {
-				org = &orgs[i]
-				break
-			}
-		}
-	}
-	if org != nil {
-		dataset, name, err := a.provisionAxiom(ctx, actor, token, *org)
-		if err != nil {
-			return AxiomSignInResult{}, err
-		}
-		return AxiomSignInResult{Dataset: dataset, Org: name}, nil
-	}
-	if err := actor.RequireMember(); err != nil {
-		return AxiomSignInResult{}, err
+	chosen := axiomChosenOrg(token)
+	if i := slices.IndexFunc(orgs, func(o domain.AxiomOrg) bool { return len(orgs) == 1 || o.ID == chosen }); i >= 0 {
+		return a.provisionAxiom(ctx, actor, token, orgs[i])
 	}
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		if err := tx.StashAxiomPending(AxiomPending{OrganizationID: actor.OrganizationID, Token: token, Orgs: orgs, CreatedAt: a.Now()}); err != nil {
@@ -230,7 +197,7 @@ func (a *App) takeSignIn(ctx context.Context, actor domain.Actor, state string) 
 		if err != nil {
 			return err
 		}
-		if actor.OrganizationID == "" || row.OrganizationID != actor.OrganizationID {
+		if row.OrganizationID != actor.OrganizationID {
 			return nil
 		}
 		if err := tx.DeleteAxiomSignIn(state); err != nil {
@@ -244,39 +211,39 @@ func (a *App) takeSignIn(ctx context.Context, actor domain.Actor, state string) 
 	return out, err
 }
 
-func (a *App) ChooseAxiomOrg(ctx context.Context, actor domain.Actor, orgID string) (string, string, error) {
+func (a *App) ChooseAxiomOrg(ctx context.Context, actor domain.Actor, orgID string) (AxiomSignInResult, error) {
+	if err := actor.RequireMember(); err != nil {
+		return AxiomSignInResult{}, err
+	}
 	var pending *AxiomPending
-	if actor.OrganizationID != "" {
-		err := a.write(ctx, func(tx Tx, ch *Changes) error {
-			p, err := tx.AxiomPendingOf(actor.OrganizationID)
-			if errors.Is(err, ErrNoRow) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if err := tx.DeleteAxiomPending(actor.OrganizationID); err != nil {
-				return err
-			}
-			ch.Organization(actor.OrganizationID)
-			if !a.axiomRowExpired(p.CreatedAt) {
-				pending = &p
-			}
+	err := a.write(ctx, func(tx Tx, ch *Changes) error {
+		p, err := tx.AxiomPendingOf(actor.OrganizationID)
+		if errors.Is(err, ErrNoRow) {
 			return nil
-		})
-		if err != nil {
-			return "", "", err
 		}
+		if err != nil {
+			return err
+		}
+		if err := tx.DeleteAxiomPending(actor.OrganizationID); err != nil {
+			return err
+		}
+		ch.Organization(actor.OrganizationID)
+		if !a.axiomRowExpired(p.CreatedAt) {
+			pending = &p
+		}
+		return nil
+	})
+	if err != nil {
+		return AxiomSignInResult{}, err
 	}
 	if pending == nil {
-		return "", "", domain.Invalid(msgPickExpired)
+		return AxiomSignInResult{}, domain.Invalid("Sign-in expired, sign in with Axiom again")
 	}
-	for _, o := range pending.Orgs {
-		if o.ID == orgID {
-			return a.provisionAxiom(ctx, actor, pending.Token, o)
-		}
+	i := slices.IndexFunc(pending.Orgs, func(o domain.AxiomOrg) bool { return o.ID == orgID })
+	if i < 0 {
+		return AxiomSignInResult{}, domain.NotFound("Organization not found")
 	}
-	return "", "", domain.NotFound(msgOrgNotFound)
+	return a.provisionAxiom(ctx, actor, pending.Token, pending.Orgs[i])
 }
 
 func (a *App) PendingAxiomOrgs(ctx context.Context, actor domain.Actor) ([]domain.AxiomOrgChoice, error) {
@@ -324,36 +291,28 @@ func (a *App) CancelAxiomSignIn(ctx context.Context, actor domain.Actor) error {
 	})
 }
 
-func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token string, org domain.AxiomOrg) (string, string, error) {
-	if err := actor.RequireMember(); err != nil {
-		return "", "", err
-	}
-	var slug string
-	err := a.read(ctx, func(tx Tx) error {
-		s, err := tx.SinkOrganizationSlug(actor.OrganizationID)
-		if errors.Is(err, ErrNoRow) {
-			return domain.ErrNoOrganization
-		}
-		slug = s
+func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token string, org domain.AxiomOrg) (AxiomSignInResult, error) {
+	var organization domain.Organization
+	err := a.read(ctx, func(tx Tx) (err error) {
+		organization, err = tx.AuthOrganization(actor.OrganizationID)
 		return err
 	})
 	if err != nil {
-		return "", "", err
+		return AxiomSignInResult{}, err
 	}
-	sink, err := a.axiomProvision(ctx, token, org, "keel-"+slug)
+	sink, err := a.axiomProvision(ctx, token, org, "keel-"+organization.Slug)
 	if err != nil {
-		return "", "", obsInvalid(err)
+		return AxiomSignInResult{}, obsInvalid(err)
 	}
 	for _, dataset := range []string{sink.Dataset, sink.Traces} {
-		if err := a.axiomCanQuery(ctx, axiomCfg{Domain: sink.Domain, Dataset: dataset, Token: sink.Token}); err != nil {
-			return "", "", obsErr(domain.CodeInvalidInput, "Querying "+dataset+": "+err.Error())
+		if err := a.axiomCanQuery(ctx, axiomCfgOf(sink, dataset)); err != nil {
+			return AxiomSignInResult{}, domain.Invalid("Querying %s: %s", dataset, err)
 		}
 	}
-	sink.Org = org.Name
 	if err := a.saveSink(ctx, actor, sink); err != nil {
-		return "", "", err
+		return AxiomSignInResult{}, err
 	}
-	return sink.Dataset, org.Name, nil
+	return AxiomSignInResult{Dataset: sink.Dataset, Org: sink.Org}, nil
 }
 
 func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSink, error) {

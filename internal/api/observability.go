@@ -3,27 +3,13 @@ package api
 import "github.com/ThallesP/keel/internal/domain"
 
 type (
-	ServiceLogLine     = domain.ServiceLogLine
-	LogReplica         = domain.LogReplica
-	LogTail            = domain.LogTail
-	EnvironmentLogLine = domain.EnvironmentLogLine
-	EnvironmentLogs    = domain.EnvironmentLogs
-	Attribute          = domain.Attribute
-	SpanEvent          = domain.SpanEvent
-	Span               = domain.Span
-	TraceSummary       = domain.TraceSummary
-	TraceStats         = domain.TraceStats
-	TraceBucket        = domain.TraceBucket
-	TraceOverview      = domain.TraceOverview
-	Trace              = domain.Trace
-	TracingView        = domain.TracingView
-	TracingEnvVar      = domain.TracingEnvVar
-	LogSinkView        = domain.LogSinkView
-	AxiomOrgChoice     = domain.AxiomOrgChoice
+	LogTail       = domain.LogTail
+	TraceOverview = domain.TraceOverview
+	TracingEnvVar = domain.TracingEnvVar
 )
 
 type LogSinkEnvelope struct {
-	Sink *LogSinkView `json:"sink" doc:"null when the organization has no sink (Docker default)"`
+	Sink *domain.LogSinkView `json:"sink" doc:"null when the organization has no sink (Docker default)"`
 }
 
 type ConnectAxiomRequest struct {
@@ -39,7 +25,7 @@ type ConnectAxiomResult struct {
 }
 
 type PendingAxiomOrgs struct {
-	Orgs []AxiomOrgChoice `json:"orgs" nullable:"true" doc:"null when no sign-in waits for an org pick"`
+	Orgs []domain.AxiomOrgChoice `json:"orgs" nullable:"true" doc:"null when no sign-in waits for an org pick"`
 }
 
 type BeginAxiomSignInRequest struct {
@@ -71,7 +57,7 @@ type AxiomSinkResult struct {
 }
 
 type TracingEnvelope struct {
-	Tracing *TracingView `json:"tracing" doc:"null when the node is not a service the caller can see"`
+	Tracing *domain.TracingView `json:"tracing" doc:"null when the node is not a service the caller can see"`
 }
 
 type SetTracingRequest struct {

@@ -21,22 +21,12 @@ import (
 )
 
 type axiomCfg struct {
-	Domain  string
+	AxiomTarget
 	Dataset string
-	Token   string
 }
 
-func (c axiomCfg) target() AxiomTarget { return AxiomTarget{Domain: c.Domain, Token: c.Token} }
-
-func axiomLogsCfg(s domain.LogSink) axiomCfg {
-	return axiomCfg{Domain: s.Domain, Dataset: s.Dataset, Token: s.Token}
-}
-
-func AxiomBaseURL(domain string) string {
-	if !strings.Contains(domain, "://") {
-		domain = "https://" + domain
-	}
-	return strings.TrimRight(domain, "/")
+func axiomCfgOf(s domain.LogSink, dataset string) axiomCfg {
+	return axiomCfg{AxiomTarget{Domain: s.Domain, Token: s.Token}, dataset}
 }
 
 func CompactDetail(body string) string { return compactText(body, 200) }
@@ -55,13 +45,18 @@ func truncateRunes(s string, n int) string {
 	return s
 }
 
-const (
-	axiomQueryWindowMs = 30 * 24 * 60 * 60_000
-	axiomUntilSlackMs  = 60_000
-)
+const axiomQueryWindowMs = 30 * 24 * 60 * 60_000
 
 func aplLit(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
+func aplIn(values []string) string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = aplLit(v)
+	}
+	return "in (" + strings.Join(quoted, ", ") + ")"
 }
 
 func aplDataset(dataset string) string { return "['" + dataset + "']" }
@@ -70,16 +65,12 @@ func aplTime(ms float64) string {
 	return time.UnixMilli(int64(ms)).UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
-func (a *App) axiomUntil() float64 { return float64(a.Now() + axiomUntilSlackMs) }
-
-func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, from, to float64) ([]AxiomRow, error) {
-	return a.Axiom.Query(ctx, cfg.target(), AxiomQuery{APL: apl, StartTime: aplTime(from), EndTime: aplTime(to)})
-}
+func (a *App) axiomUntil() float64 { return float64(a.Now() + 60_000) }
 
 func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, from, to float64) ([]AxiomRow, error) {
-	rows, err := a.axiomQuery(ctx, cfg, apl, from, to)
+	rows, err := a.Axiom.Query(ctx, cfg.AxiomTarget, AxiomQuery{APL: apl, StartTime: aplTime(from), EndTime: aplTime(to)})
 	if axiomStatus(err) == http.StatusBadRequest && strings.Contains(err.Error(), "invalid field") {
-		return []AxiomRow{}, nil
+		return nil, nil
 	}
 	return rows, err
 }
@@ -94,17 +85,17 @@ func axiomRowsAs[T any](ctx context.Context, a *App, cfg axiomCfg, apl string, f
 
 func readRows[T any](log *slog.Logger, rows []AxiomRow, read func(AxiomRow) (T, error)) []T {
 	out := make([]T, 0, len(rows))
-	var skipped []error
+	var firstErr error
 	for _, row := range rows {
 		v, err := read(row)
 		if err != nil {
-			skipped = append(skipped, err)
+			firstErr = cmp.Or(firstErr, err)
 			continue
 		}
 		out = append(out, v)
 	}
-	if len(skipped) > 0 {
-		log.Warn("Axiom: skipped rows Keel cannot read", "skipped", len(skipped), "rows", len(rows), "err", skipped[0])
+	if firstErr != nil {
+		log.Warn("Axiom: skipped rows Keel cannot read", "skipped", len(rows)-len(out), "rows", len(rows), "err", firstErr)
 	}
 	return out
 }
@@ -113,12 +104,10 @@ func decodeRow[T any](row AxiomRow) (T, error) {
 	var v T
 	b, err := json.Marshal(row)
 	if err != nil {
-		return v, fmt.Errorf("Axiom row: %w", err)
+		return v, err
 	}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return v, fmt.Errorf("Axiom row: %w", err)
-	}
-	return v, nil
+	err = json.Unmarshal(b, &v)
+	return v, err
 }
 
 type axiomTime float64
@@ -161,10 +150,7 @@ var axiomDatasetDescriptions = map[string]string{
 }
 
 func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
-	if !domain.ValidDataset(cfg.Dataset) {
-		return errors.New("Dataset name: letters, digits, - _ . only")
-	}
-	err := a.Axiom.CreateDataset(ctx, cfg.target(), "", cfg.Dataset, axiomDatasetDescriptions[domain.DatasetLogs])
+	err := a.Axiom.CreateDataset(ctx, cfg.AxiomTarget, "", cfg.Dataset, axiomDatasetDescriptions[domain.DatasetLogs])
 	if status := axiomStatus(err); status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return err
 	}
@@ -172,7 +158,7 @@ func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
 }
 
 func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
-	_, err := a.axiomQuery(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), a.axiomUntil())
+	_, err := a.axiomRows(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), a.axiomUntil())
 	return err
 }
 
@@ -216,7 +202,7 @@ func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n i
 }
 
 func sortLogReplicas(rs []domain.LogReplica) {
-	slices.SortStableFunc(rs, func(a, b domain.LogReplica) int {
+	slices.SortFunc(rs, func(a, b domain.LogReplica) int {
 		return cmp.Or(cmp.Compare(a.Slot, b.Slot), strings.Compare(a.Task, b.Task))
 	})
 }
@@ -232,10 +218,6 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	if len(serviceIDs) == 0 {
 		return []domain.EnvironmentLogLine{}, nil
 	}
-	ids := make([]string, len(serviceIDs))
-	for i, id := range serviceIDs {
-		ids[i] = aplLit(id)
-	}
 	where := ""
 	if term := strings.TrimSpace(q.Search); term != "" {
 		where = " | where message contains " + aplLit(term)
@@ -244,7 +226,7 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	if q.OldestFirst {
 		order = "asc"
 	}
-	apl := aplDataset(cfg.Dataset) + " | where service_id in (" + strings.Join(ids, ", ") + ")" + where +
+	apl := aplDataset(cfg.Dataset) + " | where service_id " + aplIn(serviceIDs) + where +
 		" | sort by _time " + order + " | limit " + strconv.Itoa(q.N) + " | project _time, message, stream, task, service_id"
 	rows, err := axiomRowsAs[axiomLogRow](ctx, a, cfg, apl, q.From, q.To)
 	if err != nil {
@@ -252,55 +234,37 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	}
 	lines := make([]domain.EnvironmentLogLine, len(rows))
 	for i, r := range rows {
-		at := i
-		if !q.OldestFirst {
-			at = len(rows) - 1 - i
-		}
-		lines[at] = domain.EnvironmentLogLine{ServiceLogLine: r.line(), ServiceID: r.ServiceID}
+		lines[i] = domain.EnvironmentLogLine{ServiceLogLine: r.line(), ServiceID: r.ServiceID}
+	}
+	if !q.OldestFirst {
+		slices.Reverse(lines)
 	}
 	return lines, nil
 }
 
 func (a *App) axiomAuthURL() string {
-	u := "https://authorization.axiom.co"
 	if a.Config.AllowLocalSinks && a.Config.AxiomAuthURL != "" {
-		u = a.Config.AxiomAuthURL
+		return strings.TrimRight(a.Config.AxiomAuthURL, "/")
 	}
-	return strings.TrimRight(u, "/")
+	return "https://authorization.axiom.co"
 }
 
-func (a *App) axiomAPIOverride() string {
-	if a.Config.AllowLocalSinks {
-		return a.Config.AxiomAPIURL
-	}
-	return ""
-}
-
-func obsBase64URL(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
-
-func obsRandom(n int) []byte {
+func randomBase64URL(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func axiomPKCEChallenge(verifier string) string {
-	sum := sha256.Sum256([]byte(verifier))
-	return obsBase64URL(sum[:])
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 func (a *App) axiomAuthorizeURL(clientID, redirectURI string) (state, verifier, authorizeURL string) {
-	verifier = obsBase64URL(obsRandom(32))
-	state = obsBase64URL(obsRandom(16))
+	verifier, state = randomBase64URL(32), randomBase64URL(16)
+	challenge := sha256.Sum256([]byte(verifier))
 	query := url.Values{
 		"client_id":             {clientID},
 		"response_type":         {"code"},
 		"redirect_uri":          {redirectURI},
 		"scope":                 {"openid profile email"},
 		"state":                 {state},
-		"code_challenge":        {axiomPKCEChallenge(verifier)},
+		"code_challenge":        {base64.RawURLEncoding.EncodeToString(challenge[:])},
 		"code_challenge_method": {"S256"},
 	}
 	return state, verifier, a.axiomAuthURL() + "/oauth2/authorize?" + query.Encode()
@@ -332,10 +296,7 @@ func axiomJWTAudience(token string) string {
 	if !ok {
 		return "(not a JWT)"
 	}
-	if claims.Audience == nil {
-		return "null"
-	}
-	return string(claims.Audience)
+	return cmp.Or(string(claims.Audience), "null")
 }
 
 func axiomChosenOrg(token string) string {
@@ -344,22 +305,21 @@ func axiomChosenOrg(token string) string {
 }
 
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
-	override := a.axiomAPIOverride()
-	host := domain.AxiomDomains[0]
-	if override != "" {
-		host = override
+	override := ""
+	if a.Config.AllowLocalSinks {
+		override = a.Config.AxiomAPIURL
 	}
-	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: host, Token: token})
+	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: cmp.Or(override, domain.AxiomDomains[0]), Token: token})
 	if err != nil {
-		return nil, errors.New(err.Error() + " (Axiom API rejected the sign-in token, aud " + axiomJWTAudience(token) + ")")
+		return nil, fmt.Errorf("%w (Axiom API rejected the sign-in token, aud %s)", err, axiomJWTAudience(token))
 	}
 	orgs := make([]domain.AxiomOrg, len(infos))
 	for i, o := range infos {
-		d := domain.AxiomDomains[0]
+		region := domain.AxiomDomains[0]
 		if strings.Contains(o.Edge, "eu-") {
-			d = domain.AxiomDomains[1]
+			region = domain.AxiomDomains[1]
 		}
-		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: cmp.Or(override, d)}
+		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: cmp.Or(override, region)}
 	}
 	return orgs, nil
 }
@@ -368,7 +328,7 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 	t := AxiomTarget{Domain: org.Domain, Token: token}
 	existing, err := a.Axiom.Datasets(ctx, t, org.ID)
 	if err != nil {
-		return domain.LogSink{}, errors.New("Listing datasets: " + err.Error())
+		return domain.LogSink{}, fmt.Errorf("Listing datasets: %w", err)
 	}
 	have := map[string]bool{}
 	var own []string
@@ -396,12 +356,14 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 		Datasets:    []string{domain.DatasetLogs, domain.DatasetTraces},
 	})
 	if err != nil {
-		return domain.LogSink{}, errors.New("Minting the ingest token: " + err.Error())
+		return domain.LogSink{}, fmt.Errorf("Minting the ingest token: %w", err)
 	}
 	if minted == "" {
 		return domain.LogSink{}, errors.New("Axiom did not return a token")
 	}
-	return domain.LogSink{Kind: domain.SinkKindAxiom, Domain: org.Domain, Dataset: domain.DatasetLogs, Traces: domain.DatasetTraces, Token: minted}, nil
+	return domain.LogSink{
+		Kind: domain.SinkKindAxiom, Domain: org.Domain, Dataset: domain.DatasetLogs, Traces: domain.DatasetTraces, Token: minted, Org: org.Name,
+	}, nil
 }
 
 func datasetCapMessage(org domain.AxiomOrg, own, left []string, err error) string {

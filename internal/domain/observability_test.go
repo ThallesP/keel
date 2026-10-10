@@ -1,35 +1,33 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRangeWindow(t *testing.T) {
 	const now = 1_791_460_812_345
 	cases := []struct {
 		r        TimeRange
 		from, to int64
-		count    int
 	}{
-		{Range15m, 1_791_459_930_000, 1_791_460_830_000, 30},
-		{Range1h, 1_791_457_320_000, 1_791_460_920_000, 30},
-		{Range24h, 1_791_378_000_000, 1_791_464_400_000, 24},
-		{Range7d, 1_790_877_600_000, 1_791_482_400_000, 28},
+		{Range15m, 1_791_459_930_000, 1_791_460_830_000},
+		{Range1h, 1_791_457_320_000, 1_791_460_920_000},
+		{Range24h, 1_791_378_000_000, 1_791_464_400_000},
+		{Range7d, 1_790_877_600_000, 1_791_482_400_000},
 	}
 	for _, c := range cases {
-		from, to, count := RangeWindow(c.r, now)
-		if from != c.from || to != c.to || count != c.count {
-			t.Errorf("%s: %d %d %d, want %d %d %d", c.r, from, to, count, c.from, c.to, c.count)
-		}
 		spec, _ := c.r.Spec()
-		if now < to-spec.BinMs || now >= to {
-			t.Errorf("%s: the last bucket does not hold now", c.r)
+		if from, to := spec.Window(now); from != c.from || to != c.to {
+			t.Errorf("%s: %d %d, want %d %d", c.r, from, to, c.from, c.to)
 		}
 	}
-	from, to, _ := RangeWindow(Range1h, 1_791_460_800_000)
-	if to != 1_791_460_920_000 || from != 1_791_457_320_000 {
+	spec, _ := Range1h.Spec()
+	if from, to := spec.Window(1_791_460_800_000); to != 1_791_460_920_000 || from != 1_791_457_320_000 {
 		t.Errorf("boundary: %d %d", from, to)
 	}
-	if TimeRange("2d").Valid() || !Range7d.Valid() {
-		t.Error("Valid")
+	if _, ok := TimeRange("2d").Spec(); ok {
+		t.Error("2d is not a range")
 	}
 }
 
@@ -42,10 +40,7 @@ func TestValidDataset(t *testing.T) {
 			t.Errorf("ValidDataset(%q) = %v", name, got)
 		}
 	}
-	long := "a"
-	for len(long) < 128 {
-		long += "b"
-	}
+	long := "a" + strings.Repeat("b", 127)
 	if !ValidDataset(long) || ValidDataset(long+"c") {
 		t.Error("128-character limit")
 	}

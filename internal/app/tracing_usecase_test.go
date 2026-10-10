@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,7 +54,7 @@ func TestSetNodeTracing(t *testing.T) {
 	}
 	topics := e.pub.take("org")
 	for _, want := range []string{"/api/environments/env", "/api/nodes/" + obsNodeAPI, "/api/nodes/" + obsNodeWorker} {
-		if !obsContains(topics, want) {
+		if !slices.Contains(topics, want) {
 			t.Errorf("topics %v lack %s", topics, want)
 		}
 	}
@@ -82,15 +83,6 @@ func TestSetNodeTracing(t *testing.T) {
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeVolume, false), domain.CodeInvalidInput, "Only services can be traced")
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, "missing", true), domain.CodeServiceNotFound, "Node not found")
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.signedOut, obsNodeAPI, true), domain.CodeNotAuthenticated, "Not authenticated")
-}
-
-func obsContains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 func TestNodeTracingView(t *testing.T) {
@@ -122,7 +114,7 @@ func TestNodeTracingView(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.exec(t, `INSERT INTO variables (id, node_id, key, value, secret) VALUES ('v1', ?, 'OTEL_SERVICE_NAME', 'mine', 0), ('v2', ?, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://x', 0)`, obsNodeAPI, obsNodeAPI)
-	e.app.Config.OTLPURL = "http://100.64.0.1:3211/otlp/"
+	e.app.Config.OTLPURL = "http://100.64.0.1:3211/otlp"
 	v, err = e.app.NodeTracing(ctx, e.member, obsNodeAPI)
 	if err != nil {
 		t.Fatal(err)

@@ -1,28 +1,22 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"maps"
 	"net/url"
 	"slices"
-	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
 
 const (
-	otelHeaders        = "OTEL_EXPORTER_OTLP_HEADERS"
-	otelEndpoint       = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	otelTracesEndpoint = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+	otelHeaders  = "OTEL_EXPORTER_OTLP_HEADERS"
+	otelEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT"
 )
 
-func (a *App) otlpEndpoint() string {
-	endpoint := a.Config.OTLPURL
-	if endpoint == "" {
-		endpoint = a.Config.SiteURL + "/otlp"
-	}
-	return strings.TrimRight(endpoint, "/")
-}
+func (a *App) otlpEndpoint() string { return cmp.Or(a.Config.OTLPURL, a.Config.SiteURL+"/otlp") }
 
 type envVar struct {
 	Key   string
@@ -52,70 +46,42 @@ func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key s
 	)
 }
 
-func tracingOverridden(own map[string]bool, k string) bool {
-	return own[k] || (k == otelHeaders && (own[otelEndpoint] || own[otelTracesEndpoint]))
+func tracingOverridden(own []string, k string) bool {
+	return slices.Contains(own, k) ||
+		(k == otelHeaders && (slices.Contains(own, otelEndpoint) || slices.Contains(own, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")))
 }
 
-func (a *App) tracingVars(tx Tx, node domain.Node, own map[string]bool) ([]envVar, error) {
+func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[string]string, error) {
 	if node.Desired == nil || !node.Desired.Tracing {
-		return nil, nil
+		return env, nil
 	}
-	env, err := tx.Environment(node.EnvironmentID)
-	if errors.Is(err, ErrNoRow) {
-		return nil, nil
-	}
+	environment, err := tx.Environment(node.EnvironmentID)
 	if err != nil {
 		return nil, err
 	}
 	key, err := tx.OTLPKeyOf(node.EnvironmentID)
 	if errors.Is(err, ErrNoRow) {
-		return nil, nil
+		return env, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var out []envVar
-	for _, v := range tracingEnv(a.otlpEndpoint(), node, env, key, false) {
+	own := slices.Collect(maps.Keys(env))
+	out := maps.Clone(env)
+	for _, v := range tracingEnv(a.otlpEndpoint(), node, environment, key, false) {
 		if !tracingOverridden(own, v.Key) {
-			out = append(out, v)
+			out[v.Key] = v.Value
 		}
 	}
 	return out, nil
 }
 
-func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[string]string, error) {
-	own := make(map[string]bool, len(env))
-	for k := range env {
-		own[k] = true
-	}
-	added, err := a.tracingVars(tx, node, own)
-	if err != nil || len(added) == 0 {
-		return env, err
-	}
-	out := make(map[string]string, len(env)+len(added))
-	for k, v := range env {
-		out[k] = v
-	}
-	for _, v := range added {
-		out[v.Key] = v.Value
-	}
-	return out, nil
-}
-
-func TracingVarOrder(key string) int {
-	return slices.Index([]string{otelEndpoint, "OTEL_EXPORTER_OTLP_PROTOCOL", otelHeaders, "OTEL_SERVICE_NAME",
-		"OTEL_RESOURCE_ATTRIBUTES", "OTEL_TRACES_EXPORTER", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER"}, key)
-}
-
 func orgTracesState(tx Tx, org string) (string, error) {
-	rec, err := orgSinkOf(tx, org)
-	if err != nil {
-		return "", err
+	sink, err := orgSinkOf(tx, org)
+	if err != nil || sink == nil {
+		return domain.TracesOff, err
 	}
-	if rec == nil || rec.Sink.Kind != domain.SinkKindAxiom {
-		return domain.TracesOff, nil
-	}
-	if rec.Sink.Traces == "" {
+	if sink.Traces == "" {
 		return domain.TracesOld, nil
 	}
 	return domain.TracesOn, nil
@@ -124,9 +90,9 @@ func orgTracesState(tx Tx, org string) (string, error) {
 func requireTracesOn(state string) error {
 	switch state {
 	case domain.TracesOff:
-		return errTracesOff(msgNoSink)
+		return errNoSink
 	case domain.TracesOld:
-		return errTracesOff(msgNoTraces)
+		return errNoTraces
 	}
 	return nil
 }
@@ -137,7 +103,7 @@ func tracingScope(tx Tx, actor domain.Actor, nodeID string) (NodeScope, string, 
 		return NodeScope{}, "", err
 	}
 	if scope.Node.Type != domain.NodeService || scope.Node.Desired == nil {
-		return NodeScope{}, "", domain.Invalid(msgOnlyServicesTrace)
+		return NodeScope{}, "", domain.Invalid("Only services can be traced")
 	}
 	state, err := orgTracesState(tx, scope.Org)
 	return scope, state, err
@@ -189,13 +155,9 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 		if err != nil && !errors.Is(err, ErrNoRow) {
 			return err
 		}
-		keys, err := tx.TracingVariableKeys(node.ID)
+		own, err := tx.TracingVariableKeys(node.ID)
 		if err != nil {
 			return err
-		}
-		own := map[string]bool{}
-		for _, k := range keys {
-			own[k] = true
 		}
 		state, err := orgTracesState(tx, scope.Org)
 		if err != nil {
@@ -224,11 +186,8 @@ func (a *App) LocalTracingEnv(ctx context.Context, actor domain.Actor, nodeID st
 		if err != nil {
 			return err
 		}
-		if state != domain.TracesOn {
-			out.Reason = msgNoTraces
-			if state == domain.TracesOff {
-				out.Reason = msgNoSink
-			}
+		if err := requireTracesOn(state); err != nil {
+			out.Reason = err.Error()
 			return nil
 		}
 		key, err := a.ensureOTLPKey(tx, ch, scope.EnvScope)

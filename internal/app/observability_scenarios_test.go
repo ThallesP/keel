@@ -1,13 +1,14 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -168,22 +169,6 @@ func (f *obsAPLServer) sortedCalls() []obsGoldenCall {
 	return out
 }
 
-func obsSameJSON(t *testing.T, got any, want json.RawMessage) bool {
-	t.Helper()
-	b, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var g, w any
-	if err := json.Unmarshal(b, &g); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(want, &w); err != nil {
-		t.Fatal(err)
-	}
-	return reflect.DeepEqual(g, w)
-}
-
 func TestAxiomScenarios(t *testing.T) {
 	fx := app.ReadJSON[obsScenarioFixture](t, "testdata/axiom_scenarios.json")
 	var golden []obsGoldenScenario
@@ -242,8 +227,9 @@ func TestAxiomScenarios(t *testing.T) {
 			if err != nil {
 				msg := err.Error()
 				got[i].Error = &msg
-				if domain.CodeOf(err) != domain.CodeInvalidInput {
-					t.Errorf("code = %s, want INVALID_INPUT", domain.CodeOf(err))
+				var de *domain.Error
+				if !errors.As(err, &de) || de.Code != domain.CodeInvalidInput {
+					t.Errorf("error %v, want INVALID_INPUT", err)
 				}
 			} else if got[i].Result, err = json.Marshal(result); err != nil {
 				t.Fatal(err)
@@ -263,7 +249,8 @@ func TestAxiomScenarios(t *testing.T) {
 				if got[i].Error != nil {
 					t.Fatal(*got[i].Error)
 				}
-				if !obsSameJSON(t, result, want.Result) {
+				var wantResult bytes.Buffer
+				if err := json.Compact(&wantResult, want.Result); err != nil || !bytes.Equal(got[i].Result, wantResult.Bytes()) {
 					t.Fatalf("result differs\n got: %s\nwant: %s", got[i].Result, want.Result)
 				}
 			}

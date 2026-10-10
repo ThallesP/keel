@@ -11,11 +11,10 @@ import (
 )
 
 type ObservabilityTx interface {
-	LogSinkOf(organizationID string) (SinkRecord, error)
+	LogSinkOf(organizationID string) (domain.LogSink, error)
 	ReplaceLogSink(organizationID string, sink domain.LogSink, connectedAt int64) error
 	DeleteLogSink(organizationID string) error
 	WorkerSinks() ([]WorkerSink, error)
-	SinkOrganizationSlug(organizationID string) (string, error)
 
 	AxiomClientFor(redirectURI string) (string, error)
 	SaveAxiomClient(redirectURI, clientID string, now int64) error
@@ -31,15 +30,9 @@ type ObservabilityTx interface {
 
 	OTLPKeyOf(environmentID string) (string, error)
 	InsertOTLPKey(environmentID, key string, now int64) error
-	OTLPKeyEnvironment(key string) (string, error)
+	OTLPKeyOrganization(key string) (string, error)
 
 	TracingVariableKeys(nodeID string) ([]string, error)
-}
-
-type SinkRecord struct {
-	OrganizationID string
-	Sink           domain.LogSink
-	ConnectedAt    int64
 }
 
 type WorkerSink struct {

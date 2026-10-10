@@ -67,26 +67,18 @@ func (q *Queries) ObsGetOTLPKey(ctx context.Context, environmentID string) (stri
 	return key, err
 }
 
-const obsGetOTLPKeyEnvironment = `-- name: ObsGetOTLPKeyEnvironment :one
-SELECT environment_id FROM otlp_keys WHERE key = ?
+const obsGetOTLPKeyOrganization = `-- name: ObsGetOTLPKeyOrganization :one
+SELECT p.organization_id FROM otlp_keys k
+JOIN environments e ON e.id = k.environment_id
+JOIN projects p ON p.id = e.project_id
+WHERE k.key = ?
 `
 
-func (q *Queries) ObsGetOTLPKeyEnvironment(ctx context.Context, key string) (string, error) {
-	row := q.db.QueryRowContext(ctx, obsGetOTLPKeyEnvironment, key)
-	var environment_id string
-	err := row.Scan(&environment_id)
-	return environment_id, err
-}
-
-const obsGetOrganizationSlug = `-- name: ObsGetOrganizationSlug :one
-SELECT slug FROM organizations WHERE id = ?
-`
-
-func (q *Queries) ObsGetOrganizationSlug(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRowContext(ctx, obsGetOrganizationSlug, id)
-	var slug string
-	err := row.Scan(&slug)
-	return slug, err
+func (q *Queries) ObsGetOTLPKeyOrganization(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, obsGetOTLPKeyOrganization, key)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const obsGetPending = `-- name: ObsGetPending :one

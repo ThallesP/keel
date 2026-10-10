@@ -1,20 +1,19 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
-	"strconv"
+	"mime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-const (
-	otlpMaxBody     = 4 * 1024 * 1024
-	otlpForwardWait = 30 * time.Second
-)
+const otlpMaxBody = 4 * 1024 * 1024
 
 func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) {
 	key, err := tx.OTLPKeyOf(scope.Environment.ID)
@@ -24,7 +23,7 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	if !errors.Is(err, ErrNoRow) {
 		return "", err
 	}
-	key = domain.OTLPKeyPrefix + obsBase64URL(obsRandom(24))
+	key = domain.OTLPKeyPrefix + randomBase64URL(24)
 	if err := tx.InsertOTLPKey(scope.Environment.ID, key, a.Now()); err != nil {
 		return "", err
 	}
@@ -39,29 +38,18 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	return key, nil
 }
 
-func (a *App) otlpRoute(ctx context.Context, key string) (sink *OTLPForward, found bool, err error) {
+func (a *App) otlpRoute(ctx context.Context, key string) (sink *domain.LogSink, found bool, err error) {
 	err = a.read(ctx, func(tx Tx) error {
-		envID, err := tx.OTLPKeyEnvironment(key)
+		org, err := tx.OTLPKeyOrganization(key)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		org, err := tx.OrganizationOfEnvironment(envID)
-		if errors.Is(err, ErrNoRow) || (err == nil && org == "") {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
 		found = true
-		rec, err := orgSinkOf(tx, org)
-		if err != nil || rec == nil || rec.Sink.Kind != domain.SinkKindAxiom || rec.Sink.Traces == "" {
-			return err
-		}
-		sink = &OTLPForward{Domain: rec.Sink.Domain, Dataset: rec.Sink.Traces, Token: rec.Sink.Token}
-		return nil
+		sink, err = orgSinkOf(tx, org)
+		return err
 	})
 	return sink, found, err
 }
@@ -74,88 +62,64 @@ type OTLPRequest struct {
 	Body            io.Reader
 }
 
-type OTLPResponse struct {
-	Status      int
-	ContentType string
-	Body        []byte
+func otlpText(status int, body string) HTTPReply {
+	return HTTPReply{Status: status, Body: []byte(body)}
 }
 
-func otlpTextReply(status int, body string) OTLPResponse {
-	return OTLPResponse{Status: status, Body: []byte(body)}
-}
-
-func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
-	key := ""
-	if token, ok := strings.CutPrefix(r.Authorization, "Bearer "); ok {
-		key = strings.TrimSpace(token)
+func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) HTTPReply {
+	token, isBearer := strings.CutPrefix(r.Authorization, "Bearer ")
+	key := strings.TrimSpace(token)
+	if !isBearer || !strings.HasPrefix(key, domain.OTLPKeyPrefix) {
+		return otlpText(401, "unauthorized")
 	}
-	var sink *OTLPForward
-	found := false
-	if strings.HasPrefix(key, domain.OTLPKeyPrefix) {
-		var err error
-		if sink, found, err = a.otlpRoute(ctx, key); err != nil {
-			a.Log.Error("otlp: route", "err", err)
-			return otlpTextReply(500, "internal error")
-		}
+	sink, found, err := a.otlpRoute(ctx, key)
+	if err != nil {
+		a.Log.Error("otlp: route", "err", err)
+		return otlpText(500, "internal error")
 	}
 	if !found {
-		return otlpTextReply(401, "unauthorized")
+		return otlpText(401, "unauthorized")
 	}
-	ctype, _, _ := strings.Cut(r.ContentType, ";")
-	ctype = strings.ToLower(strings.TrimSpace(ctype))
+	ctype, _, _ := mime.ParseMediaType(r.ContentType)
 	if ctype != "application/x-protobuf" && ctype != "application/json" {
-		return otlpTextReply(415, "OTLP over HTTP: application/x-protobuf or application/json")
+		return otlpText(415, "OTLP over HTTP: application/x-protobuf or application/json")
 	}
 	if r.ContentLength > otlpMaxBody {
-		return otlpTextReply(413, "too large")
+		return otlpText(413, "too large")
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, otlpMaxBody+1))
 	if err != nil {
-		return otlpTextReply(400, "bad request")
+		return otlpText(400, "bad request")
 	}
 	if len(body) > otlpMaxBody {
-		return otlpTextReply(413, "too large")
+		return otlpText(413, "too large")
 	}
-	if sink == nil {
-		accepted := OTLPResponse{Status: 200, ContentType: ctype, Body: []byte{}}
+	if sink == nil || sink.Traces == "" {
 		if ctype == "application/json" {
-			accepted.Body = []byte("{}")
+			return HTTPReply{Status: 200, ContentType: ctype, Body: []byte("{}")}
 		}
-		return accepted
+		return HTTPReply{Status: 200, ContentType: ctype}
 	}
-	fwd := *sink
-	fwd.ContentType = ctype
-	fwd.ContentEncoding = r.ContentEncoding
-	fwd.Body = body
-	fctx, cancel := context.WithTimeout(ctx, otlpForwardWait)
+	fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	res, err := a.Axiom.ForwardTraces(fctx, fwd)
+	res, err := a.Axiom.ForwardTraces(fctx, OTLPForward{
+		Domain: sink.Domain, Token: sink.Token, Dataset: sink.Traces, ContentType: ctype, ContentEncoding: r.ContentEncoding, Body: body,
+	})
 	if err != nil {
-		a.Log.Warn("otlp: Axiom unreachable: " + err.Error())
-		return otlpTextReply(503, "sink unreachable")
+		a.Log.Warn("otlp: Axiom unreachable", "err", err)
+		return otlpText(503, "sink unreachable")
 	}
 	if res.Status >= 200 && res.Status < 300 {
-		ct := res.ContentType
-		if ct == "" {
-			ct = ctype
-		}
-		return OTLPResponse{Status: 200, ContentType: ct, Body: res.Body}
+		return HTTPReply{Status: 200, ContentType: cmp.Or(res.ContentType, ctype), Body: res.Body}
 	}
 	detail := CompactDetail(string(res.Body))
-	msg := "otlp: Axiom " + strconv.Itoa(res.Status)
-	if detail != "" {
-		msg += ": " + detail
+	a.Log.Warn("otlp: Axiom rejected spans", "status", res.Status, "detail", detail)
+	if slices.Contains([]int{429, 502, 503, 504}, res.Status) {
+		return otlpText(res.Status, detail)
 	}
-	a.Log.Warn(msg)
-	switch res.Status {
-	case 429, 502, 503, 504:
-		return otlpTextReply(res.Status, detail)
-	}
-	if detail == "" {
-		detail = "rejected"
-	}
+	detail = cmp.Or(detail, "rejected")
 	if res.Status >= 500 {
-		return otlpTextReply(503, detail)
+		return otlpText(503, detail)
 	}
-	return otlpTextReply(400, detail)
+	return otlpText(400, detail)
 }

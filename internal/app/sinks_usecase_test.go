@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,23 +15,21 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func obsStrp(s string) *string { return &s }
-
-func obsSinkOfOrg(t *testing.T, e *obsEnv, org string) *app.SinkRecord {
+func obsSinkOfOrg(t *testing.T, e *obsEnv, org string) *domain.LogSink {
 	t.Helper()
-	var rec *app.SinkRecord
+	var sink *domain.LogSink
 	err := e.store.Read(context.Background(), func(tx app.Tx) error {
-		r, err := tx.LogSinkOf(org)
+		s, err := tx.LogSinkOf(org)
 		if errors.Is(err, app.ErrNoRow) {
 			return nil
 		}
-		rec = &r
+		sink = &s
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return rec
+	return sink
 }
 
 func TestLogSinkViewAndDisconnect(t *testing.T) {
@@ -90,22 +89,20 @@ func TestConnectAxiom(t *testing.T) {
 	ax := &obsFakeAxiom{}
 	e.app.Axiom = ax
 	connect := func(domainName, dataset string, traces *string, token string) error {
-		_, _, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: domainName, Dataset: dataset, Traces: traces, Token: token})
-		return err
+		return e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: domainName, Dataset: dataset, Traces: traces, Token: token})
 	}
 	obsWantCode(t, connect("evil.example.com", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
 	obsWantCode(t, connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Region must be US or EU")
 	obsWantCode(t, connect("api.axiom.co", "-logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
-	obsWantCode(t, connect("api.axiom.co", "logs", obsStrp(""), "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
+	obsWantCode(t, connect("api.axiom.co", "logs", new(""), "xaat-12345678"), domain.CodeInvalidInput, "Dataset: letters, digits, - _ . only")
 	obsWantCode(t, connect("api.axiom.co", "logs", nil, "  short  "), domain.CodeInvalidInput, "That does not look like an Axiom API token")
 	if len(ax.take()) != 0 {
 		t.Fatal("Axiom was called before validation passed")
 	}
 
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 409, Detail: "dataset exists"}}
-	dataset, traces, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Traces: obsStrp("spans"), Token: "  xaat-12345678  "})
-	if err != nil || dataset != "logs" || traces == nil || *traces != "spans" {
-		t.Fatalf("connect: %s %v %v", dataset, traces, err)
+	if err := connect("api.axiom.co", "logs", new("spans"), "  xaat-12345678  "); err != nil {
+		t.Fatal(err)
 	}
 	calls := ax.take()
 	if len(calls) != 4 || !strings.HasPrefix(calls[0], `CreateDataset api.axiom.co xaat-12345678 org= logs "Keel container logs"`) ||
@@ -114,9 +111,10 @@ func TestConnectAxiom(t *testing.T) {
 		!strings.HasPrefix(calls[3], "Query api.axiom.co xaat-12345678 ['spans'] | limit 1") {
 		t.Fatalf("calls %q", calls)
 	}
-	rec := obsSinkOfOrg(t, e, "org")
-	if rec == nil || rec.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "logs", Traces: "spans", Token: "xaat-12345678"}) || rec.ConnectedAt != 7_000 {
-		t.Fatalf("saved %+v", rec)
+	sink := obsSinkOfOrg(t, e, "org")
+	if sink == nil || *sink != (domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "logs", Traces: "spans", Token: "xaat-12345678"}) ||
+		e.count(t, `SELECT created_at FROM log_sinks WHERE organization_id = 'org'`) != 7_000 {
+		t.Fatalf("saved %+v", sink)
 	}
 
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 403, Detail: "forbidden"}}
@@ -131,10 +129,10 @@ func TestConnectAxiom(t *testing.T) {
 	if err := connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" || rec.Sink.Traces != "" {
-		t.Fatalf("local sink %+v", rec.Sink)
+	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "http://127.0.0.1:4318" || sink.Traces != "" {
+		t.Fatalf("local sink %+v", sink)
 	}
-	_, _, err = e.app.ConnectAxiom(ctx, domain.Actor{UserID: "u3"}, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Token: "xaat-12345678"})
+	err := e.app.ConnectAxiom(ctx, domain.Actor{UserID: "u3"}, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Token: "xaat-12345678"})
 	obsWantCode(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }
 
@@ -258,11 +256,10 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	if ax.mintReq.Description != "Keel: logs and traces go in, the control plane reads them back" {
 		t.Fatalf("token description %q", ax.mintReq.Description)
 	}
-	rec := obsSinkOfOrg(t, e, "org")
-	if rec.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.eu.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-minted-ABCD", Org: "Acme Axiom"}) {
-		t.Fatalf("sink %+v", rec.Sink)
+	if sink := obsSinkOfOrg(t, e, "org"); *sink != (domain.LogSink{Kind: "axiom", Domain: "api.eu.axiom.co", Dataset: "keel-logs", Traces: "keel-traces", Token: "xaat-minted-ABCD", Org: "Acme Axiom"}) {
+		t.Fatalf("sink %+v", sink)
 	}
-	if got := e.pub.take("org"); !obsContains(got, "/api/organization") || !obsContains(got, "/api/nodes") {
+	if got := e.pub.take("org"); !slices.Contains(got, "/api/organization") || !slices.Contains(got, "/api/nodes") {
 		t.Errorf("topics %v", got)
 	}
 	if e.count(t, `SELECT COUNT(*) FROM axiom_sign_ins`) != 0 {
@@ -350,7 +347,7 @@ func TestAxiomOrgPick(t *testing.T) {
 	if err != nil || !res.Choose {
 		t.Fatalf("pending: %+v %v", res, err)
 	}
-	if got := e.pub.take("org"); !obsContains(got, "/api/organization") {
+	if got := e.pub.take("org"); !slices.Contains(got, "/api/organization") {
 		t.Errorf("topics %v", got)
 	}
 	choices, err := e.app.PendingAxiomOrgs(ctx, e.member)
@@ -360,23 +357,23 @@ func TestAxiomOrgPick(t *testing.T) {
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.foreigner); c != nil {
 		t.Fatalf("foreign sees the pick: %+v", c)
 	}
-	_, _, err = e.app.ChooseAxiomOrg(ctx, e.foreigner, "o1")
+	_, err = e.app.ChooseAxiomOrg(ctx, e.foreigner, "o1")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
-	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o9")
+	_, err = e.app.ChooseAxiomOrg(ctx, e.member, "o9")
 	obsWantCode(t, err, domain.CodeNotFound, "Organization not found")
-	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
+	_, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
 	ax.take()
-	dataset, org, err := e.app.ChooseAxiomOrg(ctx, e.member, "o2")
-	if err != nil || dataset != "keel-logs" || org != "Two" {
-		t.Fatalf("choose: %s %s %v", dataset, org, err)
+	res, err = e.app.ChooseAxiomOrg(ctx, e.member, "o2")
+	if err != nil || res != (app.AxiomSignInResult{Dataset: "keel-logs", Org: "Two"}) {
+		t.Fatalf("choose: %+v %v", res, err)
 	}
-	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.axiom.co" || rec.Sink.Org != "Two" {
-		t.Fatalf("sink %+v", rec.Sink)
+	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "api.axiom.co" || sink.Org != "Two" {
+		t.Fatalf("sink %+v", sink)
 	}
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.member); c != nil {
 		t.Fatal("pick not consumed")
@@ -411,7 +408,7 @@ func TestAxiomOrgPick(t *testing.T) {
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.member); c != nil {
 		t.Fatal("expired pick still listed")
 	}
-	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
+	_, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 }
 
@@ -424,16 +421,16 @@ func TestAxiomAPIOverride(t *testing.T) {
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "api.eu.axiom.co" {
-		t.Fatalf("domain %s", rec.Sink.Domain)
+	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "api.eu.axiom.co" {
+		t.Fatalf("domain %s", sink.Domain)
 	}
 	e.app.Config.AllowLocalSinks = true
 	ax.take()
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
-	if rec := obsSinkOfOrg(t, e, "org"); rec.Sink.Domain != "http://127.0.0.1:4318" {
-		t.Fatalf("domain %s", rec.Sink.Domain)
+	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "http://127.0.0.1:4318" {
+		t.Fatalf("domain %s", sink.Domain)
 	}
 	if calls := ax.take(); !strings.HasPrefix(calls[1], "Orgs http://127.0.0.1:4318 ") {
 		t.Fatalf("calls %q", calls)

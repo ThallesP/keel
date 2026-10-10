@@ -49,11 +49,9 @@ func (f *obsFakeAxiom) take() []string {
 func (f *obsFakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]app.AxiomRow, error) {
 	f.record("Query %s %s %s", t.Domain, t.Token, q.APL)
 	if f.queryErr != nil {
-		if err := f.queryErr(t, q); err != nil {
-			return nil, err
-		}
+		return nil, f.queryErr(t, q)
 	}
-	return []app.AxiomRow{}, nil
+	return nil, nil
 }
 
 func (f *obsFakeAxiom) CreateDataset(_ context.Context, t app.AxiomTarget, orgID, name, description string) error {

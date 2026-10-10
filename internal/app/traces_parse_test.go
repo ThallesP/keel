@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -29,13 +28,6 @@ type demuxFrame struct {
 func readAxiomFixture(t *testing.T) axiomFixture {
 	t.Helper()
 	return ReadJSON[axiomFixture](t, "testdata/axiom_scenarios.json")
-}
-
-func dockerFrame(stream byte, payload string) []byte {
-	head := make([]byte, 8, 8+len(payload))
-	head[0] = stream
-	binary.BigEndian.PutUint32(head[4:], uint32(len(payload)))
-	return append(head, payload...)
 }
 
 func obsRow(t *testing.T, raw string) AxiomRow {
@@ -152,7 +144,7 @@ func TestDemuxDockerLogs(t *testing.T) {
 	for i, d := range fx.Demux {
 		buf := []byte(d.Raw)
 		for _, f := range d.Frames {
-			buf = append(buf, dockerFrame(f.Stream, f.Payload)...)
+			buf = append(buf, DockerFrame(f.Stream, f.Payload)...)
 		}
 		got[i] = DemuxGolden{Name: d.Name, Lines: demuxDockerLogs(append(buf, d.Tail...))}
 	}
@@ -166,7 +158,7 @@ func TestDemuxDockerLogs(t *testing.T) {
 }
 
 func TestDemuxDockerLogsJoinsSplitCharacters(t *testing.T) {
-	buf := append(dockerFrame(1, "2026-10-08T12:00:00Z caf\xc3"), dockerFrame(1, "\xa9\n")...)
+	buf := append(DockerFrame(1, "2026-10-08T12:00:00Z caf\xc3"), DockerFrame(1, "\xa9\n")...)
 	want := []domain.ServiceLogLine{{Time: 1791460800000, Text: "café", Stream: "stdout"}}
 	if got := demuxDockerLogs(buf); !reflect.DeepEqual(got, want) {
 		t.Errorf("split character %+v", got)

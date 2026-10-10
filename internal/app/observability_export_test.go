@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"os"
@@ -22,6 +23,13 @@ type AxiomGolden struct {
 type DemuxGolden struct {
 	Name  string                  `json:"name"`
 	Lines []domain.ServiceLogLine `json:"lines"`
+}
+
+func DockerFrame(stream byte, payload string) []byte {
+	head := make([]byte, 8, 8+len(payload))
+	head[0] = stream
+	binary.BigEndian.PutUint32(head[4:], uint32(len(payload)))
+	return append(head, payload...)
 }
 
 func ReadJSON[T any](t *testing.T, path string) T {

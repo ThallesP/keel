@@ -8,90 +8,58 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-const (
-	msgNoSink            = "Connect Axiom to see traces"
-	msgNoTraces          = "Sign in with Axiom again to turn on traces"
-	msgNoLogStore        = "Connect Axiom to search all logs"
-	msgNotATraceID       = "Not a trace id"
-	msgOnlyServicesTrace = "Only services can be traced"
-	msgRegion            = "Region must be US or EU"
-	msgDataset           = "Dataset: letters, digits, - _ . only"
-	msgNotAToken         = "That does not look like an Axiom API token"
-	msgBadRedirect       = "Bad redirect URI"
-	msgSignInExpired     = "Axiom sign-in expired, try again"
-	msgNoAxiomOrg        = "This Axiom account has no organization"
-	msgPickExpired       = "Sign-in expired, sign in with Axiom again"
-	msgOrgNotFound       = "Organization not found"
-)
-
 const axiomPendingTTL = 10 * time.Minute
+
+var (
+	errNoSink     = domain.E(domain.CodeTracesOff, "Connect Axiom to see traces")
+	errNoTraces   = domain.E(domain.CodeTracesOff, "Sign in with Axiom again to turn on traces")
+	errNoLogStore = domain.Invalid("Connect Axiom to search all logs")
+	errBadRange   = domain.Invalid("Range must be one of 15m, 1h, 24h, 7d")
+)
 
 func obsInvalid(err error) error {
 	var de *domain.Error
 	if errors.As(err, &de) || errors.Is(err, context.Canceled) {
 		return err
 	}
-	return obsErr(domain.CodeInvalidInput, err.Error())
+	return domain.Invalid("%s", err)
 }
 
-func obsErr(code, msg string) error { return &domain.Error{Code: code, Message: msg} }
-
-func errTracesOff(msg string) error { return obsErr(domain.CodeTracesOff, msg) }
-
-func obsEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
-	if err := actor.RequireUser(); err != nil {
-		return EnvScope{}, err
-	}
-	scope, ok, err := ownedEnvironment(tx, actor, id)
-	if err != nil {
-		return EnvScope{}, err
-	}
-	if !ok {
-		return EnvScope{}, domain.E(domain.CodeProjectNotFound, domain.MsgEnvironmentNotFound)
-	}
-	return scope, nil
-}
-
-func orgSinkOf(tx Tx, org string) (*SinkRecord, error) {
-	if org == "" {
-		return nil, nil
-	}
-	r, err := tx.LogSinkOf(org)
+func orgSinkOf(tx Tx, org string) (*domain.LogSink, error) {
+	sink, err := tx.LogSinkOf(org)
 	if errors.Is(err, ErrNoRow) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &r, nil
+	return &sink, nil
 }
 
 type envSinkScope struct {
-	EnvScope
-	Sink       *domain.LogSink
+	Sink       domain.LogSink
 	ServiceIDs []string
 }
 
-func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentID string) (envSinkScope, error) {
+func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentID string, noSink error) (envSinkScope, error) {
 	var s envSinkScope
 	err := a.read(ctx, func(tx Tx) error {
-		scope, err := obsEnvironment(tx, actor, environmentID)
+		scope, err := requireEnvironment(tx, actor, environmentID)
 		if err != nil {
 			return err
 		}
-		s.EnvScope = scope
-		rec, err := orgSinkOf(tx, scope.Org)
+		sink, err := orgSinkOf(tx, scope.Org)
 		if err != nil {
 			return err
 		}
-		if rec != nil {
-			s.Sink = &rec.Sink
+		if sink == nil {
+			return noSink
 		}
+		s.Sink = *sink
 		nodes, err := tx.Nodes(environmentID)
 		if err != nil {
 			return err
 		}
-		s.ServiceIDs = []string{}
 		for _, n := range nodes {
 			if n.Type != domain.NodeVolume && n.Type != domain.NodeGroup {
 				s.ServiceIDs = append(s.ServiceIDs, n.ID)
@@ -109,9 +77,7 @@ func sinkChanged(ch *Changes, org string) {
 
 func (a *App) recoverObservability(ctx context.Context) {
 	a.purgeAxiomState(ctx)
-	if a.Jobs != nil {
-		a.Jobs.Every("observability.axiom-expiry", time.Minute, a.purgeAxiomState)
-	}
+	a.Jobs.Every("observability.axiom-expiry", time.Minute, a.purgeAxiomState)
 }
 
 func (a *App) purgeAxiomState(ctx context.Context) {

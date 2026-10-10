@@ -10,8 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-const dockerTaskKey = "com.docker.swarm.task.id="
-
 func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 	line := domain.ServiceLogLine{Text: raw, Stream: stream}
 	if stamp, text, ok := strings.Cut(raw, " "); ok {
@@ -25,7 +23,7 @@ func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 	}
 	line.Text = text
 	for _, kv := range strings.Split(details, ",") {
-		if task, ok := strings.CutPrefix(kv, dockerTaskKey); ok {
+		if task, ok := strings.CutPrefix(kv, "com.docker.swarm.task.id="); ok {
 			line.Task = task
 			break
 		}
@@ -50,7 +48,7 @@ func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 	for off+8 <= len(buf) {
 		typ := buf[off]
 		n := int(binary.BigEndian.Uint32(buf[off+4 : off+8]))
-		if typ > 2 || off+8+n > len(buf) || off+8+n < off {
+		if typ > 2 || off+8+n > len(buf) {
 			break
 		}
 		payload := buf[off+8 : off+8+n]

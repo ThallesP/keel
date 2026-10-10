@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"math"
-	"regexp"
-)
+import "regexp"
 
 const SinkKindAxiom = "axiom"
 
@@ -34,21 +31,11 @@ var axiomDatasetRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 func ValidDataset(name string) bool { return axiomDatasetRE.MatchString(name) }
 
-func TokenHint(token string) string { return "…" + obsLastChars(token, 4) }
+func TokenHint(token string) string { return "…" + token[max(0, len(token)-4):] }
 
 const OTLPKeyPrefix = "keel_otlp_"
 
-func MaskOTLPKey(key string) string {
-	return OTLPKeyPrefix + "…" + obsLastChars(key, 4)
-}
-
-func obsLastChars(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[len(r)-n:])
-}
+func MaskOTLPKey(key string) string { return OTLPKeyPrefix + TokenHint(key) }
 
 type TimeRange string
 
@@ -60,18 +47,16 @@ const (
 )
 
 type RangeSpec struct {
-	Ms    int64
-	Bin   string
-	BinMs int64
+	Bin     string
+	BinMs   int64
+	Buckets int
 }
 
-const rangeMinuteMs, rangeHourMs = 60_000, 3_600_000
-
 var timeRanges = map[TimeRange]RangeSpec{
-	Range15m: {Ms: 15 * rangeMinuteMs, Bin: "30s", BinMs: 30_000},
-	Range1h:  {Ms: rangeHourMs, Bin: "2m", BinMs: 2 * rangeMinuteMs},
-	Range24h: {Ms: 24 * rangeHourMs, Bin: "1h", BinMs: rangeHourMs},
-	Range7d:  {Ms: 7 * 24 * rangeHourMs, Bin: "6h", BinMs: 6 * rangeHourMs},
+	Range15m: {Bin: "30s", BinMs: 30_000, Buckets: 30},
+	Range1h:  {Bin: "2m", BinMs: 120_000, Buckets: 30},
+	Range24h: {Bin: "1h", BinMs: 3_600_000, Buckets: 24},
+	Range7d:  {Bin: "6h", BinMs: 21_600_000, Buckets: 28},
 }
 
 func (r TimeRange) Spec() (RangeSpec, bool) {
@@ -79,21 +64,9 @@ func (r TimeRange) Spec() (RangeSpec, bool) {
 	return s, ok
 }
 
-func (r TimeRange) Valid() bool { _, ok := timeRanges[r]; return ok }
-
-func RangeWindow(r TimeRange, now int64) (from, to int64, count int) {
-	s := timeRanges[r]
-	count = int(math.Round(float64(s.Ms) / float64(s.BinMs)))
-	from = rangeFloorDiv(now, s.BinMs)*s.BinMs - int64(count-1)*s.BinMs
-	return from, from + int64(count)*s.BinMs, count
-}
-
-func rangeFloorDiv(a, b int64) int64 {
-	q := a / b
-	if (a%b != 0) && ((a < 0) != (b < 0)) {
-		q--
-	}
-	return q
+func (s RangeSpec) Window(now int64) (from, to int64) {
+	to = (now/s.BinMs + 1) * s.BinMs
+	return to - int64(s.Buckets)*s.BinMs, to
 }
 
 const (

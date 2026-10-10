@@ -20,10 +20,10 @@ func TestRelayTraces(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := obsOTLPKeyOf(t, e, "env")
-	relay := func(auth, ctype string, length int64, body string) app.OTLPResponse {
+	relay := func(auth, ctype string, length int64, body string) app.HTTPReply {
 		return e.app.RelayTraces(ctx, app.OTLPRequest{Authorization: auth, ContentType: ctype, ContentLength: length, ContentEncoding: "gzip", Body: strings.NewReader(body)})
 	}
-	check := func(r app.OTLPResponse, status int, ctype, body string) {
+	check := func(r app.HTTPReply, status int, ctype, body string) {
 		t.Helper()
 		if r.Status != status || r.ContentType != ctype || string(r.Body) != body {
 			t.Fatalf("got %d %q %q, want %d %q %q", r.Status, r.ContentType, r.Body, status, ctype, body)

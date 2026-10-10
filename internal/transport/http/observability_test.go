@@ -21,7 +21,7 @@ import (
 type obsFakeAxiom struct{ forward app.HTTPReply }
 
 func (obsFakeAxiom) Query(context.Context, app.AxiomTarget, app.AxiomQuery) ([]app.AxiomRow, error) {
-	return []app.AxiomRow{}, nil
+	return nil, nil
 }
 func (obsFakeAxiom) CreateDataset(context.Context, app.AxiomTarget, string, string, string) error {
 	return nil

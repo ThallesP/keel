@@ -1,7 +1,6 @@
 {
   "now": 1791460812345,
   "sink": { "domain": "api.axiom.co", "dataset": "keel-logs", "traces": "keel-traces", "token": "xaat-test-token-1234" },
-  "serviceIds": ["nodeapiaaaaaaaaaaaaa", "nodeworkerbbbbbbbbbb", "nodedbcccccccccccccc"],
   "spanRows": [
     {
       "_time": "2026-10-08T12:00:00.123456789Z",

@@ -2,10 +2,11 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -23,43 +24,24 @@ const (
 	obsNodeForeign = "nodeforeigneeeeeeeee"
 )
 
-type obsPublished struct {
-	org    string
-	topics []string
-}
-
 type obsPublisher struct {
 	mu  sync.Mutex
-	got []obsPublished
+	got map[string][]string
 }
 
 func (p *obsPublisher) Publish(org string, topics []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.got = append(p.got, obsPublished{org, append([]string(nil), topics...)})
+	p.got[org] = append(p.got[org], topics...)
 }
 
 func (p *obsPublisher) take(org string) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	set := map[string]bool{}
-	var rest []obsPublished
-	for _, x := range p.got {
-		if x.org != org {
-			rest = append(rest, x)
-			continue
-		}
-		for _, t := range x.topics {
-			set[t] = true
-		}
-	}
-	p.got = rest
-	out := []string{}
-	for t := range set {
-		out = append(out, t)
-	}
-	sort.Strings(out)
-	return out
+	topics := p.got[org]
+	delete(p.got, org)
+	slices.Sort(topics)
+	return slices.Compact(topics)
 }
 
 type obsJobs struct {
@@ -68,9 +50,6 @@ type obsJobs struct {
 
 func (j *obsJobs) After(string, time.Duration, func(context.Context)) {}
 func (j *obsJobs) Every(name string, _ time.Duration, fn func(context.Context)) {
-	if j.every == nil {
-		j.every = map[string]func(context.Context){}
-	}
 	j.every[name] = fn
 }
 
@@ -127,8 +106,8 @@ func newObsEnv(t *testing.T, now int64) *obsEnv {
 	e := &obsEnv{
 		store:     store,
 		now:       now,
-		pub:       &obsPublisher{},
-		jobs:      &obsJobs{},
+		pub:       &obsPublisher{got: map[string][]string{}},
+		jobs:      &obsJobs{every: map[string]func(context.Context){}},
 		member:    domain.Actor{UserID: "u1", OrganizationID: "org", Role: domain.RoleMember},
 		foreigner: domain.Actor{UserID: "u2", OrganizationID: "org2", Role: domain.RoleOwner},
 	}
@@ -181,10 +160,8 @@ func (e *obsEnv) count(t *testing.T, q string, args ...any) int {
 
 func obsWantCode(t *testing.T, err error, code, msg string) {
 	t.Helper()
-	if err == nil {
-		t.Fatalf("no error, want %s %q", code, msg)
-	}
-	if got := domain.CodeOf(err); got != code || err.Error() != msg {
-		t.Fatalf("error = %s %q, want %s %q", got, err.Error(), code, msg)
+	var de *domain.Error
+	if !errors.As(err, &de) || de.Code != code || de.Message != msg {
+		t.Fatalf("error = %v, want %s %q", err, code, msg)
 	}
 }

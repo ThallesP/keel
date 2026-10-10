@@ -52,7 +52,7 @@ func parseAxiomDuration(text string) (float64, error) {
 	if m == nil {
 		return 0, fmt.Errorf("Axiom duration %q: unknown format", text)
 	}
-	days, _ := strconv.ParseFloat(cmp.Or(m[1], "0"), 64)
+	days, _ := strconv.ParseFloat(m[1], 64)
 	hours, _ := strconv.ParseFloat(m[2], 64)
 	minutes, _ := strconv.ParseFloat(m[3], 64)
 	seconds, _ := strconv.ParseFloat(m[4], 64)
@@ -198,11 +198,7 @@ func sortedAttributes(attributes map[string]string) []domain.Attribute {
 }
 
 func httpStatusOf(attributes map[string]string) *float64 {
-	text, ok := attributes["http.response.status_code"]
-	if !ok {
-		text = attributes["http.status_code"]
-	}
-	status, err := strconv.Atoi(text)
+	status, err := strconv.Atoi(cmp.Or(attributes["http.response.status_code"], attributes["http.status_code"]))
 	if err != nil || status <= 0 {
 		return nil
 	}

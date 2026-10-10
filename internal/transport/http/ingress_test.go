@@ -48,12 +48,11 @@ func newIngressHarness(t *testing.T) *ingressHarness {
 			t.Fatal(err)
 		}
 	}
-	port, rev := 8080, 1
 	for _, n := range []domain.Node{
 		{ID: "j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4", EnvironmentID: "env", Type: domain.NodeService, Name: "api", CreatedAt: 1,
-			Desired: &domain.Desired{Image: "api:1", Revision: 1, Replicas: 1, Port: &port}, DeployedRevision: &rev},
+			Desired: &domain.Desired{Image: "api:1", Revision: 1, Replicas: 1, Port: new(8080)}, DeployedRevision: new(1)},
 		{ID: "pg", EnvironmentID: "env", Type: domain.NodeDatabase, Name: "postgres", CreatedAt: 2,
-			Desired: &domain.Desired{Image: "postgres:16", Revision: 1, Replicas: 1, Port: &port}, DeployedRevision: &rev},
+			Desired: &domain.Desired{Image: "postgres:16", Revision: 1, Replicas: 1, Port: new(8080)}, DeployedRevision: new(1)},
 	} {
 		if err := store.Write(context.Background(), func(tx app.Tx) error { return tx.InsertNode(n) }); err != nil {
 			t.Fatal(err)

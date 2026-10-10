@@ -1,9 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"math"
+	"sync"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -12,7 +13,7 @@ func clampLogTail(tail float64) int {
 	if math.IsNaN(tail) {
 		return 1
 	}
-	return int(math.Min(math.Max(1, math.Floor(tail)), 1000))
+	return int(min(max(tail, 1), 1000))
 }
 
 func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID string, tail float64) (domain.LogTail, error) {
@@ -22,42 +23,34 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 		if err != nil {
 			return err
 		}
-		rec, err := orgSinkOf(tx, scope.Org)
-		if err != nil {
-			return err
-		}
-		if rec != nil {
-			sink = &rec.Sink
-		}
-		return nil
+		sink, err = orgSinkOf(tx, scope.Org)
+		return err
 	})
 	if err != nil {
 		return domain.LogTail{}, err
 	}
-	n := clampLogTail(tail)
-	if sink != nil && sink.Kind == domain.SinkKindAxiom {
-		return a.axiomTail(ctx, axiomLogsCfg(*sink), nodeID, n)
+	if sink != nil {
+		return a.axiomTail(ctx, axiomCfgOf(*sink, sink.Dataset), nodeID, clampLogTail(tail))
 	}
-	return a.dockerTail(ctx, nodeID, n)
+	return a.dockerTail(ctx, nodeID, clampLogTail(tail))
 }
 
 func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environmentID, search string, tail float64, rng domain.TimeRange) (domain.EnvironmentLogs, error) {
-	if rng != "" && !rng.Valid() {
-		return domain.EnvironmentLogs{}, domain.Invalid("Range must be one of 15m, 1h, 24h, 7d")
+	from := a.Now() - axiomQueryWindowMs
+	if rng != "" {
+		spec, ok := rng.Spec()
+		if !ok {
+			return domain.EnvironmentLogs{}, errBadRange
+		}
+		from, _ = spec.Window(a.Now())
 	}
-	scope, err := a.envSinkScope(ctx, actor, environmentID)
+	scope, err := a.envSinkScope(ctx, actor, environmentID, errNoLogStore)
 	if err != nil {
 		return domain.EnvironmentLogs{}, err
 	}
-	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
-		return domain.EnvironmentLogs{}, domain.Invalid(msgNoLogStore)
-	}
-	q := linesQuery{N: clampLogTail(tail), Search: truncateRunes(search, 200), From: float64(a.Now() - axiomQueryWindowMs), To: a.axiomUntil()}
-	if rng != "" {
-		from, _, _ := domain.RangeWindow(rng, a.Now())
-		q.From = float64(from)
-	}
-	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, q)
+	lines, err := a.axiomLines(ctx, axiomCfgOf(scope.Sink, scope.Sink.Dataset), scope.ServiceIDs, linesQuery{
+		N: clampLogTail(tail), Search: truncateRunes(search, 200), From: float64(from), To: a.axiomUntil(),
+	})
 	if err != nil {
 		return domain.EnvironmentLogs{}, obsInvalid(err)
 	}
@@ -77,14 +70,11 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 	if err := validLogMoment(at); err != nil {
 		return nil, err
 	}
-	scope, err := a.envSinkScope(ctx, actor, environmentID)
+	scope, err := a.envSinkScope(ctx, actor, environmentID, errNoLogStore)
 	if err != nil {
 		return nil, err
 	}
-	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
-		return nil, domain.Invalid(msgNoLogStore)
-	}
-	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, linesQuery{
+	lines, err := a.axiomLines(ctx, axiomCfgOf(scope.Sink, scope.Sink.Dataset), scope.ServiceIDs, linesQuery{
 		N: 500, From: at - logsAroundMs, To: at + logsAroundMs, OldestFirst: true,
 	})
 	if err != nil {
@@ -94,39 +84,27 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 }
 
 func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogTail, error) {
-	if a.Logs == nil {
-		return domain.LogTail{}, errors.New("docker logs: no log reader configured")
-	}
 	service := domain.ServicePrefix + nodeID
-	type logsResult struct {
-		body  []byte
-		found bool
-		err   error
-	}
-	logsc := make(chan logsResult, 1)
-	go func() {
-		body, found, err := a.Logs.ReadServiceLogs(ctx, service, n)
-		logsc <- logsResult{body, found, err}
-	}()
+	var body []byte
+	var found bool
+	var readErr error
+	var wg sync.WaitGroup
+	wg.Go(func() { body, found, readErr = a.Logs.ReadServiceLogs(ctx, service, n) })
 	tasks, err := a.Logs.ListLogReplicas(ctx, service)
 	if err != nil {
 		tasks = nil
 	}
-	res := <-logsc
-	if res.err != nil {
-		return domain.LogTail{}, res.err
+	wg.Wait()
+	if readErr != nil {
+		return domain.LogTail{}, readErr
 	}
-	if !res.found {
+	if !found {
 		return domain.LogTail{Source: domain.LogSourceDocker, Lines: []domain.ServiceLogLine{}, Replicas: []domain.LogReplica{}}, nil
 	}
 	replicas := make([]domain.LogReplica, len(tasks))
 	for i, t := range tasks {
-		state := t.State
-		if state == "" {
-			state = "unknown"
-		}
-		replicas[i] = domain.LogReplica{Task: t.ID, Slot: t.Slot, State: state}
+		replicas[i] = domain.LogReplica{Task: t.ID, Slot: t.Slot, State: cmp.Or(t.State, "unknown")}
 	}
 	sortLogReplicas(replicas)
-	return domain.LogTail{Source: domain.LogSourceDocker, Lines: demuxDockerLogs(res.body), Replicas: replicas}, nil
+	return domain.LogTail{Source: domain.LogSourceDocker, Lines: demuxDockerLogs(body), Replicas: replicas}, nil
 }

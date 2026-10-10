@@ -9,12 +9,12 @@ import (
 	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-func (t *tx) LogSinkOf(organizationID string) (app.SinkRecord, error) {
+func (t *tx) LogSinkOf(organizationID string) (domain.LogSink, error) {
 	r, err := t.q.ObsGetSink(t.ctx, organizationID)
 	if err != nil {
-		return app.SinkRecord{}, noRow(err)
+		return domain.LogSink{}, noRow(err)
 	}
-	return app.SinkRecord{OrganizationID: r.OrganizationID, Sink: sinkOf(r), ConnectedAt: r.CreatedAt}, nil
+	return sinkOf(r), nil
 }
 
 func sinkOf(r sqlc.LogSink) domain.LogSink {
@@ -60,11 +60,6 @@ func (t *tx) WorkerSinks() ([]app.WorkerSink, error) {
 		out[i] = app.WorkerSink{ServiceIDs: byOrganization[s.OrganizationID], Sink: sinkOf(s), Since: s.CreatedAt}
 	}
 	return out, nil
-}
-
-func (t *tx) SinkOrganizationSlug(organizationID string) (string, error) {
-	s, err := t.q.ObsGetOrganizationSlug(t.ctx, organizationID)
-	return s, noRow(err)
 }
 
 func (t *tx) AxiomClientFor(redirectURI string) (string, error) {
@@ -140,9 +135,9 @@ func (t *tx) InsertOTLPKey(environmentID, key string, now int64) error {
 	return t.q.ObsInsertOTLPKey(t.ctx, sqlc.ObsInsertOTLPKeyParams{EnvironmentID: environmentID, Key: key, CreatedAt: now})
 }
 
-func (t *tx) OTLPKeyEnvironment(key string) (string, error) {
-	env, err := t.q.ObsGetOTLPKeyEnvironment(t.ctx, key)
-	return env, noRow(err)
+func (t *tx) OTLPKeyOrganization(key string) (string, error) {
+	org, err := t.q.ObsGetOTLPKeyOrganization(t.ctx, key)
+	return org, noRow(err)
 }
 
 func (t *tx) TracingVariableKeys(nodeID string) ([]string, error) {

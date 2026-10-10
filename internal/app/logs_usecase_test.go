@@ -10,17 +10,12 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func obsFrame(stream byte, text string) []byte {
-	n := len(text)
-	return append([]byte{stream, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}, text...)
-}
-
 func TestTailNodeLogsFromDocker(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
 	logs := &obsFakeLogReader{
 		found: true,
-		body:  append(obsFrame(1, "2026-10-08T12:00:01.000000001Z com.docker.swarm.task.id=t2 b\n"), obsFrame(2, "2026-10-08T12:00:00Z com.docker.swarm.task.id=t1 a\n")...),
+		body:  append(app.DockerFrame(1, "2026-10-08T12:00:01.000000001Z com.docker.swarm.task.id=t2 b\n"), app.DockerFrame(2, "2026-10-08T12:00:00Z com.docker.swarm.task.id=t1 a\n")...),
 		tasks: []app.LogReplica{{ID: "t2", Slot: 2, State: "running"}, {ID: "t1", Slot: 1, State: "shutdown"}, {ID: "t0", Slot: 1}},
 	}
 	e.app.Logs = logs
@@ -49,8 +44,9 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 	if err != nil || tail.Source != "docker" || tail.Lines == nil || tail.Replicas == nil || len(tail.Lines)+len(tail.Replicas) != 0 {
 		t.Fatalf("missing service: %+v %v", tail, err)
 	}
-	logs.err = errors.New("socket gone")
-	if _, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200); err == nil || domain.CodeOf(err) != domain.CodeServerError {
+	socketGone := errors.New("socket gone")
+	logs.err = socketGone
+	if _, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200); !errors.Is(err, socketGone) {
 		t.Fatalf("docker error: %v", err)
 	}
 }

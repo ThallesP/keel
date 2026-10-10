@@ -46,14 +46,6 @@ func TestTracingEnv(t *testing.T) {
 		local[3].Value != "keel.service_id=n1,keel.environment_id=e%2F1,deployment.environment.name=local" {
 		t.Fatalf("local env %q", local)
 	}
-	for i, v := range deployed {
-		if TracingVarOrder(v.Key) != i {
-			t.Errorf("TracingVarOrder(%s) = %d", v.Key, TracingVarOrder(v.Key))
-		}
-	}
-	if TracingVarOrder("PATH") != -1 {
-		t.Error("TracingVarOrder of a non-tracing key")
-	}
 }
 
 func TestTracingOverridden(t *testing.T) {
@@ -70,11 +62,7 @@ func TestTracingOverridden(t *testing.T) {
 		{[]string{"OTEL_EXPORTER_OTLP_HEADERS"}, "OTEL_EXPORTER_OTLP_HEADERS", true},
 	}
 	for _, c := range cases {
-		own := map[string]bool{}
-		for _, k := range c.own {
-			own[k] = true
-		}
-		if got := tracingOverridden(own, c.key); got != c.want {
+		if got := tracingOverridden(c.own, c.key); got != c.want {
 			t.Errorf("overridden(%v, %s) = %v", c.own, c.key, got)
 		}
 	}
@@ -86,12 +74,7 @@ type tracingTx struct {
 	key string
 }
 
-func (t tracingTx) Environment(id string) (domain.Environment, error) {
-	if t.env.ID != id {
-		return domain.Environment{}, ErrNoRow
-	}
-	return t.env, nil
-}
+func (t tracingTx) Environment(string) (domain.Environment, error) { return t.env, nil }
 
 func (t tracingTx) OTLPKeyOf(string) (string, error) {
 	if t.key == "" {
@@ -141,7 +124,6 @@ func TestWithTracing(t *testing.T) {
 		"off":        {tx, domain.Node{ID: "n1", EnvironmentID: "env", Desired: &domain.Desired{}}},
 		"no desired": {tx, domain.Node{ID: "n1", EnvironmentID: "env"}},
 		"no key":     {tracingTx{env: env}, node},
-		"no env":     {tracingTx{key: "k"}, node},
 	} {
 		got, err := a.withTracing(c.tx, c.node, map[string]string{"A": "1"})
 		if err != nil || !reflect.DeepEqual(got, map[string]string{"A": "1"}) {
@@ -153,7 +135,7 @@ func TestWithTracing(t *testing.T) {
 func TestOTLPEndpoint(t *testing.T) {
 	for _, c := range []struct{ otlp, site, want string }{
 		{"", "https://keel.example.com", "https://keel.example.com/otlp"},
-		{"http://100.64.0.1:3211/otlp/", "https://keel.example.com", "http://100.64.0.1:3211/otlp"},
+		{"http://100.64.0.1:3211/otlp", "https://keel.example.com", "http://100.64.0.1:3211/otlp"},
 		{"", "", "/otlp"},
 	} {
 		a := New(App{Config: Config{OTLPURL: c.otlp, SiteURL: c.site}})

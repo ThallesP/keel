@@ -21,9 +21,6 @@ JOIN projects p ON p.id = e.project_id
 WHERE n.desired_image IS NOT NULL
 ORDER BY n.created_at, n.id;
 
--- name: ObsGetOrganizationSlug :one
-SELECT slug FROM organizations WHERE id = ?;
-
 -- name: ObsGetAxiomClient :one
 SELECT client_id FROM axiom_clients WHERE redirect_uri = ?;
 
@@ -67,8 +64,11 @@ SELECT key FROM otlp_keys WHERE environment_id = ?;
 -- name: ObsInsertOTLPKey :exec
 INSERT INTO otlp_keys (environment_id, key, created_at) VALUES (?, ?, ?);
 
--- name: ObsGetOTLPKeyEnvironment :one
-SELECT environment_id FROM otlp_keys WHERE key = ?;
+-- name: ObsGetOTLPKeyOrganization :one
+SELECT p.organization_id FROM otlp_keys k
+JOIN environments e ON e.id = k.environment_id
+JOIN projects p ON p.id = e.project_id
+WHERE k.key = ?;
 
 -- name: ObsListVariableKeys :many
 SELECT key FROM variables WHERE node_id = ? ORDER BY rowid;

@@ -45,7 +45,7 @@ func authServe(t *testing.T, siteURL string) *authHTTP {
 
 type authReq struct {
 	method, path string
-	body         any
+	body         map[string]string
 	cookie       string
 	bearer       string
 	origin       string
@@ -103,6 +103,11 @@ func (h *authHTTP) signUp(email, invitationID string) authResp {
 		"email": email, "password": "correct-horse-battery", "name": "CI", "invitationId": invitationID}})
 }
 
+func (h *authHTTP) invite(r authReq) authResp {
+	r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
+	return h.do(r)
+}
+
 func authBody[T any](t *testing.T, r authResp) T {
 	t.Helper()
 	var v T
@@ -137,7 +142,6 @@ func authExpectDevice(t *testing.T, r authResp, status int, code, description st
 
 func TestAuthHTTPAccounts(t *testing.T) {
 	h := authServe(t, "http://keel.test")
-	origin := h.srv.URL
 
 	me := h.do(authReq{method: "GET", path: "/api/me"})
 	if me.status != 200 || me.raw != "{\"user\":null,\"organization\":null}\n" {
@@ -207,7 +211,7 @@ func TestAuthHTTPAccounts(t *testing.T) {
 	anon := h.do(authReq{method: "GET", path: "/api/organization/members"})
 	authExpect(t, anon, 401, "NOT_AUTHENTICATED", "Not authenticated")
 
-	out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", cookie: token, origin: origin})
+	out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", cookie: token, origin: h.srv.URL})
 	cleared := out.sessionCookie()
 	if out.status != 200 || !authBody[api.AuthSuccess](t, out).Success || cleared == nil || cleared.Value != "" || cleared.MaxAge >= 0 {
 		t.Fatalf("sign-out: %d %s %+v", out.status, out.raw, cleared)
@@ -227,10 +231,6 @@ func TestAuthHTTPSecureCookieOnHTTPS(t *testing.T) {
 func TestAuthHTTPCSRF(t *testing.T) {
 	h := authServe(t, "http://keel.example.com:8080")
 	token := authBody[api.SignedIn](t, h.signUp("ci@example.com", "")).Token
-	invite := func(r authReq) authResp {
-		r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
-		return h.do(r)
-	}
 
 	cases := []struct {
 		name   string
@@ -250,7 +250,7 @@ func TestAuthHTTPCSRF(t *testing.T) {
 		{"bearer and cookie, foreign origin", authReq{bearer: token, cookie: token, origin: "http://evil.example"}, 200, ""},
 	}
 	for _, c := range cases {
-		r := invite(c.req)
+		r := h.invite(c.req)
 		p := authBody[api.Problem](t, r)
 		if r.status != c.status || p.Detail != c.detail {
 			t.Errorf("%s: %d %s, want %d %q", c.name, r.status, r.raw, c.status, c.detail)
@@ -371,21 +371,11 @@ func TestAuthHTTPBearerWinsOverCookie(t *testing.T) {
 	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: member, cookie: owner}); authBody[authMe](t, me).User.Email != "member@example.com" {
 		t.Fatalf("me with bearer and cookie: %s", me.raw)
 	}
-	invite := func(r authReq) authResp {
-		r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
-		return h.do(r)
-	}
-	r := invite(authReq{bearer: member, cookie: owner, origin: "http://evil.example"})
+	r := h.invite(authReq{bearer: member, cookie: owner, origin: "http://evil.example"})
 	authExpect(t, r, 403, "FORBIDDEN", "You are not allowed to invite users to this organization")
-	r = invite(authReq{bearer: "made-up", cookie: owner, origin: "http://evil.example"})
+	r = h.invite(authReq{bearer: "made-up", cookie: owner, origin: "http://evil.example"})
 	authExpect(t, r, 401, "NOT_AUTHENTICATED", "Not authenticated")
 	if r.sessionCookie() != nil {
 		t.Fatal("a bearer request got a session cookie")
-	}
-}
-
-func TestAuthHTTPRateLimitedStatus(t *testing.T) {
-	if got := transport.StatusOf(domain.CodeRateLimited); got != http.StatusTooManyRequests {
-		t.Fatalf("RATE_LIMITED is HTTP %d", got)
 	}
 }

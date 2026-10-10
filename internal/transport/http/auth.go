@@ -139,12 +139,10 @@ func (s *Server) registerAuth(h huma.API) {
 		}
 		var out api.Me
 		if me.User != nil {
-			u := authUserView(*me.User)
-			out.User = &u
+			out.User = new(authUserView(*me.User))
 		}
 		if me.Organization != nil {
-			o := authOrganizationView(*me.Organization)
-			out.Organization = &o
+			out.Organization = new(authOrganizationView(*me.Organization))
 		}
 		return &authMeOutput{Body: out}, nil
 	})

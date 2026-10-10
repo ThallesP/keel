@@ -36,9 +36,6 @@ type CoreTx interface {
 	UpdateNode(n domain.Node) error
 	DeleteNode(id string) error
 	ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error
-
-	Setting(key string) (string, bool, error)
-	SetSetting(key, value string) error
 }
 
 type Connections interface {

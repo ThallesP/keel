@@ -3,9 +3,8 @@ package app_test
 import (
 	"context"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
@@ -13,39 +12,15 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-type canvasPublisher struct {
-	mu     sync.Mutex
-	topics map[string][]string
-}
+type canvasPublisher map[string][]string
 
-func (p *canvasPublisher) Publish(org string, topics []string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.topics == nil {
-		p.topics = map[string][]string{}
-	}
-	p.topics[org] = append(p.topics[org], topics...)
-}
+func (p canvasPublisher) Publish(org string, topics []string) { p[org] = append(p[org], topics...) }
 
-func (p *canvasPublisher) take(org string) []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	set := map[string]bool{}
-	for _, t := range p.topics[org] {
-		set[t] = true
-	}
-	delete(p.topics, org)
-	out := make([]string, 0, len(set))
-	for t := range set {
-		out = append(out, t)
-	}
-	sort.Strings(out)
-	return out
-}
-
-type canvasShipCall struct {
-	Environment string
-	Opts        app.ShipOptions
+func (p canvasPublisher) take(org string) []string {
+	topics := p[org]
+	delete(p, org)
+	slices.Sort(topics)
+	return slices.Compact(topics)
 }
 
 type canvasKit struct {
@@ -53,10 +28,10 @@ type canvasKit struct {
 	ctx   context.Context
 	store *sqlite.Store
 	app   *app.App
-	pub   *canvasPublisher
+	pub   canvasPublisher
 	now   int64
 
-	ships    []canvasShipCall
+	ships    []app.ShipOptions
 	shipErr  error
 	proxy    int
 	removed  []string
@@ -76,7 +51,7 @@ func canvasSetup(t *testing.T) *canvasKit {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	k := &canvasKit{t: t, ctx: ctx, store: store, pub: &canvasPublisher{}, now: 1_000}
+	k := &canvasKit{t: t, ctx: ctx, store: store, pub: canvasPublisher{}, now: 1_000}
 	k.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org-a', 'A', 'a', 1), ('org-b', 'B', 'b', 1)`)
 	k.app = app.New(app.App{Store: store, Events: k.pub, Now: func() int64 { k.now++; return k.now }, Config: app.Config{PublicIP: "203.0.113.7"}})
 	app.StubCanvasSeams(t, app.CanvasSeams{
@@ -84,7 +59,7 @@ func canvasSetup(t *testing.T) *canvasKit {
 			if k.shipErr != nil {
 				return "", k.shipErr
 			}
-			k.ships = append(k.ships, canvasShipCall{Environment: scope.Environment.ID, Opts: opts})
+			k.ships = append(k.ships, opts)
 			return "dep-" + scope.Environment.ID, nil
 		},
 		Schedulers: &app.CanvasSchedulers{

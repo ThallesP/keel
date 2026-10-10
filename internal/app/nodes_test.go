@@ -3,6 +3,7 @@ package app_test
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,15 +25,15 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 		position domain.Position
 	}{
 		{app.CreateNodeInput{Type: domain.NodeService}, "nginx", "nginx:alpine", 80, true, "", domain.NodeConfig{}, domain.Position{X: 0, Y: 0}},
-		{app.CreateNodeInput{Type: domain.NodeService, Image: canvasPtr("ghcr.io/acme/api-server:1.2")}, "api-server", "ghcr.io/acme/api-server:1.2", 80, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
+		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", "ghcr.io/acme/api-server:1.2", 80, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
 		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", "postgres:16", 5432, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
 		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", "mysql:8", 3306, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: canvasPtr(27018.0)}, "mongo", "mongo:7", 27018, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", "mongo:7", 27018, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
 		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", "redis:7", 6379, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
 		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", "redis:7", 6379, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
-		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", "", 0, false, "", domain.NodeConfig{SizeGb: canvasPtr(10.0)}, domain.Position{X: 1960}},
-		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", "", 0, false, "", domain.NodeConfig{Width: canvasPtr(300.0), Height: canvasPtr(180.0)}, domain.Position{X: 5.5, Y: -3}},
-		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: canvasPtr(0.0)}, "api", "nginx:alpine", 80, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
+		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", "", 0, false, "", domain.NodeConfig{SizeGb: new(10.0)}, domain.Position{X: 1960}},
+		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", "", 0, false, "", domain.NodeConfig{Width: new(300.0), Height: new(180.0)}, domain.Position{X: 5.5, Y: -3}},
+		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", "nginx:alpine", 80, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
 	}
 	var ids []string
 	for _, c := range cases {
@@ -87,26 +88,21 @@ func TestCanvasCreateNodeErrors(t *testing.T) {
 		code string
 		msg  string
 	}{
-		{"image on a database", app.CreateNodeInput{Type: domain.NodeDatabase, Image: canvasPtr("postgres:15"), Port: canvasPtr(1.5)}, domain.CodeInvalidInput, "Only services take a custom image"},
-		{"empty image is an image", app.CreateNodeInput{Type: domain.NodeService, Image: canvasPtr("")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
-		{"port on a volume", app.CreateNodeInput{Type: domain.NodeVolume, Port: canvasPtr(80.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
-		{"replicas on a group", app.CreateNodeInput{Type: domain.NodeGroup, Replicas: canvasPtr(1.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
+		{"image on a database", app.CreateNodeInput{Type: domain.NodeDatabase, Image: new("postgres:15"), Port: new(1.5)}, domain.CodeInvalidInput, "Only services take a custom image"},
+		{"empty image is an image", app.CreateNodeInput{Type: domain.NodeService, Image: new("")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
+		{"port on a volume", app.CreateNodeInput{Type: domain.NodeVolume, Port: new(80.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
+		{"replicas on a group", app.CreateNodeInput{Type: domain.NodeGroup, Replicas: new(1.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
 		{"engine of another type", app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineRedis}, domain.CodeInvalidInput, "redis is not a database"},
 		{"engine on a service", app.CreateNodeInput{Type: domain.NodeService, Engine: domain.EnginePostgres}, domain.CodeInvalidInput, "postgres is not a service"},
-		{"bad image", app.CreateNodeInput{Type: domain.NodeService, Image: canvasPtr("Nginx:Latest")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
-		{"taken before invalid", app.CreateNodeInput{Type: domain.NodeService, Name: "nginx", Port: canvasPtr(0.0)}, domain.CodeNameTaken, `"nginx" is already taken`},
+		{"bad image", app.CreateNodeInput{Type: domain.NodeService, Image: new("Nginx:Latest")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
+		{"taken before invalid", app.CreateNodeInput{Type: domain.NodeService, Name: "nginx", Port: new(0.0)}, domain.CodeNameTaken, `"nginx" is already taken`},
 		{"bad name", app.CreateNodeInput{Type: domain.NodeService, Name: "Api"}, domain.CodeInvalidInput, "Name: 1–40 chars, a-z 0-9 and - only"},
 		{"long name", app.CreateNodeInput{Type: domain.NodeService, Name: strings.Repeat("a", 41)}, domain.CodeInvalidInput, "Name: 1–40 chars, a-z 0-9 and - only"},
-		{"replicas before port", app.CreateNodeInput{Type: domain.NodeService, Replicas: canvasPtr(21.0), Port: canvasPtr(0.0)}, domain.CodeInvalidInput, "Replicas must be 0–20"},
-		{"fractional port", app.CreateNodeInput{Type: domain.NodeService, Port: canvasPtr(80.5)}, domain.CodeInvalidInput, "Port must be 1–65535"},
-		{"unknown environment", app.CreateNodeInput{Type: domain.NodeService}, "", ""},
+		{"replicas before port", app.CreateNodeInput{Type: domain.NodeService, Replicas: new(21.0), Port: new(0.0)}, domain.CodeInvalidInput, "Replicas must be 0–20"},
+		{"fractional port", app.CreateNodeInput{Type: domain.NodeService, Port: new(80.5)}, domain.CodeInvalidInput, "Port must be 1–65535"},
 	}
 	for _, c := range cases {
-		target := env
-		if c.code == "" {
-			target, c.code, c.msg = "nope", domain.CodeProjectNotFound, "Environment not found"
-		}
-		_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), target, c.in)
+		_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, c.in)
 		if err == nil || domain.CodeOf(err) != c.code || err.Error() != c.msg {
 			t.Errorf("%s: %s %v, want %s %q", c.name, domain.CodeOf(err), err, c.code, c.msg)
 		}
@@ -114,6 +110,8 @@ func TestCanvasCreateNodeErrors(t *testing.T) {
 	if nodes, _ := k.app.ListNodes(k.ctx, canvasMember(canvasOrg), env); len(nodes) != 1 {
 		t.Errorf("failed creates left %d nodes", len(nodes))
 	}
+	_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), "nope", app.CreateNodeInput{Type: domain.NodeService})
+	canvasWantErr(t, err, domain.CodeProjectNotFound, "Environment not found")
 }
 
 func TestCanvasCreateNodeDeploy(t *testing.T) {
@@ -123,7 +121,7 @@ func TestCanvasCreateNodeDeploy(t *testing.T) {
 	if err != nil || out.DeploymentID != "dep-"+env {
 		t.Fatalf("deploy: %+v %v", out, err)
 	}
-	if len(k.ships) != 1 || !reflect.DeepEqual(k.ships[0].Opts, app.ShipOptions{Only: []string{out.ID}}) {
+	if len(k.ships) != 1 || !reflect.DeepEqual(k.ships[0], app.ShipOptions{Only: []string{out.ID}}) {
 		t.Fatalf("ship call %+v", k.ships)
 	}
 	if out, _ := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, app.CreateNodeInput{Type: domain.NodeVolume, Deploy: true}); out.DeploymentID != "" || len(k.ships) != 1 {
@@ -139,10 +137,8 @@ func TestCanvasCreateNodeDeploy(t *testing.T) {
 		t.Fatal("no error")
 	}
 	nodes, _ := k.app.ListNodes(k.ctx, canvasMember(canvasOrg), env)
-	for _, n := range nodes {
-		if n.Name == "boom" {
-			t.Fatal("create not rolled back")
-		}
+	if slices.ContainsFunc(nodes, func(n domain.Node) bool { return n.Name == "boom" }) {
+		t.Fatal("create not rolled back")
 	}
 }
 
@@ -156,7 +152,7 @@ func TestCanvasRenameNode(t *testing.T) {
 	k.clean(env)
 	k.pub.take(canvasOrg)
 
-	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), pg, app.NodeUpdate{Name: canvasPtr("db")}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), pg, app.NodeUpdate{Name: new("db")}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(pg); n.Name != "db" || n.Dirty {
@@ -173,33 +169,26 @@ func TestCanvasRenameNode(t *testing.T) {
 	}
 	topics := k.pub.take(canvasOrg)
 	for _, want := range []string{"/api/environments/" + env, "/api/nodes/" + api, "/api/nodes/" + pg} {
-		if !canvasHas(topics, want) {
+		if !slices.Contains(topics, want) {
 			t.Errorf("topics %v lack %s", topics, want)
 		}
 	}
 
-	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("api")}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("api")}); err != nil {
 		t.Fatal(err)
 	}
 	if got := k.pub.take(canvasOrg); len(got) != 0 {
 		t.Errorf("no-op published %v", got)
 	}
-	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("db")})
+	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("db")})
 	canvasWantErr(t, err, domain.CodeNameTaken, `"db" is already taken`)
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("no spaces")})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("no spaces")})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Name: 1–40 chars, a-z 0-9 and - only")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), "nope", app.NodeUpdate{Name: canvasPtr("x")})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), "nope", app.NodeUpdate{Name: new("x")})
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
 }
 
-func canvasHas(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
+func canvasHas(list []string, s string) bool { return slices.Contains(list, s) }
 
 func TestCanvasSetDesired(t *testing.T) {
 	k := canvasSetup(t)
@@ -214,7 +203,7 @@ func TestCanvasSetDesired(t *testing.T) {
 	k.exec(`UPDATE nodes SET desired_revision = 3, desired_tracing = 1 WHERE id = ?`, redis)
 	k.clean(env)
 
-	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), redis, app.NodeUpdate{Port: canvasPtr(6380.0), Replicas: canvasPtr(2.0)})
+	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), redis, app.NodeUpdate{Port: new(6380.0), Replicas: new(2.0)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,17 +215,17 @@ func TestCanvasSetDesired(t *testing.T) {
 		t.Errorf("dirty: worker %v api %v other %v", k.node(worker).Dirty, k.node(api).Dirty, k.node(other).Dirty)
 	}
 	k.clean(env)
-	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), other, app.NodeUpdate{Image: canvasPtr("nginx:alpine")}); err != nil || !k.node(other).Dirty {
+	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), other, app.NodeUpdate{Image: new("nginx:alpine")}); err != nil || !k.node(other).Dirty {
 		t.Fatalf("same image: dirty %v %v", k.node(other).Dirty, err)
 	}
 
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), vol, app.NodeUpdate{Image: canvasPtr("x")})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), vol, app.NodeUpdate{Image: new("x")})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "This node type has no runtime settings")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Image: canvasPtr("UPPER"), Port: canvasPtr(0.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Image: new("UPPER"), Port: new(0.0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Image must look like repo/name:tag")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Port: canvasPtr(70000.0), Replicas: canvasPtr(99.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Port: new(70000.0), Replicas: new(99.0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Port must be 1–65535")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("api-2"), Replicas: canvasPtr(99.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("api-2"), Replicas: new(99.0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Replicas must be 0–20")
 	if k.node(api).Name != "api" {
 		t.Error("rename kept after a failed update")
@@ -253,22 +242,22 @@ func TestCanvasConfigAndParent(t *testing.T) {
 	k.clean(env)
 	m := canvasMember(canvasOrg)
 
-	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: canvasPtr(25.0)}}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: new(25.0)}}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(vol); *n.Config.SizeGb != 25 || n.Dirty {
 		t.Fatalf("volume config %+v dirty %v", n.Config, n.Dirty)
 	}
-	if err := k.app.UpdateNode(k.ctx, m, group, app.NodeUpdate{Config: &domain.NodeConfig{Width: canvasPtr(640.0)}}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, m, group, app.NodeUpdate{Config: &domain.NodeConfig{Width: new(640.0)}}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(group); *n.Config.Width != 640 || *n.Config.Height != 180 {
 		t.Fatalf("group config %+v", n.Config)
 	}
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, api, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: canvasPtr(1.0)}}), domain.CodeInvalidInput, "Only volumes have a size")
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{Height: canvasPtr(1.0)}}), domain.CodeInvalidInput, "Only groups have a width and height")
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: canvasPtr(0.0)}}), domain.CodeInvalidInput, "Size must be more than 0 GB")
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, group, app.NodeUpdate{Config: &domain.NodeConfig{Height: canvasPtr(-1.0)}}), domain.CodeInvalidInput, "Width and height must be more than 0")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, api, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: new(1.0)}}), domain.CodeInvalidInput, "Only volumes have a size")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{Height: new(1.0)}}), domain.CodeInvalidInput, "Only groups have a width and height")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: new(0.0)}}), domain.CodeInvalidInput, "Size must be more than 0 GB")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, group, app.NodeUpdate{Config: &domain.NodeConfig{Height: new(-1.0)}}), domain.CodeInvalidInput, "Width and height must be more than 0")
 
 	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &group}); err != nil {
 		t.Fatal(err)
@@ -288,7 +277,7 @@ func TestCanvasConfigAndParent(t *testing.T) {
 	if n := k.node(vol); n.ParentID != group || n.Position != (domain.Position{X: 1, Y: 2}) {
 		t.Fatalf("explicit: parent %q at %+v", n.ParentID, n.Position)
 	}
-	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: canvasPtr("")}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: new("")}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(vol); n.ParentID != "" || n.Position != (domain.Position{X: 101, Y: 52}) {
@@ -296,7 +285,7 @@ func TestCanvasConfigAndParent(t *testing.T) {
 	}
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, group2, app.NodeUpdate{ParentID: &group}), domain.CodeInvalidInput, "Groups cannot be nested")
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &api}), domain.CodeInvalidInput, "Parent must be a group in the same environment")
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: canvasPtr("nope")}), domain.CodeInvalidInput, "Parent must be a group in the same environment")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: new("nope")}), domain.CodeInvalidInput, "Parent must be a group in the same environment")
 	otherEnv := k.project(canvasOrg, "Other")
 	foreignGroup := k.create(otherEnv, app.CreateNodeInput{Type: domain.NodeGroup})
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &foreignGroup}), domain.CodeInvalidInput, "Parent must be a group in the same environment")
@@ -380,7 +369,7 @@ func TestCanvasDuplicateNode(t *testing.T) {
 func TestCanvasStartStop(t *testing.T) {
 	k := canvasSetup(t)
 	env := k.project(canvasOrg, "Acme")
-	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Replicas: canvasPtr(3.0)})
+	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Replicas: new(3.0)})
 	vol := k.create(env, app.CreateNodeInput{Type: domain.NodeVolume})
 	m := canvasMember(canvasOrg)
 
@@ -388,7 +377,7 @@ func TestCanvasStartStop(t *testing.T) {
 	if err != nil || id != "dep-"+env {
 		t.Fatalf("start: %q %v", id, err)
 	}
-	if got := k.ships[0].Opts; !reflect.DeepEqual(got, app.ShipOptions{Only: []string{api}, Verb: "deploy"}) {
+	if got := k.ships[0]; !reflect.DeepEqual(got, app.ShipOptions{Only: []string{api}, Verb: "deploy"}) {
 		t.Errorf("start ship %+v", got)
 	}
 	if n := k.node(api); n.Desired.Replicas != 3 || !n.Dirty {
@@ -400,7 +389,7 @@ func TestCanvasStartStop(t *testing.T) {
 	if err != nil || !ok || did != "dep-"+env {
 		t.Fatalf("stop: %q %v %v", did, ok, err)
 	}
-	if got := k.ships[1].Opts; !reflect.DeepEqual(got, app.ShipOptions{Only: []string{api}, Verb: "stop"}) {
+	if got := k.ships[1]; !reflect.DeepEqual(got, app.ShipOptions{Only: []string{api}, Verb: "stop"}) {
 		t.Errorf("stop ship %+v", got)
 	}
 	if n := k.node(api); n.Desired.Replicas != 0 || !n.Dirty {
@@ -412,8 +401,8 @@ func TestCanvasStartStop(t *testing.T) {
 	if _, err := k.app.StartNode(k.ctx, m, api); err != nil {
 		t.Fatal(err)
 	}
-	if n := k.node(api); n.Desired.Replicas != 1 || k.ships[2].Opts.Verb != "start" {
-		t.Errorf("restart: replicas %d verb %q", n.Desired.Replicas, k.ships[2].Opts.Verb)
+	if n := k.node(api); n.Desired.Replicas != 1 || k.ships[2].Verb != "start" {
+		t.Errorf("restart: replicas %d verb %q", n.Desired.Replicas, k.ships[2].Verb)
 	}
 	k.exec(`UPDATE nodes SET dirty = 0 WHERE id = ?`, api)
 	k.shipErr = domain.E(domain.CodeDeploymentRunning, "A deployment is already running")
@@ -460,7 +449,7 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if k.proxy != 1 || !reflect.DeepEqual(k.removed, []string{pg}) || !reflect.DeepEqual(k.observed, []string{pg}) {
 		t.Errorf("after commit: proxy %d removed %v observed %v", k.proxy, k.removed, k.observed)
 	}
-	if topics := k.pub.take(canvasOrg); !canvasHas(topics, "/api/nodes/"+pg) || !canvasHas(topics, "/api/environments/"+env) || !canvasHas(topics, "/api/nodes/"+web) {
+	if topics := k.pub.take(canvasOrg); !slices.Contains(topics, "/api/nodes/"+pg) || !slices.Contains(topics, "/api/environments/"+env) || !slices.Contains(topics, "/api/nodes/"+web) {
 		t.Errorf("topics %v", topics)
 	}
 	vars, _ := k.app.ListVariables(k.ctx, m, api)
@@ -545,7 +534,7 @@ func TestCanvasOtherOrganization(t *testing.T) {
 	}
 	_, err := k.app.CreateNode(k.ctx, b, env, app.CreateNodeInput{Type: domain.NodeService})
 	canvasWantErr(t, err, domain.CodeProjectNotFound, "Environment not found")
-	canvasWantErr(t, k.app.UpdateNode(k.ctx, b, api, app.NodeUpdate{Name: canvasPtr("mine")}), domain.CodeServiceNotFound, "Node not found")
+	canvasWantErr(t, k.app.UpdateNode(k.ctx, b, api, app.NodeUpdate{Name: new("mine")}), domain.CodeServiceNotFound, "Node not found")
 	canvasWantErr(t, k.app.MoveNode(k.ctx, b, api, domain.Position{X: 1}), domain.CodeServiceNotFound, "Node not found")
 	_, err = k.app.DuplicateNode(k.ctx, b, api)
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")

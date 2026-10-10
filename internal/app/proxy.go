@@ -257,7 +257,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 	certs := map[string]ProxyCert{}
 	if len(names) > 0 {
 		// Any failure here only means "not known yet": the cert event reports it later.
-		if got, err := a.Proxy.Certs(ctx, names); err == nil && got != nil {
+		if got, err := a.Proxy.Certs(ctx, names); err == nil {
 			certs = got
 		}
 	}
@@ -445,10 +445,11 @@ func (a *App) recoverIngress(ctx context.Context) {
 			a.Log.Info("default domains moved to the current public IP", "ip", ip, "domainsMoved", moved)
 		}
 	}
-	if a.Jobs != nil {
-		a.Jobs.After(proxyStartupKey, 0, a.startupProxySync(0))
+	if a.Jobs == nil {
+		return
 	}
-	if a.Jobs != nil && a.ingress().resyncArmed.CompareAndSwap(false, true) {
+	a.Jobs.After(proxyStartupKey, 0, a.startupProxySync(0))
+	if a.ingress().resyncArmed.CompareAndSwap(false, true) {
 		a.Jobs.Every(proxyResyncName, ProxyResyncInterval, a.ResyncProxy)
 	}
 }

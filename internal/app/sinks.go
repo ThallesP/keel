@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -27,14 +28,13 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 			return err
 		}
 		s := rec.Sink
-		v := &domain.LogSinkView{Kind: s.Kind, Domain: s.Domain, Dataset: s.Dataset, TokenHint: domain.TokenHint(s.Token)}
+		view = &domain.LogSinkView{Kind: s.Kind, Domain: s.Domain, Dataset: s.Dataset, TokenHint: domain.TokenHint(s.Token)}
 		if s.Traces != "" {
-			v.Traces = &s.Traces
+			view.Traces = &s.Traces
 		}
 		if s.Org != "" {
-			v.Org = &s.Org
+			view.Org = &s.Org
 		}
-		view = v
 		return nil
 	})
 	return view, err
@@ -84,8 +84,7 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 	if err := actor.RequireMember(); err != nil {
 		return "", nil, err
 	}
-	allowLocal := a.Config.AllowLocalSinks
-	if !slices.Contains(domain.AxiomDomains, in.Domain) && !(allowLocal && sinkDomainHasScheme(in.Domain)) {
+	if !slices.Contains(domain.AxiomDomains, in.Domain) && !(a.Config.AllowLocalSinks && strings.Contains(in.Domain, "://")) {
 		return "", nil, domain.Invalid(msgRegion)
 	}
 	names := []string{in.Dataset}
@@ -122,17 +121,6 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 	return in.Dataset, in.Traces, nil
 }
 
-func sinkDomainHasScheme(s string) bool {
-	for i := 0; i+3 <= len(s); i++ {
-		if s[i:i+3] == "://" {
-			return true
-		}
-	}
-	return false
-}
-
-// ── Sign in with Axiom ───────────────────────────────────────────────────────────────────────
-//
 // BeginAxiomSignIn makes the PKCE verifier + state here (the browser may be on plain http, where
 // WebCrypto is unavailable) and returns the authorize URL. Axiom redirects to /axiom/callback,
 // which hands state + code to CompleteAxiomSignIn: exchange for a personal token, list orgs, and
@@ -353,9 +341,11 @@ func (a *App) CancelAxiomSignIn(ctx context.Context, actor domain.Actor) error {
 		return nil
 	}
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
-		if _, err := tx.AxiomPendingOf(actor.OrganizationID); errors.Is(err, ErrNoRow) {
+		_, err := tx.AxiomPendingOf(actor.OrganizationID)
+		if errors.Is(err, ErrNoRow) {
 			return nil
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
 		if err := tx.DeleteAxiomPending(actor.OrganizationID); err != nil {
@@ -400,8 +390,6 @@ func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token stri
 	}
 	return sink.Dataset, org.Name, nil
 }
-
-// ── Agent config ─────────────────────────────────────────────────────────────────────────────
 
 // WorkerSinkEntry is one project's routing for the agents (GET /worker/config).
 type WorkerSinkEntry struct {

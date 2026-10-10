@@ -8,6 +8,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -21,11 +22,11 @@ const (
 
 // otlpEndpoint is where deployed services send spans: KEEL_OTLP_URL, else <site>/otlp.
 func (a *App) otlpEndpoint() string {
-	site := a.Config.OTLPURL
-	if site == "" {
-		site = a.Config.SiteURL + "/otlp"
+	endpoint := a.Config.OTLPURL
+	if endpoint == "" {
+		endpoint = a.Config.SiteURL + "/otlp"
 	}
-	return strings.TrimRight(site, "/")
+	return strings.TrimRight(endpoint, "/")
 }
 
 // tracingEnv is the OTEL_* a traced process gets, in order. local: `keel run`, which has no
@@ -115,13 +116,8 @@ func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[s
 // TracingVarOrder is the position of an OTEL_* variable withTracing adds (0–7), or -1 for any
 // other key: the deploy area sorts the container env with it (own variables first).
 func TracingVarOrder(key string) int {
-	for i, k := range []string{otelEndpoint, "OTEL_EXPORTER_OTLP_PROTOCOL", otelHeaders, "OTEL_SERVICE_NAME",
-		"OTEL_RESOURCE_ATTRIBUTES", "OTEL_TRACES_EXPORTER", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER"} {
-		if k == key {
-			return i
-		}
-	}
-	return -1
+	return slices.Index([]string{otelEndpoint, "OTEL_EXPORTER_OTLP_PROTOCOL", otelHeaders, "OTEL_SERVICE_NAME",
+		"OTEL_RESOURCE_ATTRIBUTES", "OTEL_TRACES_EXPORTER", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER"}, key)
 }
 
 // orgTracesState is whether the organization can store traces: no sink, a sink from before traces,
@@ -227,13 +223,12 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 		if err != nil {
 			return err
 		}
-		v := &domain.TracingView{Enabled: node.Desired.Tracing, Traces: state, Env: []domain.TracingEnvVar{}}
+		view = &domain.TracingView{Enabled: node.Desired.Tracing, Traces: state, Env: []domain.TracingEnvVar{}}
 		for _, kv := range tracingEnv(a.otlpEndpoint(), node, scope.Environment, domain.MaskOTLPKey(key), false) {
-			v.Env = append(v.Env, domain.TracingEnvVar{
+			view.Env = append(view.Env, domain.TracingEnvVar{
 				Key: kv[0], Value: kv[1], Secret: kv[0] == otelHeaders, Overridden: tracingOverridden(own, kv[0]),
 			})
 		}
-		view = v
 		return nil
 	})
 	return view, err

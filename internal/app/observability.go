@@ -47,8 +47,6 @@ func obsErr(code, msg string) error { return &domain.Error{Code: code, Message: 
 
 func errTracesOff(msg string) error { return obsErr(domain.CodeTracesOff, msg) }
 
-func errObsNodeNotFound() error { return domain.E(domain.CodeServiceNotFound, domain.MsgNodeNotFound) }
-
 // obsEnvironment is the environment when the actor may see it. Missing or foreign →
 // "Environment not found" with PROJECT_NOT_FOUND, the code the CLI gives that message.
 func obsEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
@@ -101,8 +99,7 @@ func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentI
 			return err
 		}
 		if rec != nil {
-			sink := rec.Sink
-			s.Sink = &sink
+			s.Sink = &rec.Sink
 		}
 		nodes, err := tx.Nodes(environmentID)
 		if err != nil {
@@ -156,7 +153,6 @@ func (a *App) purgeAxiomState(ctx context.Context) {
 	}
 }
 
-// expired: a sign-in or pending row created at createdAt is past its 10 minutes.
 func (a *App) axiomRowExpired(createdAt int64) bool {
 	return createdAt <= a.Now()-axiomPendingTTL.Milliseconds()
 }

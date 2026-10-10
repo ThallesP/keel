@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net"
 	"strconv"
 	"strings"
 
@@ -25,7 +26,7 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 	if len(web) > 0 {
 		listen := make([]string, 0, len(addrs))
 		for _, a := range addrs {
-			listen = append(listen, "host-tcp/"+caddyHostPort(a, 443))
+			listen = append(listen, "host-tcp/"+net.JoinHostPort(a, "443"))
 		}
 		handlers := make([]any, 0, len(web))
 		managed := []string{}
@@ -53,7 +54,7 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 			}}}
 		}
 		apps["events"] = map[string]any{"subscriptions": []any{map[string]any{
-			"events":   []string{"cert_obtained", "cert_failed"},
+			"events":   []string{CertObtained, CertFailed},
 			"handlers": []any{map[string]any{"handler": "keel", "url": rep.URL, "token": rep.Token}},
 		}}}
 	}
@@ -62,7 +63,7 @@ func caddyApps(routes []ProxyRoute, addrs []string, rep proxyReporter, acme prox
 		for _, r := range raw {
 			listen := make([]string, 0, len(addrs))
 			for _, a := range addrs {
-				listen = append(listen, "host-"+string(r.Protocol)+"/"+caddyHostPort(a, r.PublicPort))
+				listen = append(listen, "host-"+string(r.Protocol)+"/"+net.JoinHostPort(a, strconv.Itoa(r.PublicPort)))
 			}
 			dial := caddyUpstream(r)
 			if r.Protocol == domain.ProtocolUDP {
@@ -96,13 +97,6 @@ func caddyIssuers(acme proxyACME) []any {
 		map[string]any{"module": "acme", "email": acme.Email},
 		map[string]any{"module": "acme", "ca": domain.ZeroSSLCA, "email": acme.Email},
 	}
-}
-
-func caddyHostPort(addr string, port int) string {
-	if strings.Contains(addr, ":") {
-		return "[" + addr + "]:" + strconv.Itoa(port)
-	}
-	return addr + ":" + strconv.Itoa(port)
 }
 
 // caddyUpstream is the node's Swarm service on the keel overlay, resolved by Docker DNS when a

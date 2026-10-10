@@ -57,7 +57,7 @@ func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 
 // splitDockerLines drops empty lines, then strips one trailing \r (in that order, as the TS did).
 func splitDockerLines(text, stream string) []domain.ServiceLogLine {
-	var out []domain.ServiceLogLine
+	out := []domain.ServiceLogLine{}
 	for _, l := range strings.Split(text, "\n") {
 		if l == "" {
 			continue
@@ -102,16 +102,9 @@ func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 		off += 8 + n
 	}
 	if off == 0 && len(buf) > 0 {
-		lines := splitDockerLines(dockerUTF8(buf), "stdout")
-		if lines == nil {
-			lines = []domain.ServiceLogLine{}
-		}
-		return lines
+		return splitDockerLines(dockerUTF8(buf), "stdout")
 	}
 	lines := append(splitDockerLines(stdout.String(), "stdout"), splitDockerLines(stderr.String(), "stderr")...)
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].Time < lines[j].Time })
-	if lines == nil {
-		lines = []domain.ServiceLogLine{}
-	}
 	return lines
 }

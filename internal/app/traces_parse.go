@@ -124,10 +124,7 @@ func durationOf(v any) float64 {
 
 // durationOrNull: null or "" → null, else durationOf.
 func durationOrNull(v any) *float64 {
-	if v == nil {
-		return nil
-	}
-	if s, ok := v.(string); ok && s == "" {
+	if v == nil || v == "" {
 		return nil
 	}
 	d := durationOf(v)
@@ -193,10 +190,7 @@ func spanAttrText(v any) string {
 // flattenAttrs: the leaves of a value as key.path → text; objects recurse, arrays and scalars are
 // leaves; null and "" are skipped.
 func flattenAttrs(out *attrMap, key string, v any) {
-	if v == nil {
-		return
-	}
-	if s, ok := v.(string); ok && s == "" {
+	if v == nil || v == "" {
 		return
 	}
 	if o, ok := v.(*JSONObject); ok {

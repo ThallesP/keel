@@ -35,8 +35,7 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 			return err
 		}
 		if rec != nil {
-			s := rec.Sink
-			sink = &s
+			sink = &rec.Sink
 		}
 		return nil
 	})
@@ -112,7 +111,6 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 // dockerTail is the last n lines of the node's Swarm service, every replica merged, each line
 // tagged by task, read through the manager's Docker socket.
 func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogTail, error) {
-	empty := domain.LogTail{Source: domain.LogSourceDocker, Lines: []domain.ServiceLogLine{}, Replicas: []domain.LogReplica{}}
 	if a.Logs == nil {
 		return domain.LogTail{}, errors.New("docker logs: no log reader configured")
 	}
@@ -136,7 +134,7 @@ func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogT
 		return domain.LogTail{}, res.err
 	}
 	if !res.found {
-		return empty, nil
+		return domain.LogTail{Source: domain.LogSourceDocker, Lines: []domain.ServiceLogLine{}, Replicas: []domain.LogReplica{}}, nil
 	}
 	replicas := make([]domain.LogReplica, len(tasks))
 	for i, t := range tasks {

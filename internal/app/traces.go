@@ -10,6 +10,7 @@ import (
 	"context"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,7 +33,6 @@ const (
 	traceStats      = `requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)`
 )
 
-// TraceIDRE: what a trace id looks like.
 var traceIDRE = regexp.MustCompile(`(?i)^[0-9a-f]{16,32}$`)
 
 // traceScope is axiomScope: the environment's sink (logs side), its traces dataset (nil on a
@@ -126,15 +126,13 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 			HTTPStatus: spanHTTPStatus(r),
 			Spans:      1,
 			Error:      isErr,
+			Local:      rowPickValue(r, "resource.deployment.environment.name") == "local",
 		}
 		if isErr {
 			s.Errors = 1
 		}
 		if c, ok := perTrace[traceID]; ok {
 			s.Spans, s.Errors = c.spans, c.errors
-		}
-		if env, ok := rowPickValue(r, "resource.deployment.environment.name").(string); ok && env == "local" {
-			s.Local = true
 		}
 		out[i] = s
 	}
@@ -157,12 +155,8 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	}
 	ids := scope.serviceIDs
 	if nodeID != "" {
-		found := false
-		for _, id := range scope.serviceIDs {
-			found = found || id == nodeID
-		}
-		if !found {
-			return domain.TraceOverview{}, errObsNodeNotFound()
+		if !slices.Contains(scope.serviceIDs, nodeID) {
+			return domain.TraceOverview{}, domain.E(domain.CodeServiceNotFound, domain.MsgNodeNotFound)
 		}
 		ids = []string{nodeID}
 	}
@@ -214,11 +208,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	buckets := make([]domain.TraceBucket, count)
 	for i := range buckets {
 		t := from + float64(i)*binMs
-		stats, ok := byBucket[t]
-		if !ok {
-			stats = domain.TraceStats{}
-		}
-		buckets[i] = domain.TraceBucket{Time: t, TraceStats: stats}
+		buckets[i] = domain.TraceBucket{Time: t, TraceStats: byBucket[t]}
 	}
 	stats := domain.TraceStats{}
 	if len(totals) > 0 {
@@ -239,7 +229,7 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 	}
 	id := strings.ToLower(traceID)
 	if math.IsNaN(at) || math.IsInf(at, 0) {
-		at = 0 // unknown
+		at = 0
 	}
 	scope, err := a.traceScope(ctx, actor, environmentID)
 	if err != nil {

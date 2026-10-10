@@ -23,8 +23,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-// ── Ordered JSON objects ─────────────────────────────────────────────────────────────────────
-
 // JSONObject is a decoded JSON object that keeps JavaScript's property order: array-index keys
 // ascending, then the others in insertion order. A duplicate key keeps its first position and
 // its last value (JSON.parse). Values are nil (null), bool, float64, string, []any or
@@ -180,8 +178,6 @@ func jsGet(obj any, key string) (any, bool) {
 	}
 	return nil, false
 }
-
-// ── Conversions ──────────────────────────────────────────────────────────────────────────────
 
 // jsTruthy is JS truthiness.
 func jsTruthy(v any) bool {
@@ -413,8 +409,6 @@ func writeJSQuoted(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
-// ── Strings ──────────────────────────────────────────────────────────────────────────────────
-
 // jsSpaceClass is JS \s (WhiteSpace and LineTerminator).
 const jsSpaceClass = `[\t\n\v\f\r \x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]`
 
@@ -504,8 +498,6 @@ func jsFormEncode(pairs [][2]string) string {
 	return b.String()
 }
 
-// ── Collation ────────────────────────────────────────────────────────────────────────────────
-
 var (
 	jsCollatorMu sync.Mutex
 	jsCollator   = collate.New(language.English)
@@ -517,8 +509,6 @@ func localeCompare(a, b string) int {
 	defer jsCollatorMu.Unlock()
 	return jsCollator.CompareString(a, b)
 }
-
-// ── Dates ────────────────────────────────────────────────────────────────────────────────────
 
 // jsDateRE is the date-time strings Date.parse accepts that Axiom and Docker produce: ISO 8601
 // date or date-time (T, t or a space), seconds and any number of fraction digits optional, Z or

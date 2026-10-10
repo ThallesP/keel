@@ -104,8 +104,8 @@ func otlpTextReply(status int, body string) OTLPResponse {
 // and dropped, so an exporter does not log a failure every few seconds.
 func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 	key := ""
-	if strings.HasPrefix(r.Authorization, "Bearer ") {
-		key = jsTrim(r.Authorization[len("Bearer "):])
+	if token, ok := strings.CutPrefix(r.Authorization, "Bearer "); ok {
+		key = jsTrim(token)
 	}
 	var sink *OTLPForward
 	found := false

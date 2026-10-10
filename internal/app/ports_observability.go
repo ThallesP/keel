@@ -195,11 +195,9 @@ type OAuthError struct {
 
 // Error is the OAuth message: error_description || error || "HTTP <status>".
 func (e *OAuthError) Error() string {
-	if e.Body != nil {
-		for _, k := range []string{"error_description", "error"} {
-			if v, ok := e.Body.Get(k); ok && jsTruthy(v) {
-				return jsString(v)
-			}
+	for _, k := range []string{"error_description", "error"} {
+		if v, ok := e.Body.Get(k); ok && jsTruthy(v) {
+			return jsString(v)
 		}
 	}
 	return "HTTP " + strconv.Itoa(e.Status)

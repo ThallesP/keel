@@ -109,7 +109,7 @@ func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
 }
 
 func logStreamOf(v any) string {
-	if s, ok := v.(string); ok && s == "stderr" {
+	if v == "stderr" {
 		return "stderr"
 	}
 	return "stdout"
@@ -209,8 +209,6 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	return lines, nil
 }
 
-// ── Sign in with Axiom ───────────────────────────────────────────────────────────────────────
-
 // axiomAuthURL is Axiom's OAuth server; KEEL_AXIOM_AUTH_URL applies only with
 // KEEL_ALLOW_LOCAL_SINKS=1. Trailing slashes are stripped.
 func (a *App) axiomAuthURL() string {
@@ -296,17 +294,10 @@ func axiomJWTAudience(token string) string {
 // axiomChosenOrg is the org picked on Axiom's consent page: the token's axiomDefaultOrg claim
 // (undocumented; an org id like ramp-vcrw), "" when absent.
 func axiomChosenOrg(token string) string {
-	if c := axiomJWTClaims(token); c != nil {
-		if v, ok := c.Get("axiomDefaultOrg"); ok {
-			if s, ok := v.(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
+	v, _ := axiomJWTClaims(token).Get("axiomDefaultOrg")
+	s, _ := v.(string)
+	return s
 }
-
-var axiomEURE = regexp.MustCompile(`eu-`)
 
 // axiomOrgs is the orgs the personal token can see, each with the API host its data lives on.
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
@@ -332,7 +323,7 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 				edge = *o.Region
 			}
 			d = domain.AxiomDomains[0]
-			if axiomEURE.MatchString(edge) {
+			if strings.Contains(edge, "eu-") {
 				d = domain.AxiomDomains[1]
 			}
 		}

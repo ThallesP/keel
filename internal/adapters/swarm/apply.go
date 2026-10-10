@@ -4,6 +4,7 @@ import (
 	"context"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/swarm"
 	"github.com/moby/moby/client"
 
 	"github.com/ThallesP/keel/internal/app"
@@ -44,8 +45,7 @@ func (s *Swarm) CreateService(ctx context.Context, spec app.ServiceSpec) error {
 }
 
 func (s *Swarm) UpdateService(ctx context.Context, version uint64, spec app.ServiceSpec) error {
-	opts := client.ServiceUpdateOptions{Spec: toSpec(spec)}
-	opts.Version.Index = version
+	opts := client.ServiceUpdateOptions{Spec: toSpec(spec), Version: swarm.Version{Index: version}}
 	_, err := s.cli.ServiceUpdate(ctx, serviceName(spec.NodeID), opts)
 	return err
 }

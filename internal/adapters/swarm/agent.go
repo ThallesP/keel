@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,10 +20,7 @@ import (
 const (
 	agentServiceName  = "keel-agent"
 	agentSpecLabel    = "keel.agent.spec"
-	agentStateVolume  = "keel-agent-state"
-	agentStateDir     = "/var/lib/keel-agent"
 	agentSecretPrefix = "keel-agent-token-"
-	agentSecretTarget = "keel_worker_token"
 	dockerSocketPath  = "/var/run/docker.sock"
 )
 
@@ -32,8 +30,6 @@ func agentSecretName(token string) string {
 }
 
 func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec {
-	restartDelay := 2 * time.Second
-	grace := 10 * time.Second
 	spec := swarm.ServiceSpec{
 		Annotations: swarm.Annotations{Name: agentServiceName, Labels: map[string]string{}},
 		TaskTemplate: swarm.TaskSpec{
@@ -44,17 +40,17 @@ func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec
 				Secrets: []*swarm.SecretReference{{
 					SecretID:   secretID,
 					SecretName: agentSecretName(a.Token),
-					File:       &swarm.SecretReferenceFileTarget{Name: agentSecretTarget, UID: "0", GID: "0", Mode: 0o400},
+					File:       &swarm.SecretReferenceFileTarget{Name: "keel_worker_token", UID: "0", GID: "0", Mode: 0o400},
 				}},
 				Mounts: []mount.Mount{
 					{Type: mount.TypeBind, Source: dockerSocketPath, Target: dockerSocketPath, ReadOnly: true},
-					{Type: mount.TypeVolume, Source: agentStateVolume, Target: agentStateDir},
+					{Type: mount.TypeVolume, Source: "keel-agent-state", Target: "/var/lib/keel-agent"},
 				},
-				StopGracePeriod: &grace,
+				StopGracePeriod: new(10 * time.Second),
 				CapabilityDrop:  []string{"ALL"},
 				Privileges:      &swarm.Privileges{NoNewPrivileges: true},
 			},
-			RestartPolicy: &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionAny, Delay: &restartDelay},
+			RestartPolicy: &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionAny, Delay: new(2 * time.Second)},
 			Networks:      []swarm.NetworkAttachmentConfig{{Target: "host"}},
 		},
 		Mode: swarm.ServiceMode{Global: &swarm.GlobalService{}},
@@ -74,17 +70,12 @@ func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
 	res, err := s.cli.ServiceInspect(ctx, agentServiceName, client.ServiceInspectOptions{})
 	switch {
 	case cerrdefs.IsNotFound(err):
-		if _, err := s.cli.ServiceCreate(ctx, client.ServiceCreateOptions{Spec: spec}); err != nil {
-			return err
-		}
-	case err != nil:
+		_, err = s.cli.ServiceCreate(ctx, client.ServiceCreateOptions{Spec: spec})
+	case err == nil && res.Service.Spec.Labels[agentSpecLabel] != spec.Labels[agentSpecLabel]:
+		_, err = s.cli.ServiceUpdate(ctx, agentServiceName, client.ServiceUpdateOptions{Spec: spec, Version: res.Service.Version})
+	}
+	if err != nil {
 		return err
-	case res.Service.Spec.Labels[agentSpecLabel] != spec.Labels[agentSpecLabel]:
-		opts := client.ServiceUpdateOptions{Spec: spec}
-		opts.Version = res.Service.Version
-		if _, err := s.cli.ServiceUpdate(ctx, agentServiceName, opts); err != nil {
-			return err
-		}
 	}
 	s.removeStaleAgentSecrets(ctx, agentSecretName(a.Token))
 	return nil
@@ -96,19 +87,14 @@ func (s *Swarm) ensureAgentSecret(ctx context.Context, token string) (string, er
 	if err != nil {
 		return "", err
 	}
-	for _, sec := range res.Items {
-		if sec.Spec.Name == name {
-			return sec.ID, nil
-		}
+	if i := slices.IndexFunc(res.Items, func(sec swarm.Secret) bool { return sec.Spec.Name == name }); i >= 0 {
+		return res.Items[i].ID, nil
 	}
 	created, err := s.cli.SecretCreate(ctx, client.SecretCreateOptions{Spec: swarm.SecretSpec{
 		Annotations: swarm.Annotations{Name: name, Labels: map[string]string{"keel.agent": "token"}},
 		Data:        []byte(token),
 	}})
-	if err != nil {
-		return "", err
-	}
-	return created.ID, nil
+	return created.ID, err
 }
 
 func (s *Swarm) removeStaleAgentSecrets(ctx context.Context, keep string) {
@@ -128,10 +114,7 @@ func (s *Swarm) pinnedImage(ctx context.Context, image string) string {
 		return image
 	}
 	inspect, err := s.cli.ImageInspect(ctx, image)
-	if cerrdefs.IsNotFound(err) {
-		if s.PullImage(ctx, image) != nil {
-			return image
-		}
+	if cerrdefs.IsNotFound(err) && s.PullImage(ctx, image) == nil {
 		inspect, err = s.cli.ImageInspect(ctx, image)
 	}
 	if err != nil || len(inspect.RepoDigests) == 0 {

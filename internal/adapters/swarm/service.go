@@ -60,5 +60,3 @@ func engineArgs(image string, env []string) []string {
 	}
 	return nil
 }
-
-func imageEngine(image string) string { return string(domain.EngineOf(image)) }

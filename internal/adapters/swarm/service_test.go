@@ -3,6 +3,7 @@ package swarm
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/app"
@@ -94,21 +95,8 @@ func TestEngineArgs(t *testing.T) {
 		{"my-redis:1", []string{"REDIS_PASSWORD=p"}, nil},
 	}
 	for _, c := range cases {
-		got := engineArgs(c.image, c.env)
-		if len(got) != len(c.want) || (len(got) > 0 && got[2] != c.want[2]) {
+		if got := engineArgs(c.image, c.env); !slices.Equal(got, c.want) {
 			t.Errorf("engineArgs(%q, %v) = %v", c.image, c.env, got)
-		}
-	}
-}
-
-func TestImageEngine(t *testing.T) {
-	for in, want := range map[string]string{
-		"postgres:16": "postgres", "docker.io/library/mysql:8.4": "mysql", "mongo": "mongo",
-		"bitnami/redis:7": "redis", "redis@sha256:abc": "redis", "nginx": "", "ghcr.io/acme/postgres-tools:1": "",
-		"localhost:5000/redis": "redis",
-	} {
-		if got := imageEngine(in); got != want {
-			t.Errorf("imageEngine(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

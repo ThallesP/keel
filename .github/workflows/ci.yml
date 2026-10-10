@@ -146,8 +146,7 @@ jobs:
         run: |
           export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
           keel() { "$RUNNER_TEMP/keel" "$@"; }
-          # This account never opened the dashboard, so there is no organization yet: no projects,
-          # and the first project create founds it.
+          # Sign-up founded this account's organization; it has no project until the first create.
           keel project list | jq -e '.ok and .projects == []'
           keel project create "CI App" --link | jq -e '.ok and .project.slug == "ci-app" and .project.environments[0].name == "production" and .url == "http://" + env.KEEL_ADDR + "/p/ci-app"'
           ! keel project create ci-app > taken.json

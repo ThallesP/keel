@@ -47,7 +47,6 @@ var (
 	realtimeCloseTimeout = time.Second
 )
 
-// Env reads a variable with a default.
 func Env(key, def string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v

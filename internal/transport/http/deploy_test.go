@@ -167,7 +167,7 @@ func TestWorkerEventsRoute(t *testing.T) {
 // deployAPI serves the deploy operations with a fixed actor (the auth area resolves real ones).
 func deployAPI(a *app.App, actor domain.Actor) http.Handler {
 	mux := http.NewServeMux()
-	s := &Server{app: a, log: a.Log}
+	s := &Server{app: a}
 	s.registerDeploy(humago.New(mux, Config("test")))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))

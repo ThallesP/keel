@@ -63,7 +63,7 @@ func newIngressHarness(t *testing.T) *ingressHarness {
 	h.app = app.New(app.App{Store: store, Jobs: ingressNoJobs{}, Config: app.Config{PublicIP: "203.0.113.7", WorkerToken: "s3cret"}})
 	mux := http.NewServeMux()
 	humaAPI := humago.New(mux, Config("test"))
-	s := &Server{app: h.app, log: h.app.Log}
+	s := &Server{app: h.app}
 	s.registerIngress(humaAPI)
 	s.registerIngressRaw(mux)
 	h.h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -227,15 +227,6 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 	h.app.Config.WorkerToken = ""
 	if status, body, _ := h.do("POST", "/proxy/events", good, "Authorization", "Bearer "); status != 401 || body != "unauthorized" {
 		t.Fatalf("unset token: %d %q", status, body)
-	}
-}
-
-func TestIngressUTF16Length(t *testing.T) {
-	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, string([]byte{0xff, 'a'}): 2}
-	for in, want := range cases {
-		if got := ingressUTF16Len([]byte(in)); got != want {
-			t.Errorf("ingressUTF16Len(%q) = %d, want %d", in, got, want)
-		}
 	}
 }
 

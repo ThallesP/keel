@@ -83,9 +83,8 @@ func canvasPosition(p *api.Position) *domain.Position {
 }
 
 func (s *Server) registerCanvas(h huma.API) {
-	tags := []string{"canvas"}
 	operation := func(id, method, path, summary string) huma.Operation {
-		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary, Tags: tags}
+		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary, Tags: []string{"canvas"}}
 	}
 
 	// ── Projects ──

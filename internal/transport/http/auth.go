@@ -289,12 +289,11 @@ func (s *Server) registerAuth(h huma.API) {
 		{"approveDevice", "/api/auth/device/approve", "Approve a keel login you claimed", true},
 		{"denyDevice", "/api/auth/device/deny", "Deny a keel login you claimed", false},
 	} {
-		approve := d.approve
 		authOp(h, huma.Operation{
 			OperationID: d.id, Method: http.MethodPost, Path: d.path, Tags: authTags, Summary: d.summary,
 			Responses: authDeviceResponses(h, "400", "401", "403"),
 		}, func(ctx context.Context, in *authDeviceDecideInput) (*authSuccessOutput, error) {
-			if err := s.app.DecideDeviceLogin(ctx, ActorFrom(ctx), in.Body.UserCode, approve); err != nil {
+			if err := s.app.DecideDeviceLogin(ctx, ActorFrom(ctx), in.Body.UserCode, d.approve); err != nil {
 				return nil, err
 			}
 			return &authSuccessOutput{Body: api.AuthSuccess{Success: true}}, nil

@@ -6,9 +6,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 // Raw (non-Huma) routes. Owner: the ingress area.
@@ -35,7 +35,7 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 		ingressText(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	if len(body) > 3*ingressMaxBody || ingressUTF16Len(body) > ingressMaxBody {
+	if len(body) > 3*ingressMaxBody || domain.UTF16Len(string(body)) > ingressMaxBody {
 		ingressText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
@@ -53,7 +53,7 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	certError, _ := report["error"].(string)
 	if err := s.app.ReportCert(r.Context(), event, name, certError); err != nil {
-		s.log.Error("proxy cert report", "name", name, "err", err)
+		s.app.Log.Error("proxy cert report", "name", name, "err", err)
 		ingressText(w, http.StatusInternalServerError, "server error")
 		return
 	}
@@ -75,22 +75,6 @@ func ingressBearerOK(r *http.Request, expected string) bool {
 	copy(a, got)
 	copy(b, expected)
 	return subtle.ConstantTimeCompare(a, b)&lengthOK == 1
-}
-
-// ingressUTF16Len is the JavaScript length of the UTF-8 text b (invalid bytes count one each, as the
-// decoder's replacement characters would).
-func ingressUTF16Len(b []byte) int {
-	n := 0
-	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
-		b = b[size:]
-		if r >= 0x10000 {
-			n += 2
-		} else {
-			n++
-		}
-	}
-	return n
 }
 
 func ingressText(w http.ResponseWriter, status int, body string) {

@@ -245,8 +245,7 @@ func (s *Server) registerObservability(h huma.API) {
 		}
 		out := api.LocalTracingEnv{Env: lt.Env}
 		if lt.Reason != "" {
-			r := lt.Reason
-			out.Reason = &r
+			out.Reason = &lt.Reason
 		}
 		return &obsLocalTracingEnvOut{Body: out}, nil
 	})

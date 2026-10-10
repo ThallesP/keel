@@ -25,7 +25,7 @@ import (
 // bearer. Only such requests can be forged cross-site: a page on another origin cannot add an
 // Authorization header without a CORS preflight, which this server never grants.
 func authViaCookie(r *http.Request) bool {
-	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+	if authViaBearer(r) {
 		return false
 	}
 	c, err := r.Cookie(SessionCookie)
@@ -37,7 +37,6 @@ func authViaBearer(r *http.Request) bool {
 	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
-// authSafeMethod: methods that never change anything.
 func authSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
@@ -60,35 +59,21 @@ func (s *Server) authCSRFRefusal(r *http.Request) string {
 	if strings.EqualFold(u.Host, r.Host) {
 		return ""
 	}
-	if s.app != nil && s.app.Config.SiteURL != "" {
-		if site, err := url.Parse(s.app.Config.SiteURL); err == nil && site.Host != "" && strings.EqualFold(u.Host, site.Host) {
-			return ""
-		}
+	if site, err := url.Parse(s.app.Config.SiteURL); err == nil && site.Host != "" && strings.EqualFold(u.Host, site.Host) {
+		return ""
 	}
 	return domain.MsgInvalidOrigin
 }
 
-// authForbidden writes the CSRF refusal.
-func authForbidden(w http.ResponseWriter, msg string) {
-	writeProblem(w, &api.Problem{Status: http.StatusForbidden, Title: http.StatusText(http.StatusForbidden), Detail: msg, Code: domain.CodeForbidden})
-}
-
 // authSecure: cookies are Secure when the dashboard is served over https.
 func (s *Server) authSecure() bool {
-	return s.app != nil && strings.HasPrefix(strings.ToLower(s.app.Config.SiteURL), "https://")
-}
-
-func (s *Server) authNow() int64 {
-	if s.app != nil && s.app.Now != nil {
-		return s.app.Now()
-	}
-	return time.Now().UnixMilli()
+	return strings.HasPrefix(strings.ToLower(s.app.Config.SiteURL), "https://")
 }
 
 // authSessionCookie is keel_session carrying token until expiresAt (unix ms): HttpOnly,
 // SameSite=Lax, Path=/, Secure on https.
 func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
-	maxAge := int((expiresAt - s.authNow()) / 1000)
+	maxAge := int((expiresAt - s.app.Now()) / 1000)
 	if maxAge < 1 {
 		maxAge = -1
 	}
@@ -98,7 +83,6 @@ func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
 	}
 }
 
-// authClearedCookie removes keel_session.
 func (s *Server) authClearedCookie() http.Cookie {
 	return http.Cookie{
 		Name: SessionCookie, Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,

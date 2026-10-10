@@ -45,7 +45,7 @@ func canvasServe(t *testing.T) *canvasHTTP {
 	}
 	a := app.New(app.App{Store: store, Config: app.Config{PublicIP: "203.0.113.7"}})
 	c := &canvasHTTP{t: t, store: store, actor: domain.Actor{UserID: "u", OrganizationID: "org-a", Role: "member"}}
-	s := &Server{app: a, log: a.Log}
+	s := &Server{app: a}
 	mux := http.NewServeMux()
 	s.registerCanvas(humago.New(mux, Config("test")))
 	c.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

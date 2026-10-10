@@ -19,8 +19,7 @@ const InvalidateHeader = "Keel-Invalidate"
 // which can only concern the organization the request put them in. Runs inside withActor.
 func withInvalidations(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
+		if authSafeMethod(r.Method) {
 			next.ServeHTTP(w, r)
 			return
 		}

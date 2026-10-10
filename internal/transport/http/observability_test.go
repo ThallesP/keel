@@ -90,7 +90,7 @@ func newObsHarness(t *testing.T) *obsHarness {
 		Config: app.Config{Version: "test", SiteURL: "https://keel.example.com", WorkerToken: "worker-secret"},
 		Now:    func() int64 { return 1_791_460_812_345 },
 	})
-	s := &Server{app: a, log: a.Log}
+	s := &Server{app: a}
 	mux := http.NewServeMux()
 	s.Register(humago.New(mux, Config("test")))
 	s.registerRaw(mux)

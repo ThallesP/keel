@@ -55,7 +55,7 @@ type fakeAdapter struct {
 	closed bool
 }
 
-func (f *fakeAdapter) build(a *app.App, _ *slog.Logger) (func() error, error) {
+func (f *fakeAdapter) build(a *app.App) (func() error, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.app = a
@@ -273,7 +273,7 @@ func TestWireAdaptersReleasesOnFailure(t *testing.T) {
 	saved := adapters
 	adapters = []adapter{
 		{"first", first.build},
-		{"broken", func(*app.App, *slog.Logger) (func() error, error) { return nil, io.ErrUnexpectedEOF }},
+		{"broken", func(*app.App) (func() error, error) { return nil, io.ErrUnexpectedEOF }},
 	}
 	t.Cleanup(func() { adapters = saved })
 	_, err := wireAdapters(app.New(app.App{}), slog.New(slog.NewTextHandler(io.Discard, nil)))

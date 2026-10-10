@@ -22,19 +22,14 @@ func (s *Server) registerObservabilityRaw(mux *http.ServeMux) {
 	mux.HandleFunc("GET /agent/config", s.obsWorkerConfig)
 }
 
-// obsRelayRequest is what the relay reads of the HTTP request.
-func obsRelayRequest(r *http.Request) app.OTLPRequest {
-	return app.OTLPRequest{
+func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {
+	res := s.app.RelayTraces(r.Context(), app.OTLPRequest{
 		Authorization:   r.Header.Get("Authorization"),
 		ContentType:     r.Header.Get("Content-Type"),
 		ContentLength:   r.ContentLength,
 		ContentEncoding: r.Header.Get("Content-Encoding"),
 		Body:            r.Body,
-	}
-}
-
-func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {
-	res := s.app.RelayTraces(r.Context(), obsRelayRequest(r))
+	})
 	ct := res.ContentType
 	if ct == "" {
 		ct = "text/plain; charset=utf-8"
@@ -77,7 +72,7 @@ func (s *Server) obsWorkerConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.app.WorkerConfig(r.Context())
 	if err != nil {
-		s.log.Error("worker config", "err", err)
+		s.app.Log.Error("worker config", "err", err)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("internal error"))

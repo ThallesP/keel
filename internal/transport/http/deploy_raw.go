@@ -10,10 +10,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode/utf16"
-	"unicode/utf8"
 
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 // Raw (non-Huma) routes. Owner: the deploy area.
@@ -40,7 +39,7 @@ func (s *Server) workerEvents(w http.ResponseWriter, r *http.Request) {
 		deployWriteText(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	if len(body) > 3*workerEventsMaxBody || deployUTF16Length(body) > workerEventsMaxBody {
+	if len(body) > 3*workerEventsMaxBody || domain.UTF16Len(string(body)) > workerEventsMaxBody {
 		deployWriteText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
@@ -62,7 +61,7 @@ func deployWorkerAuthorized(r *http.Request, expected string) bool {
 	if expected == "" || !strings.HasPrefix(header, "Bearer ") {
 		return false
 	}
-	got := strings.TrimFunc(strings.TrimPrefix(header, "Bearer "), deployJSSpace)
+	got := domain.TrimJS(strings.TrimPrefix(header, "Bearer "))
 	a, b := sha256.Sum256([]byte(got)), sha256.Sum256([]byte(expected))
 	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
@@ -73,22 +72,6 @@ func deployWriteText(w http.ResponseWriter, status int, text string) {
 	_, _ = io.WriteString(w, text)
 }
 
-// deployUTF16Length is the JavaScript length of body decoded as UTF-8 (an invalid byte decodes to one
-// U+FFFD, one unit).
-func deployUTF16Length(body []byte) int {
-	n := 0
-	for len(body) > 0 {
-		r, size := utf8.DecodeRune(body)
-		body = body[size:]
-		if w := utf16.RuneLen(r); w > 0 {
-			n += w
-		} else {
-			n++
-		}
-	}
-	return n
-}
-
 var errDeployNotDockerEvent = errors.New("not a Docker event")
 
 // parseWorkerEvents is http.ts parseEvents + trim: text whose trimmed form starts with `[` is one
@@ -96,7 +79,7 @@ var errDeployNotDockerEvent = errors.New("not a Docker event")
 // Every element must be an object with `Type` and `Action` keys.
 func parseWorkerEvents(text string) ([]app.DockerEvent, error) {
 	var list []any
-	if strings.HasPrefix(strings.TrimFunc(text, deployJSSpace), "[") {
+	if strings.HasPrefix(domain.TrimJS(text), "[") {
 		var v any
 		if err := json.Unmarshal([]byte(text), &v); err != nil {
 			return nil, err
@@ -108,7 +91,7 @@ func parseWorkerEvents(text string) ([]app.DockerEvent, error) {
 		}
 	} else {
 		for _, line := range strings.Split(text, "\n") {
-			if strings.TrimFunc(line, deployJSSpace) == "" {
+			if domain.TrimJS(line) == "" {
 				continue
 			}
 			var v any
@@ -154,10 +137,7 @@ func deployJSString(v any) string {
 	case bool:
 		return strconv.FormatBool(x)
 	case float64:
-		switch {
-		case math.IsInf(x, 0) || math.IsNaN(x):
-			return strconv.FormatFloat(x, 'g', -1, 64)
-		case x == math.Trunc(x) && math.Abs(x) < 1e21:
+		if x == math.Trunc(x) && math.Abs(x) < 1e21 {
 			return strconv.FormatFloat(x, 'f', -1, 64)
 		}
 		return strconv.FormatFloat(x, 'g', -1, 64)
@@ -171,13 +151,4 @@ func deployJSString(v any) string {
 		return strings.Join(parts, ",")
 	}
 	return "[object Object]"
-}
-
-// deployJSSpace is ECMAScript's whitespace (String.prototype.trim).
-func deployJSSpace(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
-		return true
-	}
-	return r >= 0x2000 && r <= 0x200a
 }

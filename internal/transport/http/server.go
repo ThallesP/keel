@@ -19,25 +19,20 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Options configure the server beyond the app.
 type Options struct {
 	// Web is the built dashboard (apps/web/dist), served with an SPA fallback. nil in dev: Vite
 	// serves it and proxies the API here.
 	Web fs.FS
 	// WS is the WebSocket handler mounted at /api/ws (adapters/realtime). nil disables it.
-	WS http.Handler
-	// ConfigJS is the body of /config.js.
+	WS       http.Handler
 	ConfigJS string
 }
 
-// Server holds what handlers need.
 type Server struct {
 	app  *app.App
 	opts Options
-	log  *slog.Logger
 }
 
-// SessionCookie is the dashboard's session cookie.
 const SessionCookie = "keel_session"
 
 func init() {
@@ -82,17 +77,14 @@ func Config(version string) huma.Config {
 	return c
 }
 
-// New builds the whole HTTP handler.
 func New(a *app.App, opts Options) http.Handler {
-	s := &Server{app: a, opts: opts, log: a.Log}
+	s := &Server{app: a, opts: opts}
 	mux := http.NewServeMux()
-	humaAPI := humago.New(mux, Config(a.Config.Version))
-	s.Register(humaAPI)
+	s.Register(humago.New(mux, Config(a.Config.Version)))
 	s.registerRaw(mux)
 	return s.withActor(withInvalidations(mux))
 }
 
-// Register adds every Huma operation. `keel openapi` calls it with a nil app to print the spec.
 func (s *Server) Register(h huma.API) {
 	s.registerMeta(h)
 	s.registerAuth(h)
@@ -164,16 +156,16 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 			(viaCookie || r.Header.Get("Origin") != "" || r.Header.Get("Referer") != "")
 		if browserWrite {
 			if msg := s.authCSRFRefusal(r); msg != "" {
-				authForbidden(w, msg)
+				writeProblem(w, &api.Problem{Status: http.StatusForbidden, Title: http.StatusText(http.StatusForbidden), Detail: msg, Code: domain.CodeForbidden})
 				return
 			}
 		}
 		actor := domain.Actor{}
-		if token != "" && s.app != nil && s.app.Store != nil {
+		if token != "" {
 			a, err := s.app.ResolveSession(r.Context(), token)
 			if err != nil {
 				// Not "signed out": the dashboard would drop its cache and the CLI its saved token.
-				s.log.Error("resolve session", "err", err)
+				s.app.Log.Error("resolve session", "err", err)
 				writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
 					Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
 				return
@@ -203,7 +195,6 @@ func SessionToken(r *http.Request) string {
 	return ""
 }
 
-// ActorFrom is the caller of the current request.
 func ActorFrom(ctx context.Context) domain.Actor {
 	a, _ := ctx.Value(actorKey{}).(domain.Actor)
 	return a
@@ -285,7 +276,6 @@ func codeForStatus(status int) string {
 	return domain.CodeServerError
 }
 
-// writeProblem writes a problem from a raw (non-Huma) handler.
 func writeProblem(w http.ResponseWriter, p *api.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)

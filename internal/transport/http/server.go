@@ -82,7 +82,7 @@ func (s *Server) Register(h huma.API) {
 func OpenAPI(version string) *huma.OpenAPI {
 	mux := http.NewServeMux()
 	h := humago.New(mux, Config(version))
-	(&Server{app: &app.App{Config: app.Config{Version: version}}}).Register(h)
+	(&Server{app: app.New(app.App{Config: app.Config{Version: version}})}).Register(h)
 	return h.OpenAPI()
 }
 

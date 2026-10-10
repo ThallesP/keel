@@ -11,22 +11,17 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-func withExtra(t *testing.T, cmds ...*cobra.Command) {
-	t.Helper()
-	saved := slices.Clone(Extra)
-	for _, c := range cmds {
-		Extra = append(Extra, func() *cobra.Command { return c })
-	}
-	t.Cleanup(func() { Extra = saved })
-}
-
 func TestServerCommands(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	ran := false
-	withExtra(t,
-		&cobra.Command{Use: "fake-daemon", RunE: func(*cobra.Command, []string) error { ran = true; return nil }},
-		&cobra.Command{Use: "fake-broken", RunE: func(*cobra.Command, []string) error { return errors.New("boom") }},
-	)
+	saved := slices.Clone(Extra)
+	t.Cleanup(func() { Extra = saved })
+	for _, c := range []*cobra.Command{
+		{Use: "fake-daemon", RunE: func(*cobra.Command, []string) error { ran = true; return nil }},
+		{Use: "fake-broken", RunE: func(*cobra.Command, []string) error { return errors.New("boom") }},
+	} {
+		Extra = append(Extra, func() *cobra.Command { return c })
+	}
 
 	a := &app{}
 	if code := a.execute(context.Background(), []string{"fake-daemon", "--json"}); code != 0 || !ran {
@@ -40,7 +35,7 @@ func TestServerCommands(t *testing.T) {
 	}
 
 	root := (&app{}).root()
-	for _, name := range []string{"serve", "openapi", "fake-daemon"} {
+	for _, name := range []string{"serve", "openapi", "agent", "fake-daemon"} {
 		cmd, _, err := root.Find([]string{name})
 		if err != nil || !isServer(cmd) {
 			t.Errorf("%s: %v, server %v", name, err, isServer(cmd))

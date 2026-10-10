@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 
 	"golang.org/x/term"
@@ -122,9 +123,7 @@ func (p *Printer) Fail(e *Error) int {
 	}
 	if p.JSON {
 		body := map[string]any{"code": e.Code, "error": e.Message, "fix": e.Fix}
-		for k, v := range e.Extra {
-			body[k] = v
-		}
+		maps.Copy(body, e.Extra)
 		p.Out.Write(withOK(false, encode(body)))
 	}
 	return e.ExitCode()
@@ -143,7 +142,7 @@ func encode(v any) []byte {
 }
 
 func withOK(ok bool, obj []byte) []byte {
-	head := []byte(fmt.Sprintf(`{"ok":%t`, ok))
+	head := fmt.Appendf(nil, `{"ok":%t`, ok)
 	rest := bytes.TrimSpace(obj)[1:]
 	if rest[0] != '}' {
 		head = append(head, ',')

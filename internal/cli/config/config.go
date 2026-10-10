@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,8 +14,7 @@ type Config struct {
 	Current   string               `json:"current,omitempty"`
 	Instances map[string]*Instance `json:"instances,omitempty"`
 	Links     map[string]*Link     `json:"links,omitempty"`
-
-	path string
+	Path      string               `json:"-"`
 }
 
 type Instance struct {
@@ -58,8 +58,8 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Config{path: filepath.Join(dir, "config.json")}
-	data, err := os.ReadFile(c.path)
+	c := &Config{Instances: map[string]*Instance{}, Links: map[string]*Link{}, Path: filepath.Join(dir, "config.json")}
+	data, err := os.ReadFile(c.Path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil
 	}
@@ -72,33 +72,25 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
-func (c *Config) Path() string { return c.path }
-
 func (c *Config) Save() error {
-	if err := os.MkdirAll(filepath.Dir(c.path), 0o700); err != nil {
+	dir := filepath.Dir(c.Path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(c.path), ".config-*.json")
+	tmp, err := os.CreateTemp(dir, ".config-*.json")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+	_, err = tmp.Write(append(data, '\n'))
+	if err := errors.Join(err, tmp.Close()); err != nil {
 		return err
 	}
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), c.path)
+	return os.Rename(tmp.Name(), c.Path)
 }
 
 func (c *Config) LinkFor(dir string) (string, *Link) {
@@ -114,27 +106,9 @@ func (c *Config) LinkFor(dir string) (string, *Link) {
 	}
 }
 
-func (c *Config) SetLink(dir string, l *Link) {
-	if c.Links == nil {
-		c.Links = map[string]*Link{}
-	}
-	c.Links[dir] = l
-}
-
-func (c *Config) SetInstance(name string, inst *Instance) {
-	if c.Instances == nil {
-		c.Instances = map[string]*Instance{}
-	}
-	c.Instances[name] = inst
-}
-
 func (c *Config) RemoveInstance(name string) {
 	delete(c.Instances, name)
-	for dir, l := range c.Links {
-		if l.Instance == name {
-			delete(c.Links, dir)
-		}
-	}
+	maps.DeleteFunc(c.Links, func(_ string, l *Link) bool { return l.Instance == name })
 	if c.Current == name {
 		c.Current = ""
 	}

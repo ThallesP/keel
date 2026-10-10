@@ -14,12 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 var UserAgent = "keel-cli"
-
-var sharedHTTP = &http.Client{Timeout: 60 * time.Second}
 
 type Client struct {
 	URL   string
@@ -27,7 +26,9 @@ type Client struct {
 	HTTP  *http.Client
 }
 
-func New(url, token string) *Client { return &Client{URL: url, Token: token} }
+func New(url, token string) *Client {
+	return &Client{URL: url, Token: token, HTTP: &http.Client{Timeout: time.Minute}}
+}
 
 type reply struct {
 	status int
@@ -61,7 +62,7 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	resp, err := cmp.Or(c.HTTP, sharedHTTP).Do(req)
+	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -90,21 +91,11 @@ func (c *Client) call(ctx context.Context, method, path string, query url.Values
 	return nil
 }
 
-type problem struct {
-	Status int    `json:"status"`
-	Title  string `json:"title"`
-	Detail string `json:"detail"`
-	Code   string `json:"code"`
-	Slug   string `json:"slug"`
-	Errors []struct {
-		Message  string `json:"message"`
-		Location string `json:"location"`
-	} `json:"errors"`
-}
-
 func (c *Client) failure(what string, r *reply) *output.Error {
-	var p problem
-	_ = json.Unmarshal(r.body, &p)
+	var p api.Problem
+	if json.Unmarshal(r.body, &p) != nil || p.Code == "" {
+		return output.Errorf(output.CodeServer, "", "%s: HTTP %d: %s", what, r.status, snippet(r.body))
+	}
 	msg := p.Detail
 	if len(p.Errors) > 0 {
 		details := make([]string, len(p.Errors))
@@ -113,23 +104,10 @@ func (c *Client) failure(what string, r *reply) *output.Error {
 		}
 		msg = strings.TrimSpace(msg + ": " + strings.Join(details, "; "))
 	}
-	code := p.Code
-	if code == "" {
-		switch r.status {
-		case http.StatusUnauthorized:
-			code = output.CodeNotAuthenticated
-		case http.StatusTooManyRequests:
-			code = output.CodeRateLimited
-		}
-	}
-	if code == "" {
-		return output.Errorf(output.CodeServer, "", "%s: HTTP %d: %s", what, r.status, snippet(r.body))
-	}
-	msg = cmp.Or(msg, p.Title, http.StatusText(r.status))
-	return withFix(code, msg, p.Slug, c.URL, r.header)
+	return withFix(p.Code, cmp.Or(msg, p.Title), c.URL, r.header)
 }
 
-func withFix(code, msg, slug, webURL string, h http.Header) *output.Error {
+func withFix(code, msg, webURL string, h http.Header) *output.Error {
 	fix := ""
 	switch code {
 	case output.CodeNotAuthenticated:
@@ -147,13 +125,9 @@ func withFix(code, msg, slug, webURL string, h http.Header) *output.Error {
 	case output.CodeProjectNotFound:
 		fix = "keel project list"
 	case output.CodeNameTaken:
-		if slug == "" {
-			slug = takenProject(msg)
-		}
-		if slug != "" {
+		fix = "Pick another name; keel service list shows the taken ones"
+		if slug := takenProject(msg); slug != "" {
 			fix = "Pick another name, or use it: keel link " + slug
-		} else {
-			fix = "Pick another name; keel service list shows the taken ones"
 		}
 	case output.CodeRateLimited:
 		fix = "Wait a moment, then retry"
@@ -165,28 +139,22 @@ func withFix(code, msg, slug, webURL string, h http.Header) *output.Error {
 }
 
 func takenProject(msg string) string {
-	if s, ok := strings.CutPrefix(msg, `Project "`); ok {
-		if s, ok := strings.CutSuffix(s, `" already exists`); ok {
-			return s
-		}
+	s, isProject := strings.CutPrefix(msg, `Project "`)
+	slug, isTaken := strings.CutSuffix(s, `" already exists`)
+	if !isProject || !isTaken {
+		return ""
 	}
-	return ""
+	return slug
 }
 
 func translate(err error, webURL string) error {
-	var oe *output.Error
-	if errors.As(err, &oe) {
-		return oe
-	}
 	if errors.Is(err, context.Canceled) {
 		return output.Errorf(output.CodeCancelled, "", "Cancelled")
 	}
 	var ne net.Error
 	if errors.As(err, &ne) {
-		host := webURL
-		if u, perr := url.Parse(webURL); perr == nil && u.Host != "" {
-			host = u.Host
-		}
+		u, _ := url.Parse(webURL)
+		host := u.Host
 		if ne.Timeout() {
 			return output.Errorf(output.CodeTimeout, "Retry; check that "+host+" is up",
 				"Timed out talking to %s", host)
@@ -208,12 +176,8 @@ func rootCause(err error) error {
 	}
 }
 
-func notAuthenticated(url, msg string) *output.Error {
-	fix := "keel login <dashboard-url>, or set KEEL_URL and KEEL_TOKEN"
-	if url != "" {
-		fix = "keel login " + url
-	}
-	return &output.Error{Code: output.CodeNotAuthenticated, Message: msg, Fix: fix}
+func notAuthenticated(webURL, msg string) *output.Error {
+	return &output.Error{Code: output.CodeNotAuthenticated, Message: msg, Fix: "keel login " + webURL}
 }
 
 func snippet(b []byte) string {

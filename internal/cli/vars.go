@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
@@ -172,13 +174,9 @@ func (a *app) varDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			have := map[string]bool{}
-			for _, v := range existing {
-				have[v.Key] = true
-			}
 			keys := args[1:]
 			for _, key := range keys {
-				if !have[key] {
+				if !slices.ContainsFunc(existing, func(v api.VariableView) bool { return v.Key == key }) {
 					return output.Errorf(output.CodeVariableNotFound, "keel var list "+svc.Name,
 						"%s has no variable %s; nothing was deleted", svc.Name, key)
 				}

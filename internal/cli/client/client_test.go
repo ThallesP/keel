@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ThallesP/keel/internal/cli/output"
 )
@@ -299,17 +298,7 @@ func TestDeleteService(t *testing.T) {
 }
 
 func TestTimeJSON(t *testing.T) {
-	var got struct{ A, B, C Time }
-	if err := json.Unmarshal([]byte(`{"A":1791460800123,"B":1791460800123.9,"C":"2026-10-08T12:00:00.123Z"}`), &got); err != nil {
-		t.Fatal(err)
-	}
-	want := time.Date(2026, 10, 8, 12, 0, 0, 123_000_000, time.UTC)
-	for _, v := range []Time{got.A, got.B, got.C} {
-		if !v.Equal(want) {
-			t.Errorf("%v, want %v", v, want)
-		}
-	}
-	if b, _ := json.Marshal(got.A); string(b) != `"2026-10-08T12:00:00.123Z"` {
+	if b, _ := json.Marshal(Millis(1791460800123)); string(b) != `"2026-10-08T12:00:00.123Z"` {
 		t.Errorf("marshal %s", b)
 	}
 }

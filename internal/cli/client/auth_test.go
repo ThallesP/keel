@@ -12,7 +12,7 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-func fakeDevice(t *testing.T, path string, status int, body string) (*Client, *map[string]string) {
+func fakeDevice(t *testing.T, path string, status int, body string) (*Client, map[string]string) {
 	t.Helper()
 	got := map[string]string{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,11 +23,12 @@ func fakeDevice(t *testing.T, path string, status int, body string) (*Client, *m
 			t.Errorf("device request carries %q; it must not", r.Header.Get("Authorization"))
 		}
 		json.NewDecoder(r.Body).Decode(&got)
+		w.Header().Set("Retry-After", "30")
 		w.WriteHeader(status)
 		w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return New(srv.URL, ""), &got
+	return New(srv.URL, ""), got
 }
 
 func TestStartLogin(t *testing.T) {
@@ -38,8 +39,8 @@ func TestStartLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if (*sent)["client_id"] != "keel-cli" {
-		t.Errorf("client_id = %q", (*sent)["client_id"])
+	if sent["client_id"] != "keel-cli" {
+		t.Errorf("client_id = %q", sent["client_id"])
 	}
 	if p.DeviceCode != "dev" || p.UserCode != "ABCDEFGH" || p.Interval != 5 ||
 		p.URL != "https://keel.test/device?user_code=ABCDEFGH" {
@@ -81,9 +82,6 @@ func TestPollLogin(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, sent := fakeDevice(t, "/api/auth/device/token", tc.status, tc.body)
-			if tc.status == 429 {
-				c.HTTP = &http.Client{Transport: retryAfter{"30"}}
-			}
 			token, slowDown, err := c.PollLogin(context.Background(), "dev")
 			if token != tc.token || slowDown != tc.slowDown || output.CodeOf(err) != tc.code {
 				t.Errorf("got %q, %v, %v; want %q, %v, %s", token, slowDown, err, tc.token, tc.slowDown, tc.code)
@@ -91,22 +89,12 @@ func TestPollLogin(t *testing.T) {
 			if tc.fix != "" && err.(*output.Error).Fix != tc.fix {
 				t.Errorf("fix = %q, want %q", err.(*output.Error).Fix, tc.fix)
 			}
-			if (*sent)["device_code"] != "dev" || (*sent)["client_id"] != "keel-cli" ||
-				(*sent)["grant_type"] != "urn:ietf:params:oauth:grant-type:device_code" {
-				t.Errorf("sent %v", *sent)
+			if sent["device_code"] != "dev" || sent["client_id"] != "keel-cli" ||
+				sent["grant_type"] != "urn:ietf:params:oauth:grant-type:device_code" {
+				t.Errorf("sent %v", sent)
 			}
 		})
 	}
-}
-
-type retryAfter struct{ seconds string }
-
-func (r retryAfter) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := http.DefaultTransport.RoundTrip(req)
-	if err == nil {
-		resp.Header.Set("Retry-After", r.seconds)
-	}
-	return resp, err
 }
 
 func TestMe(t *testing.T) {

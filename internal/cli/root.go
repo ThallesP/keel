@@ -22,8 +22,6 @@ var Version = "dev"
 
 var Extra []func() *cobra.Command
 
-const serverAnnotation = "keel.server"
-
 type app struct {
 	out          *output.Printer
 	json         bool
@@ -72,19 +70,18 @@ func (a *app) execute(ctx context.Context, args []string) int {
 		return exit.code
 	}
 	var oe *output.Error
-	if isServer(cmd) && !errors.As(err, &oe) {
+	switch {
+	case errors.As(err, &oe):
+	case isServer(cmd):
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return output.ExitError
-	}
-	if a.out == nil {
-		a.out = output.New(a.jsonMode() || jsonArg(args))
-	}
-	switch {
-	case oe != nil, errors.As(err, &oe):
 	case ctx.Err() != nil:
 		oe = output.Errorf(output.CodeCancelled, "", "Cancelled")
 	default:
 		oe = usage(cmd, "%v", err)
+	}
+	if a.out == nil {
+		a.out = output.New(a.jsonMode() || jsonArg(args))
 	}
 	return a.out.Fail(oe)
 }
@@ -132,10 +129,6 @@ func (a *app) root() *cobra.Command {
 		server = append(server, mk())
 	}
 	for _, cmd := range server {
-		if cmd.Annotations == nil {
-			cmd.Annotations = map[string]string{}
-		}
-		cmd.Annotations[serverAnnotation] = "true"
 		cmd.GroupID = "server"
 		root.AddCommand(cmd)
 	}
@@ -161,12 +154,12 @@ func serverCommands() []*cobra.Command {
 			return enc.Encode(transport.OpenAPI(Version))
 		},
 	}
-	return []*cobra.Command{serveCmd, openapiCmd}
+	return []*cobra.Command{serveCmd, openapiCmd, agentCmd()}
 }
 
 func isServer(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if c.Annotations[serverAnnotation] != "" {
+		if c.GroupID == "server" {
 			return true
 		}
 	}
@@ -192,12 +185,13 @@ func (a *app) confirm(question string) bool {
 func jsonArg(args []string) bool {
 	on := false
 	for _, s := range args {
-		if s == "--" {
-			break
-		}
-		if s == "--json" {
+		v, hasValue := strings.CutPrefix(s, "--json=")
+		switch {
+		case s == "--":
+			return on
+		case s == "--json":
 			on = true
-		} else if v, ok := strings.CutPrefix(s, "--json="); ok {
+		case hasValue:
 			on, _ = strconv.ParseBool(v)
 		}
 	}

@@ -7,8 +7,7 @@ import (
 )
 
 func TestLinkForWalksUp(t *testing.T) {
-	c := &Config{}
-	c.SetLink("/work/app", &Link{Instance: "dev", Project: "api"})
+	c := &Config{Links: map[string]*Link{"/work/app": {Instance: "dev", Project: "api"}}}
 	if dir, l := c.LinkFor("/work/app/src/deep"); dir != "/work/app" || l.Project != "api" {
 		t.Errorf("LinkFor(child) = %q, %v", dir, l)
 	}
@@ -23,13 +22,13 @@ func TestSaveIsPrivateAndRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.SetInstance("dev", &Instance{URL: "https://keel.test", Token: "secret"})
-	c.SetLink("/work/app", &Link{Instance: "dev", Project: "api"})
+	c.Instances["dev"] = &Instance{URL: "https://keel.test", Token: "secret"}
+	c.Links["/work/app"] = &Link{Instance: "dev", Project: "api"}
 	c.Current = "dev"
 	if err := c.Save(); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(c.Path())
+	info, err := os.Stat(c.Path)
 	if err != nil {
 		t.Fatal(err)
 	}

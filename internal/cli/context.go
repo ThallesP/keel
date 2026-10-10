@@ -22,11 +22,11 @@ type session struct {
 	name string
 	inst *config.Instance
 	api  *client.Client
-	user *client.User
-	org  *client.Organization
+	user *api.User
+	org  *api.Organization
 }
 
-func (a *app) loadConfig() (*config.Config, error) {
+func loadConfig() (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, output.Errorf(output.CodeConfig, "Fix or delete the file, then keel login again",
@@ -37,7 +37,7 @@ func (a *app) loadConfig() (*config.Config, error) {
 
 func saveConfig(cfg *config.Config) error {
 	if err := cfg.Save(); err != nil {
-		return output.Errorf(output.CodeConfig, "Check the permissions of "+cfg.Path(),
+		return output.Errorf(output.CodeConfig, "Check the permissions of "+cfg.Path,
 			"Can't write the config file: %v", err)
 	}
 	return nil
@@ -79,7 +79,7 @@ func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 }
 
 func (a *app) connect(ctx context.Context) (*session, error) {
-	cfg, err := a.loadConfig()
+	cfg, err := loadConfig()
 	if err != nil {
 		return nil, err
 	}

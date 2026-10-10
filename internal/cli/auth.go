@@ -10,16 +10,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/config"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 type identity struct {
-	Instance     string               `json:"instance"`
-	URL          string               `json:"url"`
-	User         *client.User         `json:"user"`
-	Organization *client.Organization `json:"organization"`
+	Instance     string            `json:"instance"`
+	URL          string            `json:"url"`
+	User         *api.User         `json:"user"`
+	Organization *api.Organization `json:"organization"`
 }
 
 type loginResult struct {
@@ -68,7 +69,7 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 			if wait && noWait {
 				return usage(cmd, "--wait and --no-wait are exclusive")
 			}
-			cfg, err := a.loadConfig()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -76,26 +77,27 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 			if err != nil {
 				return err
 			}
-			cfg.SetInstance(name, inst)
+			cfg.Instances[name] = inst
 			cfg.Current = name
 			c := client.New(inst.URL, "")
 
-			var token string
 			if inst.Token != "" {
 				s, err := dial(ctx, cfg, name, inst)
-				if output.CodeOf(err) == output.CodeNotAuthenticated {
-					inst.Token = ""
-				} else if err != nil {
-					return err
-				} else {
+				switch {
+				case err == nil:
 					return a.loggedIn(s)
+				case output.CodeOf(err) != output.CodeNotAuthenticated:
+					return err
 				}
+				inst.Token = ""
 			}
+			var token string
 			if p := inst.Pending; p != nil && !p.Expired() {
 				token, _, err = c.PollLogin(ctx, p.DeviceCode)
-				if output.CodeOf(err) == output.CodeNotAuthenticated {
+				switch {
+				case output.CodeOf(err) == output.CodeNotAuthenticated:
 					inst.Pending = nil
-				} else if err != nil {
+				case err != nil:
 					return err
 				}
 			}
@@ -110,7 +112,7 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 
 			if token == "" {
 				p := inst.Pending
-				if !wait && (noWait || a.out.JSON || !output.IsTerminal(os.Stdin)) {
+				if !wait && (noWait || !a.interactive()) {
 					next := "Send approvalUrl to a person to approve, then carry on: the next keel command finishes the login (or wait for it: keel login --wait)"
 					a.out.Result(pendingResult{"pending", name, inst.URL, p.URL, prettyCode(p.UserCode), p.ExpiresAt, next},
 						func(w io.Writer) {
@@ -225,7 +227,7 @@ func (a *app) logoutCmd() *cobra.Command {
 			if os.Getenv("KEEL_URL") != "" {
 				return usage(cmd, "KEEL_URL is set; logout only removes saved logins (unset KEEL_URL and KEEL_TOKEN instead)")
 			}
-			cfg, err := a.loadConfig()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -264,13 +266,13 @@ func (a *app) whoamiCmd() *cobra.Command {
 			}
 			id := s.identity()
 			a.out.Result(id, func(w io.Writer) {
+				org := "none yet"
+				if o := id.Organization; o != nil {
+					org = o.Name + " (" + o.Role + ")"
+				}
 				t := table(w)
 				fmt.Fprintf(t, "User\t%s (%s)\n", id.User.Email, id.User.Name)
-				if o := id.Organization; o != nil {
-					fmt.Fprintf(t, "Organization\t%s (%s)\n", o.Name, o.Role)
-				} else {
-					fmt.Fprintf(t, "Organization\tnone yet\n")
-				}
+				fmt.Fprintf(t, "Organization\t%s\n", org)
 				fmt.Fprintf(t, "Instance\t%s  %s\n", id.Instance, id.URL)
 				t.Flush()
 			})
@@ -287,7 +289,7 @@ func (a *app) tokenCmd() *cobra.Command {
 to run keel where you can't log in, such as CI. It is a full session: treat it as a password.`,
 		Args: args(0, 0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := a.loadConfig()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}

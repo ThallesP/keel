@@ -71,13 +71,13 @@ func pendingInstance(t *testing.T, expiresIn time.Duration, polls ...string) (*c
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.SetInstance("keel.test", &config.Instance{
+	cfg.Instances["keel.test"] = &config.Instance{
 		URL: f.URL,
 		Pending: &config.PendingLogin{
 			DeviceCode: "dev", UserCode: "ABCDEFGH", URL: f.URL + "/device?user_code=ABCDEFGH",
-			ExpiresAt: time.Now().Add(expiresIn), Interval: 0,
+			ExpiresAt: time.Now().Add(expiresIn),
 		},
-	})
+	}
 	if err := cfg.Save(); err != nil {
 		t.Fatal(err)
 	}

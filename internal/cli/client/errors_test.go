@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,8 +39,6 @@ func TestProblemCodes(t *testing.T) {
 			output.CodeProjectNotFound, "Environment not found", "keel project list", ""},
 		{409, `{"status":409,"detail":"Project \"acme-api\" already exists","code":"NAME_TAKEN"}`,
 			output.CodeNameTaken, `Project "acme-api" already exists`, "Pick another name, or use it: keel link acme-api", ""},
-		{409, `{"status":409,"detail":"Project \"acme-api\" already exists","code":"NAME_TAKEN","slug":"acme"}`,
-			output.CodeNameTaken, `Project "acme-api" already exists`, "Pick another name, or use it: keel link acme", ""},
 		{409, `{"status":409,"detail":"\"api\" is already taken","code":"NAME_TAKEN"}`,
 			output.CodeNameTaken, `"api" is already taken`, "Pick another name; keel service list shows the taken ones", ""},
 		{422, `{"status":422,"detail":"Image must look like repo/name:tag","code":"INVALID_INPUT"}`,
@@ -62,8 +59,7 @@ func TestProblemCodes(t *testing.T) {
 			output.CodeServer, "Something went wrong on the server", "", ""},
 		{409, `{"status":409,"detail":"Brand new","code":"SOMETHING_NEW"}`, "SOMETHING_NEW", "Brand new", "", ""},
 
-		{401, ``, output.CodeNotAuthenticated, "Session expired or signed out", "keel login " + url, ""},
-		{429, `slow down`, output.CodeRateLimited, "Too Many Requests", "Wait a moment, then retry", ""},
+		{401, ``, output.CodeServer, "GET /api/projects: HTTP 401: ", "", ""},
 		{502, `<html>Bad Gateway</html>`, output.CodeServer, "GET /api/projects: HTTP 502: <html>Bad Gateway</html>", "", ""},
 	} {
 		h := http.Header{}
@@ -99,9 +95,6 @@ func TestTransportErrors(t *testing.T) {
 	if oe, ok := err.(*output.Error); !ok || oe.Code != output.CodeNetwork ||
 		oe.Fix != "Check the URL, and that this machine is on the install's tailnet" {
 		t.Errorf("refused: %#v", err)
-	}
-	if err := translate(fmt.Errorf("wrapped: %w", &output.Error{Code: output.CodeUsage}), ""); output.CodeOf(err) != output.CodeUsage {
-		t.Errorf("an *output.Error passes through: %v", err)
 	}
 	if err := translate(errors.New("odd"), ""); output.CodeOf(err) != output.CodeServer {
 		t.Errorf("anything else: %v", err)

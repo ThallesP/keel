@@ -64,12 +64,10 @@ func (c *Client) Variables(ctx context.Context, serviceID string) ([]api.Variabl
 func (c *Client) CreateService(ctx context.Context, environmentID, name, image string, port, replicas *int) (*Service, error) {
 	in := api.CreateNodeRequest{Type: "service", Name: name, Image: &image}
 	if port != nil {
-		p := float64(*port)
-		in.Port = &p
+		in.Port = new(float64(*port))
 	}
 	if replicas != nil {
-		r := float64(*replicas)
-		in.Replicas = &r
+		in.Replicas = new(float64(*replicas))
 	}
 	var created api.CreatedNode
 	if err := c.call(ctx, http.MethodPost, apiPath("/api/environments/%s/nodes", environmentID), nil, in, &created); err != nil {
@@ -138,8 +136,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 			Spans: int(t.Spans), Errors: int(t.Errors), Error: t.Error, Local: t.Local,
 		}
 		if t.HTTPStatus != nil {
-			s := int(*t.HTTPStatus)
-			out.Traces[i].HTTPStatus = &s
+			out.Traces[i].HTTPStatus = new(int(*t.HTTPStatus))
 		}
 	}
 	return out, nil

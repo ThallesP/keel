@@ -7,11 +7,6 @@ import (
 	"github.com/ThallesP/keel/internal/api"
 )
 
-type (
-	User         = api.User
-	Organization = api.Organization
-)
-
 type Service struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -112,8 +107,7 @@ func deploymentOf(d *api.Deployment) *Deployment {
 		Steps: make([]Step, len(d.Steps)), Log: make([]LogEntry, len(d.Log)),
 	}
 	if d.FinishedAt != nil {
-		t := Millis(*d.FinishedAt)
-		out.FinishedAt = &t
+		out.FinishedAt = new(Millis(*d.FinishedAt))
 	}
 	for i, s := range d.Steps {
 		out.Steps[i] = Step{ServiceID: s.NodeID, Label: s.Label, Status: s.Status}
@@ -127,24 +121,6 @@ func deploymentOf(d *api.Deployment) *Deployment {
 type Time struct{ time.Time }
 
 func Millis(ms int64) Time { return Time{time.UnixMilli(ms).UTC()} }
-
-func (t *Time) UnmarshalJSON(b []byte) error {
-	var ms float64
-	if err := json.Unmarshal(b, &ms); err == nil {
-		*t = Millis(int64(ms))
-		return nil
-	}
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return err
-	}
-	t.Time = parsed.UTC()
-	return nil
-}
 
 func (t Time) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.UTC().Format("2006-01-02T15:04:05.000Z07:00"))

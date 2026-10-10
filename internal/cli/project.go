@@ -98,9 +98,9 @@ also links this directory to it, as keel link does.`,
 			dir := ""
 			if link {
 				dir = cwd()
-				s.cfg.SetLink(dir, &config.Link{Instance: s.name, Project: p.Slug})
+				s.cfg.Links[dir] = &config.Link{Instance: s.name, Project: p.Slug}
 				if err := s.cfg.Save(); err != nil {
-					return output.Errorf(output.CodeConfig, "Check the permissions of "+s.cfg.Path(),
+					return output.Errorf(output.CodeConfig, "Check the permissions of "+s.cfg.Path,
 						"Created project %s, but can't link it: Can't write the config file: %v", p.Slug, err)
 				}
 			}
@@ -150,7 +150,7 @@ when there is exactly one. The link lives in the config file, not in the directo
 				return err
 			}
 			dir := cwd()
-			s.cfg.SetLink(dir, &config.Link{Instance: s.name, Project: p.Slug})
+			s.cfg.Links[dir] = &config.Link{Instance: s.name, Project: p.Slug}
 			if err := saveConfig(s.cfg); err != nil {
 				return err
 			}
@@ -172,7 +172,7 @@ func (a *app) unlinkCmd() *cobra.Command {
 		Short: "Remove the link of this directory (or the closest linked parent)",
 		Args:  args(0, 0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := a.loadConfig()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -235,15 +235,15 @@ func (a *app) statusCmd() *cobra.Command {
 				LatestDeployment *client.Deployment     `json:"latestDeployment"`
 			}{s.name, s.inst.URL, refOf(p), *env, summary.PendingChanges, summary.Servers, services, latest},
 				func(w io.Writer) {
+					staged := "nothing"
+					if n := summary.PendingChanges; n > 0 {
+						staged = fmt.Sprintf("%d %s → keel ship", n, plural(n, "service", "services"))
+					}
 					t := table(w)
 					fmt.Fprintf(t, "Project\t%s · %s\n", p.Slug, env.Name)
 					fmt.Fprintf(t, "Instance\t%s  %s\n", s.name, s.inst.URL)
 					fmt.Fprintf(t, "Servers\t%d\n", summary.Servers)
-					if n := summary.PendingChanges; n > 0 {
-						fmt.Fprintf(t, "Staged\t%d %s → keel ship\n", n, plural(n, "service", "services"))
-					} else {
-						fmt.Fprintf(t, "Staged\tnothing\n")
-					}
+					fmt.Fprintf(t, "Staged\t%s\n", staged)
 					if latest != nil {
 						fmt.Fprintf(t, "Last deploy\t%s · %s · %s\n", latest.Status, latest.Message, ago(latest.StartedAt.Time))
 					}

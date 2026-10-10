@@ -113,15 +113,7 @@ Asks first with a terminal; without one (or with --json) it needs --yes.`,
 				return usage(cmd, "Deleting %s can't be undone: pass --yes to confirm", args[0])
 			}
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}

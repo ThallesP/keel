@@ -13,7 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ThallesP/keel/internal/cli/client"
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
@@ -41,22 +41,14 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
   keel run api -- python -m app
   keel run worker -- go run ./cmd/worker`,
 		Args: func(cmd *cobra.Command, args []string) error {
-			if at := cmd.ArgsLenAtDash(); at != 1 || len(args) < 2 {
+			if cmd.ArgsLenAtDash() != 1 || len(args) < 2 {
 				return usage(cmd, "usage: %s (the command goes after --)", cmd.UseLine())
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -68,7 +60,7 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 			if err != nil {
 				return err
 			}
-			endpoint := strings.TrimRight(s.inst.URL, "/") + "/otlp"
+			endpoint := s.inst.URL + "/otlp"
 			environ, skipped := runEnv(os.Environ(), vars, tracing, endpoint)
 
 			if len(skipped) > 0 {
@@ -85,7 +77,7 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 	}
 }
 
-func runEnv(shell []string, vars []client.Variable, tracing map[string]string, endpoint string) ([]string, []string) {
+func runEnv(shell []string, vars []api.VariableView, tracing map[string]string, endpoint string) ([]string, []string) {
 	out := slices.Clone(shell)
 	set := map[string]bool{}
 	for _, kv := range shell {
@@ -121,12 +113,8 @@ func runEnv(shell []string, vars []client.Variable, tracing map[string]string, e
 	return out, skipped
 }
 
-func run(argv []string, environ []string) error {
-	path, err := exec.LookPath(argv[0])
-	if err != nil {
-		return output.Errorf(output.CodeUsage, "Check the command after --", "Can't run %s: %v", argv[0], err)
-	}
-	c := exec.Command(path, argv[1:]...)
+func run(argv, environ []string) error {
+	c := exec.Command(argv[0], argv[1:]...)
 	c.Env = environ
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 
@@ -157,7 +145,7 @@ func run(argv []string, environ []string) error {
 			}
 		}
 	}()
-	err = c.Wait()
+	err := c.Wait()
 	close(done)
 
 	var ee *exec.ExitError

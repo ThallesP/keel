@@ -10,11 +10,6 @@ import (
 type (
 	User         = api.User
 	Organization = api.Organization
-	Project      = api.ProjectSummary
-	Environment  = api.ProjectEnvironment
-	Summary      = api.EnvironmentSummary
-	Variable     = api.VariableView
-	TracingVar   = api.TracingEnvVar
 )
 
 type Service struct {
@@ -81,9 +76,9 @@ type Traces struct {
 }
 
 type Tracing struct {
-	Enabled bool         `json:"enabled"`
-	Store   string       `json:"store"`
-	Env     []TracingVar `json:"env"`
+	Enabled bool                `json:"enabled"`
+	Store   string              `json:"store"`
+	Env     []api.TracingEnvVar `json:"env"`
 }
 
 type Deployment struct {

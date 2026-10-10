@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"slices"
@@ -11,8 +12,6 @@ import (
 
 	"github.com/ThallesP/keel/internal/cli/client"
 )
-
-var traceRanges = []string{"15m", "1h", "24h", "7d"}
 
 func (a *app) tracesCmd() *cobra.Command {
 	var since, search string
@@ -30,7 +29,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 		Args: args(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			if !slices.Contains(traceRanges, since) {
+			if !slices.Contains([]string{"15m", "1h", "24h", "7d"}, since) {
 				return usage(cmd, "--since must be one of 15m, 1h, 24h, 7d")
 			}
 			s, err := a.connect(ctx)
@@ -43,7 +42,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 			}
 			var name, id string
 			if len(args) == 1 {
-				svc, _, err := s.service(ctx, env.ID, args[0])
+				svc, err := s.service(ctx, env.ID, args[0])
 				if err != nil {
 					return err
 				}
@@ -58,12 +57,8 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 				Since   string `json:"since"`
 				*client.Traces
 			}{name, since, traces}, func(w io.Writer) {
-				of := "this project"
-				if name != "" {
-					of = name
-				}
 				if len(traces.Traces) == 0 {
-					fmt.Fprintf(a.out.Err, "No requests from %s in the last %s\n", of, since)
+					fmt.Fprintf(a.out.Err, "No requests from %s in the last %s\n", cmp.Or(name, "this project"), since)
 					return
 				}
 				t := table(w)
@@ -73,13 +68,13 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 					if r.Local {
 						local = "local"
 					}
-					fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", r.Start.Local().Format("2006-01-02 15:04:05"),
+					fmt.Fprintf(t, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", r.Start.Local().Format(time.DateTime),
 						dash(r.Service), r.Name, requestStatus(r), millis(&r.DurationMs), r.Spans, local)
 				}
 				t.Flush()
 				st := traces.Stats
 				a.out.Progress("%d %s in the last %s · %d failed · p50 %s · p95 %s · trace ids with --json",
-					st.Requests, plural(int(st.Requests), "request", "requests"), since, st.Errors,
+					st.Requests, plural(st.Requests, "request", "requests"), since, st.Errors,
 					millis(st.P50Ms), millis(st.P95Ms))
 			})
 			return nil
@@ -93,7 +88,7 @@ OTLP relay to the organization's Axiom traces dataset. Without one, this fails w
 func requestStatus(r client.TraceSummary) string {
 	switch {
 	case r.HTTPStatus != nil:
-		return strconv.Itoa(int(*r.HTTPStatus))
+		return strconv.Itoa(*r.HTTPStatus)
 	case r.Error:
 		return "error"
 	}
@@ -109,5 +104,5 @@ func millis(ms *float64) string {
 	case *ms < 1000:
 		return fmt.Sprintf("%.1fms", *ms)
 	}
-	return (time.Duration(*ms * float64(time.Millisecond))).Round(10 * time.Millisecond).String()
+	return time.Duration(*ms * float64(time.Millisecond)).Round(10 * time.Millisecond).String()
 }

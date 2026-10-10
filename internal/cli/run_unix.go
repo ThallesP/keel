@@ -13,9 +13,5 @@ func ownGroup(c *exec.Cmd) {
 }
 
 func signalGroup(p *os.Process, sig os.Signal) error {
-	s, ok := sig.(syscall.Signal)
-	if !ok {
-		return p.Signal(sig)
-	}
-	return syscall.Kill(-p.Pid, s)
+	return syscall.Kill(-p.Pid, sig.(syscall.Signal))
 }

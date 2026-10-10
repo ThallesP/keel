@@ -51,7 +51,7 @@ dashboard.`,
 				envID = env.ID
 			}
 			if len(args) == 1 {
-				svc, _, err := s.service(ctx, env.ID, args[0])
+				svc, err := s.service(ctx, env.ID, args[0])
 				if err != nil {
 					return err
 				}
@@ -75,9 +75,18 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 		Short: "Whether tracing is on for a service, and the variables it gets",
 		Args:  args(1, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, tracing, err := a.tracingOf(cmd, args[0])
+			ctx := cmd.Context()
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
+			}
+			tracing, err := s.api.Tracing(ctx, svc.ID)
+			if err != nil {
+				return err
+			}
+			if tracing == nil {
+				return output.Errorf(output.CodeInvalidInput, "Pick a service: keel service list",
+					"%s is a %s; only services can be traced", svc.Name, svc.Type)
 			}
 			a.out.Result(struct {
 				Service string `json:"service"`
@@ -131,15 +140,7 @@ with traces (TRACES_OFF otherwise).`,
 		Args: args(1, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -165,29 +166,4 @@ with traces (TRACES_OFF otherwise).`,
 			return nil
 		},
 	}
-}
-
-func (a *app) tracingOf(cmd *cobra.Command, name string) (*client.Service, *client.Tracing, error) {
-	ctx := cmd.Context()
-	s, err := a.connect(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	_, env, err := a.project(ctx, s)
-	if err != nil {
-		return nil, nil, err
-	}
-	svc, _, err := s.service(ctx, env.ID, name)
-	if err != nil {
-		return nil, nil, err
-	}
-	tracing, err := s.api.Tracing(ctx, svc.ID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if tracing == nil {
-		return nil, nil, output.Errorf(output.CodeInvalidInput, "Pick a service: keel service list",
-			"%s is a %s; only services can be traced", svc.Name, svc.Type)
-	}
-	return svc, tracing, nil
 }

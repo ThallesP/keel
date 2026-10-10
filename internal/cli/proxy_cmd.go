@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"cmp"
 	"os"
 	"strings"
 
@@ -25,9 +26,7 @@ func proxyCommand() *cobra.Command {
 			"the admin socket (KEEL_PROXY_SOCKET).",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if opts.Socket == "" {
-				opts.Socket = strings.TrimSpace(os.Getenv("KEEL_PROXY_SOCKET"))
-			}
+			opts.Socket = cmp.Or(opts.Socket, strings.TrimSpace(os.Getenv("KEEL_PROXY_SOCKET")))
 			return proxy.Run(cmd.Context(), opts)
 		},
 	}

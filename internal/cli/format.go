@@ -60,13 +60,6 @@ func dash(s string) string {
 	return s
 }
 
-func mark(on bool) string {
-	if on {
-		return "*"
-	}
-	return ""
-}
-
 func plural(n int, one, many string) string {
 	if n == 1 {
 		return one

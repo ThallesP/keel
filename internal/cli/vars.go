@@ -38,15 +38,7 @@ func (a *app) varListCmd() *cobra.Command {
 		Args:    args(1, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -61,7 +53,7 @@ func (a *app) varListCmd() *cobra.Command {
 				if show || !v.Secret {
 					views[i].Value = &v.Value
 				}
-				if show || !(v.Secret || v.ResolvedSecret) {
+				if show || !views[i].Secret {
 					views[i].Resolved = &v.Resolved
 				}
 				if views[i].Value == nil || views[i].Resolved == nil {
@@ -126,15 +118,7 @@ func (a *app) varSetCmd() *cobra.Command {
 				}
 				pairs = append(pairs, pair{key, value})
 			}
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -179,15 +163,7 @@ func (a *app) varDeleteCmd() *cobra.Command {
 		Args:    args(2, -1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}

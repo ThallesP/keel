@@ -13,11 +13,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-const (
-	followEvery = 2 * time.Second
-	pollTimeout = 15 * time.Second
-)
-
 func (a *app) logsCmd() *cobra.Command {
 	var lines int
 	var follow bool
@@ -38,15 +33,7 @@ object per line: {"service","time","stream","task","text"}.`,
 			if lines < 1 || lines > 1000 {
 				return usage(cmd, "--lines must be 1–1000")
 			}
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -87,7 +74,7 @@ object per line: {"service","time","stream","task","text"}.`,
 				seen.add(l)
 			}
 			emit(tail.Lines)
-			tick := time.NewTicker(followEvery)
+			tick := time.NewTicker(2 * time.Second)
 			defer tick.Stop()
 			for {
 				select {
@@ -95,14 +82,14 @@ object per line: {"service","time","stream","task","text"}.`,
 					return nil
 				case <-tick.C:
 				}
-				poll, cancel := context.WithTimeout(ctx, pollTimeout)
+				poll, cancel := context.WithTimeout(ctx, 15*time.Second)
 				tail, err := s.api.Tail(poll, svc.ID, 200)
 				cancel()
 				if ctx.Err() != nil {
 					return nil
 				}
-				if oe, ok := err.(*output.Error); ok && (oe.Code == output.CodeTimeout || oe.Code == output.CodeNetwork) {
-					a.out.Warn("%s; retrying", oe.Message)
+				if code := output.CodeOf(err); code == output.CodeTimeout || code == output.CodeNetwork {
+					a.out.Warn("%v; retrying", err)
 					continue
 				}
 				if err != nil {
@@ -119,7 +106,7 @@ object per line: {"service","time","stream","task","text"}.`,
 }
 
 func logLine(l client.LogLine) string {
-	return l.Time.Local().Format("2006-01-02 15:04:05") + "  " + l.Text
+	return l.Time.Local().Format(time.DateTime) + "  " + l.Text
 }
 
 func sortLines(ls []client.LogLine) {

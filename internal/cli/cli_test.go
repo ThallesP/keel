@@ -7,16 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
 func TestPickProject(t *testing.T) {
-	one := []client.Project{{ID: "p1", Slug: "api"}}
-	two := append(one, client.Project{ID: "p2", Slug: "web"})
+	one := []api.ProjectSummary{{ID: "p1", Slug: "api"}}
+	two := append(one, api.ProjectSummary{ID: "p2", Slug: "web"})
 	for _, tc := range []struct {
 		name     string
-		projects []client.Project
+		projects []api.ProjectSummary
 		slug     string
 		want     string
 	}{
@@ -73,7 +74,7 @@ func TestUsageBeforeConnecting(t *testing.T) {
 
 func TestRunEnv(t *testing.T) {
 	shell := []string{"HOME=/home/me", "LOG_LEVEL=warn"}
-	vars := []client.Variable{
+	vars := []api.VariableView{
 		{Key: "LOG_LEVEL", Resolved: "debug"},
 		{Key: "STRIPE_KEY", Resolved: "sk_test"},
 		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7:5432/app"},
@@ -166,7 +167,7 @@ func TestLineSetSkipsWhatWasPrinted(t *testing.T) {
 			}
 		}
 	}
-	if got := len(printed); got != 4 || printed[2] != "c" || printed[3] != "d" {
+	if !slices.Equal(printed, []string{"a", "b", "c", "d"}) {
 		t.Errorf("printed %v, want [a b c d]", printed)
 	}
 }

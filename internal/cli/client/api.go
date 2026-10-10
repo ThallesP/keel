@@ -10,26 +10,23 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-func (c *Client) Projects(ctx context.Context) ([]Project, error) {
+func (c *Client) Projects(ctx context.Context) ([]api.ProjectSummary, error) {
 	var out api.ProjectList
 	if err := c.call(ctx, http.MethodGet, "/api/projects", nil, nil, &out); err != nil {
 		return nil, err
 	}
-	if out.Projects == nil {
-		out.Projects = []Project{}
-	}
 	return out.Projects, nil
 }
 
-func (c *Client) CreateProject(ctx context.Context, name string) (*Project, error) {
-	var p Project
+func (c *Client) CreateProject(ctx context.Context, name string) (*api.ProjectSummary, error) {
+	var p api.ProjectSummary
 	if err := c.call(ctx, http.MethodPost, "/api/projects", nil, api.CreateProjectRequest{Name: name}, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
 }
 
-func (c *Client) Summary(ctx context.Context, environmentID string) (*Summary, error) {
+func (c *Client) Summary(ctx context.Context, environmentID string) (*api.EnvironmentSummary, error) {
 	var out api.EnvironmentSummaryResult
 	if err := c.call(ctx, http.MethodGet, apiPath("/api/environments/%s/summary", environmentID), nil, nil, &out); err != nil {
 		return nil, err
@@ -55,7 +52,7 @@ func (c *Client) Services(ctx context.Context, environmentID string) ([]Service,
 	return services, nil
 }
 
-func (c *Client) Variables(ctx context.Context, serviceID string) ([]Variable, error) {
+func (c *Client) Variables(ctx context.Context, serviceID string) ([]api.VariableView, error) {
 	var out api.VariableList
 	if err := c.call(ctx, http.MethodGet, apiPath("/api/nodes/%s/variables", serviceID), nil, nil, &out); err != nil {
 		return nil, err
@@ -157,11 +154,7 @@ func (c *Client) Tracing(ctx context.Context, serviceID string) (*Tracing, error
 	if t == nil {
 		return nil, nil
 	}
-	env := t.Env
-	if env == nil {
-		env = []TracingVar{}
-	}
-	return &Tracing{Enabled: t.Enabled, Store: t.Traces, Env: env}, nil
+	return &Tracing{Enabled: t.Enabled, Store: t.Traces, Env: t.Env}, nil
 }
 
 func (c *Client) SetTracing(ctx context.Context, serviceID string, on bool) error {
@@ -195,10 +188,7 @@ func (c *Client) TracingPrompt(ctx context.Context, serviceID, environmentID str
 }
 
 func (c *Client) StartDeployment(ctx context.Context, environmentID string, only []string, refresh bool) (string, error) {
-	in := api.ShipRequest{Refresh: refresh}
-	if len(only) > 0 {
-		in.Only = only
-	}
+	in := api.ShipRequest{Only: only, Refresh: refresh}
 	var out api.ShipResponse
 	if err := c.call(ctx, http.MethodPost, apiPath("/api/environments/%s/deployments", environmentID), nil, in, &out); err != nil {
 		return "", err

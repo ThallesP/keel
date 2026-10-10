@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/config"
 	"github.com/ThallesP/keel/internal/cli/output"
@@ -51,23 +53,14 @@ func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 		return hostOf(webURL), &config.Instance{URL: webURL, Token: token}, nil
 	}
 
-	name := a.instanceFlag
-	if name == "" {
-		name = os.Getenv("KEEL_INSTANCE")
+	var linked, only string
+	if _, l := cfg.LinkFor(cwd()); l != nil {
+		linked = l.Instance
 	}
-	if name == "" {
-		if _, l := cfg.LinkFor(cwd()); l != nil {
-			name = l.Instance
-		}
+	if len(cfg.Instances) == 1 {
+		only = slices.Collect(maps.Keys(cfg.Instances))[0]
 	}
-	if name == "" {
-		name = cfg.Current
-	}
-	if name == "" && len(cfg.Instances) == 1 {
-		for n := range cfg.Instances {
-			name = n
-		}
-	}
+	name := cmp.Or(a.instanceFlag, os.Getenv("KEEL_INSTANCE"), linked, cfg.Current, only)
 	inst := cfg.Instances[name]
 	if inst == nil {
 		if name != "" && len(cfg.Instances) > 0 {
@@ -161,19 +154,14 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 }
 
 func (a *app) projectSlug(s *session) string {
-	if a.projectFlag != "" {
-		return a.projectFlag
-	}
-	if p := os.Getenv("KEEL_PROJECT"); p != "" {
-		return p
-	}
+	var linked string
 	if _, l := s.cfg.LinkFor(cwd()); l != nil && l.Instance == s.name {
-		return l.Project
+		linked = l.Project
 	}
-	return ""
+	return cmp.Or(a.projectFlag, os.Getenv("KEEL_PROJECT"), linked)
 }
 
-func (a *app) project(ctx context.Context, s *session) (*client.Project, *client.Environment, error) {
+func (a *app) project(ctx context.Context, s *session) (*api.ProjectSummary, *api.ProjectEnvironment, error) {
 	projects, err := s.api.Projects(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -189,9 +177,12 @@ func (a *app) project(ctx context.Context, s *session) (*client.Project, *client
 	return p, &p.Environments[0], nil
 }
 
-func pickProject(projects []client.Project, slug string) (*client.Project, error) {
+func pickProject(projects []api.ProjectSummary, slug string) (*api.ProjectSummary, error) {
 	if len(projects) == 0 {
 		return nil, output.Errorf(output.CodeNoProjects, "keel project create <name> --link", "No projects yet")
+	}
+	if slug == "" && len(projects) == 1 {
+		return &projects[0], nil
 	}
 	slugs := make([]string, len(projects))
 	for i := range projects {
@@ -202,23 +193,34 @@ func pickProject(projects []client.Project, slug string) (*client.Project, error
 	}
 	list := strings.Join(slugs, ", ")
 	if slug == "" {
-		if len(projects) == 1 {
-			return &projects[0], nil
-		}
-		return nil, output.Errorf(output.CodeProjectRequired,
-			fmt.Sprintf("Pass --project <slug> or run keel link <slug> (projects: %s)", list),
+		return nil, output.Errorf(output.CodeProjectRequired, "Pass --project <slug> or run keel link <slug> (projects: "+list+")",
 			"%d projects and none picked", len(projects))
 	}
 	return nil, output.Errorf(output.CodeProjectNotFound, "Projects: "+list, "No project %q", slug)
 }
 
-func (s *session) service(ctx context.Context, environmentID, name string) (*client.Service, []client.Service, error) {
-	services, err := s.api.Services(ctx, environmentID)
+func (a *app) connectService(ctx context.Context, name string) (*session, *client.Service, error) {
+	s, err := a.connect(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	found, err := findService(services, name)
-	return found, services, err
+	_, env, err := a.project(ctx, s)
+	if err != nil {
+		return nil, nil, err
+	}
+	svc, err := s.service(ctx, env.ID, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s, svc, nil
+}
+
+func (s *session) service(ctx context.Context, environmentID, name string) (*client.Service, error) {
+	services, err := s.api.Services(ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	return findService(services, name)
 }
 
 func findService(services []client.Service, name string) (*client.Service, error) {

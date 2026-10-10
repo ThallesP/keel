@@ -110,12 +110,6 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 	defer cancel()
 	printed := 0
 	for first := true; ; first = false {
-		if !first {
-			select {
-			case <-ctx.Done():
-			case <-time.After(time.Second):
-			}
-		}
 		d, err := s.api.Deployment(ctx, id)
 		if ctx.Err() != nil {
 			return stoppedWaiting(ctx, id)
@@ -133,15 +127,19 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 			printed = 0
 		}
 		for _, l := range d.Log[printed:] {
-			if name := names[l.ServiceID]; name != "" && !strings.HasPrefix(l.Text, name+":") {
-				a.out.Progress("  %s: %s", name, l.Text)
-			} else {
-				a.out.Progress("  %s", l.Text)
+			text := l.Text
+			if name := names[l.ServiceID]; name != "" && !strings.HasPrefix(text, name+":") {
+				text = name + ": " + text
 			}
+			a.out.Progress("  %s", text)
 		}
 		printed = len(d.Log)
 		switch d.Status {
 		case "running":
+			select {
+			case <-ctx.Done():
+			case <-time.After(time.Second):
+			}
 			continue
 		case "success":
 			a.printDeployment(d, func(w io.Writer) {
@@ -202,15 +200,7 @@ func (a *app) deploymentListCmd() *cobra.Command {
 		Args:    args(1, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			s, err := a.connect(ctx)
-			if err != nil {
-				return err
-			}
-			_, env, err := a.project(ctx, s)
-			if err != nil {
-				return err
-			}
-			svc, _, err := s.service(ctx, env.ID, args[0])
+			s, svc, err := a.connectService(ctx, args[0])
 			if err != nil {
 				return err
 			}

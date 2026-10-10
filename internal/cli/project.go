@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/config"
 	"github.com/ThallesP/keel/internal/cli/output"
@@ -18,7 +19,7 @@ type projectRef struct {
 	Name string `json:"name"`
 }
 
-func refOf(p *client.Project) projectRef { return projectRef{p.ID, p.Slug, p.Name} }
+func refOf(p *api.ProjectSummary) projectRef { return projectRef{p.ID, p.Slug, p.Name} }
 
 func (a *app) projectCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -45,7 +46,7 @@ func (a *app) projectCmd() *cobra.Command {
 				slug = projects[0].Slug
 			}
 			type row struct {
-				client.Project
+				api.ProjectSummary
 				Current bool `json:"current"`
 			}
 			rows := make([]row, len(projects))
@@ -62,7 +63,11 @@ func (a *app) projectCmd() *cobra.Command {
 					for i, e := range r.Environments {
 						envs[i] = e.Name
 					}
-					fmt.Fprintf(t, "%s\t%s\t%s\t%s\n", mark(r.Current), r.Slug, r.Name, strings.Join(envs, ", "))
+					current := ""
+					if r.Current {
+						current = "*"
+					}
+					fmt.Fprintf(t, "%s\t%s\t%s\t%s\n", current, r.Slug, r.Name, strings.Join(envs, ", "))
 				}
 				t.Flush()
 			})
@@ -105,9 +110,9 @@ also links this directory to it, as keel link does.`,
 			}
 			canvas := s.inst.URL + "/p/" + p.Slug
 			a.out.Result(struct {
-				Project client.Project `json:"project"`
-				URL     string         `json:"url"`
-				Linked  string         `json:"linked,omitempty"`
+				Project api.ProjectSummary `json:"project"`
+				URL     string             `json:"url"`
+				Linked  string             `json:"linked,omitempty"`
 			}{*p, canvas, dir}, func(w io.Writer) {
 				fmt.Fprintf(w, "Created project %s: %s\n", p.Slug, canvas)
 				if dir != "" {
@@ -228,14 +233,14 @@ func (a *app) statusCmd() *cobra.Command {
 				latest.Log = nil
 			}
 			a.out.Result(struct {
-				Instance         string             `json:"instance"`
-				URL              string             `json:"url"`
-				Project          projectRef         `json:"project"`
-				Environment      client.Environment `json:"environment"`
-				PendingChanges   int                `json:"pendingChanges"`
-				Servers          int                `json:"servers"`
-				Services         []client.Service   `json:"services"`
-				LatestDeployment *client.Deployment `json:"latestDeployment"`
+				Instance         string                 `json:"instance"`
+				URL              string                 `json:"url"`
+				Project          projectRef             `json:"project"`
+				Environment      api.ProjectEnvironment `json:"environment"`
+				PendingChanges   int                    `json:"pendingChanges"`
+				Servers          int                    `json:"servers"`
+				Services         []client.Service       `json:"services"`
+				LatestDeployment *client.Deployment     `json:"latestDeployment"`
 			}{s.name, s.inst.URL, refOf(p), *env, summary.PendingChanges, summary.Servers, services, latest},
 				func(w io.Writer) {
 					t := table(w)

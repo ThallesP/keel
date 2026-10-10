@@ -15,13 +15,11 @@ type ControlPlane struct {
 	Token string
 	HTTP  *http.Client
 	Log   *Logger
-
-	timeout time.Duration
-	sleep   func(context.Context, time.Duration) error
+	sleep func(context.Context, time.Duration) error
 }
 
 func NewControlPlane(url, token string, hc *http.Client, log *Logger) *ControlPlane {
-	return &ControlPlane{URL: url, Token: token, HTTP: hc, Log: log, timeout: 10 * time.Second, sleep: sleepCtx}
+	return &ControlPlane{URL: url, Token: token, HTTP: hc, Log: log, sleep: sleepCtx}
 }
 
 type WorkerConfig struct {
@@ -29,10 +27,9 @@ type WorkerConfig struct {
 }
 
 type SinkRoute struct {
-	ProjectID  string     `json:"projectId"`
 	ServiceIDs []string   `json:"serviceIds"`
 	Sink       SinkConfig `json:"sink"`
-	Since      *float64   `json:"since,omitempty"`
+	Since      int64      `json:"since"`
 }
 
 type SinkConfig struct {
@@ -43,7 +40,7 @@ type SinkConfig struct {
 }
 
 func (c *ControlPlane) FetchConfig(ctx context.Context) (WorkerConfig, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+"/worker/config", nil)
 	if err != nil {
@@ -69,28 +66,29 @@ func (c *ControlPlane) FetchConfig(ctx context.Context) (WorkerConfig, error) {
 func (c *ControlPlane) PostEvents(ctx context.Context, body []byte, resync bool) bool {
 	for n := 0; ; n = min(n+1, 6) {
 		status, err := c.postEventsOnce(ctx, body, resync)
+		wait := time.Duration(n*5+5) * time.Second
 		switch {
 		case err == nil && status >= 200 && status <= 299:
 			return true
 		case err == nil && status >= 400 && status <= 499:
-			c.Log.Log("events", fmt.Sprintf("rejected %d, skipping", status), "body", truncate(string(body), 120))
+			c.Log.Log("events", fmt.Sprintf("rejected %d, skipping %q", status, truncate(string(body), 120)))
 			return false
 		case ctx.Err() != nil:
 			return false
 		case err == nil:
-			c.Log.Log("events", fmt.Sprintf("post failed %d, retry in %ds", status, n*5+5))
+			c.Log.Log("events", fmt.Sprintf("post failed %d, retry in %s", status, wait))
 		default:
-			c.Log.Log("events", fmt.Sprintf("post failed (%s), retry in %ds", errorText(err), n*5+5))
+			c.Log.Log("events", fmt.Sprintf("post failed (%s), retry in %s", errorText(err), wait))
 		}
 		resync = true
-		if c.sleep(ctx, time.Duration(n*5+5)*time.Second) != nil {
+		if c.sleep(ctx, wait) != nil {
 			return false
 		}
 	}
 }
 
 func (c *ControlPlane) postEventsOnce(ctx context.Context, body []byte, resync bool) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/worker/events", bytes.NewReader(body))
 	if err != nil {

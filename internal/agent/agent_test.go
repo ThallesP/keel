@@ -115,7 +115,7 @@ func (c *controlPlaneStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (c *controlPlaneStub) snapshot() (int, []post) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.configs, append([]post(nil), c.events...)
+	return c.configs, slices.Clone(c.events)
 }
 
 func TestAgentRun(t *testing.T) {
@@ -193,11 +193,7 @@ func TestAgentRunNeedsDocker(t *testing.T) {
 func TestSignalName(t *testing.T) {
 	for cause, want := range map[string]string{"interrupt signal received": "SIGINT", "terminated signal received": "SIGTERM", "": "SIGTERM"} {
 		ctx, cancel := context.WithCancelCause(context.Background())
-		if cause != "" {
-			cancel(errors.New(cause))
-		} else {
-			cancel(nil)
-		}
+		cancel(errors.New(cause))
 		if got := signalName(ctx); got != want {
 			t.Errorf("signalName(%q) = %s, want %s", cause, got, want)
 		}

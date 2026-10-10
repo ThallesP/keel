@@ -17,13 +17,11 @@ var (
 	sinkB = SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-b", Token: "xaat-bbbbbb"}
 )
 
-func ms(v float64) *float64 { return &v }
-
 func newTestShipper(t *testing.T, d *fakeDocker, ss *sinkSet) (*Shipper, *State, *syncBuffer) {
 	t.Helper()
 	state := LoadState(t.TempDir() + "/state.json")
 	buf := &syncBuffer{}
-	s := NewShipper(d, state, NewLogger(buf), ss.factory, nil)
+	s := NewShipper(d, state, NewLogger(buf), ss.factory, func() {})
 	s.flushEvery = 5 * time.Millisecond
 	s.retryEvery = 5 * time.Millisecond
 	s.followRetry = 5 * time.Millisecond
@@ -55,17 +53,14 @@ func (s *Shipper) lastRead(id string) string {
 	return s.readSince[id]
 }
 
-func (s *Shipper) queued() map[string]int {
+func (s *Shipper) queued(cfg SinkConfig) (lines int, draining bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := map[string]int{}
-	for k, q := range s.queues {
-		out[k] = len(q.entries)
-		if q.draining != nil {
-			out[k+" draining"] = 1
-		}
+	q := s.queues[cfg]
+	if q == nil {
+		return 0, false
 	}
-	return out
+	return len(q.entries), q.draining != nil
 }
 
 func reconcile(t *testing.T, s *Shipper) {
@@ -87,9 +82,7 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, state, logs := newTestShipper(t, d, ss)
 
-	if !s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA, Since: ms(1704067200000)}}) {
-		t.Fatal("first config reported unchanged")
-	}
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1704067200000}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067202.500000001" })
 	if got := d.callsFor(c.ID); !slices.Equal(got, []string{"1704067200.000000000"}) {
@@ -117,8 +110,8 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 	}
 	out := logs.String()
 	for _, w := range []string{
-		`[logs] config applied {"sinks":1,"services":1}`,
-		`[logs] following svc-n1 (aaaaaaaaaaaa) {"since":"1704067200.000000000"}`,
+		`[logs] config applied: sinks=1 services=1`,
+		`[logs] following svc-n1 (aaaaaaaaaaaa) since 1704067200.000000000`,
 	} {
 		if !strings.Contains(out, w) {
 			t.Errorf("log lacks %q:\n%s", w, out)
@@ -138,10 +131,10 @@ func TestShipperResumePointPrecedence(t *testing.T) {
 	)
 	ss := newSinkSet()
 	s, state, logs := newTestShipper(t, d, ss)
-	state.Checkpoint([]resumePoint{{persisted.ID, "1704067300.000000001"}})
+	state.Checkpoint(persisted.ID, "1704067300.000000001")
 	s.ApplyConfig([]SinkRoute{
-		{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA, Since: ms(1704067200000)},
-		{ProjectID: "p2", ServiceIDs: []string{"n2"}, Sink: sinkB},
+		{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1704067200000},
+		{ServiceIDs: []string{"n2"}, Sink: sinkB},
 	})
 	reconcile(t, s)
 	waitFor(t, func() bool { return len(d.callsFor(flaky.ID)) == 2 })
@@ -158,7 +151,7 @@ func TestShipperResumePointPrecedence(t *testing.T) {
 	if !strings.Contains(logs.String(), "[logs] follow rrrrrrrrrrrr failed (unexpected EOF), retry in 3s") {
 		t.Errorf("log = %s", logs.String())
 	}
-	if !strings.Contains(logs.String(), `[logs] following svc-n2 (ffffffffffff) {"since":"now"}`) {
+	if !strings.Contains(logs.String(), `[logs] following svc-n2 (ffffffffffff) since now`) {
 		t.Errorf("log = %s", logs.String())
 	}
 }
@@ -172,10 +165,10 @@ func TestShipperRetryKeepsBatchAndResumePoint(t *testing.T) {
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.results = []bool{false, true}; f.gate = gate }
 	s, state, _ := newTestShipper(t, d, ss)
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067202.000000001" })
-	waitFor(t, func() bool { return s.queued()[sinkKey(sinkA)+" draining"] == 1 })
+	waitFor(t, func() bool { _, draining := s.queued(sinkA); return draining })
 
 	gate <- struct{}{}
 	waitFor(t, func() bool { return len(ss.get(sinkA).sent()) == 1 })
@@ -205,8 +198,8 @@ func TestShipperBatchesOf500(t *testing.T) {
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, state, _ := newTestShipper(t, d, ss)
 	s.flushEvery = time.Hour
-	state.Checkpoint([]resumePoint{{c.ID, "1704067200.000000001"}})
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	state.Checkpoint(c.ID, "1704067200.000000001")
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.isFinished(c.ID) })
 	close(gate)
@@ -240,7 +233,7 @@ func TestShipperBackPressure(t *testing.T) {
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, _, _ := newTestShipper(t, d, ss)
 	s.maxQueue = 4
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" })
 	time.Sleep(30 * time.Millisecond)
@@ -267,17 +260,16 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	ss := newSinkSet()
 	ss.setup = func(f *fakeSink) { f.results = []bool{false} }
 	s, _, logs := newTestShipper(t, d, ss)
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
-	key := sinkKey(sinkA)
 	waitFor(t, func() bool {
-		q := s.queued()
-		return q[key] == 3 && q[key+" draining"] == 0 && len(ss.get(sinkA).sent()) > 0
+		lines, draining := s.queued(sinkA)
+		return lines == 3 && !draining && len(ss.get(sinkA).sent()) > 0
 	})
 
 	s.ApplyConfig(nil)
-	if q := s.queued(); len(q) != 0 {
-		t.Fatalf("queues = %v, want the removed sink's dropped", q)
+	if lines, _ := s.queued(sinkA); lines != 0 {
+		t.Fatalf("%d lines queued, want the removed sink's dropped", lines)
 	}
 	if !strings.Contains(logs.String(), "[logs] dropping 3 queued lines for a removed sink") {
 		t.Fatalf("log = %s", logs.String())
@@ -303,7 +295,7 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	s, state, logs := newTestShipper(t, d, ss)
 	s.maxQueue = 2
 	s.flushEvery = time.Hour
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067201.000000001" })
 	time.Sleep(20 * time.Millisecond)
@@ -311,7 +303,7 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 		t.Fatal("read past a full queue")
 	}
 
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: rotated}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: rotated}})
 	waitFor(t, func() bool {
 		r := s.lastRead(c.ID)
 		return r == "1704067203.000000001" || r == "1704067204.000000001"
@@ -346,7 +338,7 @@ func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 	s, _, _ := newTestShipper(t, d, ss)
 	s.maxQueue = 4
 	s.flushEvery = time.Hour
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" })
 	sink := ss.get(sinkA)
@@ -389,8 +381,9 @@ func TestShipperReconcileFollowers(t *testing.T) {
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
 	gone := containerID('9')
-	state.Checkpoint([]resumePoint{{pending.ID, "1704067200.000000001"}, {gone, "1.000000001"}})
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	state.Checkpoint(pending.ID, "1704067200.000000001")
+	state.Checkpoint(gone, "1.000000001")
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 
 	waitFor(t, func() bool { return s.isFinished(pending.ID) })
@@ -419,7 +412,7 @@ func TestShipperReconcileFollowers(t *testing.T) {
 		t.Error("resume point kept for a removed container")
 	}
 
-	state.Checkpoint([]resumePoint{{running.ID, "5.000000001"}})
+	state.Checkpoint(running.ID, "5.000000001")
 	s.ApplyConfig(nil)
 	reconcile(t, s)
 	if f := s.following(); len(f) != 0 {
@@ -439,8 +432,8 @@ func TestShipperReconcileKeepsContainersStartedDuringTheList(t *testing.T) {
 	d.script(young.ID, logScript{data: stamped("2024-01-01T00:00:07Z first line")})
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
-	state.Checkpoint([]resumePoint{{gone.ID, "1.000000001"}})
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA, Since: ms(1704067200000)}})
+	state.Checkpoint(gone.ID, "1.000000001")
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1704067200000}})
 	d.afterList = func() {
 		d.mu.Lock()
 		d.afterList = nil
@@ -485,7 +478,7 @@ func TestShipperContainerEvents(t *testing.T) {
 	count := func() int { mu.Lock(); defer mu.Unlock(); return refreshes }
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return now }
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 
 	routed := task('a', "n1", "1", "running")
 	s.OnContainerEvent("start", routed.ID, routed.Labels)
@@ -508,7 +501,7 @@ func TestShipperContainerEvents(t *testing.T) {
 		t.Fatal("a non-svc start or a die did something")
 	}
 
-	state.Checkpoint([]resumePoint{{routed.ID, "1.000000001"}})
+	state.Checkpoint(routed.ID, "1.000000001")
 	s.OnContainerEvent("destroy", routed.ID, nil)
 	if f := s.following(); len(f) != 0 {
 		t.Errorf("still following %v after destroy", f)
@@ -530,8 +523,8 @@ func TestShipperOrganizationIsolation(t *testing.T) {
 	ss := newSinkSet()
 	s, _, _ := newTestShipper(t, d, ss)
 	s.ApplyConfig([]SinkRoute{
-		{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA},
-		{ProjectID: "p2", ServiceIDs: []string{"n2"}, Sink: sinkB},
+		{ServiceIDs: []string{"n1"}, Sink: sinkA},
+		{ServiceIDs: []string{"n2"}, Sink: sinkB},
 	})
 	reconcile(t, s)
 	waitFor(t, func() bool { return len(ss.get(sinkA).messages()) == 1 && len(ss.get(sinkB).messages()) == 1 })
@@ -540,7 +533,7 @@ func TestShipperOrganizationIsolation(t *testing.T) {
 		for _, batch := range sink.sent() {
 			for _, e := range batch {
 				if e.ServiceID != service {
-					t.Errorf("sink %s got a line of %s", sink.key, e.ServiceID)
+					t.Errorf("the sink of %s got a line of %s", service, e.ServiceID)
 				}
 			}
 		}
@@ -549,7 +542,7 @@ func TestShipperOrganizationIsolation(t *testing.T) {
 		t.Fatalf("an unrouted service was read: %v", got)
 	}
 
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	s.OnContainerEvent("start", b.ID, b.Labels)
 	if f := s.following(); !slices.Equal(f, []string{a.ID}) {
@@ -572,52 +565,41 @@ func TestShipperSharedSinkQueue(t *testing.T) {
 	ss := newSinkSet()
 	s, _, _ := newTestShipper(t, d, ss)
 	s.ApplyConfig([]SinkRoute{
-		{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA},
-		{ProjectID: "p3", ServiceIDs: []string{"n3"}, Sink: sinkA},
+		{ServiceIDs: []string{"n1"}, Sink: sinkA},
+		{ServiceIDs: []string{"n3"}, Sink: sinkA},
 	})
 	reconcile(t, s)
 	waitFor(t, func() bool { return len(ss.get(sinkA).messages()) == 2 })
 	if ss.builds != 1 {
 		t.Errorf("sink built %d times, want once", ss.builds)
 	}
-	if q := s.queued(); len(q) != 1 {
-		t.Errorf("queues = %v, want one", q)
-	}
 }
 
 func TestApplyConfigChanged(t *testing.T) {
 	ss := newSinkSet()
 	s, _, logs := newTestShipper(t, newFakeDocker(), ss)
-	cfg := []SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA, Since: ms(1)}}
-	if !s.ApplyConfig(cfg) {
-		t.Fatal("first apply unchanged")
+	applied := func() int { return strings.Count(logs.String(), "config applied") }
+	cfg := []SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1}}
+	s.ApplyConfig(cfg)
+	s.ApplyConfig(cfg)
+	if applied() != 1 || ss.builds != 1 {
+		t.Fatalf("applied %d times with %d builds, want once with the sink reused", applied(), ss.builds)
 	}
-	if s.ApplyConfig(cfg) {
-		t.Fatal("same config reported changed")
-	}
-	if ss.builds != 1 {
-		t.Fatalf("builds = %d, want the sink reused", ss.builds)
-	}
-	if n := strings.Count(logs.String(), "config applied"); n != 1 {
-		t.Fatalf("config applied logged %d times", n)
-	}
-	more := []SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1", "n2"}, Sink: sinkA}}
-	if !s.ApplyConfig(more) {
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1", "n2"}, Sink: sinkA}})
+	if applied() != 2 {
 		t.Fatal("a new service was not a change")
 	}
 	rotated := sinkA
 	rotated.Token = "xaat-rotated"
-	if !s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1", "n2"}, Sink: rotated}}) {
-		t.Fatal("a new token was not a change")
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1", "n2"}, Sink: rotated}})
+	if applied() != 3 || ss.builds != 2 {
+		t.Fatalf("applied %d times with %d builds, want a new sink for the new token", applied(), ss.builds)
 	}
-	if ss.builds != 2 {
-		t.Fatalf("builds = %d, want a new sink for the new token", ss.builds)
-	}
-	if s.ApplyConfig([]SinkRoute{{ProjectID: "p9", ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}}); len(s.routes) != 0 {
-		t.Fatalf("an unknown sink kind was routed: %v", s.routes)
-	}
-	if !strings.Contains(logs.String(), `config applied {"sinks":1,"services":2}`) {
+	if !strings.Contains(logs.String(), "config applied: sinks=1 services=2") {
 		t.Errorf("log = %s", logs.String())
+	}
+	if s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}}); len(s.queues) != 0 {
+		t.Fatalf("an unknown sink kind was routed: %v", s.queues)
 	}
 }
 
@@ -629,11 +611,11 @@ func TestShipperUnstampedLine(t *testing.T) {
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
 	s.now = func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 123_456_789, time.UTC) }
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return len(ss.get(sinkA).messages()) == 1 })
 	e := ss.get(sinkA).sent()[0][0]
-	if e.Time != "2026-10-08T12:00:00.123Z" || e.Message != "hello from a tty" || e.Stream != "stdout" {
+	if e.Time != "2026-10-08T12:00:00.123456789Z" || e.Message != "hello from a tty" || e.Stream != "stdout" {
 		t.Fatalf("event = %+v", e)
 	}
 	if _, ok := state.LogsSince(c.ID); ok || s.lastRead(c.ID) != "" {
@@ -649,9 +631,9 @@ func TestShipperFlushAndClose(t *testing.T) {
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
 	s.flushEvery = time.Hour
-	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
-	waitFor(t, func() bool { return s.queued()[sinkKey(sinkA)] == 1 })
+	waitFor(t, func() bool { lines, _ := s.queued(sinkA); return lines == 1 })
 	s.StopFollowing()
 	s.Flush(context.Background())
 	if got := ss.get(sinkA).messages(); !slices.Equal(got, []string{"one"}) {

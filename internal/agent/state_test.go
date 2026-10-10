@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -62,7 +61,9 @@ func TestStateFlushFormat(t *testing.T) {
 		t.Fatalf("forgetting nothing wrote the state")
 	}
 
-	s.Checkpoint([]resumePoint{{"c1", "1.000000001"}, {"c2", ""}, {"c1", "2.000000001"}})
+	s.Checkpoint("c1", "1.000000001")
+	s.Checkpoint("c2", "")
+	s.Checkpoint("c1", "2.000000001")
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestStateWriterLogsFailures(t *testing.T) {
 	if n := strings.Count(buf.String(), "write failed"); n != 1 {
 		t.Fatalf("write failed logged %d times, want once per change", n)
 	}
-	if !slices.Equal(s.LogsSinceIDs(), []string{}) {
+	if len(s.LogsSinceIDs()) != 0 {
 		t.Fatal("unexpected resume points")
 	}
 }

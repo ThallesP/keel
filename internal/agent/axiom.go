@@ -3,32 +3,25 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 type AxiomSink struct {
-	key   string
 	url   string
 	token string
 	http  *http.Client
 	log   *Logger
-
-	attempts int
-	timeout  time.Duration
-	backoff  time.Duration
-	sleep    func(context.Context, time.Duration) error
+	sleep func(context.Context, time.Duration) error
 }
 
 func NewAxiomSink(cfg SinkConfig, hc *http.Client, log *Logger) *AxiomSink {
-	return &AxiomSink{
-		key: sinkKey(cfg), url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token,
-		http: hc, log: log,
-		attempts: 5, timeout: 15 * time.Second, backoff: time.Second, sleep: sleepCtx,
-	}
+	return &AxiomSink{url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token, http: hc, log: log, sleep: sleepCtx}
 }
 
 func axiomIngestURL(domain, dataset string) string {
@@ -38,35 +31,33 @@ func axiomIngestURL(domain, dataset string) string {
 	}
 	base = strings.TrimRight(base, "/")
 	if strings.HasSuffix(domain, ".edge.axiom.co") {
-		return base + "/v1/ingest/" + encodeURIComponent(dataset)
+		return base + "/v1/ingest/" + url.PathEscape(dataset)
 	}
-	return base + "/v1/datasets/" + encodeURIComponent(dataset) + "/ingest"
+	return base + "/v1/datasets/" + url.PathEscape(dataset) + "/ingest"
 }
 
-func (s *AxiomSink) Key() string { return s.key }
-
 func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
-	lines := make([][]byte, len(events))
-	for i, e := range events {
-		lines[i] = marshal(e)
+	var body bytes.Buffer
+	enc := json.NewEncoder(&body)
+	for _, e := range events {
+		_ = enc.Encode(e)
 	}
-	body := bytes.Join(lines, []byte("\n"))
-	for attempt := 0; attempt < s.attempts; attempt++ {
-		status, text, err := s.post(ctx, body)
+	for attempt := range 5 {
+		status, text, err := s.post(ctx, body.Bytes())
 		switch {
 		case err == nil && status >= 200 && status <= 299:
 			return true
 		case err == nil && status >= 400 && status <= 499 && status != 429:
-			s.log.Log("axiom", fmt.Sprintf("rejected %d, dropping %d events", status, len(events)), "text", text)
+			s.log.Log("axiom", fmt.Sprintf("rejected %d, dropping %d events: %q", status, len(events), text))
 			return true
 		case ctx.Err() != nil:
 			return false
 		case err == nil:
-			s.log.Log("axiom", fmt.Sprintf("ingest %d, retry %d", status, attempt+1), "text", text)
+			s.log.Log("axiom", fmt.Sprintf("ingest %d, retry %d: %q", status, attempt+1, text))
 		default:
 			s.log.Log("axiom", fmt.Sprintf("ingest failed (%s), retry %d", errorText(err), attempt+1))
 		}
-		if s.sleep(ctx, s.backoff<<attempt) != nil {
+		if s.sleep(ctx, time.Second<<attempt) != nil {
 			return false
 		}
 	}
@@ -75,7 +66,7 @@ func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
 }
 
 func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url, bytes.NewReader(body))
 	if err != nil {
@@ -88,26 +79,6 @@ func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) 
 		return 0, "", err
 	}
 	defer res.Body.Close()
-	if res.StatusCode >= 200 && res.StatusCode <= 299 {
-		_, _ = io.Copy(io.Discard, res.Body)
-		return res.StatusCode, "", nil
-	}
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
 	return res.StatusCode, truncate(string(raw), 200), nil
-}
-
-func encodeURIComponent(s string) string {
-	const hex = "0123456789ABCDEF"
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || strings.IndexByte("-_.!~*'()", c) >= 0 {
-			b.WriteByte(c)
-			continue
-		}
-		b.WriteByte('%')
-		b.WriteByte(hex[c>>4])
-		b.WriteByte(hex[c&15])
-	}
-	return b.String()
 }

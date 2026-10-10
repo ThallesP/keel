@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -16,26 +17,14 @@ type Forwarder struct {
 	State       *State
 	Log         *Logger
 	OnContainer func(action, containerID string, attrs map[string]string)
-
-	reconnect time.Duration
-	sleep     func(context.Context, time.Duration) error
+	reconnect   time.Duration
 }
 
 func (f *Forwarder) Run(ctx context.Context) {
-	reconnect := f.reconnect
-	if reconnect == 0 {
-		reconnect = 2 * time.Second
-	}
-	sleep := f.sleep
-	if sleep == nil {
-		sleep = sleepCtx
-	}
+	reconnect := cmp.Or(f.reconnect, 2*time.Second)
 	for ctx.Err() == nil {
 		f.stream(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		if sleep(ctx, reconnect) != nil {
+		if sleepCtx(ctx, reconnect) != nil {
 			return
 		}
 	}
@@ -79,7 +68,7 @@ func (f *Forwarder) stream(ctx context.Context) {
 			}
 		}
 		if e.TimeNano != 0 {
-			f.State.SetEventsSince(eventsSinceAfter(e.TimeNano))
+			f.State.SetEventsSince(dockerTime(time.Unix(0, e.TimeNano+1)))
 		}
 	}
 }

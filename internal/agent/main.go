@@ -27,5 +27,5 @@ func Main(ctx context.Context) error {
 		return err
 	}
 	defer m.Close()
-	return New(cfg, docker, m.Client, &http.Client{Transport: http.DefaultTransport}, log).Run(ctx)
+	return New(cfg, docker, m.Client, http.DefaultClient, log).Run(ctx)
 }

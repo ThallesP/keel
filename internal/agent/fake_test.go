@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -14,19 +15,16 @@ type fakeDocker struct {
 	info        NodeInfo
 	infoErr     error
 	containers  []Container
-	listErr     error
 	afterList   func()
 	logs        map[string][]logScript
 	logCalls    []logCall
 	streams     []eventScript
 	eventsSince []string
-	openStreams int
 }
 
 type logCall struct{ id, since string }
 
 type logScript struct {
-	err   error
 	data  []byte
 	end   error
 	chunk int
@@ -46,12 +44,12 @@ func (d *fakeDocker) Info(context.Context) (NodeInfo, error) { return d.info, d.
 
 func (d *fakeDocker) ListSwarmContainers(context.Context) ([]Container, error) {
 	d.mu.Lock()
-	out, err, hook := slices.Clone(d.containers), d.listErr, d.afterList
+	out, hook := slices.Clone(d.containers), d.afterList
 	d.mu.Unlock()
 	if hook != nil {
 		hook()
 	}
-	return out, err
+	return out, nil
 }
 
 func (d *fakeDocker) setContainers(cs ...Container) {
@@ -78,14 +76,7 @@ func (d *fakeDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 		}
 	}
 	d.mu.Unlock()
-	if s.err != nil {
-		return nil, s.err
-	}
-	r := newScriptedReader(ctx, s.data, s.end)
-	if s.chunk > 0 {
-		r.chunk = s.chunk
-	}
-	return r, nil
+	return &scriptedReader{ctx: ctx, data: s.data, end: s.end, chunk: cmp.Or(s.chunk, 7), closed: make(chan struct{})}, nil
 }
 
 func (d *fakeDocker) calls() []logCall {
@@ -158,10 +149,6 @@ type scriptedReader struct {
 	once   sync.Once
 }
 
-func newScriptedReader(ctx context.Context, data []byte, end error) *scriptedReader {
-	return &scriptedReader{ctx: ctx, data: data, end: end, chunk: 7, closed: make(chan struct{})}
-}
-
 func (r *scriptedReader) Read(p []byte) (int, error) {
 	if len(r.data) > 0 {
 		n := min(len(p), len(r.data), r.chunk)
@@ -186,14 +173,11 @@ func (r *scriptedReader) Close() error {
 }
 
 type fakeSink struct {
-	key     string
 	mu      sync.Mutex
 	batches [][]LogEvent
 	results []bool
 	gate    chan struct{}
 }
-
-func (s *fakeSink) Key() string { return s.key }
 
 func (s *fakeSink) Send(ctx context.Context, events []LogEvent) bool {
 	if s.gate != nil {
@@ -234,12 +218,12 @@ func (s *fakeSink) messages() []string {
 
 type sinkSet struct {
 	mu     sync.Mutex
-	sinks  map[string]*fakeSink
+	sinks  map[SinkConfig]*fakeSink
 	builds int
 	setup  func(*fakeSink)
 }
 
-func newSinkSet() *sinkSet { return &sinkSet{sinks: map[string]*fakeSink{}} }
+func newSinkSet() *sinkSet { return &sinkSet{sinks: map[SinkConfig]*fakeSink{}} }
 
 func (ss *sinkSet) factory(cfg SinkConfig) (Sink, bool) {
 	if cfg.Kind != "axiom" {
@@ -248,22 +232,18 @@ func (ss *sinkSet) factory(cfg SinkConfig) (Sink, bool) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	ss.builds++
-	key := sinkKey(cfg)
-	s := ss.sinks[key]
-	if s == nil {
-		s = &fakeSink{key: key}
-		if ss.setup != nil {
-			ss.setup(s)
-		}
-		ss.sinks[key] = s
+	s := &fakeSink{}
+	if ss.setup != nil {
+		ss.setup(s)
 	}
+	ss.sinks[cfg] = s
 	return s, true
 }
 
 func (ss *sinkSet) get(cfg SinkConfig) *fakeSink {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
-	return ss.sinks[sinkKey(cfg)]
+	return ss.sinks[cfg]
 }
 
 func stamped(lines ...string) []byte {

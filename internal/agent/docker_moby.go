@@ -20,10 +20,6 @@ func NewMobyDocker(socket string) (*MobyDocker, error) {
 	if socket != "" {
 		opts = append(opts, client.WithHost("unix://"+socket))
 	}
-	return newMobyDocker(opts...)
-}
-
-func newMobyDocker(opts ...client.Opt) (*MobyDocker, error) {
 	cli, err := client.New(opts...)
 	if err != nil {
 		return nil, err
@@ -74,9 +70,6 @@ func (d *MobyDocker) Events(ctx context.Context, since string) (EventStream, err
 	select {
 	case err := <-res.Err:
 		cancel()
-		if err == nil {
-			err = io.EOF
-		}
 		return nil, err
 	default:
 	}
@@ -92,10 +85,7 @@ func (s *mobyEvents) Next() (Event, error) {
 	select {
 	case m := <-s.res.Messages:
 		return eventOf(m), nil
-	case err, ok := <-s.res.Err:
-		if !ok || err == nil {
-			return Event{}, io.EOF
-		}
+	case err := <-s.res.Err:
 		return Event{}, err
 	}
 }

@@ -73,7 +73,7 @@ func TestAxiomSendNDJSON(t *testing.T) {
 		t.Fatal("not delivered")
 	}
 	want := `{"_time":"2024-01-01T00:00:00.000000001Z","message":"hello","stream":"stdout","service_id":"n1","service":"svc-n1","task":"t1","replica":1,"node":"node1","container":"abcdef123456"}` + "\n" +
-		`{"_time":"2024-01-01T00:00:01Z","message":"say \"hi\" <b>","stream":"stderr","service_id":"n1","service":"svc-n1","task":"t1","replica":1,"node":"node1","container":"abcdef123456"}`
+		`{"_time":"2024-01-01T00:00:01Z","message":"say \"hi\" \u003cb\u003e","stream":"stderr","service_id":"n1","service":"svc-n1","task":"t1","replica":1,"node":"node1","container":"abcdef123456"}` + "\n"
 	if got := as.requests(); len(got) != 1 || got[0] != want {
 		t.Fatalf("body =\n%v\nwant\n%s", got, want)
 	}
@@ -85,9 +85,6 @@ func TestAxiomSendNDJSON(t *testing.T) {
 	}
 	if len(*sleeps) != 0 {
 		t.Errorf("slept %v", *sleeps)
-	}
-	if sink.Key() != "axiom:"+srv.URL+":keel logs:secret" {
-		t.Errorf("key = %q", sink.Key())
 	}
 }
 
@@ -102,7 +99,7 @@ func TestAxiomRejectDrops(t *testing.T) {
 	if len(as.requests()) != 1 || len(*sleeps) != 0 {
 		t.Fatalf("retried a 400")
 	}
-	if want := `[axiom] rejected 400, dropping 2 events {"text":"{\"message\":\"bad\"}"}`; !strings.Contains(logs.String(), want) {
+	if want := `[axiom] rejected 400, dropping 2 events: "{\"message\":\"bad\"}"`; !strings.Contains(logs.String(), want) {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
@@ -124,7 +121,7 @@ func TestAxiomRetriesThenGivesUp(t *testing.T) {
 	}
 	out := logs.String()
 	for _, w := range []string{
-		`[axiom] ingest 429, retry 1 {"text":"` + strings.Repeat("e", 200) + `"}`,
+		`[axiom] ingest 429, retry 1: "` + strings.Repeat("e", 200) + `"`,
 		`[axiom] ingest 500, retry 5`,
 		`[axiom] unreachable, keeping 2 events for a later attempt`,
 	} {
@@ -161,8 +158,8 @@ func TestAxiomNetworkError(t *testing.T) {
 
 func TestSinkFactory(t *testing.T) {
 	f := NewSinkFactory(http.DefaultClient, NewLogger(io.Discard))
-	if s, ok := f(SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.Key() != "axiom:api.axiom.co:d:t" {
-		t.Fatalf("axiom sink = %v, %v", s, ok)
+	if s, ok := f(SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.(*AxiomSink).url != "https://api.axiom.co/v1/datasets/d/ingest" {
+		t.Fatalf("axiom sink = %+v, %v", s, ok)
 	}
 	if _, ok := f(SinkConfig{Kind: "clickhouse"}); ok {
 		t.Fatal("unknown kind built a sink")

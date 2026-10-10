@@ -3,16 +3,8 @@ package agent
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
-)
-
-const (
-	streamStdout = "stdout"
-	streamStderr = "stderr"
 )
 
 type Frame struct {
@@ -25,37 +17,32 @@ type FrameParser struct {
 }
 
 func (p *FrameParser) Push(chunk []byte) []Frame {
-	buf := chunk
-	if len(p.carry) > 0 {
-		buf = make([]byte, 0, len(p.carry)+len(chunk))
-		buf = append(append(buf, p.carry...), chunk...)
-	}
+	buf := append(p.carry, chunk...)
 	var out []Frame
 	off := 0
 	for off+8 <= len(buf) {
 		typ := buf[off]
-		n := int64(binary.BigEndian.Uint32(buf[off+4 : off+8]))
 		if typ > 2 {
-			out = append(out, Frame{Stream: streamStdout, Text: string(buf[off:])})
 			p.carry = nil
-			return out
+			return append(out, Frame{Stream: "stdout", Text: string(buf[off:])})
 		}
-		if int64(off)+8+n > int64(len(buf)) {
+		n := int(binary.BigEndian.Uint32(buf[off+4 : off+8]))
+		if off+8+n > len(buf) {
 			break
 		}
-		stream := streamStdout
+		stream := "stdout"
 		if typ == 2 {
-			stream = streamStderr
+			stream = "stderr"
 		}
-		out = append(out, Frame{Stream: stream, Text: string(buf[off+8 : off+8+int(n)])})
-		off += 8 + int(n)
+		out = append(out, Frame{Stream: stream, Text: string(buf[off+8 : off+8+n])})
+		off += 8 + n
 	}
-	p.carry = append([]byte(nil), buf[off:]...)
+	p.carry = buf[off:]
 	return out
 }
 
 type Line struct {
-	Time   string
+	Time   time.Time
 	Text   string
 	Stream string
 }
@@ -81,44 +68,14 @@ func (s *LineSplitter) Push(f Frame) []Line {
 
 func parseLine(raw, stream string) Line {
 	line := strings.TrimSuffix(raw, "\r")
-	if space := strings.IndexByte(line, ' '); space > 0 {
-		stamp := line[:space]
-		if len(stamp) >= 20 && strings.HasSuffix(stamp, "Z") && stamp[4] == '-' {
-			return Line{Time: stamp, Text: line[space+1:], Stream: stream}
-		}
+	stamp, text, ok := strings.Cut(line, " ")
+	t, err := time.Parse(time.RFC3339Nano, stamp)
+	if !ok || err != nil {
+		return Line{Text: line, Stream: stream}
 	}
-	return Line{Text: line, Stream: stream}
+	return Line{Time: t, Text: text, Stream: stream}
 }
 
-var stampRE = regexp.MustCompile(`^(.+?)(?:\.(\d{1,9}))?Z$`)
-
-func sinceAfter(stamp string) string {
-	m := stampRE.FindStringSubmatch(stamp)
-	if m == nil {
-		return ""
-	}
-	t, err := time.Parse(time.RFC3339, m[1]+"Z")
-	if err != nil {
-		return ""
-	}
-	secs := t.Unix()
-	frac := m[2] + strings.Repeat("0", 9-len(m[2]))
-	nanos, _ := strconv.ParseInt(frac, 10, 64)
-	nanos++
-	if nanos >= 1_000_000_000 {
-		nanos -= 1_000_000_000
-		secs++
-	}
-	return fmt.Sprintf("%d.%09d", secs, nanos)
-}
-
-func dockerSince(ms float64) string {
-	nanos := math.Floor(math.Mod(ms, 1000)*1_000_000 + 0.5)
-	nanos = math.Min(nanos, 999_999_999)
-	return fmt.Sprintf("%d.%09d", int64(math.Floor(ms/1000)), int64(nanos))
-}
-
-func eventsSinceAfter(timeNano int64) string {
-	ns := timeNano + 1
-	return fmt.Sprintf("%d.%09d", ns/1_000_000_000, ns%1_000_000_000)
+func dockerTime(t time.Time) string {
+	return fmt.Sprintf("%d.%09d", t.Unix(), t.Nanosecond())
 }

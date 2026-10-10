@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 )
@@ -15,8 +17,6 @@ type State struct {
 	mu    sync.Mutex
 	data  stateFile
 	dirty bool
-
-	writeMu sync.Mutex
 }
 
 type stateFile struct {
@@ -25,18 +25,13 @@ type stateFile struct {
 }
 
 func LoadState(path string) *State {
-	s := &State{path: path, data: stateFile{LogsSince: map[string]string{}}}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return s
+	s := &State{path: path}
+	raw, _ := os.ReadFile(path)
+	if json.Unmarshal(raw, &s.data) != nil {
+		s.data = stateFile{}
 	}
-	var parsed stateFile
-	if json.Unmarshal(raw, &parsed) != nil {
-		return s
-	}
-	s.data.EventsSince = parsed.EventsSince
-	if parsed.LogsSince != nil {
-		s.data.LogsSince = parsed.LogsSince
+	if s.data.LogsSince == nil {
+		s.data.LogsSince = map[string]string{}
 	}
 	return s
 }
@@ -61,19 +56,15 @@ func (s *State) LogsSince(container string) (string, bool) {
 	return v, ok
 }
 
-func (s *State) Checkpoint(points []resumePoint) {
+func (s *State) Checkpoint(container, since string) {
+	if since == "" {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, p := range points {
-		if p.since == "" {
-			continue
-		}
-		s.data.LogsSince[p.container] = p.since
-		s.dirty = true
-	}
+	s.data.LogsSince[container] = since
+	s.dirty = true
 }
-
-type resumePoint struct{ container, since string }
 
 func (s *State) Forget(container string) {
 	s.mu.Lock()
@@ -87,23 +78,17 @@ func (s *State) Forget(container string) {
 func (s *State) LogsSinceIDs() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ids := make([]string, 0, len(s.data.LogsSince))
-	for id := range s.data.LogsSince {
-		ids = append(ids, id)
-	}
-	return ids
+	return slices.Collect(maps.Keys(s.data.LogsSince))
 }
 
 func (s *State) Flush() error {
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	if !s.dirty {
 		s.mu.Unlock()
 		return nil
 	}
 	s.dirty = false
-	raw := marshal(s.data)
+	raw, _ := json.Marshal(s.data)
 	s.mu.Unlock()
 	return writeFileAtomic(s.path, raw)
 }
@@ -132,22 +117,16 @@ func writeFileAtomic(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
+	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		os.Remove(tmp.Name())
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
 		return err
 	}
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		os.Remove(tmp.Name())
 		return err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
-	return nil
+	return os.Rename(tmp.Name(), path)
 }

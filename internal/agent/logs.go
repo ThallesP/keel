@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"math"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,13 +21,12 @@ type Shipper struct {
 	newSink SinkFactory
 	refresh func()
 
-	flushEvery   time.Duration
-	flushLines   int
-	retryEvery   time.Duration
-	maxQueue     int
-	followRetry  time.Duration
-	refreshEvery time.Duration
-	now          func() time.Time
+	flushEvery  time.Duration
+	flushLines  int
+	retryEvery  time.Duration
+	maxQueue    int
+	followRetry time.Duration
+	now         func() time.Time
 
 	followCtx     context.Context
 	stopFollowing context.CancelFunc
@@ -34,24 +36,18 @@ type Shipper struct {
 
 	mu             sync.Mutex
 	nodeID         string
-	routes         map[string]route
-	sinkByService  map[string]Sink
+	queues         map[SinkConfig]*queue
+	queueByService map[string]*queue
 	sinceByService map[string]string
 	readSince      map[string]string
 	followers      map[string]*follower
 	finished       map[string]bool
 	starts         uint64
 	startedAt      map[string]uint64
-	queues         map[string]*queue
 	flushTimer     *time.Timer
 	retryTimer     *time.Timer
 	lastRefresh    time.Time
 	closed         bool
-}
-
-type route struct {
-	sink       Sink
-	serviceIDs map[string]bool
 }
 
 type entry struct {
@@ -73,10 +69,9 @@ func NewShipper(docker Docker, state *State, log *Logger, newSink SinkFactory, r
 	s := &Shipper{
 		docker: docker, state: state, log: log, newSink: newSink, refresh: refresh,
 		flushEvery: time.Second, flushLines: 500, retryEvery: 5 * time.Second, maxQueue: 20_000,
-		followRetry: 3 * time.Second, refreshEvery: 5 * time.Second, now: time.Now,
-		routes: map[string]route{}, sinkByService: map[string]Sink{}, sinceByService: map[string]string{},
+		followRetry: 3 * time.Second, now: time.Now,
 		readSince: map[string]string{}, followers: map[string]*follower{}, finished: map[string]bool{},
-		startedAt: map[string]uint64{}, queues: map[string]*queue{},
+		startedAt: map[string]uint64{},
 	}
 	s.followCtx, s.stopFollowing = context.WithCancel(context.Background())
 	s.sendCtx, s.cancelSends = context.WithCancel(context.Background())
@@ -89,67 +84,44 @@ func (s *Shipper) SetNodeID(id string) {
 	s.nodeID = id
 }
 
-func (s *Shipper) ApplyConfig(sinks []SinkRoute) bool {
+func (s *Shipper) ApplyConfig(routes []SinkRoute) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := map[string]route{}
-	nextByService := map[string]Sink{}
-	nextSince := map[string]string{}
-	existing := map[string]Sink{}
-	for _, r := range s.routes {
-		existing[r.sink.Key()] = r.sink
-	}
-	for _, sr := range sinks {
-		key := sinkKey(sr.Sink)
-		sink, ok := existing[key]
-		if !ok {
-			built, known := s.newSink(sr.Sink)
-			if !known {
+	queues := map[SinkConfig]*queue{}
+	byService := map[string]*queue{}
+	since := map[string]string{}
+	for _, r := range routes {
+		q := cmp.Or(queues[r.Sink], s.queues[r.Sink])
+		if q == nil {
+			sink, ok := s.newSink(r.Sink)
+			if !ok {
 				continue
 			}
-			sink = built
-			existing[key] = sink
+			q = &queue{sink: sink}
 		}
-		ids := make(map[string]bool, len(sr.ServiceIDs))
-		for _, id := range sr.ServiceIDs {
-			ids[id] = true
-			nextByService[id] = sink
-			if sr.Since != nil {
-				nextSince[id] = dockerSince(*sr.Since)
+		queues[r.Sink] = q
+		for _, id := range r.ServiceIDs {
+			byService[id] = q
+			if r.Since > 0 {
+				since[id] = dockerTime(time.UnixMilli(r.Since))
 			}
 		}
-		next[sr.ProjectID] = route{sink: sink, serviceIDs: ids}
 	}
-	changed := len(next) != len(s.routes) || len(nextByService) != len(s.sinkByService)
-	for p, r := range next {
-		if old, ok := s.routes[p]; !ok || old.sink.Key() != r.sink.Key() {
-			changed = true
-		}
-	}
-	for id, sink := range nextByService {
-		if old, ok := s.sinkByService[id]; !ok || old.Key() != sink.Key() {
-			changed = true
-		}
-	}
-	s.routes, s.sinkByService, s.sinceByService = next, nextByService, nextSince
-	used := map[string]bool{}
-	for _, r := range next {
-		used[r.sink.Key()] = true
-	}
-	for key, q := range s.queues {
-		if used[key] {
+	changed := !maps.Equal(queues, s.queues) || !maps.Equal(byService, s.queueByService)
+	for cfg, q := range s.queues {
+		if queues[cfg] != nil {
 			continue
 		}
-		delete(s.queues, key)
 		if len(q.entries) > 0 {
 			s.log.Log("logs", "dropping "+strconv.Itoa(len(q.entries))+" queued lines for a removed sink")
 		}
+		q.entries = nil
 		wakeRoom(q)
 	}
+	s.queues, s.queueByService, s.sinceByService = queues, byService, since
 	if changed {
-		s.log.Log("logs", "config applied", "sinks", len(next), "services", len(nextByService))
+		s.log.Log("logs", fmt.Sprintf("config applied: sinks=%d services=%d", len(queues), len(byService)))
 	}
-	return changed
 }
 
 func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
@@ -171,15 +143,13 @@ func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
 	for _, c := range containers {
 		known[c.ID] = true
 		serviceID, ok := serviceIDOf(c.Labels)
-		_, routed := s.sinkByService[serviceID]
-		routed = ok && routed
 		_, resumable := s.state.LogsSince(c.ID)
 		pending := resumable && !s.finished[c.ID]
-		if routed && (c.State == "running" || pending) {
-			s.startLocked(c)
-		} else {
-			s.stopLocked(c.ID, false)
+		if ok && s.queueByService[serviceID] != nil && (c.State == "running" || pending) {
+			s.startLocked(c, serviceID)
+			continue
 		}
+		s.stopLocked(c.ID, false)
 	}
 	for id := range s.followers {
 		if !known[id] {
@@ -191,16 +161,8 @@ func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
 			s.stopLocked(id, true)
 		}
 	}
-	for id := range s.finished {
-		if !known[id] {
-			delete(s.finished, id)
-		}
-	}
-	for id := range s.startedAt {
-		if !known[id] {
-			delete(s.startedAt, id)
-		}
-	}
+	maps.DeleteFunc(s.finished, func(id string, _ bool) bool { return !known[id] })
+	maps.DeleteFunc(s.startedAt, func(id string, _ uint64) bool { return !known[id] })
 	return nil
 }
 
@@ -212,20 +174,19 @@ func (s *Shipper) OnContainerEvent(action, id string, attrs map[string]string) {
 			return
 		}
 		s.mu.Lock()
-		if _, routed := s.sinkByService[serviceID]; routed {
-			s.startLocked(Container{ID: id, Labels: attrs, State: "running"})
+		if s.queueByService[serviceID] != nil {
+			s.startLocked(Container{ID: id, Labels: attrs}, serviceID)
 			s.mu.Unlock()
 			return
 		}
 		now := s.now()
-		early := now.Sub(s.lastRefresh) > s.refreshEvery
-		if early {
-			s.lastRefresh = now
+		if now.Sub(s.lastRefresh) <= 5*time.Second {
+			s.mu.Unlock()
+			return
 		}
+		s.lastRefresh = now
 		s.mu.Unlock()
-		if early && s.refresh != nil {
-			s.refresh()
-		}
+		s.refresh()
 	case "destroy":
 		s.mu.Lock()
 		s.stopLocked(id, true)
@@ -233,15 +194,8 @@ func (s *Shipper) OnContainerEvent(action, id string, attrs map[string]string) {
 	}
 }
 
-func (s *Shipper) startLocked(c Container) {
+func (s *Shipper) startLocked(c Container, serviceID string) {
 	if _, ok := s.followers[c.ID]; ok || s.closed {
-		return
-	}
-	serviceID, ok := serviceIDOf(c.Labels)
-	if !ok {
-		return
-	}
-	if _, routed := s.sinkByService[serviceID]; !routed {
 		return
 	}
 	ctx, cancel := context.WithCancel(s.followCtx)
@@ -249,9 +203,7 @@ func (s *Shipper) startLocked(c Container) {
 	s.followers[c.ID] = f
 	s.starts++
 	s.startedAt[c.ID] = s.starts
-	s.followersWG.Add(1)
-	go func() {
-		defer s.followersWG.Done()
+	s.followersWG.Go(func() {
 		defer cancel()
 		s.follow(ctx, c, serviceID)
 		s.mu.Lock()
@@ -259,7 +211,7 @@ func (s *Shipper) startLocked(c Container) {
 			delete(s.followers, c.ID)
 		}
 		s.mu.Unlock()
-	}()
+	})
 }
 
 func (s *Shipper) stopLocked(id string, forget bool) {
@@ -281,14 +233,9 @@ var errUnrouted = errors.New("unrouted")
 func (s *Shipper) follow(ctx context.Context, c Container, serviceID string) {
 	for ctx.Err() == nil {
 		s.mu.Lock()
-		_, routed := s.sinkByService[serviceID]
-		since, ok := s.readSince[c.ID]
-		if !ok {
-			since, ok = s.state.LogsSince(c.ID)
-		}
-		if !ok {
-			since = s.sinceByService[serviceID]
-		}
+		routed := s.queueByService[serviceID] != nil
+		persisted, _ := s.state.LogsSince(c.ID)
+		since := cmp.Or(s.readSince[c.ID], persisted, s.sinceByService[serviceID])
 		s.mu.Unlock()
 		if !routed {
 			return
@@ -317,7 +264,7 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 	}
 	defer rc.Close()
 	service := c.Labels[labelServiceName]
-	s.log.Log("logs", "following "+service+" ("+shortID(c.ID)+")", "since", orDefault(since, "now"))
+	s.log.Log("logs", "following "+service+" ("+shortID(c.ID)+") since "+cmp.Or(since, "now"))
 	base := LogEvent{
 		ServiceID: serviceID,
 		Service:   service,
@@ -346,78 +293,40 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 	}
 }
 
-func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, base LogEvent, line Line) bool {
+func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, ev LogEvent, line Line) bool {
+	ev.Message, ev.Stream = line.Text, line.Stream
+	at, since := s.now(), ""
+	if !line.Time.IsZero() {
+		at, since = line.Time, dockerTime(line.Time.Add(time.Nanosecond))
+	}
+	ev.Time = at.UTC().Format(time.RFC3339Nano)
 	for {
 		s.mu.Lock()
-		sink := s.sinkByService[serviceID]
-		if sink == nil {
+		q := s.queueByService[serviceID]
+		if q == nil || ctx.Err() != nil {
 			s.mu.Unlock()
 			return false
 		}
-		q := s.queueForLocked(sink)
-		s.mu.Unlock()
-		if !s.waitForRoom(ctx, q) {
-			return false
-		}
-		if s.enqueueLine(ctx, q, containerID, base, line) {
+		if len(q.entries) < s.maxQueue {
+			ev.Node = s.nodeID
+			if since != "" {
+				s.readSince[containerID] = since
+			}
+			s.enqueueLocked(q, entry{event: ev, container: containerID, since: since})
+			s.mu.Unlock()
 			return true
 		}
-		if ctx.Err() != nil {
+		if q.room == nil {
+			q.room = make(chan struct{})
+		}
+		room := q.room
+		s.mu.Unlock()
+		select {
+		case <-room:
+		case <-ctx.Done():
 			return false
 		}
 	}
-}
-
-func (s *Shipper) enqueueLine(ctx context.Context, q *queue, containerID string, base LogEvent, line Line) bool {
-	ev := base
-	ev.Message = line.Text
-	ev.Stream = line.Stream
-	ev.Time = line.Time
-	if ev.Time == "" {
-		ev.Time = isoMillis(s.now())
-	}
-	after := ""
-	if line.Time != "" {
-		after = sinceAfter(line.Time)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ctx.Err() != nil || s.queues[q.sink.Key()] != q {
-		return false
-	}
-	ev.Node = s.nodeID
-	if after != "" {
-		s.readSince[containerID] = after
-	}
-	s.enqueueLocked(q, entry{event: ev, container: containerID, since: after})
-	return true
-}
-
-func (s *Shipper) queueForLocked(sink Sink) *queue {
-	q := s.queues[sink.Key()]
-	if q == nil {
-		q = &queue{sink: sink}
-		s.queues[sink.Key()] = q
-	}
-	return q
-}
-
-func (s *Shipper) waitForRoom(ctx context.Context, q *queue) bool {
-	s.mu.Lock()
-	if len(q.entries) < s.maxQueue || ctx.Err() != nil {
-		s.mu.Unlock()
-		return ctx.Err() == nil
-	}
-	if q.room == nil {
-		q.room = make(chan struct{})
-	}
-	room := q.room
-	s.mu.Unlock()
-	select {
-	case <-room:
-	case <-ctx.Done():
-	}
-	return ctx.Err() == nil
 }
 
 func wakeRoom(q *queue) {
@@ -464,13 +373,13 @@ func (s *Shipper) drain(q *queue, done chan struct{}) {
 	defer close(done)
 	for {
 		s.mu.Lock()
-		if len(q.entries) == 0 || s.queues[q.sink.Key()] != q {
+		if len(q.entries) == 0 {
 			q.draining = nil
 			s.mu.Unlock()
 			return
 		}
 		n := min(s.flushLines, len(q.entries))
-		batch := append([]entry(nil), q.entries[:n]...)
+		batch := slices.Clone(q.entries[:n])
 		q.entries = q.entries[n:]
 		s.mu.Unlock()
 
@@ -495,11 +404,9 @@ func (s *Shipper) drain(q *queue, done chan struct{}) {
 			s.mu.Unlock()
 			return
 		}
-		points := make([]resumePoint, 0, len(batch))
 		for _, e := range batch {
-			points = append(points, resumePoint{container: e.container, since: e.since})
+			s.state.Checkpoint(e.container, e.since)
 		}
-		s.state.Checkpoint(points)
 		if len(q.entries) < s.maxQueue/2 {
 			wakeRoom(q)
 		}
@@ -535,22 +442,16 @@ func (s *Shipper) Close(wait time.Duration) {
 	s.closed = true
 	if s.flushTimer != nil {
 		s.flushTimer.Stop()
-		s.flushTimer = nil
 	}
 	if s.retryTimer != nil {
 		s.retryTimer.Stop()
-		s.retryTimer = nil
 	}
 	s.mu.Unlock()
 	waitAtMost(&s.followersWG, wait)
 }
 
 func serviceIDOf(labels map[string]string) (string, bool) {
-	name := labels[labelServiceName]
-	if !strings.HasPrefix(name, "svc-") {
-		return "", false
-	}
-	return name[len("svc-"):], true
+	return strings.CutPrefix(labels[labelServiceName], "svc-")
 }
 
 func replicaOf(taskName string) int {
@@ -558,16 +459,8 @@ func replicaOf(taskName string) int {
 	if len(parts) < 2 {
 		return 0
 	}
-	f, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
-		return 0
-	}
-	return int(f)
+	n, _ := strconv.Atoi(parts[1])
+	return n
 }
 
-func shortID(id string) string {
-	if len(id) > 12 {
-		return id[:12]
-	}
-	return id
-}
+func shortID(id string) string { return id[:min(len(id), 12)] }

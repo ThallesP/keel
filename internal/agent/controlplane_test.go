@@ -63,7 +63,7 @@ func TestFetchConfig(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"sinks":[{"projectId":"p1","serviceIds":["n1","n2"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel","traces":"keel-traces","token":"xaat-1","org":"acme"},"since":1759912345678.25},{"projectId":"p2","serviceIds":[],"sink":{"kind":"axiom","domain":"d","dataset":"x","token":"t"}}]}`)
+		io.WriteString(w, `{"sinks":[{"projectId":"p1","serviceIds":["n1","n2"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel","traces":"keel-traces","token":"xaat-1","org":"acme"},"since":1759912345678},{"projectId":"p2","serviceIds":[],"sink":{"kind":"axiom","domain":"d","dataset":"x","token":"t"}}]}`)
 	}))
 	defer srv.Close()
 
@@ -76,14 +76,14 @@ func TestFetchConfig(t *testing.T) {
 		t.Fatalf("sinks = %+v", cfg.Sinks)
 	}
 	s := cfg.Sinks[0]
-	if s.ProjectID != "p1" || !slices.Equal(s.ServiceIDs, []string{"n1", "n2"}) || s.Since == nil || *s.Since != 1759912345678.25 {
+	if !slices.Equal(s.ServiceIDs, []string{"n1", "n2"}) || s.Since != 1759912345678 {
 		t.Errorf("route = %+v", s)
 	}
 	if s.Sink != (SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel", Token: "xaat-1"}) {
 		t.Errorf("sink = %+v", s.Sink)
 	}
-	if cfg.Sinks[1].Since != nil {
-		t.Errorf("absent since = %v, want nil", *cfg.Sinks[1].Since)
+	if cfg.Sinks[1].Since != 0 {
+		t.Errorf("absent since = %d, want 0", cfg.Sinks[1].Since)
 	}
 
 	cp.Token = "wrong"
@@ -127,7 +127,7 @@ func TestPostEventsRejected(t *testing.T) {
 	if len(es.all()) != 1 || len(*sleeps) != 0 {
 		t.Fatalf("a 4xx was retried: %d posts, sleeps %v", len(es.all()), *sleeps)
 	}
-	if want := `[events] rejected 400, skipping {"body":"` + strings.Repeat("x", 120) + `"}`; !strings.Contains(logs.String(), want) {
+	if want := `[events] rejected 400, skipping "` + strings.Repeat("x", 120) + `"`; !strings.Contains(logs.String(), want) {
 		t.Fatalf("log = %s", logs.String())
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -60,8 +61,8 @@ func (a *dockerAPI) requests() []string {
 
 func (a *dockerAPI) find(prefix string) url.Values {
 	for _, r := range a.requests() {
-		if strings.HasPrefix(r, prefix+"?") {
-			q, _ := url.ParseQuery(strings.SplitN(r, "?", 2)[1])
+		if query, ok := strings.CutPrefix(r, prefix+"?"); ok {
+			q, _ := url.ParseQuery(query)
 			return q
 		}
 	}
@@ -73,12 +74,12 @@ func newTestMoby(t *testing.T) (*MobyDocker, *dockerAPI) {
 	api := &dockerAPI{}
 	srv := httptest.NewServer(api)
 	t.Cleanup(srv.Close)
-	d, err := newMobyDocker(client.WithHost("tcp://"+strings.TrimPrefix(srv.URL, "http://")), client.WithHTTPRequestHook(readOnly))
+	cli, err := client.New(client.WithHost("tcp://"+strings.TrimPrefix(srv.URL, "http://")), client.WithHTTPRequestHook(readOnly))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { d.Close() })
-	return d, api
+	t.Cleanup(func() { cli.Close() })
+	return &MobyDocker{cli: cli}, api
 }
 
 func filtersOf(t *testing.T, q url.Values) map[string]map[string]bool {
@@ -109,7 +110,7 @@ func TestMobyInfoAndContainers(t *testing.T) {
 		t.Errorf("all = %q", q.Get("all"))
 	}
 	want := map[string]map[string]bool{"label": {labelServiceName: true}, "status": {"running": true, "exited": true}}
-	if got := filtersOf(t, q); !equalFilters(got, want) {
+	if got := filtersOf(t, q); !reflect.DeepEqual(got, want) {
 		t.Errorf("filters = %v, want %v", got, want)
 	}
 }
@@ -130,8 +131,8 @@ func TestMobyContainerLogsQuery(t *testing.T) {
 	}
 	var logs []url.Values
 	for _, r := range api.requests() {
-		if strings.HasPrefix(r, "GET /containers/c1/logs?") {
-			q, _ := url.ParseQuery(strings.SplitN(r, "?", 2)[1])
+		if query, ok := strings.CutPrefix(r, "GET /containers/c1/logs?"); ok {
+			q, _ := url.ParseQuery(query)
 			logs = append(logs, q)
 		}
 	}
@@ -167,13 +168,15 @@ func TestMobyEvents(t *testing.T) {
 	if e1.Type != "container" || e1.Action != "start" || e1.ActorID != "c1" || e1.Attributes[labelServiceName] != "svc-n1" || e1.TimeNano != 1704067200000000001 {
 		t.Fatalf("event = %+v", e1)
 	}
-	var raw map[string]any
+	var raw struct {
+		Type, Action string
+		Actor        struct{ Attributes map[string]string }
+		Time         int64
+	}
 	if err := json.Unmarshal(e1.Raw, &raw); err != nil {
 		t.Fatal(err)
 	}
-	actor, _ := raw["Actor"].(map[string]any)
-	attrs, _ := actor["Attributes"].(map[string]any)
-	if raw["Type"] != "container" || raw["Action"] != "start" || attrs[labelServiceName] != "svc-n1" || raw["time"] != float64(1704067200) {
+	if raw.Type != "container" || raw.Action != "start" || raw.Actor.Attributes[labelServiceName] != "svc-n1" || raw.Time != 1704067200 {
 		t.Fatalf("raw = %s", e1.Raw)
 	}
 	if e2, err := s.Next(); err != nil || e2.Type != "node" {
@@ -187,7 +190,7 @@ func TestMobyEvents(t *testing.T) {
 		t.Errorf("since = %q", q.Get("since"))
 	}
 	want := map[string]map[string]bool{"type": {"container": true, "service": true, "node": true}}
-	if got := filtersOf(t, q); !equalFilters(got, want) {
+	if got := filtersOf(t, q); !reflect.DeepEqual(got, want) {
 		t.Errorf("filters = %v", got)
 	}
 }
@@ -242,22 +245,4 @@ func TestNewMobyDockerIsReadOnly(t *testing.T) {
 			t.Fatalf("the daemon saw %s", r)
 		}
 	}
-}
-
-func equalFilters(a, b map[string]map[string]bool) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv := b[k]
-		if len(av) != len(bv) {
-			return false
-		}
-		for v := range av {
-			if !bv[v] {
-				return false
-			}
-		}
-	}
-	return true
 }

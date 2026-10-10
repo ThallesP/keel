@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,8 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/config"
 	"github.com/ThallesP/keel/internal/cli/output"
 )
-
-const InstallCommand = "curl -fsSL https://raw.githubusercontent.com/ThallesP/keel/main/install.sh | sudo bash"
 
 func Discover(ctx context.Context, webURL string) (*api.Meta, error) {
 	c := New(webURL, "")
@@ -24,17 +21,8 @@ func Discover(ctx context.Context, webURL string) (*api.Meta, error) {
 	if r.status == http.StatusOK && json.Unmarshal(r.body, &m) == nil && m.Name == "keel" {
 		return &m, nil
 	}
-	if c.convexEra(ctx) {
-		return nil, output.Errorf(output.CodeDiscoveryFailed, InstallCommand,
-			"%s runs an older Keel; re-run install.sh on it to upgrade", webURL)
-	}
 	return nil, output.Errorf(output.CodeDiscoveryFailed, "keel login <the URL you open the dashboard at>",
 		"%s doesn't look like a Keel dashboard (no /api/meta)", webURL)
-}
-
-func (c *Client) convexEra(ctx context.Context) bool {
-	r, err := c.send(ctx, http.MethodGet, "/config.js", nil, nil)
-	return err == nil && r.status == http.StatusOK && bytes.Contains(r.body, []byte(`"convexUrl"`))
 }
 
 const ClientID = "keel-cli"

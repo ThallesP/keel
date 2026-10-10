@@ -140,11 +140,10 @@ func TestMeNotKeel(t *testing.T) {
 		code string
 		msg  string
 	}{
-		{"older keel", map[string]string{
-			"/api/me":    `<!doctype html><html></html>`,
-			"/api/meta":  `<!doctype html><html></html>`,
-			"/config.js": `window.__KEEL__ = {"convexUrl":"http://100.64.0.1:3210","convexSiteUrl":"http://100.64.0.1:3211"};`,
-		}, output.CodeDiscoveryFailed, "runs an older Keel"},
+		{"html", map[string]string{
+			"/api/me":   `<!doctype html><html></html>`,
+			"/api/meta": `<!doctype html><html></html>`,
+		}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
 		{"something else", map[string]string{}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
 		{"keel failing", map[string]string{
 			"/api/me":   `{"user":`,
@@ -177,10 +176,6 @@ func TestDiscover(t *testing.T) {
 		msg  string
 	}{
 		{"keel", map[string]string{"/api/meta": `{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`}, "", ""},
-		{"older keel", map[string]string{
-			"/api/meta":  `<!doctype html><html></html>`,
-			"/config.js": `window.__KEEL__ = {"convexUrl":"http://100.64.0.1:3210","convexSiteUrl":"http://100.64.0.1:3211"};`,
-		}, output.CodeDiscoveryFailed, "runs an older Keel"},
 		{"not keel", map[string]string{"/api/meta": `{"hello":"world"}`}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

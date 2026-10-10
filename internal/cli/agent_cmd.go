@@ -13,8 +13,7 @@ func init() {
 			Short: "Run the node agent (Docker events to the control plane, container logs to the sink)",
 			Long: "Runs on every Swarm node as a global service. Outbound only, read-only on Docker.\n\n" +
 				"Environment: KEEL_URL (required), KEEL_WORKER_TOKEN or /run/secrets/keel_worker_token,\n" +
-				"KEEL_STATE (/var/lib/keel-agent/state.json; /var/lib/keel-worker/state.json when only\n" +
-				"that directory is mounted), KEEL_CONFIG_POLL_MS (30000),\n" +
+				"KEEL_STATE (/var/lib/keel-agent/state.json), KEEL_CONFIG_POLL_MS (30000),\n" +
 				"DOCKER_SOCKET (/var/run/docker.sock), KEEL_TS_AUTHKEY (optional: reach KEEL_URL through\n" +
 				"an embedded, ephemeral Tailscale node keel-agent-<hostname> instead of the host network).",
 			Args: cobra.NoArgs,

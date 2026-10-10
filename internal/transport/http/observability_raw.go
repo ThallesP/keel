@@ -13,7 +13,6 @@ import (
 func (s *Server) registerObservabilityRaw(mux *http.ServeMux) {
 	mux.HandleFunc("POST /otlp/v1/traces", s.obsOTLPTraces)
 	mux.HandleFunc("GET /worker/config", s.obsWorkerConfig)
-	mux.HandleFunc("GET /agent/config", s.obsWorkerConfig)
 }
 
 func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {

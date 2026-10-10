@@ -115,9 +115,6 @@ func (c *Client) failure(what string, r *reply) *output.Error {
 	}
 	code := p.Code
 	if code == "" {
-		code = codeOfMessage(msg)
-	}
-	if code == "" {
 		switch r.status {
 		case http.StatusUnauthorized:
 			code = output.CodeNotAuthenticated
@@ -172,28 +169,6 @@ func takenProject(msg string) string {
 		if s, ok := strings.CutSuffix(s, `" already exists`); ok {
 			return s
 		}
-	}
-	return ""
-}
-
-func codeOfMessage(msg string) string {
-	switch {
-	case msg == "Not authenticated":
-		return output.CodeNotAuthenticated
-	case strings.HasPrefix(msg, "You're not in an organization"):
-		return output.CodeNoOrganization
-	case msg == "A deployment is already running":
-		return output.CodeDeploymentRunning
-	case msg == "Nothing to ship":
-		return output.CodeNothingToShip
-	case msg == "Node not found":
-		return output.CodeServiceNotFound
-	case msg == "Connect Axiom to see traces" || msg == "Sign in with Axiom again to turn on traces":
-		return output.CodeTracesOff
-	case msg == "Environment not found":
-		return output.CodeProjectNotFound
-	case takenProject(msg) != "", strings.HasSuffix(msg, `" is already taken`):
-		return output.CodeNameTaken
 	}
 	return ""
 }

@@ -290,10 +290,8 @@ func TestWorkerConfigRoute(t *testing.T) {
 	}
 	h.setSink(t, domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel-logs", Token: "xaat-1"})
 	want := `{"sinks":[{"projectId":"p","serviceIds":["api"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel-logs","token":"xaat-1"},"since":1791000000000}]}`
-	for _, path := range []string{"/worker/config", "/agent/config"} {
-		if r := h.do(t, "", "GET", path, "", "Authorization", "Bearer worker-secret"); r.body != want {
-			t.Fatalf("%s: %s", path, r.body)
-		}
+	if r := h.do(t, "", "GET", "/worker/config", "", "Authorization", "Bearer worker-secret"); r.body != want {
+		t.Fatalf("configured: %s", r.body)
 	}
 	h.app.Config.WorkerToken = ""
 	if r := h.do(t, "", "GET", "/worker/config", "", "Authorization", "Bearer "); r.status != 401 {

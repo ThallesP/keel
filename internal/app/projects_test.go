@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
 )
 
@@ -56,8 +55,8 @@ func TestCanvasListProjects(t *testing.T) {
 	k.project(canvasOrg, "Zeta")
 	k.project(canvasOrg, "Alpha")
 	k.project(canvasOther, "Other")
-	k.exec(`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('imp', 'org-a', 'Imported', 'imported', 0)`)
-	k.exec(`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('stg', 'imp', 'staging', 0, 0), ('prd', 'imp', 'production', 1, 0)`)
+	k.exec(`INSERT INTO projects (id, organization_id, name, slug, created_at) VALUES ('shop', 'org-a', 'Shop', 'shop', 0)`)
+	k.exec(`INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES ('stg', 'shop', 'staging', 0, 0), ('prd', 'shop', 'production', 1, 0)`)
 
 	list, err := k.app.ListProjects(k.ctx, a)
 	if err != nil {
@@ -67,13 +66,13 @@ func TestCanvasListProjects(t *testing.T) {
 	for _, p := range list {
 		slugs = append(slugs, p.Project.Slug)
 	}
-	if !reflect.DeepEqual(slugs, []string{"zeta", "alpha", "imported"}) {
+	if !reflect.DeepEqual(slugs, []string{"zeta", "alpha", "shop"}) {
 		t.Fatalf("slugs %v (creation order, own organization only)", slugs)
 	}
 	if envs := list[2].Environments; len(envs) != 2 || envs[0].ID != "prd" || envs[1].ID != "stg" {
 		t.Fatalf("environments %+v (production first)", envs)
 	}
-	if home, _ := k.app.ProjectBySlug(k.ctx, a, "imported"); home == nil || home.Environment.ID != "prd" {
+	if home, _ := k.app.ProjectBySlug(k.ctx, a, "shop"); home == nil || home.Environment.ID != "prd" {
 		t.Fatalf("by slug opens production: %+v", home)
 	}
 
@@ -81,10 +80,6 @@ func TestCanvasListProjects(t *testing.T) {
 	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 	_, err = k.app.ListProjects(k.ctx, domain.Actor{UserID: "u"})
 	canvasWantErr(t, err, domain.CodeNoOrganization, "You're not in an organization yet. Ask a member for an invite link.")
-	k.exec(`DELETE FROM organizations`)
-	if list, err := k.app.ListProjects(k.ctx, domain.Actor{UserID: "u"}); err != nil || len(list) != 0 {
-		t.Fatalf("fresh install: %v %v", list, err)
-	}
 }
 
 func TestCanvasProjectBySlug(t *testing.T) {
@@ -125,17 +120,8 @@ func TestCanvasEnsureDefaultProject(t *testing.T) {
 	if slug, _ := k.app.EnsureDefaultProject(k.ctx, canvasMember(canvasOther)); slug != "billing" {
 		t.Errorf("other org: %q", slug)
 	}
-	app.StubCanvasSeams(t, app.CanvasSeams{Join: func(tx app.Tx, actor domain.Actor, now int64) (domain.Actor, error) {
-		actor.OrganizationID, actor.Role = "org-new", domain.RoleOwner
-		return actor, nil
-	}})
-	k.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org-new', 'Default', 'default', 1)`)
-	if slug, err := k.app.EnsureDefaultProject(k.ctx, domain.Actor{UserID: "founder"}); err != nil || slug != "acme-support" {
-		t.Fatalf("founding: %q %v", slug, err)
-	}
-	if got := k.pub.take("org-new"); !reflect.DeepEqual(got, []string{"/api/me", "/api/organization", "/api/projects"}) {
-		t.Errorf("founding topics %v", got)
-	}
+	_, err = k.app.EnsureDefaultProject(k.ctx, domain.Actor{UserID: "u"})
+	canvasWantErr(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 	_, err = k.app.EnsureDefaultProject(k.ctx, domain.Actor{})
 	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 }

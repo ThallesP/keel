@@ -51,26 +51,7 @@ func (s *Swarm) UpdateService(ctx context.Context, version uint64, spec app.Serv
 }
 
 func (s *Swarm) RemoveService(ctx context.Context, nodeID string) error {
-	return s.removeService(ctx, serviceName(nodeID))
-}
-
-const legacyTunnelLabel = "keel.ingress"
-
-func (s *Swarm) RemoveLegacyTunnels(ctx context.Context) (int, error) {
-	res, err := s.cli.ServiceList(ctx, client.ServiceListOptions{Filters: make(client.Filters).Add("label", legacyTunnelLabel)})
-	if err != nil {
-		return 0, err
-	}
-	for _, svc := range res.Items {
-		if err := s.removeService(ctx, svc.ID); err != nil {
-			return 0, err
-		}
-	}
-	return len(res.Items), nil
-}
-
-func (s *Swarm) removeService(ctx context.Context, nameOrID string) error {
-	_, err := s.cli.ServiceRemove(ctx, nameOrID, client.ServiceRemoveOptions{})
+	_, err := s.cli.ServiceRemove(ctx, serviceName(nodeID), client.ServiceRemoveOptions{})
 	if cerrdefs.IsNotFound(err) {
 		return nil
 	}

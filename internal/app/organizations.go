@@ -21,33 +21,6 @@ func foundOrganization(tx Tx, ownerID string, now int64) (domain.Organization, e
 	return org, err
 }
 
-func joinOrFound(tx Tx, actor domain.Actor, now int64) (domain.Actor, error) {
-	if !actor.SignedIn() {
-		return actor, domain.ErrNotAuthenticated
-	}
-	m, err := tx.AuthMembership(actor.UserID)
-	if err == nil {
-		actor.OrganizationID, actor.Role = m.OrganizationID, m.Role
-		return actor, nil
-	}
-	if !errors.Is(err, ErrNoRow) {
-		return actor, err
-	}
-	exists, err := tx.AuthAnyOrganization()
-	if err != nil {
-		return actor, err
-	}
-	if exists {
-		return actor, domain.ErrNoOrganization
-	}
-	org, err := foundOrganization(tx, actor.UserID, now)
-	if err != nil {
-		return actor, err
-	}
-	actor.OrganizationID, actor.Role = org.ID, domain.RoleOwner
-	return actor, nil
-}
-
 func authFreshMember(tx Tx, actor domain.Actor) (domain.Member, error) {
 	if err := actor.RequireMember(); err != nil {
 		return domain.Member{}, err
@@ -224,11 +197,7 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 		if err := joinWithInvitation(tx, ch, *inv, actor.UserID, now); err != nil {
 			return err
 		}
-		role := inv.Role
-		if role == "" {
-			role = domain.RoleMember
-		}
-		out = MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: role}
+		out = MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: inv.Role}
 		return nil
 	})
 	if err == nil && a.Conns != nil {

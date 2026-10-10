@@ -468,8 +468,8 @@ func TestRecover(t *testing.T) {
 	if !reflect.DeepEqual(w.swarm.agents, []app.AgentSpec{{Image: "ghcr.io/thallesp/keel:1.2.3", ControlURL: "http://100.64.0.1:8080", Token: "secret"}}) {
 		t.Fatalf("agent: %+v", w.swarm.agents)
 	}
-	if w.swarm.observed[0] != "*" || w.swarm.tunnelSweeps != 1 {
-		t.Fatalf("no sweep: %v, tunnels %d", w.swarm.observed, w.swarm.tunnelSweeps)
+	if w.swarm.observed[0] != "*" {
+		t.Fatalf("no sweep: %v", w.swarm.observed)
 	}
 	if len(w.swarm.creates) != 2 {
 		t.Fatalf("creates: %+v", w.swarm.creates)

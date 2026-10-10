@@ -19,23 +19,6 @@ type ProjectHome struct {
 
 var canvasDefaultProject = struct{ Name, Slug string }{"acme-support", "acme-support"}
 
-func canvasMembership(tx Tx, ch *Changes, actor domain.Actor, now int64) (domain.Actor, error) {
-	if err := actor.RequireUser(); err != nil {
-		return actor, err
-	}
-	m, err := canvasJoin(tx, actor, now)
-	if err != nil {
-		return m, err
-	}
-	if m.OrganizationID == "" {
-		return m, errors.New("joinOrFound returned no organization")
-	}
-	if actor.OrganizationID == "" {
-		authMembershipChanged(ch, m.OrganizationID)
-	}
-	return m, nil
-}
-
 func canvasInsertProject(tx Tx, org, name, slug string, now int64) (ProjectSummary, error) {
 	p := domain.Project{ID: domain.NewID(), OrganizationID: org, Name: name, Slug: slug, CreatedAt: now}
 	if err := tx.CanvasInsertProject(p); err != nil {
@@ -56,13 +39,12 @@ func canvasProjectExists(slug string) error {
 }
 
 func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (string, error) {
+	if err := actor.RequireMember(); err != nil {
+		return "", err
+	}
 	var slug string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		m, err := canvasMembership(tx, ch, actor, a.Now())
-		if err != nil {
-			return err
-		}
-		own, err := tx.CanvasProjects(m.OrganizationID)
+		own, err := tx.CanvasProjects(actor.OrganizationID)
 		if err != nil {
 			return err
 		}
@@ -70,10 +52,10 @@ func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (str
 			slug = own[0].Slug
 			return nil
 		}
-		if _, err := canvasInsertProject(tx, m.OrganizationID, canvasDefaultProject.Name, canvasDefaultProject.Slug, a.Now()); err != nil {
+		if _, err := canvasInsertProject(tx, actor.OrganizationID, canvasDefaultProject.Name, canvasDefaultProject.Slug, a.Now()); err != nil {
 			return err
 		}
-		ch.Projects(m.OrganizationID)
+		ch.Projects(actor.OrganizationID)
 		slug = canvasDefaultProject.Slug
 		return nil
 	})
@@ -81,12 +63,11 @@ func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (str
 }
 
 func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string) (ProjectSummary, error) {
+	if err := actor.RequireMember(); err != nil {
+		return ProjectSummary{}, err
+	}
 	var out ProjectSummary
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		m, err := canvasMembership(tx, ch, actor, a.Now())
-		if err != nil {
-			return err
-		}
 		name := domain.TrimJS(name)
 		if n := domain.UTF16Len(name); n == 0 || n > 60 {
 			return domain.Invalid("Project name: 1–60 characters")
@@ -95,16 +76,17 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 		if slug == "" {
 			return domain.Invalid("Project name needs a letter or digit (a-z, 0-9)")
 		}
-		if _, err := tx.CanvasProjectBySlug(m.OrganizationID, slug); err == nil {
+		if _, err := tx.CanvasProjectBySlug(actor.OrganizationID, slug); err == nil {
 			return canvasProjectExists(slug)
 		} else if !errors.Is(err, ErrNoRow) {
 			return err
 		}
-		out, err = canvasInsertProject(tx, m.OrganizationID, name, slug, a.Now())
+		created, err := canvasInsertProject(tx, actor.OrganizationID, name, slug, a.Now())
 		if err != nil {
 			return err
 		}
-		ch.Projects(m.OrganizationID)
+		out = created
+		ch.Projects(actor.OrganizationID)
 		return nil
 	})
 	return out, err
@@ -134,21 +116,11 @@ func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string
 }
 
 func (a *App) ListProjects(ctx context.Context, actor domain.Actor) ([]ProjectSummary, error) {
+	if err := actor.RequireMember(); err != nil {
+		return nil, err
+	}
 	out := []ProjectSummary{}
 	err := a.read(ctx, func(tx Tx) error {
-		if actor.OrganizationID == "" {
-			if err := actor.RequireUser(); err != nil {
-				return err
-			}
-			exists, err := tx.CanvasOrganizationExists()
-			if err != nil {
-				return err
-			}
-			if exists {
-				return domain.ErrNoOrganization
-			}
-			return nil
-		}
 		projects, err := tx.CanvasProjects(actor.OrganizationID)
 		if err != nil {
 			return err

@@ -104,8 +104,8 @@ func (f *authFixture) exec(q string, args ...any) {
 	}
 }
 
-func (f *authFixture) legacyUser(id, email, hash string) {
-	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Legacy', ?, 1, 1)`, id, email, hash)
+func (f *authFixture) insertUser(id, email, hash string) {
+	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Guest', ?, 1, 1)`, id, email, hash)
 }
 
 func (f *authFixture) hash(pw string) string {
@@ -272,37 +272,6 @@ func TestAuthSignIn(t *testing.T) {
 	}
 }
 
-func TestAuthSignInRehashesBetterAuthHash(t *testing.T) {
-	f := authSetup(t)
-	const scryptHash = "0123456789abcdef0123456789abcdef:68b228eae069737062c56fbe239acdc9517ba0c0ed53447e2697faa281de7aab26e6e87571f29175a258c42d8a9fde39d6cd344c160472b76897c7bcfe0a1f53"
-	f.legacyUser("legacyuser", "legacy@example.com", scryptHash)
-
-	if _, err := f.app.SignIn(f.ctx, "legacy@example.com", "wrong", authClient); err == nil {
-		t.Fatal("wrong password signed in")
-	}
-	out, err := f.app.SignIn(f.ctx, "legacy@example.com", "correct-horse-battery", authClient)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out.User.ID != "legacyuser" {
-		t.Fatalf("user: %+v", out.User)
-	}
-	var stored string
-	if err := f.store.DB().QueryRow(`SELECT password_hash FROM users WHERE id = 'legacyuser'`).Scan(&stored); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(stored, "$argon2id$") {
-		t.Fatalf("not rehashed: %s", stored)
-	}
-	if _, err := f.app.SignIn(f.ctx, "legacy@example.com", "correct-horse-battery", authClient); err != nil {
-		t.Fatalf("sign in after rehash: %v", err)
-	}
-	me, _ := f.app.GetMe(f.ctx, f.actor(out.Token))
-	if me.User == nil || me.Organization != nil {
-		t.Fatalf("legacy me: %+v", me)
-	}
-}
-
 func TestAuthSignInLimiter(t *testing.T) {
 	f := authSetup(t)
 	f.signUp("ci@example.com", "")
@@ -351,9 +320,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 	if a.SessionRenewed || a.SessionExpiresAt != authT0+domain.SessionTTL {
 		t.Fatalf("fresh session: %+v", a)
 	}
-	if b := f.actor(s.Token + ".c2lnbmF0dXJl"); b.SessionID != a.SessionID {
-		t.Fatal("signed form of the token did not resolve")
-	}
 
 	f.now = authT0 + domain.SessionUpdateAge - 1
 	if a := f.actor(s.Token); a.SessionRenewed {
@@ -394,7 +360,7 @@ func TestAuthSessionLifetime(t *testing.T) {
 	}
 	var stored string
 	_ = f.store.DB().QueryRow(`SELECT token_hash FROM sessions`).Scan(&stored)
-	if stored == two.Token || stored != domain.HashSessionToken(two.Token) {
+	if stored == two.Token || stored != domain.HashSecret(two.Token) {
 		t.Fatalf("stored token %q", stored)
 	}
 }
@@ -487,24 +453,24 @@ func TestAuthInvitationLimit(t *testing.T) {
 func TestAuthAcceptInvitation(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
-	f.legacyUser("legacy1", "legacy@example.com", f.hash("legacy-password"))
-	f.legacyUser("legacy2", "other@example.com", f.hash("legacy-password"))
+	f.insertUser("guest1", "guest@example.com", f.hash("guest-password"))
+	f.insertUser("guest2", "other@example.com", f.hash("guest-password"))
 	signIn := func(email string) domain.Actor {
-		out, err := f.app.SignIn(f.ctx, email, "legacy-password", authClient)
+		out, err := f.app.SignIn(f.ctx, email, "guest-password", authClient)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return f.actor(out.Token)
 	}
-	legacy, other := signIn("legacy@example.com"), signIn("other@example.com")
+	guest, other := signIn("guest@example.com"), signIn("other@example.com")
 
-	inv, err := f.app.CreateInvitation(f.ctx, owner, "Legacy@Example.com", "")
+	inv, err := f.app.CreateInvitation(f.ctx, owner, "Guest@Example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.app.AcceptInvitation(f.ctx, domain.Actor{}, inv.ID)
 	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
-	_, err = f.app.AcceptInvitation(f.ctx, legacy, "unknown")
+	_, err = f.app.AcceptInvitation(f.ctx, guest, "unknown")
 	authWant(t, err, domain.CodeNotFound, "Invitation not found")
 	_, err = f.app.AcceptInvitation(f.ctx, other, inv.ID)
 	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
@@ -512,7 +478,7 @@ func TestAuthAcceptInvitation(t *testing.T) {
 	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
 
 	f.events.take(owner.OrganizationID)
-	org, err := f.app.AcceptInvitation(f.ctx, legacy, inv.ID)
+	org, err := f.app.AcceptInvitation(f.ctx, guest, inv.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,43 +488,15 @@ func TestAuthAcceptInvitation(t *testing.T) {
 	if got := f.events.take(owner.OrganizationID); strings.Join(got, ",") != "/api/me,/api/organization" {
 		t.Fatalf("accept published %v", got)
 	}
-	_, err = f.app.AcceptInvitation(f.ctx, legacy, inv.ID)
+	_, err = f.app.AcceptInvitation(f.ctx, guest, inv.ID)
 	authWant(t, err, domain.CodeNotFound, "Invitation not found")
 
 	again, _ := f.app.CreateInvitation(f.ctx, owner, "other@example.com", "")
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org2', 'Second', 'second', 1)`)
-	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('m2', 'org2', 'legacy2', 'owner', 1)`)
+	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('m2', 'org2', 'guest2', 'owner', 1)`)
 	other = signIn("other@example.com")
 	_, err = f.app.AcceptInvitation(f.ctx, other, again.ID)
 	authWant(t, err, domain.CodeConflict, "You're already in an organization")
-}
-
-func TestAuthJoinOrFound(t *testing.T) {
-	f := authSetup(t)
-	_, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{})
-	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
-
-	f.legacyUser("u1", "one@example.com", "")
-	f.legacyUser("u2", "two@example.com", "")
-	one, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1", Email: "one@example.com"})
-	if err != nil || one.OrganizationID == "" || one.Role != domain.RoleOwner {
-		t.Fatalf("founder: %+v %v", one, err)
-	}
-	me, _ := f.app.GetMe(f.ctx, one)
-	if me.Organization == nil || me.Organization.Name != "Default" || me.Organization.Slug != "default" {
-		t.Fatalf("founded: %+v", me.Organization)
-	}
-	again, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1"})
-	if err != nil || again.OrganizationID != one.OrganizationID {
-		t.Fatalf("second call: %+v %v", again, err)
-	}
-	_, err = app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u2"})
-	authWant(t, err, domain.CodeNoOrganization, "You're not in an organization yet. Ask a member for an invite link.")
-	var n int
-	_ = f.store.DB().QueryRow(`SELECT COUNT(*) FROM organizations`).Scan(&n)
-	if n != 1 {
-		t.Fatalf("%d organizations", n)
-	}
 }
 
 func TestAuthForeignOrganizationIsMissing(t *testing.T) {
@@ -569,7 +507,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('orgb', 'Other', 'other', 1)`)
-	f.legacyUser("ub", "b@example.com", f.hash("b-password-123"))
+	f.insertUser("ub", "b@example.com", f.hash("b-password-123"))
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('mb', 'orgb', 'ub', 'owner', 1)`)
 	out, err := f.app.SignIn(f.ctx, "b@example.com", "b-password-123", authClient)
 	if err != nil {
@@ -611,7 +549,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 
 	_, err = f.app.ListMembers(f.ctx, domain.Actor{})
 	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
-	f.legacyUser("loner", "loner@example.com", "")
+	f.insertUser("loner", "loner@example.com", "")
 	_, err = f.app.ListInvitations(f.ctx, domain.Actor{UserID: "loner"})
 	authWant(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }

@@ -1,9 +1,6 @@
 -- Canvas area: projects, environments, variables, the cluster row it reads.
 -- Creation order is rowid order (insertion order; an UPDATE keeps the rowid).
 
--- name: CanvasCountOrganizations :one
-SELECT COUNT(*) FROM organizations;
-
 -- name: CanvasListProjects :many
 SELECT * FROM projects WHERE organization_id = ? ORDER BY rowid;
 

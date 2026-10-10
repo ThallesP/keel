@@ -78,16 +78,9 @@ func TestValidPassword(t *testing.T) {
 	}
 }
 
-func TestHashSessionToken(t *testing.T) {
-	a := HashSessionToken("abc")
-	if len(a) != 64 {
-		t.Fatalf("hash length %d", len(a))
-	}
-	if a != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+func TestHashSecret(t *testing.T) {
+	if a := HashSecret("abc"); a != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
 		t.Fatalf("sha256(abc) = %s", a)
-	}
-	if HashSessionToken("abc.c2lnbmF0dXJl") != a {
-		t.Fatal("signature suffix not stripped")
 	}
 }
 
@@ -128,7 +121,6 @@ func TestInvitationStanding(t *testing.T) {
 		{InvitationPending, 8, false},
 		{InvitationAccepted, 100, false},
 		{InvitationCanceled, 100, false},
-		{InvitationRejected, 100, false},
 	}
 	for _, c := range cases {
 		if got := (Invitation{Status: c.status, ExpiresAt: c.expires}).Standing(9); got != c.want {
@@ -153,8 +145,6 @@ func TestInviteRole(t *testing.T) {
 		{RoleMember, RoleMember, "", CodeForbidden, MsgNotAllowedToInvite},
 		{"", RoleMember, "", CodeForbidden, MsgNotAllowedToInvite},
 		{RoleOwner, "superuser", "", CodeInvalidInput, "Role not found: superuser"},
-		{"admin,member", RoleOwner, "", CodeForbidden, MsgNotAllowedToInviteWithRole},
-		{"member, owner", RoleOwner, RoleOwner, "", ""},
 	}
 	for _, c := range cases {
 		got, err := InviteRole(c.inviter, c.role)

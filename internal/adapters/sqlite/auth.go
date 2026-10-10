@@ -53,10 +53,6 @@ func (t *tx) AuthInsertUser(u domain.User, passwordHash string) error {
 		PasswordHash: passwordHash, CreatedAt: u.CreatedAt, UpdatedAt: u.CreatedAt})
 }
 
-func (t *tx) AuthSetPasswordHash(userID, hash string, now int64) error {
-	return t.q.AuthSetPasswordHash(t.ctx, sqlc.AuthSetPasswordHashParams{PasswordHash: hash, UpdatedAt: now, ID: userID})
-}
-
 func (t *tx) AuthSession(tokenHash string) (domain.Session, error) {
 	s, err := t.q.AuthGetSessionByTokenHash(t.ctx, tokenHash)
 	if err != nil {
@@ -79,8 +75,6 @@ func (t *tx) AuthDeleteSession(id string) error { return t.q.AuthDeleteSession(t
 func (t *tx) AuthDeleteExpiredSessions(now int64) error {
 	return t.q.AuthDeleteExpiredSessions(t.ctx, now)
 }
-
-func (t *tx) AuthAnyOrganization() (bool, error) { return t.q.AuthAnyOrganization(t.ctx) }
 
 func (t *tx) AuthOrganization(id string) (domain.Organization, error) {
 	o, err := t.q.AuthGetOrganization(t.ctx, id)

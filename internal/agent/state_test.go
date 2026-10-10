@@ -30,10 +30,10 @@ func TestLoadStateMissingOrGarbage(t *testing.T) {
 	}
 }
 
-func TestLoadStateFromBunWorker(t *testing.T) {
+func TestLoadStateReadsResumePoints(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	bun := `{"eventsSince":"1727600000.123456790","logsSince":{"f00dbabe0000111122223333444455556666777788889999aaaabbbbccccdddd":"1727600000.123456790"}}`
-	if err := os.WriteFile(path, []byte(bun), 0o644); err != nil {
+	saved := `{"eventsSince":"1727600000.123456790","logsSince":{"f00dbabe0000111122223333444455556666777788889999aaaabbbbccccdddd":"1727600000.123456790"}}`
+	if err := os.WriteFile(path, []byte(saved), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := LoadState(path)

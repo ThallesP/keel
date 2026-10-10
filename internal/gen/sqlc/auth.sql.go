@@ -9,17 +9,6 @@ import (
 	"context"
 )
 
-const authAnyOrganization = `-- name: AuthAnyOrganization :one
-SELECT EXISTS (SELECT 1 FROM organizations) AS found
-`
-
-func (q *Queries) AuthAnyOrganization(ctx context.Context) (bool, error) {
-	row := q.db.QueryRowContext(ctx, authAnyOrganization)
-	var found bool
-	err := row.Scan(&found)
-	return found, err
-}
-
 const authAnyUser = `-- name: AuthAnyUser :one
 
 SELECT EXISTS (SELECT 1 FROM users) AS found
@@ -637,19 +626,4 @@ func (q *Queries) AuthSetInvitationStatus(ctx context.Context, arg AuthSetInvita
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-const authSetPasswordHash = `-- name: AuthSetPasswordHash :exec
-UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
-`
-
-type AuthSetPasswordHashParams struct {
-	PasswordHash string
-	UpdatedAt    int64
-	ID           string
-}
-
-func (q *Queries) AuthSetPasswordHash(ctx context.Context, arg AuthSetPasswordHashParams) error {
-	_, err := q.db.ExecContext(ctx, authSetPasswordHash, arg.PasswordHash, arg.UpdatedAt, arg.ID)
-	return err
 }

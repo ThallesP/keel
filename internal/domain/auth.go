@@ -1,7 +1,5 @@
 package domain
 
-import "strings"
-
 const (
 	RoleOwner  = "owner"
 	RoleAdmin  = "admin"
@@ -12,17 +10,8 @@ func KnownRole(role string) bool {
 	return role == RoleOwner || role == RoleAdmin || role == RoleMember
 }
 
-func HasRole(role, want string) bool {
-	for _, r := range strings.Split(role, ",") {
-		if strings.TrimSpace(r) == want {
-			return true
-		}
-	}
-	return false
-}
-
 func CanManageInvitations(role string) bool {
-	return HasRole(role, RoleOwner) || HasRole(role, RoleAdmin)
+	return role == RoleOwner || role == RoleAdmin
 }
 
 type User struct {
@@ -67,7 +56,6 @@ const (
 	InvitationPending  InvitationStatus = "pending"
 	InvitationAccepted InvitationStatus = "accepted"
 	InvitationCanceled InvitationStatus = "canceled"
-	InvitationRejected InvitationStatus = "rejected"
 )
 
 type Invitation struct {
@@ -95,7 +83,7 @@ func InviteRole(inviterRole, role string) (string, error) {
 	if !KnownRole(role) {
 		return "", Invalid("%s: %s", MsgRoleNotFound, role)
 	}
-	if role == RoleOwner && !HasRole(inviterRole, RoleOwner) {
+	if role == RoleOwner && inviterRole != RoleOwner {
 		return "", E(CodeForbidden, MsgNotAllowedToInviteWithRole)
 	}
 	return role, nil

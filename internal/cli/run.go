@@ -17,7 +17,7 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-var overlayHost = regexp.MustCompile(`\bsvc-[0-9a-z]{20,32}\b`)
+var overlayHost = regexp.MustCompile(`\bsvc-[0-9a-z]{20}\b`)
 
 type childExit struct{ code int }
 

@@ -3,7 +3,6 @@ package app
 import "github.com/ThallesP/keel/internal/domain"
 
 var (
-	canvasJoin       = joinOrFound
 	canvasShip       = (*App).beginDeployment
 	canvasSchedulers = func(a *App) CanvasSchedulers {
 		return CanvasSchedulers{ProxySync: a.ScheduleProxySync, RemoveService: a.ScheduleRemoveService, Observe: a.ScheduleObserve}

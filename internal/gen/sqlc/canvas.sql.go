@@ -9,20 +9,6 @@ import (
 	"context"
 )
 
-const canvasCountOrganizations = `-- name: CanvasCountOrganizations :one
-
-SELECT COUNT(*) FROM organizations
-`
-
-// Canvas area: projects, environments, variables, the cluster row it reads.
-// Creation order is rowid order (insertion order; an UPDATE keeps the rowid).
-func (q *Queries) CanvasCountOrganizations(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, canvasCountOrganizations)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const canvasDeleteNodeVariables = `-- name: CanvasDeleteNodeVariables :exec
 DELETE FROM variables WHERE node_id = ?
 `
@@ -227,9 +213,12 @@ func (q *Queries) CanvasListEnvironments(ctx context.Context, projectID string) 
 }
 
 const canvasListProjects = `-- name: CanvasListProjects :many
+
 SELECT id, organization_id, name, slug, created_at FROM projects WHERE organization_id = ? ORDER BY rowid
 `
 
+// Canvas area: projects, environments, variables, the cluster row it reads.
+// Creation order is rowid order (insertion order; an UPDATE keeps the rowid).
 func (q *Queries) CanvasListProjects(ctx context.Context, organizationID string) ([]Project, error) {
 	rows, err := q.db.QueryContext(ctx, canvasListProjects, organizationID)
 	if err != nil {

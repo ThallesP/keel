@@ -84,8 +84,8 @@ func TestDockerCallsHaveDeadlines(t *testing.T) {
 	w.app.ScheduleRemoveService(a.ID)
 	w.app.Recover(ctx)
 	w.jobs.advance(time.Second)
-	if len(w.swarm.creates) != 1 || len(w.swarm.removed) != 1 || w.swarm.tunnelSweeps != 1 {
-		t.Fatalf("calls missing: creates %d removed %d tunnels %d", len(w.swarm.creates), len(w.swarm.removed), w.swarm.tunnelSweeps)
+	if len(w.swarm.creates) != 1 || len(w.swarm.removed) != 1 {
+		t.Fatalf("calls missing: creates %d removed %d", len(w.swarm.creates), len(w.swarm.removed))
 	}
 	if len(w.swarm.undated) != 0 {
 		t.Fatalf("Docker calls without a deadline: %v", w.swarm.undated)

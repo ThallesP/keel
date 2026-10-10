@@ -44,13 +44,6 @@ func ValidPassword(password string) error {
 	return nil
 }
 
-func HashSessionToken(token string) string {
-	if i := strings.IndexByte(token, '.'); i >= 0 {
-		token = token[:i]
-	}
-	return HashSecret(token)
-}
-
 func HashSecret(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])

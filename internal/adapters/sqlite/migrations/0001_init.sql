@@ -7,8 +7,7 @@ CREATE TABLE users (
   id            TEXT PRIMARY KEY,
   email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
   name          TEXT NOT NULL DEFAULT '',
-  -- argon2id PHC string ($argon2id$v=19$m=…,t=…,p=…$salt$hash). An account imported from Better
-  -- Auth may hold its scrypt "salt:hash" until its next sign-in rehashes it.
+  -- argon2id PHC string ($argon2id$v=19$m=…,t=…,p=…$salt$hash).
   password_hash TEXT NOT NULL DEFAULT '',
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL
@@ -51,7 +50,7 @@ CREATE TABLE invitations (
   organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   email           TEXT NOT NULL COLLATE NOCASE,
   role            TEXT NOT NULL DEFAULT 'member',
-  status          TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'canceled', 'rejected')),
+  status          TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'canceled')),
   inviter_id      TEXT NOT NULL DEFAULT '',
   expires_at      INTEGER NOT NULL,
   created_at      INTEGER NOT NULL
@@ -126,6 +125,10 @@ CREATE TABLE nodes (
   created_at           INTEGER NOT NULL
 );
 CREATE INDEX nodes_by_environment ON nodes(environment_id);
+-- Node names are unique per environment: `${{ name.KEY }}` references resolve by name
+-- (docs/go/spec/projects.md section 0). The use cases still check first and map a violation to
+-- the same message.
+CREATE UNIQUE INDEX nodes_environment_name ON nodes(environment_id, name);
 
 -- nodes.endpoints in Convex. Uniqueness that Convex enforced in code is enforced here too.
 CREATE TABLE endpoints (

@@ -130,7 +130,7 @@ func TestAgentSpec(t *testing.T) {
 				"Privileges": {"CredentialSpec": null, "SELinuxContext": null, "NoNewPrivileges": true},
 				"Mounts": [
 					{"Type": "bind", "Source": "/var/run/docker.sock", "Target": "/var/run/docker.sock", "ReadOnly": true},
-					{"Type": "volume", "Source": "keel-worker-state", "Target": "/var/lib/keel-worker"}
+					{"Type": "volume", "Source": "keel-agent-state", "Target": "/var/lib/keel-agent"}
 				],
 				"StopGracePeriod": 10000000000,
 				"Secrets": [{"File": {"Name": "keel_worker_token", "UID": "0", "GID": "0", "Mode": 256}, "SecretID": "sec1", "SecretName": "`+agentSecretName("tok")+`"}],

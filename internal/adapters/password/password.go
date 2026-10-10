@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"runtime"
@@ -12,7 +11,6 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/scrypt"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -38,13 +36,6 @@ func (h *Hasher) params() Params {
 	}
 	return h.Params
 }
-
-const (
-	scryptN      = 16384
-	scryptR      = 16
-	scryptP      = 1
-	scryptKeyLen = 64
-)
 
 const (
 	maxMemory  = 1 << 20
@@ -77,47 +68,15 @@ func (h *Hasher) Hash(password string) (string, error) {
 		argon2.Version, p.Memory, p.Time, p.Threads, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
 }
 
-func (h *Hasher) Verify(hash, password string) (ok, rehash bool) {
-	switch {
-	case strings.HasPrefix(hash, "$argon2id$"):
-		p, salt, key, err := parseArgon2id(hash)
-		if err != nil {
-			h.dummy(password)
-			return false, false
-		}
-		var got []byte
-		withSlot(func() { got = argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen) })
-		if subtle.ConstantTimeCompare(got, key) != 1 {
-			return false, false
-		}
-		cur := h.params()
-		return true, p.Memory != cur.Memory || p.Time != cur.Time || p.Threads != cur.Threads ||
-			p.KeyLen != cur.KeyLen || len(salt) != cur.SaltLen
-	case strings.Contains(hash, ":"):
-		ok := verifyScrypt(hash, password)
-		return ok, ok
-	}
-	h.dummy(password)
-	return false, false
-}
-
-func verifyScrypt(hash, password string) bool {
-	saltHex, keyHex, _ := strings.Cut(hash, ":")
-	if saltHex == "" || keyHex == "" {
-		return false
-	}
-	want, err := hex.DecodeString(keyHex)
-	if err != nil || len(want) != scryptKeyLen {
+func (h *Hasher) Verify(hash, password string) bool {
+	p, salt, key, err := parseArgon2id(hash)
+	if err != nil {
+		h.dummy(password)
 		return false
 	}
 	var got []byte
-	withSlot(func() {
-		got, err = scrypt.Key(normalize(password), []byte(saltHex), scryptN, scryptR, scryptP, scryptKeyLen)
-	})
-	if err != nil {
-		return false
-	}
-	return subtle.ConstantTimeCompare(got, want) == 1
+	withSlot(func() { got = argon2.IDKey(normalize(password), salt, p.Time, p.Memory, p.Threads, p.KeyLen) })
+	return subtle.ConstantTimeCompare(got, key) == 1
 }
 
 func (h *Hasher) dummy(password string) {

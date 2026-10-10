@@ -43,7 +43,7 @@ func Env(key, def string) string {
 func ConfigFromEnv(version string) app.Config {
 	return app.Config{
 		Version:         version,
-		SiteURL:         strings.TrimRight(Env("KEEL_SITE_URL", Env("SITE_URL", "")), "/"),
+		SiteURL:         strings.TrimRight(Env("KEEL_SITE_URL", ""), "/"),
 		WorkerToken:     Env("KEEL_WORKER_TOKEN", ""),
 		PublicIP:        Env("KEEL_PUBLIC_IP", ""),
 		ACMECA:          Env("KEEL_ACME_CA", ""),

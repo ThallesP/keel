@@ -52,7 +52,7 @@ func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, e
 	if token == "" {
 		return domain.Actor{}, nil
 	}
-	hash := domain.HashSessionToken(token)
+	hash := domain.HashSecret(token)
 	now := a.Now()
 	var (
 		found  bool
@@ -200,17 +200,11 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 				return err
 			}
 		case first:
-			founded, err := tx.AuthAnyOrganization()
+			org, err := foundOrganization(tx, user.ID, now)
 			if err != nil {
 				return err
 			}
-			if !founded {
-				org, err := foundOrganization(tx, user.ID, now)
-				if err != nil {
-					return err
-				}
-				authMembershipChanged(ch, org.ID)
-			}
+			authMembershipChanged(ch, org.ID)
 		}
 		out, err = issueSession(tx, user, now, in.Client)
 		return err
@@ -226,11 +220,7 @@ func joinWithInvitation(tx Tx, ch *Changes, inv domain.Invitation, userID string
 	if !ok {
 		return domain.NotFound(domain.MsgInvitationNotFound)
 	}
-	role := inv.Role
-	if role == "" {
-		role = domain.RoleMember
-	}
-	err = tx.AuthInsertMember(domain.Member{ID: domain.NewID(), OrganizationID: inv.OrganizationID, UserID: userID, Role: role, CreatedAt: now})
+	err = tx.AuthInsertMember(domain.Member{ID: domain.NewID(), OrganizationID: inv.OrganizationID, UserID: userID, Role: inv.Role, CreatedAt: now})
 	if err != nil {
 		return err
 	}
@@ -247,7 +237,7 @@ func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (Signed
 		ID: domain.NewID(), UserID: user.ID, ExpiresAt: now + domain.SessionTTL, CreatedAt: now,
 		UserAgent: authClip(client.UserAgent, 512), IP: authClip(client.IP, 64),
 	}
-	if err := tx.AuthInsertSession(s, domain.HashSessionToken(token)); err != nil {
+	if err := tx.AuthInsertSession(s, domain.HashSecret(token)); err != nil {
 		return SignedIn{}, err
 	}
 	return SignedIn{Token: token, User: user, Session: s}, nil
@@ -284,16 +274,9 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 	if err != nil {
 		return SignedIn{}, err
 	}
-	ok, rehash := a.Passwords.Verify(cred.PasswordHash, password)
+	ok := a.Passwords.Verify(cred.PasswordHash, password)
 	if !found || !ok {
 		return SignedIn{}, domain.E(domain.CodeNotAuthenticated, domain.MsgInvalidEmailOrPassword)
-	}
-	newHash := ""
-	if rehash {
-		if newHash, err = a.Passwords.Hash(password); err != nil {
-			a.Log.Warn("rehash password", "err", err)
-			newHash = ""
-		}
 	}
 	var out SignedIn
 	err = a.write(ctx, func(tx Tx, _ *Changes) error {
@@ -304,11 +287,6 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 		}
 		if err != nil {
 			return err
-		}
-		if newHash != "" {
-			if err := tx.AuthSetPasswordHash(user.ID, newHash, now); err != nil {
-				return err
-			}
 		}
 		out, err = issueSession(tx, user, now, client)
 		return err

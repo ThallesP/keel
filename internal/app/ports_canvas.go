@@ -7,8 +7,6 @@ import (
 )
 
 type CanvasTx interface {
-	CanvasOrganizationExists() (bool, error)
-
 	CanvasProjects(organizationID string) ([]domain.Project, error)
 	CanvasProjectBySlug(organizationID, slug string) (domain.Project, error)
 	CanvasInsertProject(p domain.Project) error

@@ -22,29 +22,15 @@ type Config struct {
 }
 
 const (
-	agentStateDir     = "/var/lib/keel-agent"
-	workerStateDir    = "/var/lib/keel-worker"
 	defaultConfigPoll = 30 * time.Second
 	shutdownBudget    = 5 * time.Second
 )
 
-func defaultStatePath(isDir func(string) bool) string {
-	if !isDir(agentStateDir) && isDir(workerStateDir) {
-		return workerStateDir + "/state.json"
-	}
-	return agentStateDir + "/state.json"
-}
-
-func isDir(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && fi.IsDir()
-}
-
 func ConfigFromEnv() (Config, error) {
-	return configFrom(os.Getenv, "/run/secrets/keel_worker_token", isDir)
+	return configFrom(os.Getenv, "/run/secrets/keel_worker_token")
 }
 
-func configFrom(getenv func(string) string, secretPath string, isDir func(string) bool) (Config, error) {
+func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 	cfg := Config{
 		URL:          strings.TrimRight(getenv("KEEL_URL"), "/"),
 		StatePath:    getenv("KEEL_STATE"),
@@ -52,10 +38,10 @@ func configFrom(getenv func(string) string, secretPath string, isDir func(string
 		DockerSocket: dockerSocket(getenv),
 	}
 	if cfg.URL == "" {
-		return Config{}, errors.New("KEEL_URL is required (Convex site URL, e.g. https://x.convex.site)")
+		return Config{}, errors.New("KEEL_URL is required (the control plane's URL, e.g. http://100.64.0.1:8080)")
 	}
 	if cfg.StatePath == "" {
-		cfg.StatePath = defaultStatePath(isDir)
+		cfg.StatePath = "/var/lib/keel-agent/state.json"
 	}
 	if ms, err := strconv.ParseFloat(strings.TrimSpace(getenv("KEEL_CONFIG_POLL_MS")), 64); err == nil && ms > 0 && !math.IsInf(ms, 0) {
 		cfg.ConfigPoll = time.Duration(ms * float64(time.Millisecond))

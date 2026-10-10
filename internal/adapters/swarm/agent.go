@@ -19,14 +19,12 @@ import (
 const (
 	agentServiceName  = "keel-agent"
 	agentSpecLabel    = "keel.agent.spec"
-	agentStateVolume  = "keel-worker-state"
-	agentStateDir     = "/var/lib/keel-worker"
+	agentStateVolume  = "keel-agent-state"
+	agentStateDir     = "/var/lib/keel-agent"
 	agentSecretPrefix = "keel-agent-token-"
 	agentSecretTarget = "keel_worker_token"
 	dockerSocketPath  = "/var/run/docker.sock"
 )
-
-var legacyAgentServices = []string{"keel-worker", "keel-events"}
 
 func agentSecretName(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -88,7 +86,6 @@ func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
 			return err
 		}
 	}
-	s.removeLegacyAgents(ctx)
 	s.removeStaleAgentSecrets(ctx, agentSecretName(a.Token))
 	return nil
 }
@@ -145,30 +142,4 @@ func (s *Swarm) pinnedImage(ctx context.Context, image string) string {
 		return image
 	}
 	return image + "@" + digest
-}
-
-func (s *Swarm) removeLegacyAgents(ctx context.Context) {
-	for _, name := range legacyAgentServices {
-		_ = s.removeService(ctx, name)
-	}
-	for _, prefix := range []string{"keel-worker-token-", "keel-events-token-"} {
-		res, err := s.cli.SecretList(ctx, client.SecretListOptions{Filters: make(client.Filters).Add("name", prefix)})
-		if err != nil {
-			continue
-		}
-		for _, sec := range res.Items {
-			if strings.HasPrefix(sec.Spec.Name, prefix) {
-				_, _ = s.cli.SecretRemove(ctx, sec.ID, client.SecretRemoveOptions{})
-			}
-		}
-	}
-	res, err := s.cli.ConfigList(ctx, client.ConfigListOptions{Filters: make(client.Filters).Add("name", "keel-events-")})
-	if err != nil {
-		return
-	}
-	for _, c := range res.Items {
-		if strings.HasPrefix(c.Spec.Name, "keel-events-") {
-			_, _ = s.cli.ConfigRemove(ctx, c.ID, client.ConfigRemoveOptions{})
-		}
-	}
 }

@@ -7,7 +7,6 @@ type AuthTx interface {
 	AuthUser(id string) (domain.User, error)
 	AuthCredentials(email string) (Credentials, error)
 	AuthInsertUser(u domain.User, passwordHash string) error
-	AuthSetPasswordHash(userID, hash string, now int64) error
 
 	AuthSession(tokenHash string) (domain.Session, error)
 	AuthInsertSession(s domain.Session, tokenHash string) error
@@ -15,7 +14,6 @@ type AuthTx interface {
 	AuthDeleteSession(id string) error
 	AuthDeleteExpiredSessions(now int64) error
 
-	AuthAnyOrganization() (bool, error)
 	AuthOrganization(id string) (domain.Organization, error)
 	AuthInsertOrganization(o domain.Organization) error
 
@@ -56,5 +54,5 @@ type MemberAccount struct {
 
 type Passwords interface {
 	Hash(password string) (string, error)
-	Verify(hash, password string) (ok, rehash bool)
+	Verify(hash, password string) bool
 }

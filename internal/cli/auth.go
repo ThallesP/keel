@@ -38,7 +38,7 @@ type pendingResult struct {
 }
 
 func (a *app) loginCmd() *cobra.Command {
-	var name, convexURL, siteURL string
+	var name string
 	var wait, noWait bool
 	cmd := &cobra.Command{
 		Use:   "login [dashboard-url]",
@@ -142,10 +142,6 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 	f.BoolVar(&wait, "wait", false, "wait for the approval even without a terminal")
 	f.BoolVar(&noWait, "no-wait", false, "print the link and return, even in a terminal")
 	f.StringVar(&name, "name", "", "name for this install in the config (default: its host)")
-	f.StringVar(&convexURL, "convex-url", "", "ignored: the API is on the dashboard URL")
-	f.StringVar(&siteURL, "convex-site-url", "", "ignored: the API is on the dashboard URL")
-	_ = f.MarkHidden("convex-url")
-	_ = f.MarkHidden("convex-site-url")
 	return cmd
 }
 

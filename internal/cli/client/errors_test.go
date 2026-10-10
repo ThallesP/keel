@@ -62,8 +62,6 @@ func TestProblemCodes(t *testing.T) {
 			output.CodeServer, "Something went wrong on the server", "", "", ""},
 		{409, `{"status":409,"detail":"Brand new","code":"SOMETHING_NEW"}`, "SOMETHING_NEW", "Brand new", "", "", ""},
 
-		{400, `{"detail":"Node not found"}`, output.CodeServiceNotFound, "Node not found", "keel service list", "", ""},
-		{400, `{"detail":"Project \"web\" already exists"}`, output.CodeNameTaken, `Project "web" already exists`, "Pick another name, or use it: keel link web", "", ""},
 		{401, ``, output.CodeNotAuthenticated, "Session expired or signed out", "keel login " + url, "", ""},
 		{429, `slow down`, output.CodeRateLimited, "Too Many Requests", "Wait a moment, then retry", "", ""},
 		{502, `<html>Bad Gateway</html>`, output.CodeServer, "GET /api/projects: HTTP 502: <html>Bad Gateway</html>", "", "", ""},

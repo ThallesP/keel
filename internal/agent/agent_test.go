@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -57,7 +56,7 @@ func TestConfigFromEnv(t *testing.T) {
 		},
 		{
 			name: "no url", secret: secret, env: map[string]string{"KEEL_WORKER_TOKEN": "tok"},
-			wantErr: "KEEL_URL is required (Convex site URL, e.g. https://x.convex.site)",
+			wantErr: "KEEL_URL is required (the control plane's URL, e.g. http://100.64.0.1:8080)",
 		},
 		{
 			name: "no token", secret: missing, env: map[string]string{"KEEL_URL": "http://x"},
@@ -66,7 +65,7 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := configFrom(func(k string) string { return tt.env[k] }, tt.secret, func(string) bool { return false })
+			got, err := configFrom(func(k string) string { return tt.env[k] }, tt.secret)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Fatalf("err = %v, want %q", err, tt.wantErr)
@@ -77,39 +76,6 @@ func TestConfigFromEnv(t *testing.T) {
 				t.Fatalf("config = %+v, %v\nwant %+v", got, err, tt.want)
 			}
 		})
-	}
-}
-
-func TestDefaultStatePath(t *testing.T) {
-	tests := []struct {
-		name    string
-		mounted []string
-		want    string
-	}{
-		{"keel-agent volume", []string{"/var/lib/keel-agent"}, "/var/lib/keel-agent/state.json"},
-		{"keel-worker volume (image swap)", []string{"/var/lib/keel-worker"}, "/var/lib/keel-worker/state.json"},
-		{"both", []string{"/var/lib/keel-agent", "/var/lib/keel-worker"}, "/var/lib/keel-agent/state.json"},
-		{"none (created on first write)", nil, "/var/lib/keel-agent/state.json"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := func(p string) bool { return slices.Contains(tt.mounted, p) }
-			if got := defaultStatePath(dir); got != tt.want {
-				t.Fatalf("defaultStatePath = %s, want %s", got, tt.want)
-			}
-			env := map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "tok"}
-			cfg, err := configFrom(func(k string) string { return env[k] }, "/nope", dir)
-			if err != nil || cfg.StatePath != tt.want {
-				t.Fatalf("config state = %q, %v; want %s", cfg.StatePath, err, tt.want)
-			}
-			env["KEEL_STATE"] = "/s/state.json"
-			if cfg, _ := configFrom(func(k string) string { return env[k] }, "/nope", dir); cfg.StatePath != "/s/state.json" {
-				t.Fatalf("KEEL_STATE ignored: %q", cfg.StatePath)
-			}
-		})
-	}
-	if !isDir(t.TempDir()) || isDir(filepath.Join(t.TempDir(), "missing")) {
-		t.Fatal("isDir")
 	}
 }
 

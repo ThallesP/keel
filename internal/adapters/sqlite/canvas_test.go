@@ -79,9 +79,6 @@ func TestCanvasTx(t *testing.T) {
 		if err := tx.CanvasInsertProject(domain.Project{ID: "p2", OrganizationID: "org", Name: "Acme", Slug: "acme"}); !errors.Is(err, app.ErrCanvasTaken) {
 			t.Errorf("duplicate slug: %v", err)
 		}
-		if ok, err := tx.CanvasOrganizationExists(); !ok || err != nil {
-			t.Errorf("organization exists: %v %v", ok, err)
-		}
 		if n, err := tx.CanvasClusterServers(); n != 0 || err != nil {
 			t.Errorf("no cluster row: %d %v", n, err)
 		}

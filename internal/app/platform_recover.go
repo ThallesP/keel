@@ -6,7 +6,7 @@ import (
 )
 
 func (a *App) Recover(ctx context.Context) {
-	for _, fn := range []func(context.Context){a.recoverCanvas, a.recoverDeploy, a.recoverIngress, a.recoverObservability} {
+	for _, fn := range []func(context.Context){a.recoverDeploy, a.recoverIngress, a.recoverObservability} {
 		a.recoverPart(ctx, fn)
 	}
 }

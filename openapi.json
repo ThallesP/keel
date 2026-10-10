@@ -916,8 +916,7 @@
             "enum": [
               "pending",
               "accepted",
-              "canceled",
-              "rejected"
+              "canceled"
             ],
             "type": "string"
           }

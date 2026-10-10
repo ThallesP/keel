@@ -244,16 +244,6 @@ func TestLoginDeviceFlow(t *testing.T) {
 	}
 }
 
-func TestLoginIgnoresConvexFlags(t *testing.T) {
-	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
-	t.Setenv("KEEL_URL", "")
-	f := newFakeInstall(t, `{"error":"authorization_pending"}`)
-	got, err := login(t, f.URL, "--convex-url", "http://100.64.0.1:3210", "--convex-site-url", "http://100.64.0.1:3211")
-	if err != nil || got["status"] != "pending" {
-		t.Fatalf("%v, %v", got, err)
-	}
-}
-
 func TestLoginTargetIgnoresKeelToken(t *testing.T) {
 	cfg, _ := pendingInstance(t, time.Minute, `{"error":"authorization_pending"}`)
 	t.Setenv("KEEL_TOKEN", "from-env")

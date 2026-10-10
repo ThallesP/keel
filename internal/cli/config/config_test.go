@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -47,51 +46,5 @@ func TestSaveIsPrivateAndRoundTrips(t *testing.T) {
 	again.RemoveInstance("dev")
 	if len(again.Links) != 0 || again.Current != "" {
 		t.Errorf("RemoveInstance kept links or current: %+v", again)
-	}
-}
-
-func TestConvexEraFileLoads(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("KEEL_CONFIG_DIR", dir)
-	old := `{
-  "current": "keel.example.ts.net",
-  "instances": {
-    "keel.example.ts.net": {
-      "url": "https://keel.example.ts.net",
-      "convexUrl": "http://100.64.0.1:3210",
-      "convexSiteUrl": "http://100.64.0.1:3211",
-      "email": "me@example.com",
-      "token": "tok",
-      "pending": {
-        "deviceCode": "dev",
-        "userCode": "ABCDEFGH",
-        "url": "https://keel.example.ts.net/device?user_code=ABCDEFGH",
-        "expiresAt": "2026-10-08T12:30:00Z",
-        "interval": 5
-      }
-    }
-  },
-  "links": { "/home/me/acme": { "instance": "keel.example.ts.net", "project": "acme-api" } }
-}
-`
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(old), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	c, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	inst := c.Instances["keel.example.ts.net"]
-	if c.Current != "keel.example.ts.net" || inst == nil || inst.URL != "https://keel.example.ts.net" ||
-		inst.Token != "tok" || inst.Email != "me@example.com" || inst.Pending == nil ||
-		inst.Pending.DeviceCode != "dev" || inst.Pending.Interval != 5 || c.Links["/home/me/acme"].Project != "acme-api" {
-		t.Fatalf("loaded %+v / %+v", c, inst)
-	}
-	if err := c.Save(); err != nil {
-		t.Fatal(err)
-	}
-	saved, _ := os.ReadFile(filepath.Join(dir, "config.json"))
-	if strings.Contains(string(saved), "convex") {
-		t.Errorf("saved file still names Convex URLs:\n%s", saved)
 	}
 }

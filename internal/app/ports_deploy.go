@@ -32,7 +32,6 @@ type Swarm interface {
 	ObserveServices(ctx context.Context) ([]SwarmService, []SwarmTask, error)
 	Servers(ctx context.Context) (ready, total int, err error)
 	EnsureAgent(ctx context.Context, spec AgentSpec) error
-	RemoveLegacyTunnels(ctx context.Context) (int, error)
 }
 
 type ServiceSpec struct {

@@ -183,29 +183,6 @@ func TestDockerObserve(t *testing.T) {
 	}
 }
 
-func TestDockerRemoveLegacyTunnels(t *testing.T) {
-	s, f := newDockerSwarm(t, map[string]func(http.ResponseWriter, *http.Request){
-		"GET /services":       jsonReply(`[{"ID":"t1","Spec":{"Name":"ingress-a"}},{"ID":"t2","Spec":{"Name":"ingress-b"}}]`),
-		"DELETE /services/t1": func(w http.ResponseWriter, _ *http.Request) {},
-	})
-	n, err := s.RemoveLegacyTunnels(context.Background())
-	if err != nil || n != 2 {
-		t.Fatalf("%d %v", n, err)
-	}
-	var deleted []string
-	for _, c := range f.calls {
-		if c.method == "GET" && !strings.Contains(c.query, "keel.ingress") {
-			t.Fatalf("filter: %s", c.query)
-		}
-		if c.method == "DELETE" {
-			deleted = append(deleted, c.path)
-		}
-	}
-	if strings.Join(deleted, " ") != "/services/t1 /services/t2" {
-		t.Fatalf("deleted: %v", deleted)
-	}
-}
-
 func TestDockerEnsureAgent(t *testing.T) {
 	ctx := context.Background()
 	var mu sync.Mutex
@@ -231,11 +208,9 @@ func TestDockerEnsureAgent(t *testing.T) {
 			_, _ = io.WriteString(w, `{"ID":"agent"}`)
 		},
 		"POST /services/keel-agent/update": jsonReply(`{}`),
-		"GET /secrets":                     jsonReply(`[{"ID":"s1","Spec":{"Name":"keel-worker-token-abc"}},{"ID":"s0","Spec":{"Name":"keel-agent-token-old"}}]`),
+		"GET /secrets":                     jsonReply(`[{"ID":"s0","Spec":{"Name":"keel-agent-token-old"}}]`),
 		"POST /secrets/create":             jsonReply(`{"ID":"snew"}`),
 		"DELETE /secrets/s0":               func(w http.ResponseWriter, _ *http.Request) {},
-		"DELETE /secrets/s1":               func(w http.ResponseWriter, _ *http.Request) {},
-		"GET /configs":                     jsonReply(`[]`),
 	})
 	spec := app.AgentSpec{Image: "ghcr.io/thallesp/keel:1.0", ControlURL: "http://100.64.0.1:8080", Token: "tok"}
 	if err := s.EnsureAgent(ctx, spec); err != nil {
@@ -256,8 +231,7 @@ func TestDockerEnsureAgent(t *testing.T) {
 			created = c.body
 		}
 	}
-	if counts["POST /services/create"] != 1 || counts["POST /services/keel-agent/update"] != 1 ||
-		counts["DELETE /services/keel-worker"] != 3 || counts["DELETE /services/keel-events"] != 3 || counts["DELETE /secrets/s1"] != 3 {
+	if counts["POST /services/create"] != 1 || counts["POST /services/keel-agent/update"] != 1 || counts["DELETE /secrets/s0"] != 3 {
 		t.Fatalf("calls: %v", counts)
 	}
 	if !strings.Contains(created, `"Image":"ghcr.io/thallesp/keel:1.0@sha256:feed"`) || !strings.Contains(created, `"Global":{}`) {

@@ -14,9 +14,6 @@ SELECT * FROM users WHERE email = ? COLLATE NOCASE;
 INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?);
 
--- name: AuthSetPasswordHash :exec
-UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?;
-
 -- name: AuthGetSessionByTokenHash :one
 SELECT * FROM sessions WHERE token_hash = ?;
 
@@ -32,9 +29,6 @@ DELETE FROM sessions WHERE id = ?;
 
 -- name: AuthDeleteExpiredSessions :exec
 DELETE FROM sessions WHERE expires_at <= ?;
-
--- name: AuthAnyOrganization :one
-SELECT EXISTS (SELECT 1 FROM organizations) AS found;
 
 -- name: AuthGetOrganization :one
 SELECT * FROM organizations WHERE id = ?;

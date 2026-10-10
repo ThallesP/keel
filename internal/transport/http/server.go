@@ -247,7 +247,7 @@ func writeProblem(w http.ResponseWriter, p *api.Problem) {
 }
 
 func machineRoute(path string) bool {
-	for _, p := range []string{"/worker/", "/agent/", "/proxy/", "/otlp/"} {
+	for _, p := range []string{"/worker/", "/proxy/", "/otlp/"} {
 		if strings.HasPrefix(path, p) {
 			return true
 		}

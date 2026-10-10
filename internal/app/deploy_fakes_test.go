@@ -138,7 +138,6 @@ type fakeSwarm struct {
 	observed                 []string
 	ready, total             int
 	agents                   []app.AgentSpec
-	tunnelSweeps             int
 	versions                 uint64
 	undated                  []string
 }
@@ -289,12 +288,6 @@ func (f *fakeSwarm) Servers(ctx context.Context) (int, int, error) {
 func (f *fakeSwarm) EnsureAgent(_ context.Context, spec app.AgentSpec) error {
 	f.agents = append(f.agents, spec)
 	return nil
-}
-
-func (f *fakeSwarm) RemoveLegacyTunnels(ctx context.Context) (int, error) {
-	f.call(ctx, "RemoveLegacyTunnels")
-	f.tunnelSweeps++
-	return 0, nil
 }
 
 type recorder struct{ topics map[string][]string }

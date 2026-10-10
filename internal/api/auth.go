@@ -72,7 +72,7 @@ type Invitation struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`
 	Role      string `json:"role"`
-	Status    string `json:"status" enum:"pending,accepted,canceled,rejected"`
+	Status    string `json:"status" enum:"pending,accepted,canceled"`
 	InviterID string `json:"inviterId"`
 	ExpiresAt int64  `json:"expiresAt"`
 	CreatedAt int64  `json:"createdAt"`

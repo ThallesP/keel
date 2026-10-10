@@ -24,11 +24,6 @@ func variablesOf(rows []sqlc.Variable) []domain.Variable {
 	return out
 }
 
-func (t *tx) CanvasOrganizationExists() (bool, error) {
-	n, err := t.q.CanvasCountOrganizations(t.ctx)
-	return n > 0, err
-}
-
 func (t *tx) CanvasProjects(organizationID string) ([]domain.Project, error) {
 	rows, err := t.q.CanvasListProjects(t.ctx, organizationID)
 	if err != nil {

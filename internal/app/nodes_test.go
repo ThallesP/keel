@@ -178,8 +178,7 @@ func TestCanvasRenameNode(t *testing.T) {
 		}
 	}
 
-	k.exec(`UPDATE nodes SET name = 'Legacy_Name' WHERE id = ?`, api)
-	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("Legacy_Name")}); err != nil {
+	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("api")}); err != nil {
 		t.Fatal(err)
 	}
 	if got := k.pub.take(canvasOrg); len(got) != 0 {

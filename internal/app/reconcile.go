@@ -225,7 +225,6 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 
 func (a *App) recoverDeploy(ctx context.Context) {
 	a.Jobs.After("observe:all", 0, a.observeAll)
-	a.Jobs.After("swarm:legacy-tunnels", 0, a.removeLegacyTunnels)
 
 	var running []domain.Deployment
 	var redos []applyRequest
@@ -271,20 +270,6 @@ func (a *App) recoverDeploy(ctx context.Context) {
 	}
 	if a.Config.AgentImage != "" {
 		a.Jobs.After("agent", 0, a.ensureAgent)
-	}
-}
-
-func (a *App) removeLegacyTunnels(ctx context.Context) {
-	if a.noSwarm("remove legacy tunnels") {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-	defer cancel()
-	n, err := a.Swarm.RemoveLegacyTunnels(ctx)
-	if err != nil {
-		a.Log.Error("remove legacy tunnels", "err", err)
-	} else if n > 0 {
-		a.Log.Info("removed legacy tunnel services", "count", n)
 	}
 }
 

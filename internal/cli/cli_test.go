@@ -76,7 +76,7 @@ func TestRunEnv(t *testing.T) {
 	vars := []client.Variable{
 		{Key: "LOG_LEVEL", Resolved: "debug"},
 		{Key: "STRIPE_KEY", Resolved: "sk_test"},
-		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7ped1zs8ededv:5432/app"},
+		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7:5432/app"},
 		{Key: "REDIS_URL", Resolved: "redis://:pw@svc-k3b7q2mx9wd4tz8hn5ra:6379"},
 		{Key: "UPSTREAM", Resolved: "http://svc-api:8080"},
 		{Key: "OTEL_SERVICE_NAME", Resolved: "api-custom"},

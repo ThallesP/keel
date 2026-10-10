@@ -9,7 +9,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Implements app.DeployTx. Owner: the deploy area.
+// Implements app.DeployTx.
 
 // deployLogCap: a deployment keeps its last 500 log lines (convex/deployments.ts MAX_LOG).
 const deployLogCap = 500

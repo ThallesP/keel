@@ -6,7 +6,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Implements app.IngressTx. Owner: the ingress area.
+// Implements app.IngressTx.
 
 func (t *tx) IngressHasVariable(nodeID, key string) (bool, error) {
 	return t.q.IngressHasVariable(t.ctx, db.IngressHasVariableParams{NodeID: nodeID, Key: key})

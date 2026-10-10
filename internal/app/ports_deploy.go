@@ -7,7 +7,6 @@ import (
 )
 
 // DeployTx: deployments, steps, log, cluster.
-// Owner: the deploy area (docs/go/spec/projects.md, docs/go/spec/swarm-worker.md).
 type DeployTx interface {
 	// HasRunningDeployment: a deployment of the environment has status running.
 	HasRunningDeployment(environmentID string) (bool, error)

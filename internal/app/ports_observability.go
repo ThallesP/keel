@@ -8,7 +8,6 @@ import (
 )
 
 // ObservabilityTx: log sinks, Axiom sign-in state, OTLP keys.
-// Owner: the observability area (docs/go/spec/observability.md).
 type ObservabilityTx interface {
 	// LogSinkOf is the organization's sink; ErrNoRow when it has none.
 	LogSinkOf(organizationID string) (SinkRecord, error)

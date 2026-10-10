@@ -12,7 +12,6 @@ import (
 )
 
 // Public ingress: expose / unexpose a node through keel-proxy, and the control plane's public IP.
-// Owner: the ingress area (docs/go/spec/proxy-ingress.md §4).
 
 type ingressExposeInput struct {
 	ID   string             `path:"id" doc:"Node id"`

@@ -8,7 +8,7 @@ import (
 
 // Variable references, Railway-style: `${{ postgres.DATABASE_URL }}` (another node of the
 // environment, by name) or `${{ POSTGRES_USER }}` (the row's own node). They resolve at apply time,
-// so every ship sees current values (docs/go/spec/projects.md §5). Owner: the canvas area.
+// so every ship sees current values (docs/go/spec/projects.md §5).
 
 // canvasJSSpace is ECMAScript `\s` (RE2's `\s` is ASCII only and lacks \v).
 const canvasJSSpace = `[\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]*`

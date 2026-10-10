@@ -10,7 +10,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Raw (non-Huma) routes. Owner: the observability area.
+// Raw (non-Huma) routes.
 //
 //	POST /otlp/v1/traces  OTLP/HTTP spans; bearer = the environment's ingest key (app.RelayTraces)
 //	GET  /worker/config   log sinks + the services each covers, for the per-node agents (bearer

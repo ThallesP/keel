@@ -176,10 +176,6 @@ merged. Rules that keep the merge mechanical:
 - **Own your files.** An area owns `internal/app/<area>*.go`, `internal/app/ports_<area>.go`,
   `internal/adapters/sqlite/<area>.go` + `queries/<area>.sql`, `internal/transport/http/<area>*.go`,
   `internal/api/<area>.go`, plus any adapter package it is assigned. Don't edit other areas' files.
-- **Seams** (`internal/app/seams.go`): cross-area functions as stubs. Implement the ones you own by
-  moving them into your own file and deleting them from `seams.go` (that file is the only shared
-  one you may edit, and only to delete your stubs). Call the others as if they worked; their
-  tests are theirs.
 - **Shared files you may append to, never rewrite:** `go.mod`/`go.sum` (`go get`), new migration
   files `migrations/0002_<area>.sql` (additive, only if 0001 truly lacks something; say why in
   your report), `domain/` (new files, or new fields with a comment).

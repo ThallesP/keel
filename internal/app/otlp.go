@@ -105,7 +105,7 @@ func otlpTextReply(status int, body string) OTLPResponse {
 func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 	key := ""
 	if token, ok := strings.CutPrefix(r.Authorization, "Bearer "); ok {
-		key = jsTrim(token)
+		key = domain.TrimJS(token)
 	}
 	var sink *OTLPForward
 	found := false
@@ -120,7 +120,7 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) OTLPResponse {
 		return otlpTextReply(401, "unauthorized")
 	}
 	ctype, _, _ := strings.Cut(r.ContentType, ";")
-	ctype = strings.ToLower(jsTrim(ctype))
+	ctype = strings.ToLower(domain.TrimJS(ctype))
 	if ctype != "application/x-protobuf" && ctype != "application/json" {
 		return otlpTextReply(415, "OTLP over HTTP: application/x-protobuf or application/json")
 	}

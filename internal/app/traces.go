@@ -64,7 +64,7 @@ func (a *App) traceScope(ctx context.Context, actor domain.Actor, environmentID 
 // name or service.name contains search.
 func aplRoots(dataset string, serviceIDs []string, search string) string {
 	match := ""
-	if term := jsTrim(search); term != "" {
+	if term := domain.TrimJS(search); term != "" {
 		match = ` | where name contains ` + aplLit(term) + ` or ensure_field("service.name", typeof(string)) contains ` + aplLit(term)
 	}
 	ids := make([]string, len(serviceIDs))

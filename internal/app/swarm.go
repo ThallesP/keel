@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -424,39 +423,11 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 	})
 }
 
-// ── Text helpers ────────────────────────────────────────────────────────────────────────────
-
 // deployErrorText is an error as the deploy log and applyError show it: whitespace runs
 // collapsed to one space, trimmed, at most 300 UTF-16 units (swarm.ts errorText).
 func deployErrorText(err error) string {
-	fields := strings.FieldsFunc(err.Error(), deployIsJSSpace)
-	return deployCutUTF16(strings.Join(fields, " "), 300)
-}
-
-// deployIsJSSpace is ECMAScript's \s: WhiteSpace and LineTerminator.
-func deployIsJSSpace(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
-		return true
-	}
-	return r >= 0x2000 && r <= 0x200a
-}
-
-// deployCutUTF16 keeps the first n UTF-16 code units of s (JS String.prototype.slice(0, n)), never
-// splitting a surrogate pair.
-func deployCutUTF16(s string, n int) string {
-	units := 0
-	for i, r := range s {
-		w := utf16.RuneLen(r)
-		if w < 0 {
-			w = 1
-		}
-		if units+w > n {
-			return s[:i]
-		}
-		units += w
-	}
-	return s
+	fields := strings.FieldsFunc(err.Error(), domain.IsJSSpace)
+	return jsSlice(strings.Join(fields, " "), 300)
 }
 
 // deployToFixed1 is JavaScript's x.toFixed(1) for 0 ≤ x < 1e21: the nearest one-decimal value, the

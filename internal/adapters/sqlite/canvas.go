@@ -9,7 +9,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Implements app.CanvasTx. Owner: the canvas area.
+// Implements app.CanvasTx.
 
 // canvasTaken maps a UNIQUE violation to app.ErrCanvasTaken (keeping the driver text).
 func canvasTaken(err error) error {

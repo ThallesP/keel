@@ -1,6 +1,6 @@
 package sqlite
 
-// Implements app.AuthTx. Owner: the auth area.
+// Implements app.AuthTx.
 
 import (
 	"github.com/ThallesP/keel/internal/adapters/sqlite/db"

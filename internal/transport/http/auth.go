@@ -13,7 +13,7 @@ import (
 )
 
 // Auth area routes (docs/go/ARCHITECTURE.md "Resolved API decisions": Session, Accounts, Device
-// login, Organization). Owner: the auth area.
+// login, Organization).
 
 var authTags = []string{"auth"}
 
@@ -82,7 +82,6 @@ func authDeviceResponses(h huma.API, statuses ...string) map[string]*huma.Respon
 }
 
 func (s *Server) registerAuth(h huma.API) {
-	// ── Accounts and sessions ─────────────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "getSignUpOpen", Method: http.MethodGet, Path: "/api/auth/sign-up-open", Tags: authTags,
 		Summary: "Whether sign-up is open (no account exists yet)", Security: authPublic,
@@ -155,7 +154,6 @@ func (s *Server) registerAuth(h huma.API) {
 		return &authMeOutput{Body: out}, nil
 	})
 
-	// ── Organization ──────────────────────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "listMembers", Method: http.MethodGet, Path: "/api/organization/members", Tags: authTags,
 		Summary: "Members of your organization",
@@ -237,7 +235,6 @@ func (s *Server) registerAuth(h huma.API) {
 		return &authAcceptedOutput{Body: api.AcceptedInvitation{Organization: authOrganizationView(org)}}, nil
 	})
 
-	// ── Device login (keel login, RFC 8628) ───────────────────────────────────────────────
 	authOp(h, huma.Operation{
 		OperationID: "createDeviceCode", Method: http.MethodPost, Path: "/api/auth/device/code", Tags: authTags,
 		Summary: "Start a keel login: a code and the link a person approves", Security: authPublic,

@@ -7,8 +7,7 @@ import (
 )
 
 // IngressTx: endpoint lookups beyond CoreTx (endpoints are written with ReplaceEndpoints).
-// Owner: the ingress area (docs/go/spec/proxy-ingress.md). Method names carry the area so the
-// composite Tx never sees two areas declare the same one.
+// Method names carry the area so the composite Tx never sees two areas declare the same one.
 type IngressTx interface {
 	// IngressHasVariable: the node has a variable named key (the Redis guard).
 	IngressHasVariable(nodeID, key string) (bool, error)

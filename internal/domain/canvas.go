@@ -11,7 +11,7 @@ import (
 )
 
 // Canvas node rules: defaults per type, database engines, generated credentials, naming and
-// placement (docs/go/spec/projects.md §3). Owner: the canvas area.
+// placement (docs/go/spec/projects.md §3).
 
 // NodeDefault is what a node of a type starts with. Image is "" for types without a runtime
 // (volume, group): they get no Desired.

@@ -2,8 +2,7 @@ package swarm
 
 // app.LogReader: the Docker default log provider (docs/go/spec/observability.md §5.1, §12).
 // `docker service logs` through the manager's socket: every call fans out to every node running a
-// task of the service, and it only holds what the nodes' json-file driver kept. Owner: the
-// observability area.
+// task of the service, and it only holds what the nodes' json-file driver kept.
 
 import (
 	"context"

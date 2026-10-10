@@ -11,7 +11,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Raw (non-Huma) routes. Owner: the ingress area.
+// Raw (non-Huma) routes.
 //
 //	POST /proxy/events  keel-proxy's `keel` event handler reporting a certificate obtained or
 //	                    failed. Same bearer as the agent (KEEL_WORKER_TOKEN), which the sync writes

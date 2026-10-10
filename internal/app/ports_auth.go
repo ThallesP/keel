@@ -3,7 +3,7 @@ package app
 import "github.com/ThallesP/keel/internal/domain"
 
 // AuthTx: users, sessions, organizations, members, invitations, device codes.
-// Owner: the auth area (docs/go/spec/auth-orgs.md). Lookups return ErrNoRow when nothing matches.
+// Lookups return ErrNoRow when nothing matches.
 // Emails are compared case-insensitively. Other areas may read through it too (e.g.
 // AuthOrganization for the organization's slug).
 type AuthTx interface {

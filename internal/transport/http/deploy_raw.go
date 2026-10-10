@@ -15,7 +15,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Raw (non-Huma) routes. Owner: the deploy area.
+// Raw (non-Huma) routes.
 //
 // POST /worker/events (convex/http.ts; docs/go/spec/swarm-worker.md §11.2): Docker events from the
 // per-node agent, as one object, an array, or NDJSON. Bearer KEEL_WORKER_TOKEN. Plain-text

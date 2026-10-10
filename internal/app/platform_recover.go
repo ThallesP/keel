@@ -5,6 +5,12 @@ import (
 	"runtime/debug"
 )
 
+func (a *App) Recover(ctx context.Context) {
+	for _, fn := range []func(context.Context){a.recoverCanvas, a.recoverDeploy, a.recoverIngress, a.recoverObservability} {
+		a.recoverPart(ctx, fn)
+	}
+}
+
 // recoverPart runs one area's part of the start-up recovery pass (Recover). A panic in it is
 // logged and the pass goes on: one area's bug must not leave the others' timeouts, proxy sync
 // and crons unarmed until the next restart.

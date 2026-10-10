@@ -177,7 +177,7 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 		ids[i] = aplLit(id)
 	}
 	where := ""
-	if term := jsTrim(q.Search); term != "" {
+	if term := domain.TrimJS(q.Search); term != "" {
 		where = " | where message contains " + aplLit(term)
 	}
 	order := "desc"

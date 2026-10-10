@@ -30,7 +30,7 @@ func foundOrganization(tx Tx, ownerID string, now int64) (domain.Organization, e
 // joinOrFound is the actor's membership, founding the install's organization when there is none
 // yet (convex/projects.ts joinOrFound). Returns the actor with OrganizationID/Role set.
 // Errors: NOT_AUTHENTICATED; NO_ORGANIZATION when an organization exists and the actor is not in
-// it. Called by: canvas (EnsureDefaultProject, CreateProject). Owner: auth.
+// it. Called by: canvas (EnsureDefaultProject, CreateProject).
 //
 // It reads the membership inside the caller's write transaction (single writer), so two
 // concurrent founders cannot make two organizations. When it founds one (the returned actor has

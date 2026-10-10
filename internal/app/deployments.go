@@ -220,8 +220,6 @@ func deploymentHasNode(d domain.Deployment, nodeID string) bool {
 	return false
 }
 
-// ── Step writers (deployments.stepRunning/stepLog/stepApplied/stepFailed) ───────────────────
-
 type stepChange int
 
 const (

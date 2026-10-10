@@ -16,8 +16,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// ── Fixture ───────────────────────────────────────────────────────────────────────────────
-
 type authRecorder struct {
 	mu     sync.Mutex
 	topics map[string]map[string]bool
@@ -144,8 +142,6 @@ func authWantRefusal(t *testing.T, err error, status int, code, desc string) {
 		t.Fatalf("got %d %s %q, want %d %s %q", r.Status, r.Code, r.Description, status, code, desc)
 	}
 }
-
-// ── Accounts ──────────────────────────────────────────────────────────────────────────────
 
 func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	f := authSetup(t)
@@ -355,8 +351,6 @@ func TestAuthSignInLimiter(t *testing.T) {
 	}
 }
 
-// ── Sessions ──────────────────────────────────────────────────────────────────────────────
-
 func TestAuthSessionLifetime(t *testing.T) {
 	f := authSetup(t)
 	s := f.signUp("ci@example.com", "")
@@ -423,8 +417,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 		t.Fatalf("stored token %q", stored)
 	}
 }
-
-// ── Organization ──────────────────────────────────────────────────────────────────────────
 
 func TestAuthInvitationRules(t *testing.T) {
 	f := authSetup(t)
@@ -658,8 +650,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	_, err = f.app.ListInvitations(f.ctx, domain.Actor{UserID: "loner"})
 	authWant(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }
-
-// ── Device login ──────────────────────────────────────────────────────────────────────────
 
 func TestAuthDeviceLogin(t *testing.T) {
 	f := authSetup(t)

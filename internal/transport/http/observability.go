@@ -12,7 +12,7 @@ import (
 )
 
 // Observability routes (docs/go/spec/observability.md; web-data.md §4; ARCHITECTURE "Resolved
-// API decisions"). Owner: the observability area.
+// API decisions").
 
 var obsTags = []string{"observability"}
 
@@ -77,7 +77,6 @@ type (
 )
 
 func (s *Server) registerObservability(h huma.API) {
-	// ── Log sink and Sign in with Axiom ──────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "getLogSink", Method: http.MethodGet, Path: "/api/organization/log-sink", Tags: obsTags,
 		Summary: "The organization's log sink (never the token)",
@@ -154,7 +153,6 @@ func (s *Server) registerObservability(h huma.API) {
 		return &obsChooseOrgOut{Body: api.AxiomSinkResult{Dataset: dataset, Org: org}}, nil
 	})
 
-	// ── Logs ─────────────────────────────────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "tailNodeLogs", Method: http.MethodGet, Path: "/api/nodes/{id}/logs", Tags: obsTags,
 		Summary: "Last lines of a service (its organization's sink, else Docker)",
@@ -186,7 +184,6 @@ func (s *Server) registerObservability(h huma.API) {
 		return &obsLogsAroundOut{Body: l}, nil
 	})
 
-	// ── Traces ───────────────────────────────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "getTraceOverview", Method: http.MethodGet, Path: "/api/environments/{id}/traces", Tags: obsTags,
 		Summary: "Request rate, errors, latency and the latest requests over a range",
@@ -218,7 +215,6 @@ func (s *Server) registerObservability(h huma.API) {
 		return &obsTraceOut{Body: t}, nil
 	})
 
-	// ── Tracing switch ───────────────────────────────────────────────────────────────────────
 	op(h, huma.Operation{
 		OperationID: "getNodeTracing", Method: http.MethodGet, Path: "/api/nodes/{id}/tracing", Tags: obsTags,
 		Summary: "A service's tracing switch and the OTEL_* variables it gets (key masked)",

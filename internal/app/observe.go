@@ -28,7 +28,7 @@ func taskRevision(labels map[string]string) (int, bool) {
 	if !present {
 		return 0, false
 	}
-	v = strings.TrimFunc(v, deployIsJSSpace)
+	v = domain.TrimJS(v)
 	if v == "" {
 		return 0, true
 	}
@@ -143,8 +143,6 @@ func settlingTasks(tasks []SwarmTask, revision int) bool {
 	return false
 }
 
-// ── Debounce (nodesInternal.scheduleObserveFor) ─────────────────────────────────────────────
-
 // ScheduleObserve observes one node's Swarm service soon, debounced per node (500 ms). For a
 // node that no longer exists it settles running deployments instead, so a deleted node's steps
 // fail with "node deleted". Called by: canvas (node delete), deploy.
@@ -209,8 +207,6 @@ func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
 	rt.mu.Unlock()
 	a.observeNode(ctx, id, p.settle)
 }
-
-// ── Scans ───────────────────────────────────────────────────────────────────────────────────
 
 // observeNode scans one node, records what Swarm reports, settles its environment's running
 // deployment, and re-checks (at most twice, 2 s apart) while a task is mid-transition.

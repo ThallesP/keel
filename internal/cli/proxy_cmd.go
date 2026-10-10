@@ -12,7 +12,7 @@ import (
 )
 
 // `keel proxy`: the public edge (embedded Caddy + caddy-l4 + Keel's modules), in its own
-// container. Owner: the ingress area (docs/go/spec/proxy-ingress.md §7, §12.4 option 1).
+// container.
 //
 // Caddy roughly quadruples the binary; a CLI-only build (laptops, agents) can leave the edge out
 // with `-tags keel_noproxy`. Linux only: its listeners live in the host's network namespace

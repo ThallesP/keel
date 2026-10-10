@@ -131,8 +131,6 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 	}
 }
 
-// ── Actor ──────────────────────────────────────────────────────────────────────────────────
-
 type actorKey struct{}
 
 // withActor resolves the session (cookie, else bearer) once per request. Cookie-authenticated
@@ -199,8 +197,6 @@ func ActorFrom(ctx context.Context) domain.Actor {
 	a, _ := ctx.Value(actorKey{}).(domain.Actor)
 	return a
 }
-
-// ── Operations and errors ──────────────────────────────────────────────────────────────────
 
 // op registers a Huma operation whose handler returns domain errors; they become problems.
 func op[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Context, in *I) (*O, error)) {

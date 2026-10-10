@@ -12,7 +12,7 @@ import (
 )
 
 // Deployments: Ship / redeploy / retry and the deployment reads (docs/go/spec/web-data.md §4.1
-// Q13–Q15, §4.2 M6–M7, §5.3; ARCHITECTURE "Resolved API decisions"). Owner: the deploy area.
+// Q13–Q15, §4.2 M6–M7, §5.3; ARCHITECTURE "Resolved API decisions").
 
 var deployTags = []string{"deploy"}
 

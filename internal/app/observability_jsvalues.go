@@ -21,6 +21,8 @@ import (
 
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 // JSONObject is a decoded JSON object that keeps JavaScript's property order: array-index keys
@@ -269,7 +271,7 @@ func jsNumber(v any) float64 {
 }
 
 func jsNumberFromString(s string) float64 {
-	s = jsTrim(s)
+	s = domain.TrimJS(s)
 	switch s {
 	case "":
 		return 0
@@ -414,17 +416,6 @@ const jsSpaceClass = `[\t\n\v\f\r \x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{20
 
 var jsSpaceRunRE = regexp.MustCompile(jsSpaceClass + `+`)
 
-func isJSSpace(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
-		return true
-	}
-	return r >= 0x2000 && r <= 0x200a
-}
-
-// jsTrim is String.prototype.trim.
-func jsTrim(s string) string { return strings.TrimFunc(s, isJSSpace) }
-
 // jsSlice is s.slice(0, n): at most n UTF-16 code units (a split surrogate pair is dropped).
 func jsSlice(s string, n int) string {
 	units := 0
@@ -447,7 +438,7 @@ func CompactDetail(body string) string {
 	if !utf8.ValidString(body) {
 		body = strings.ToValidUTF8(body, "�")
 	}
-	return jsSlice(jsTrim(jsSpaceRunRE.ReplaceAllString(body, " ")), 200)
+	return jsSlice(domain.TrimJS(jsSpaceRunRE.ReplaceAllString(body, " ")), 200)
 }
 
 // jsEncodeURIComponent is encodeURIComponent.

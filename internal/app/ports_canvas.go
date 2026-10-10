@@ -7,8 +7,7 @@ import (
 )
 
 // CanvasTx: projects, environments, variables, and the canvas's own node writes (plain node reads
-// are in CoreTx). Owner: the canvas area (docs/go/spec/projects.md). Implemented by
-// adapters/sqlite/canvas.go.
+// are in CoreTx). Implemented by adapters/sqlite/canvas.go.
 type CanvasTx interface {
 	// CanvasOrganizationExists: any organization row at all (projects.list without a membership).
 	CanvasOrganizationExists() (bool, error)

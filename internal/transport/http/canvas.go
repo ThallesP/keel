@@ -12,7 +12,7 @@ import (
 )
 
 // Canvas area: projects, environments, nodes, variables (docs/go/ARCHITECTURE.md "Resolved API
-// decisions", docs/go/spec/web-data.md §4). Owner: the canvas area.
+// decisions", docs/go/spec/web-data.md §4).
 
 type canvasIDInput struct {
 	ID string `path:"id"`
@@ -87,8 +87,6 @@ func (s *Server) registerCanvas(h huma.API) {
 		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary, Tags: []string{"canvas"}}
 	}
 
-	// ── Projects ──
-
 	op(h, operation("listProjects", http.MethodGet, "/api/projects",
 		"Projects of the caller's organization"),
 		func(ctx context.Context, _ *struct{}) (*canvasProjectListOut, error) {
@@ -141,8 +139,6 @@ func (s *Server) registerCanvas(h huma.API) {
 			return out, nil
 		})
 
-	// ── Environments ──
-
 	op(h, operation("getEnvironmentSummary", http.MethodGet, "/api/environments/{id}/summary",
 		"Staged changes, status counts and servers"),
 		func(ctx context.Context, in *canvasIDInput) (*canvasSummaryOut, error) {
@@ -160,8 +156,6 @@ func (s *Server) registerCanvas(h huma.API) {
 			}
 			return out, nil
 		})
-
-	// ── Nodes ──
 
 	op(h, operation("listNodes", http.MethodGet, "/api/environments/{id}/nodes",
 		"The canvas: every node of the environment"),
@@ -252,8 +246,6 @@ func (s *Server) registerCanvas(h huma.API) {
 		func(ctx context.Context, in *canvasIDInput) (*canvasNoContent, error) {
 			return &canvasNoContent{}, s.app.RemoveNode(ctx, ActorFrom(ctx), in.ID)
 		})
-
-	// ── Variables ──
 
 	op(h, operation("listVariables", http.MethodGet, "/api/nodes/{id}/variables",
 		"A node's variables with references expanded"),

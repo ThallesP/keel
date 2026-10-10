@@ -18,8 +18,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// ── Jobs: a manual scheduler on a fake clock ──────────────────────────────────────────────────
-
 type fakeJob struct {
 	key string
 	due int64
@@ -123,8 +121,6 @@ func (j *fakeJobs) count(prefix string) int {
 	}
 	return n
 }
-
-// ── Swarm ──────────────────────────────────────────────────────────────────────────────────
 
 type fakeService struct {
 	version uint64
@@ -311,8 +307,6 @@ func (f *fakeSwarm) RemoveLegacyTunnels(ctx context.Context) (int, error) {
 	return 0, nil
 }
 
-// ── Publisher ──────────────────────────────────────────────────────────────────────────────
-
 type recorder struct{ topics map[string][]string }
 
 func (r *recorder) Publish(org string, topics []string) {
@@ -329,8 +323,6 @@ func (r *recorder) has(org, topic string) bool {
 	}
 	return false
 }
-
-// ── The world ──────────────────────────────────────────────────────────────────────────────
 
 type world struct {
 	t        *testing.T

@@ -3,8 +3,8 @@
 # Tailnet-only (`tailscale serve`, not funnel). Idempotent: re-run after a node rename or on a
 # new box; the serve config itself survives reboots. See docs/networking.md, "Dashboard over HTTPS".
 #
-#   https://<node>  -> Vite (127.0.0.1:3001), which proxies /api, /worker, /otlp, /proxy and
-#                      /config.js to `keel serve` (127.0.0.1:3400)
+#   https://<node>  -> Vite (127.0.0.1:3001), which proxies /api, /worker, /otlp and /proxy to
+#                      `keel serve` (127.0.0.1:3400)
 #
 # One origin for the dashboard and the API, so nothing else needs a certificate. `keel serve` has
 # to know the URL people open (device-login links, Secure cookies): start it with the

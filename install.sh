@@ -202,7 +202,7 @@ check_health() {
   local meta
   meta=$(curl -fsS "$SITE_URL/api/meta") || die "the control plane is not answering on $SITE_URL" "docker compose -p keel logs keel"
   [[ "$meta" == *"\"$SITE_URL\""* ]] || die "the control plane does not know its URL ($SITE_URL)" "docker compose -p keel logs keel"
-  { curl -fsS -o /dev/null "$SITE_URL/" && curl -fsS -o /dev/null "$SITE_URL/config.js"; } ||
+  curl -fsS -o /dev/null "$SITE_URL/" ||
     die "the dashboard is not served on $SITE_URL" "docker compose -p keel logs keel"
   curl -fsS -o /dev/null -H @- "$SITE_URL/worker/config" <<<"Authorization: Bearer $KEEL_WORKER_TOKEN" ||
     die "the control plane does not accept the worker token" "re-run install.sh; it passes KEEL_WORKER_TOKEN to the control plane again"

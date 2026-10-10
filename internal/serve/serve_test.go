@@ -2,7 +2,6 @@ package serve
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -21,31 +20,6 @@ import (
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
 	"github.com/ThallesP/keel/internal/app"
 )
-
-func TestConfigJS(t *testing.T) {
-	for _, tc := range []struct {
-		cfg  app.Config
-		want string
-	}{
-		{app.Config{SiteURL: "http://100.64.0.1", Version: "1.2.3"},
-			`window.__KEEL__ = {"apiUrl":"http://100.64.0.1","version":"1.2.3"};` + "\n"},
-		{app.Config{Version: "dev"}, `window.__KEEL__ = {"version":"dev"};` + "\n"},
-		{app.Config{SiteURL: `http://x/</script>"`, Version: "v"},
-			`window.__KEEL__ = {"apiUrl":"http://x/\u003c/script\u003e\"","version":"v"};` + "\n"},
-	} {
-		got := ConfigJS(tc.cfg)
-		if got != tc.want {
-			t.Fatalf("ConfigJS(%+v) =\n%s\nwant\n%s", tc.cfg, got, tc.want)
-		}
-		var v map[string]string
-		if err := json.Unmarshal([]byte(got[strings.Index(got, "{"):strings.LastIndex(got, "}")+1]), &v); err != nil {
-			t.Fatalf("CLI cannot parse %q: %v", got, err)
-		}
-		if v["apiUrl"] != tc.cfg.SiteURL || v["version"] != tc.cfg.Version {
-			t.Fatalf("parsed %v", v)
-		}
-	}
-}
 
 type fakeAdapter struct {
 	mu     sync.Mutex
@@ -100,11 +74,8 @@ func TestServeOn(t *testing.T) {
 		return resp, string(b)
 	}
 
-	resp, body := get("/config.js")
-	if resp.StatusCode != 200 || body != ConfigJS(cfg) || resp.Header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("/config.js: %d %q %v", resp.StatusCode, body, resp.Header)
-	}
-	if resp, body = get("/api/meta"); resp.StatusCode != 200 || !strings.Contains(body, `"version":"1.2.3"`) {
+	resp, body := get("/api/meta")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"version":"1.2.3"`) {
 		t.Fatalf("/api/meta: %d %s", resp.StatusCode, body)
 	}
 	for _, path := range []string{"/", "/index.html", "/p/acme", "/assets", "/assets/"} {

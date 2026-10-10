@@ -2,7 +2,7 @@
 #
 #   make dev        keel serve on 127.0.0.1:3400 with its state in ./.keel. In another terminal run
 #                   the dashboard with `bun run dev:web` (Vite on http://127.0.0.1:3001); Vite
-#                   proxies /api (and the /api/ws WebSocket), /worker, /otlp and /config.js to
+#                   proxies /api (and the /api/ws WebSocket), /worker, /otlp and /proxy to
 #                   127.0.0.1:3400, so dashboard, API and socket share one origin as in production.
 #                   Set KEEL_SITE_URL to the URL you open (e.g. your ts.net HTTPS name).
 #   make test       go vet, go test, gofmt and no-comments checks

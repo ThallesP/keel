@@ -110,8 +110,7 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
   pass it to `app`. Same origin for dashboard, API and WebSocket: no CORS.
 - Raw (non-Huma) routes: `POST /worker/events`, `GET /worker/config`, `POST /proxy/events`
   (bearer `KEEL_WORKER_TOKEN`), `POST /otlp/v1/traces` (environment ingest key).
-- `GET /config.js` stays (runtime config for the dashboard); `GET /api/meta` is what the CLI
-  discovers an install with.
+- `GET /api/meta` is what the CLI discovers an install with.
 
 ## Realtime
 
@@ -141,7 +140,7 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
   so invalidation topics match by prefix.
 - `src/lib/realtime.tsx`: the WebSocket provider. Components only call generated hooks.
 - Production: `apps/web/embed.go` embeds `dist/`; `keel serve` serves it with an SPA fallback.
-  Dev: Vite proxies `/api`, `/worker`, `/otlp`, `/config.js` to `keel serve`.
+  Dev: Vite proxies `/api`, `/worker`, `/otlp`, `/proxy` to `keel serve`.
 
 ## Env (serve)
 

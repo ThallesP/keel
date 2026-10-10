@@ -107,7 +107,6 @@ The contract:
 - **Verify:**
   ```bash
   curl -fsS "$url/api/meta"                                       # control plane: name, version, siteUrl
-  curl -fsS "$url/config.js"                                      # dashboard runtime config
   sudo docker compose -p keel ps                                  # keel, proxy: healthy
   sudo docker service ls --filter name=keel-agent                 # replicas n/n
   ```
@@ -125,7 +124,7 @@ scripts/dev-https.sh              # optional: https://<node>.<tailnet>.ts.net, t
 scripts/bootstrap-swarm.sh        # one-time: Swarm on the tailnet IP and the `keel` overlay network
 ```
 
-In development `keel serve` listens on `127.0.0.1:3400` with its database in `./.keel`, and Vite (3001) proxies `/api`, `/worker`, `/otlp`, `/proxy` and `/config.js` to it, so the dashboard and the API share one origin as they do on an install. An installed Keel serves the built dashboard from the binary itself and its runtime settings from `/config.js`: never bake deployment URLs into the web build. `KEEL_SITE_URL` is the URL people open (device-login links and cookies use it).
+In development `keel serve` listens on `127.0.0.1:3400` with its database in `./.keel`, and Vite (3001) proxies `/api`, `/worker`, `/otlp` and `/proxy` to it, so the dashboard and the API share one origin as they do on an install. An installed Keel serves the built dashboard from the binary itself, on the API's origin, so the dashboard needs no runtime config: never bake deployment URLs into the web build. `KEEL_SITE_URL` is the URL people open (device-login links and cookies use it).
 
 `scripts/dev-https.sh` puts Vite behind `tailscale serve` on this machine's MagicDNS name (443); start `keel serve` with the `KEEL_SITE_URL` it prints. Needs HTTPS certificates enabled for the tailnet. Undo with `sudo tailscale serve reset`.
 

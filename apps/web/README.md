@@ -168,5 +168,4 @@ show a live indicator.
 ## Dev
 
 `make dev` (repo root) runs `keel serve` on `127.0.0.1:3400`; `bun run dev:web` runs Vite on
-`127.0.0.1:3001`, proxying `/api` (with the WebSocket), `/worker`, `/otlp`, `/proxy` and `/config.js`
-to it. `KEEL_DEV_API=http://127.0.0.1:<port>` points Vite at another `keel serve`.
+`127.0.0.1:3001`, proxying `/api` (with the WebSocket), `/worker`, `/otlp` and `/proxy` to it. `KEEL_DEV_API=http://127.0.0.1:<port>` points Vite at another `keel serve`.

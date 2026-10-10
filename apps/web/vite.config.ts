@@ -24,7 +24,6 @@ export default defineConfig({
       "/worker": toKeel,
       "/otlp": toKeel,
       "/proxy": toKeel,
-      "/config.js": toKeel,
     },
   },
   resolve: {

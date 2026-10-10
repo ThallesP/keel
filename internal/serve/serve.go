@@ -99,7 +99,7 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	}
 	defer closeAdapters(closers, log)
 
-	handler := transport.New(a, transport.Options{Web: opts.Web, WS: rt.Handler(), ConfigJS: ConfigJS(cfg)})
+	handler := transport.New(a, transport.Options{Web: opts.Web, WS: rt.Handler()})
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	log.Info("keel serve", "listen", ln.Addr().String(), "data", cfg.DataDir, "version", cfg.Version,
 		"site", cfg.SiteURL, "dashboard", opts.Web != nil)

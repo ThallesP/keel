@@ -39,7 +39,7 @@ Each rule names what enforces it. When an agent gets corrected for something new
 
 - `install.sh` is the product's front door: one idempotent command, re-run = upgrade, `KEEL_JSON=1` for agents. Its contract (options, output, verification) is documented in `README.md`; keep the two in sync.
 - One binary, `keel` (`cmd/keel`, `internal/`, `docs/go/ARCHITECTURE.md`), one image `ghcr.io/thallesp/keel` (root `Dockerfile`, built by `.github/workflows/images.yml`). Control plane = `deploy/compose.yml`: `keel serve` (API, embedded dashboard, SQLite in the `keel-data` volume, Swarm driver; manages the `keel-agent` global service itself) and `keel proxy` (the public edge, its own container, never the Docker socket), both from that image. `ci.yml` runs Go and web checks and `install.sh` end to end; anything that changes install behaviour must keep it green.
-- The dashboard and the API share one origin; `keel serve` serves `/config.js` (runtime config). Never bake deployment URLs into the web build.
+- The dashboard and the API share one origin, so the dashboard needs no runtime config. Never bake deployment URLs into the web build.
 
 ## CLI
 

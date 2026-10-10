@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,12 @@ func TestTransportErrors(t *testing.T) {
 	if oe, ok := err.(*output.Error); !ok || oe.Code != output.CodeNetwork ||
 		oe.Fix != "Check the URL, and that this machine is on the install's tailnet" {
 		t.Errorf("refused: %#v", err)
+	}
+	for _, bad := range []string{"http://[::1", "keel.example.com"} {
+		_, err := New(bad, "tok").Projects(context.Background())
+		if output.CodeOf(err) != output.CodeNetwork || !strings.HasPrefix(err.Error(), "Can't reach "+bad+": ") {
+			t.Errorf("url %q: %v", bad, err)
+		}
 	}
 	if err := translate(errors.New("odd"), ""); output.CodeOf(err) != output.CodeServer {
 		t.Errorf("anything else: %v", err)

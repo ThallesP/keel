@@ -153,8 +153,10 @@ func translate(err error, webURL string) error {
 	}
 	var ne net.Error
 	if errors.As(err, &ne) {
-		u, _ := url.Parse(webURL)
-		host := u.Host
+		host := webURL
+		if u, err := url.Parse(webURL); err == nil && u.Host != "" {
+			host = u.Host
+		}
 		if ne.Timeout() {
 			return output.Errorf(output.CodeTimeout, "Retry; check that "+host+" is up",
 				"Timed out talking to %s", host)

@@ -99,7 +99,7 @@ func (c *ControlPlane) PostEvents(ctx context.Context, body []byte, resync bool)
 			c.Log.Log("events", fmt.Sprintf("post failed (%s), retry in %ds", errorText(err), n*5+5))
 		}
 		resync = true
-		if c.sleep(ctx, time.Duration(n*5000+5000)*time.Millisecond) != nil {
+		if c.sleep(ctx, time.Duration(n*5+5)*time.Second) != nil {
 			return false
 		}
 	}

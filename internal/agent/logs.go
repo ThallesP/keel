@@ -369,11 +369,7 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 	}
 	defer rc.Close()
 	service := c.Labels[labelServiceName]
-	logged := since
-	if logged == "" {
-		logged = "now"
-	}
-	s.log.Log("logs", "following "+service+" ("+shortID(c.ID)+")", "since", logged)
+	s.log.Log("logs", "following "+service+" ("+shortID(c.ID)+")", "since", orDefault(since, "now"))
 	base := LogEvent{
 		ServiceID: serviceID,
 		Service:   service,
@@ -614,15 +610,7 @@ func (s *Shipper) Close(wait time.Duration) {
 		s.retryTimer = nil
 	}
 	s.mu.Unlock()
-	done := make(chan struct{})
-	go func() {
-		s.followersWG.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(wait):
-	}
+	waitAtMost(&s.followersWG, wait)
 }
 
 // serviceIDOf is the node id of a Swarm task container: its service name minus "svc-".
@@ -641,11 +629,7 @@ func replicaOf(taskName string) int {
 	if len(parts) < 2 {
 		return 0
 	}
-	v := strings.TrimSpace(parts[1])
-	if v == "" {
-		return 0
-	}
-	f, err := strconv.ParseFloat(v, 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
 		return 0
 	}

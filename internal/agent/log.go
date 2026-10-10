@@ -78,9 +78,6 @@ func marshal(v any) []byte {
 // errorText is the worker's errorText: the message with whitespace runs collapsed to one space,
 // trimmed, at most 300 characters.
 func errorText(err error) string {
-	if err == nil {
-		return ""
-	}
 	return truncate(strings.Join(strings.Fields(err.Error()), " "), 300)
 }
 

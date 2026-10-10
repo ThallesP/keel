@@ -36,8 +36,6 @@ type Config struct {
 const (
 	agentStateDir     = "/var/lib/keel-agent"  // keel-agent's state volume (cli-install.md B7)
 	workerStateDir    = "/var/lib/keel-worker" // the Bun worker's keel-worker-state mount
-	defaultSecretPath = "/run/secrets/keel_worker_token"
-	defaultSocket     = "/var/run/docker.sock"
 	defaultConfigPoll = 30 * time.Second
 	shutdownBudget    = 5 * time.Second // Swarm's stop grace period is 10 s
 )
@@ -60,7 +58,9 @@ func isDir(path string) bool {
 }
 
 // ConfigFromEnv reads the agent's environment.
-func ConfigFromEnv() (Config, error) { return configFrom(os.Getenv, defaultSecretPath, isDir) }
+func ConfigFromEnv() (Config, error) {
+	return configFrom(os.Getenv, "/run/secrets/keel_worker_token", isDir)
+}
 
 func configFrom(getenv func(string) string, secretPath string, isDir func(string) bool) (Config, error) {
 	cfg := Config{
@@ -156,11 +156,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.shipper.Close(0)
 		return fmt.Errorf("docker /info: %w", err)
 	}
-	nodeID := me.NodeID
-	if nodeID == "" {
-		nodeID = me.Name
-	}
-	a.shipper.SetNodeID(nodeID)
+	a.shipper.SetNodeID(orDefault(me.NodeID, me.Name))
 	a.log.Log("worker", "starting on node "+orDefault(me.NodeID, "?")+" ("+orDefault(me.Name, "?")+")")
 
 	var wg sync.WaitGroup
@@ -204,15 +200,8 @@ func (a *Agent) pollConfig(ctx context.Context) {
 
 // signalName is the worker's "SIGTERM"/"SIGINT" from signal.NotifyContext's cause.
 func signalName(ctx context.Context) string {
-	cause := ""
-	if err := context.Cause(ctx); err != nil {
-		cause = err.Error()
-	}
-	switch {
-	case strings.HasPrefix(cause, "interrupt"):
+	if err := context.Cause(ctx); err != nil && strings.HasPrefix(err.Error(), "interrupt") {
 		return "SIGINT"
-	case strings.HasPrefix(cause, "terminated"):
-		return "SIGTERM"
 	}
 	return "SIGTERM"
 }
@@ -238,5 +227,5 @@ func dockerSocket(getenv func(string) string) string {
 	if getenv("DOCKER_HOST") != "" {
 		return ""
 	}
-	return defaultSocket
+	return "/var/run/docker.sock"
 }

@@ -131,10 +131,9 @@ func (d *MobyDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 		ShowStderr: true,
 		Timestamps: true,
 		Follow:     true,
+		Since:      since, // "seconds.nanoseconds" passes through unchanged
 	}
-	if since != "" {
-		opts.Since = since // "seconds.nanoseconds" passes through unchanged
-	} else {
+	if since == "" {
 		opts.Tail = "0"
 	}
 	return d.cli.ContainerLogs(ctx, id, opts)

@@ -55,7 +55,6 @@ func (f *Forwarder) Run(ctx context.Context) {
 
 // stream runs one connection to the Docker event stream, until it ends.
 func (f *Forwarder) stream(ctx context.Context) {
-	resync := true
 	since := f.State.EventsSince()
 	s, err := f.Docker.Events(ctx, since)
 	if err != nil {
@@ -71,9 +70,7 @@ func (f *Forwarder) stream(ctx context.Context) {
 		f.Log.Log("events", "streaming docker events")
 	}
 	// (Re)connect: ask for a full sweep before streaming anything.
-	if f.Poster.PostEvents(ctx, []byte("[]"), true) {
-		resync = false
-	}
+	resync := !f.Poster.PostEvents(ctx, []byte("[]"), true)
 	for {
 		e, err := s.Next()
 		if err != nil {
@@ -86,12 +83,8 @@ func (f *Forwarder) stream(ctx context.Context) {
 			}
 			return
 		}
-		if e.Type == "container" && e.ActorID != "" && f.OnContainer != nil {
-			attrs := e.Attributes
-			if attrs == nil {
-				attrs = map[string]string{}
-			}
-			f.OnContainer(e.Action, e.ActorID, attrs)
+		if e.Type == "container" && e.ActorID != "" {
+			f.OnContainer(e.Action, e.ActorID, e.Attributes)
 		}
 		if relevant(e) {
 			resync = !f.Poster.PostEvents(ctx, e.Raw, resync)
@@ -119,6 +112,7 @@ func relevant(e Event) bool {
 		return strings.HasPrefix(e.Attributes["name"], "svc-")
 	case "node":
 		return true
+	default:
+		return false
 	}
-	return false
 }

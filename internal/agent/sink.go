@@ -48,7 +48,8 @@ func NewSinkFactory(hc *http.Client, log *Logger) SinkFactory {
 		switch cfg.Kind {
 		case "axiom":
 			return NewAxiomSink(cfg, hc, log), true
+		default:
+			return nil, false
 		}
-		return nil, false
 	}
 }

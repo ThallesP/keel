@@ -79,15 +79,11 @@ func (s *State) LogsSince(container string) (string, bool) {
 func (s *State) Checkpoint(points []resumePoint) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	changed := false
 	for _, p := range points {
 		if p.since == "" {
 			continue
 		}
 		s.data.LogsSince[p.container] = p.since
-		changed = true
-	}
-	if changed {
 		s.dirty = true
 	}
 }

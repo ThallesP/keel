@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -52,7 +53,7 @@ func (Admin) Routes() []caddy.AdminRoute {
 
 func serveHostAddrs(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		return caddy.APIError{HTTPStatus: http.StatusMethodNotAllowed, Err: fmt.Errorf("method not allowed")}
+		return caddy.APIError{HTTPStatus: http.StatusMethodNotAllowed, Err: errors.New("method not allowed")}
 	}
 	addrs, err := hostAddrs()
 	if err != nil {
@@ -71,7 +72,7 @@ type Cert struct {
 
 func serveCerts(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		return caddy.APIError{HTTPStatus: http.StatusMethodNotAllowed, Err: fmt.Errorf("method not allowed")}
+		return caddy.APIError{HTTPStatus: http.StatusMethodNotAllowed, Err: errors.New("method not allowed")}
 	}
 	out := map[string]Cert{}
 	for _, name := range r.URL.Query()["name"] {

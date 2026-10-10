@@ -12,7 +12,7 @@ We do **not** ship a per-node reconciler agent. Joining a server is a script tha
 
 One thing does run on every node: `keel-agent`, a Swarm **global service** running `keel agent` (`internal/agent`, the control plane's own image; was `keel-worker` from `apps/worker`, Bun). `keel serve` creates and updates it on every start when `KEEL_AGENT_IMAGE` is set (`ensureAgent` in `internal/app/reconcile.go`, `EnsureAgent` in `internal/adapters/swarm/agent.go`). It is not a reconciler: the socket is mounted read-only, every Docker call it makes is a GET, nothing listens, and it only talks outbound to `keel serve`'s worker routes under one bearer token (`KEEL_WORKER_TOKEN`). Swarm schedules it onto new nodes by itself, so the join flow is still plain `docker swarm join`. Two jobs today:
 
-- **Events** (`internal/agent/events.go`): streams that node's `docker events` to `POST /worker/events`. `scope=local` events (container start/die) are only visible on the daemon that runs the container, and observation must be event-driven, not polled.
+- **Events** (`internal/agent/events.go`): streams that node's `docker events` to `POST /worker/events`, one JSON array per event (see [`observe`](#observe--swarm-to-observed)). `scope=local` events (container start/die) are only visible on the daemon that runs the container, and observation must be event-driven, not polled.
 - **Logs** (`internal/agent/logs.go`): follows every `svc-*` container's stdout/stderr and ships it to its organization's log sink, when one is configured. Config comes from `GET /worker/config`, polled every 30s. See [`logs.md`](./logs.md).
 
 Anything that needs to run on the node itself (metrics, exec into a container, volume rsync in [`volumes.md`](./volumes.md)) goes into this agent rather than a new service. It replaced the 60-line `docker:cli` shell forwarder (`infra/events-sidecar`, removed 2026-09-20) because a shell script could not follow logs, batch, or resume per container.
@@ -50,7 +50,7 @@ Facts:
 - The image runs as root on purpose (see the repo-root `Dockerfile`): the socket's group id differs per host, so socket permissions are fine.
 - The image ships no `docker` CLI. Use the moby client over `DOCKER_HOST` (default `unix:///var/run/docker.sock`), never shell out to `docker`.
 - Nothing is installed at run time: the client is compiled in (Convex needed `dockerode` and `ssh2` as external packages, fetched from npm on the first push).
-- Instead of Convex's 10-minute, 16-concurrent node actions, every Docker call carries its own deadline (an apply 15 min because pulls are slow, scans and removals 1 min: `internal/app/deploy_state.go`) and the applies of one node run one at a time. Never block a job on a build.
+- Instead of Convex's 10-minute, 16-concurrent node actions, every Docker call carries its own deadline (an apply 15 min because pulls are slow, in `apply` in `internal/app/swarm.go`; scans and removals 1 min, `dockerCallDeadline` in `internal/app/deploy_state.go`) and the applies of one node run one at a time. Never block a job on a build.
 - SQLite is a single writer (one write connection on `$KEEL_DATA_DIR/keel.db`), so an install runs one `keel serve`; pending jobs live in memory, die with the process and are re-derived by the start-up `Recover` pass. Control plane is one box. Running containers survive a control-plane outage, new deploys do not.
 
 Security: mounting the Docker socket gives `keel serve` root-equivalent access to the control-plane host. Only use cases and jobs call the Swarm port (`app.Swarm`, `internal/app/ports_deploy.go`); HTTP handlers never touch adapters. Never expose a route that takes a raw image, command, or mount. `keel proxy`, which parses internet traffic, never gets the socket. The `keel` container is trusted infrastructure at the same tier as the host.
@@ -149,17 +149,20 @@ Idempotent. Create if missing, update if present. `version` is Swarm's optimisti
 ```go
 // internal/adapters/swarm/service.go (trimmed: engine args, one-shot FailureAction)
 func toSpec(s app.ServiceSpec) swarm.ServiceSpec {
-	labels := map[string]string{"keel.service": s.NodeID, "keel.revision": strconv.Itoa(s.Revision)}
-	delay, attempts, replicas := 5*time.Second, uint64(5), uint64(s.Replicas)
+	labels := map[string]string{labelService: s.NodeID, "keel.revision": strconv.Itoa(s.Revision)}
 	return swarm.ServiceSpec{
-		Annotations: swarm.Annotations{Name: "svc-" + s.NodeID, Labels: labels},
+		Annotations: swarm.Annotations{Name: serviceName(s.NodeID), Labels: labels},
 		TaskTemplate: swarm.TaskSpec{
 			ContainerSpec: &swarm.ContainerSpec{Image: s.Image, Env: s.Env, Labels: labels},
-			RestartPolicy: &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionOnFailure, Delay: &delay, MaxAttempts: &attempts},
-			Networks:      []swarm.NetworkAttachmentConfig{{Target: "keel"}},
+			RestartPolicy: &swarm.RestartPolicy{
+				Condition:   swarm.RestartPolicyConditionOnFailure,
+				Delay:       new(5 * time.Second),
+				MaxAttempts: new(uint64(5)),
+			},
+			Networks: []swarm.NetworkAttachmentConfig{{Target: "keel"}},
 			// Pin to node, not built yet: Placement: &swarm.Placement{Constraints: []string{"node.id==" + pin}}
 		},
-		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: &replicas}},
+		Mode: swarm.ServiceMode{Replicated: &swarm.ReplicatedService{Replicas: new(uint64(s.Replicas))}},
 		// start-first is for stateless only. Services with volumes must use stop-first,
 		// otherwise two tasks share one volume during rollout. See volumes.md rules 5 and 6.
 		UpdateConfig: &swarm.UpdateConfig{Parallelism: 1, Order: swarm.UpdateOrderStartFirst, FailureAction: swarm.UpdateFailureActionRollback},
@@ -193,9 +196,9 @@ User actions map to `desired` writes followed by an apply job queued once the wr
 
 ### `observe` — Swarm to observed
 
-Event-driven. No cron. The per-node agent POSTs each Docker event (`type=container|service|node`, only containers whose `com.docker.swarm.service.name` label starts with `svc-`) to `POST /worker/events` on `keel serve` (the agent's `KEEL_URL`) with a bearer token (`KEEL_WORKER_TOKEN` in serve's env, constant-time compare). The route (`internal/transport/http/deploy_raw.go`) authenticates, parses one object / an array / NDJSON, and hands a trimmed `{type, action, name, serviceName}` list (`app.DockerEvent`) to `IngestWorkerEvents` (`internal/app/events.go`).
+Event-driven. No cron. The per-node agent POSTs each Docker event (`type=container|service|node`, only containers whose `com.docker.swarm.service.name` label starts with `svc-` and services named `svc-*`, never `exec_*` or `health_status*` actions) to `POST /worker/events` on `keel serve` (the agent's `KEEL_URL`) with a bearer token (`KEEL_WORKER_TOKEN` in serve's env, compared as SHA-256 digests in constant time). The body is always a JSON array: `[]` with `X-Keel-Resync: 1` each time the agent's event stream (re)connects, then a one-element array per event, in order, each post waiting for the previous one. The route (`internal/transport/http/deploy_raw.go`) authenticates, takes only an array (no single object, no NDJSON; over 256 KiB is `413 too large`, anything else malformed or an element without `Type` is `400 bad json`), and hands a trimmed `{type, name, serviceName}` list (`app.DockerEvent`) to `IngestWorkerEvents` (`internal/app/events.go`). A 4xx makes the agent log it and skip the event; anything else is retried every 5 to 35s with the resync header set.
 
-`IngestWorkerEvents` maps each event to a node id (`svc-<id>` from the container label or the service name), drops ids that are not ours (orphan services, the user's own containers), and calls `scheduleObserve` (`internal/app/observe.go`), which is the debounce: an in-memory map holds each node's pending scan, a `Jobs.After` job keyed `observe:<id>:<gen>` (Convex kept its id in `nodes.observeScheduled`); if one is pending and due no later than +500ms the event is coalesced into it, otherwise a new one is scheduled at +500ms. A rollout emits about six events and results in two or three scans, not six. `type=node` events schedule `observeServers` (job `observe:servers`), which refreshes the `cluster` row's ready-server count.
+`IngestWorkerEvents` maps each event to a node id (`svc-<id>` from the container label or the service name), drops ids that are not ours (orphan services, the user's own containers), and calls `scheduleObserve` (`internal/app/observe.go`), which is the debounce: a map on `App` holds each node's pending scan, a `Jobs.After` job keyed `observe:<id>:<gen>` (Convex kept its id in `nodes.observeScheduled`); if one is pending and due no later than +500ms the event is coalesced into it, otherwise a new one is scheduled at +500ms. A rollout emits about six events and results in two or three scans, not six. A batch with any `type=node` event schedules `observeServers` once, before the loop (job `observe:servers`), which refreshes the `cluster` row's ready-server count.
 
 `observeNode` frees the node's slot first (so an event that lands mid-scan gets its own scan), then reads one task list filtered on `keel.service=<id>` plus one service inspect (`ObserveService` in `internal/adapters/swarm/observe.go`), and in one write calls `setObserved` and `reconcile` on the result of `summarizeTasks`. Three things in `summarizeTasks` matter:
 
@@ -203,7 +206,9 @@ Event-driven. No cron. The per-node agent POSTs each Docker event (`type=contain
 - `UpdateStatus.State` from the service is authoritative for updates: `updating` keeps `state: "updating"` even when the new task is already running, because Swarm watches it for `UpdateConfig.Monitor` (5s) and rolls back if it dies. `paused` / `rollback_*` give `state: "failed"` with Swarm's message as `error`. `completed` lets the task counts decide. A fresh `create` has no `UpdateStatus` at all; readiness comes from the `container start` event on the node that runs it.
 - If a task is mid-transition (`assigned`, `preparing`, `starting`) the scan re-schedules itself at most twice, 2s apart. The Docker API lags `container start` by ~100ms, so a scan can land on `starting`. This is bounded by Swarm's own transition, not a poll.
 
-`observeAll` (full sweep, every service, job `observe:all`) runs on every `keel serve` start (the `Recover` pass) and is scheduled when the agent sends `X-Keel-Resync: 1`, which it does on its first batch after any (re)start and after any failed POST. Docker only buffers a small number of past events, so a restart is treated as "we may have missed something". There is no manual trigger any more (Convex had `bunx convex run swarm:observe`); restarting `keel serve` runs one.
+`observeAll` (full sweep, every service, job `observe:all`) runs on every `keel serve` start (the `Recover` pass) and is scheduled when the agent sends `X-Keel-Resync: 1`, which it does with the `[]` it posts whenever its event stream (re)connects and on the next post after a failed one. Docker only buffers a small number of past events, so a restart is treated as "we may have missed something". There is no manual trigger any more (Convex had `bunx convex run swarm:observe`); restarting `keel serve` runs one.
+
+Observe logs through `log/slog` (text on stderr, `docker compose -p keel logs keel`) and only on failure: `observeNode`, `observe (full sweep)`, `observeServers` or `schedule observe`, with `node` and `err` attributes. A scan that works writes the node and says nothing, and so does an event.
 
 The only timer left is `timeoutDeployment` (`internal/app/reconcile.go`), a `Jobs.After` job keyed `timeout:<deployment id>` that `beginDeployment` (`internal/app/deployments.go`) queues at +5min per deployment. If the deployment is still running (task `pending` because no node can schedule it, a container that exits 0 and is never restarted, a pull that hangs) every unfinished step fails and the node gets `applyError`. One scheduled check per deployment, not polling. Jobs are in memory, so `Recover` re-arms the timeout of every running deployment at max(now, start + 5min) and re-queues the applies that never reached Swarm.
 
@@ -286,6 +291,8 @@ The canvas drives Swarm end-to-end. `services` is gone; deployable nodes (`servi
 
 - Agent release: no deploy script. `keel serve` creates or updates `keel-agent` on every start when `KEEL_AGENT_IMAGE` is set (compose sets it to the control plane's own image), pinned by digest when Docker knows one and never resolved against a registry by Swarm. A locally built image on more than one node still needs a registry for the others to pull it.
 - The agent's `KEEL_URL` is `KEEL_AGENT_CONTROL_URL` (compose: `http://<KEEL_ADDR>:<KEEL_WEB_PORT>`), else `KEEL_SITE_URL`. One listener for the dashboard, the API and the worker routes; no `:3211`.
-- Token rotation: delete `KEEL_WORKER_TOKEN` from `/opt/keel/.env` and re-run `install.sh`, which generates a new one. `keel serve` and `keel proxy` get it from compose, and serve's start-up pass updates `keel-agent` with it. The agent gets it as a Swarm secret named after its hash (`keel-agent-token-<hash>`, `EnsureAgent`); a new token makes a new secret and the previous one is removed.
-- Resume state: `keel-agent` keeps its `state.json` on its own named volume per node (`internal/agent/state.go`; `KEEL_STATE` overrides the path).
+- Token rotation: delete `KEEL_WORKER_TOKEN` from `/opt/keel/.env` and re-run `install.sh`, which generates a new one. `keel serve` gets it from compose, writes it into the config it pushes to `keel proxy` (the token of its certificate reports), and its start-up pass updates `keel-agent` with it. The agent gets it as a Swarm secret named after its hash (`keel-agent-token-<hash>`, `EnsureAgent`); a new token makes a new secret and the previous one is removed.
+- Resume state: `keel-agent` keeps its `state.json` on its own named volume per node (`keel-agent-state` at `/var/lib/keel-agent`, `internal/agent/state.go`; `KEEL_STATE` overrides the path). Nothing reads the Bun worker's `keel-worker-state`.
+- Docker: the agent, like `keel serve`, finds the socket through moby's `client.FromEnv` (`DOCKER_HOST`, default `/var/run/docker.sock`); `DOCKER_SOCKET` is gone.
+- Logs: the agent's own lines are `log/slog` text (start, shutdown, failures), not the Bun worker's `[scope] msg {json}` lines.
 - Local dev: `keel serve` talks to the host Docker socket directly (`DOCKER_HOST` unset). No compose needed.

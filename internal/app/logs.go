@@ -12,20 +12,23 @@ func clampLogTail(tail int) int {
 }
 
 func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID string, tail int) (domain.LogTail, error) {
-	var sink *domain.LogSink
+	var (
+		sink    domain.LogSink
+		hasSink bool
+	)
 	err := a.read(ctx, func(tx Tx) error {
 		scope, err := requireNode(tx, actor, nodeID)
 		if err != nil {
 			return err
 		}
-		sink, err = orgSinkOf(tx, scope.Project.OrganizationID)
+		sink, hasSink, err = orgSinkOf(tx, scope.Project.OrganizationID)
 		return err
 	})
 	if err != nil {
 		return domain.LogTail{}, err
 	}
-	if sink != nil {
-		return a.axiomTail(ctx, *sink, nodeID, clampLogTail(tail))
+	if hasSink {
+		return a.axiomTail(ctx, sink, nodeID, clampLogTail(tail))
 	}
 	return a.dockerTail(ctx, nodeID, clampLogTail(tail))
 }

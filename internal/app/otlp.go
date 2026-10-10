@@ -38,14 +38,14 @@ func (a *App) ensureOTLPKey(tx Tx, ch *Changes, scope EnvScope) (string, error) 
 	return key, nil
 }
 
-func (a *App) otlpRoute(ctx context.Context, key string) (*domain.LogSink, error) {
-	var sink *domain.LogSink
+func (a *App) otlpRoute(ctx context.Context, key string) (domain.LogSink, error) {
+	var sink domain.LogSink
 	err := a.read(ctx, func(tx Tx) error {
 		org, err := tx.OTLPKeyOrganization(key)
 		if err != nil {
 			return err
 		}
-		sink, err = orgSinkOf(tx, org)
+		sink, _, err = orgSinkOf(tx, org)
 		return err
 	})
 	return sink, err
@@ -89,7 +89,7 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) HTTPReply {
 	if len(body) > otlpMaxBody {
 		return otlpText(413, "too large")
 	}
-	if sink == nil || sink.Traces == "" {
+	if sink.Traces == "" {
 		if ctype == "application/json" {
 			return HTTPReply{Status: 200, ContentType: ctype, Body: []byte("{}")}
 		}

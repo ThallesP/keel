@@ -25,15 +25,12 @@ func obsInvalid(err error) error {
 	return domain.Invalid("%s", err)
 }
 
-func orgSinkOf(tx Tx, org string) (*domain.LogSink, error) {
+func orgSinkOf(tx Tx, org string) (domain.LogSink, bool, error) {
 	sink, err := tx.LogSinkOf(org)
 	if errors.Is(err, ErrNoRow) {
-		return nil, nil
+		return domain.LogSink{}, false, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &sink, nil
+	return sink, err == nil, err
 }
 
 type envSinkScope struct {
@@ -48,14 +45,14 @@ func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentI
 		if err != nil {
 			return err
 		}
-		sink, err := orgSinkOf(tx, scope.Project.OrganizationID)
+		sink, ok, err := orgSinkOf(tx, scope.Project.OrganizationID)
 		if err != nil {
 			return err
 		}
-		if sink == nil {
+		if !ok {
 			return noSink
 		}
-		s.Sink = *sink
+		s.Sink = sink
 		nodes, err := tx.Nodes(environmentID)
 		if err != nil {
 			return err

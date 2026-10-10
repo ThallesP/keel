@@ -77,8 +77,8 @@ func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[s
 }
 
 func orgTracesState(tx Tx, org string) (domain.TracesState, error) {
-	sink, err := orgSinkOf(tx, org)
-	if err != nil || sink == nil {
+	sink, ok, err := orgSinkOf(tx, org)
+	if err != nil || !ok {
 		return domain.TracesOff, err
 	}
 	if sink.Traces == "" {

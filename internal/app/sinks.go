@@ -16,8 +16,8 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 	}
 	var view *domain.LogSinkView
 	err := a.read(ctx, func(tx Tx) error {
-		s, err := orgSinkOf(tx, actor.OrganizationID)
-		if err != nil || s == nil {
+		s, ok, err := orgSinkOf(tx, actor.OrganizationID)
+		if err != nil || !ok {
 			return err
 		}
 		view = &domain.LogSinkView{Kind: s.Kind, Domain: s.Domain, Dataset: s.Dataset, TokenHint: domain.TokenHint(s.Token)}

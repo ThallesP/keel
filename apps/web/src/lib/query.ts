@@ -49,8 +49,6 @@ export function createQueryClient(): QueryClient {
   });
 }
 
-// ── Topics ──────────────────────────────────────────────────────────────────────────────────
-
 /** The request path a query key starts with, or undefined for keys that are not API reads. */
 export function keyPath(key: readonly unknown[]): string | undefined {
   return typeof key[0] === "string" ? key[0] : undefined;
@@ -107,15 +105,10 @@ export function parseTopics(header: string | null | undefined): string[] {
     .filter((t) => t.startsWith("/"));
 }
 
-// ── Session cache ───────────────────────────────────────────────────────────────────────────
-
 /** `GET /api/me` for a signed-out caller. */
 export const SIGNED_OUT: Me = { user: null, organization: null };
 
-/** The session query's key, `["/api/me"]`. */
-export const meQueryKey = getMeQueryKey;
-
-const isMeQuery = (q: Query) => keyPath(q.queryKey) === meQueryKey()[0];
+const isMeQuery = (q: Query) => keyPath(q.queryKey) === getMeQueryKey()[0];
 
 /**
  * The one definition of the session query, shared by every observer (useSession, the realtime
@@ -138,7 +131,7 @@ export function meQueryOptions() {
  */
 export async function markSignedOut(queryClient: QueryClient): Promise<void> {
   await queryClient.cancelQueries();
-  queryClient.setQueryData(meQueryKey(), SIGNED_OUT);
+  queryClient.setQueryData(getMeQueryKey(), SIGNED_OUT);
   queryClient.removeQueries({ predicate: (q) => !isMeQuery(q) });
 }
 
@@ -159,5 +152,5 @@ export async function refreshSession(queryClient: QueryClient): Promise<Me> {
 
 /** The cached session, if loaded. */
 export function cachedSession(queryClient: QueryClient): Me | undefined {
-  return queryClient.getQueryData<Me>(meQueryKey());
+  return queryClient.getQueryData<Me>(getMeQueryKey());
 }

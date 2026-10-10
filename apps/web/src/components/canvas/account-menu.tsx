@@ -47,13 +47,7 @@ export function AccountMenu() {
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {organization && (
-        // TODO(merge): drop `organizationId` once invite-dialog.tsx takes the organization from
-        // the session (web-data.md B5). Spread, so this compiles on either side of that change.
-        <InviteDialog
-          {...{ open: inviting, onOpenChange: setInviting, organizationId: organization.id }}
-        />
-      )}
+      {organization && <InviteDialog open={inviting} onOpenChange={setInviting} />}
     </>
   );
 }

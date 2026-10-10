@@ -4,10 +4,11 @@ import type { TraceStats } from "@/api/gen";
 
 import { formatCount, formatDuration } from "../../format";
 
+const latency = (ms: number | null) => (ms === null ? "—" : formatDuration(ms));
+
 export function StatRow({ stats, rangeMs }: { stats: TraceStats; rangeMs: number }) {
   const rate = stats.requests / (rangeMs / 60_000);
   const errorRate = stats.requests ? (stats.errors / stats.requests) * 100 : 0;
-  const latency = (ms: number | null) => (ms === null ? "—" : formatDuration(ms));
   return (
     <div className="grid grid-cols-5 gap-3">
       <Stat

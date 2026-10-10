@@ -1,6 +1,5 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { Lock } from "lucide-react";
-import { useState } from "react";
 
 import { useGetNodeTracing, useSetNodeTracing } from "@/api/gen";
 import { succeeded } from "@/lib/panel-write";
@@ -15,8 +14,7 @@ import { Spinner } from "../../primitives";
  */
 export function TracingSection({ nodeId }: { nodeId: string }) {
   const { data } = useGetNodeTracing({ path: { id: nodeId } });
-  const setTracing = useSetNodeTracing();
-  const [busy, setBusy] = useState(false);
+  const { mutateAsync: setTracing, isPending } = useSetNodeTracing();
   if (data === undefined) {
     return (
       <div className="flex h-16 items-center justify-center">
@@ -38,12 +36,6 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
       : "Have your coding agent instrument the repo with the prompt, then turn this on and Ship.",
   }[tracing.traces];
 
-  const toggle = async () => {
-    setBusy(true);
-    await succeeded(setTracing.mutateAsync({ path: { id: nodeId }, body: { on: !enabled } }));
-    setBusy(false);
-  };
-
   return (
     <section className="shrink-0 border-b border-line">
       <div className="flex items-center gap-6 px-5 py-3">
@@ -58,8 +50,10 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
             role="switch"
             aria-checked={enabled}
             aria-label="OpenTelemetry tracing"
-            disabled={busy || blocked}
-            onClick={() => void toggle()}
+            disabled={isPending || blocked}
+            onClick={() =>
+              void succeeded(setTracing({ path: { id: nodeId }, body: { on: !enabled } }))
+            }
             className={cn(
               "relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-50",
               enabled ? "bg-primary" : "bg-line",

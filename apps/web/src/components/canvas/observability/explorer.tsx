@@ -54,7 +54,6 @@ const KINDS: { id: Kind; label: string }[] = [
   { id: "logs", label: "Logs" },
 ];
 
-const POLL_MS = 10_000;
 const LINES = 300;
 /** traceProviders/axiom LIST: how many requests overview returns. */
 const REQUESTS = 100;
@@ -75,8 +74,9 @@ export function Explorer({ sink }: { sink: Sink }) {
       setOpened({ at: e.trace.start });
       void navigate({ search: (prev) => ({ ...prev, trace: e.trace.traceId, around: undefined }) });
     } else if (e.ref) {
+      const { traceId } = e.ref;
       setOpened({ at: e.time, line: e.line });
-      void navigate({ search: (prev) => ({ ...prev, trace: e.ref!.traceId, around: undefined }) });
+      void navigate({ search: (prev) => ({ ...prev, trace: traceId, around: undefined }) });
     } else {
       setOpened({ at: e.time, line: e.line });
       void navigate({ search: (prev) => ({ ...prev, trace: undefined, around: e.time }) });
@@ -100,7 +100,7 @@ export function Explorer({ sink }: { sink: Sink }) {
               placeholder="Filter requests and logs"
             />
             <Segmented
-              options={RANGES.map((r) => ({ ...r, label: r.label, title: `Last ${r.long}` }))}
+              options={RANGES.map((r) => ({ ...r, title: `Last ${r.long}` }))}
               value={range}
               onChange={setRange}
               label="Time range"
@@ -195,7 +195,7 @@ function useStream(
   active: boolean,
 ) {
   const polled = {
-    refetchInterval: POLL_MS,
+    refetchInterval: 10_000,
     retry: false,
     placeholderData: keepPreviousData,
     meta: { realtime: false },

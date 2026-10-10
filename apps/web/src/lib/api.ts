@@ -8,7 +8,7 @@
 //   - drop the session when an answer says the caller is no longer signed in (401).
 import type { QueryClient } from "@tanstack/react-query";
 
-import { type DeviceError, type Problem, ResponseError, client } from "@/api/gen";
+import { type DeviceError, type Problem, client } from "@/api/gen";
 
 import { cachedSession, invalidateTopics, markSignedOut, parseTopics } from "./query";
 
@@ -131,9 +131,6 @@ export function setupApiClient(queryClient: QueryClient): void {
 
   installed = { client, response, error };
 }
-
-/** Re-exported so a caller can tell a raw client error (`throwOnError` off) from an ApiError. */
-export { ResponseError };
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;

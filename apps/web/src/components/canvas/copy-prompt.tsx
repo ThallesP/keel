@@ -20,11 +20,10 @@ export function CopyPrompt({
   className?: string;
 }) {
   // Static text: fetched on mount, never invalidated by writes.
-  const { data } = useGetTracingPrompt(
+  const { data: prompt } = useGetTracingPrompt(
     { query: { nodeId, environmentId } },
-    { query: { meta: { realtime: false } } },
+    { query: { meta: { realtime: false }, select: (p) => p.prompt } },
   );
-  const prompt = data?.prompt;
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     if (!prompt) return;

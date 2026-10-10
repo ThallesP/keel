@@ -24,7 +24,7 @@ export function ProjectSwitcher() {
   const { view } = route.useSearch();
   const navigate = useNavigate();
   const { data: projectList } = useListProjects();
-  const create = useCreateProject().mutateAsync;
+  const { mutateAsync: createProject } = useCreateProject();
   const [open, setOpen] = useState(false);
   useHotkey(
     { key: "p" },
@@ -40,7 +40,7 @@ export function ProjectSwitcher() {
       placeholder: "Name it, e.g. my-app",
       items: [],
       onSubmit: (name) => {
-        void attempt(create({ body: { name } })).then((r) => r.ok && go(r.data.slug));
+        void attempt(createProject({ body: { name } })).then((r) => r.ok && go(r.data.slug));
       },
       submitLabel: (name) => `Create ${name}`,
       submitHint: "Empty canvas · production environment",
@@ -70,7 +70,7 @@ export function ProjectSwitcher() {
         },
       ],
     };
-  }, [projectList, projectId, view, navigate, create]);
+  }, [projectList, projectId, view, navigate, createProject]);
 
   return (
     <>

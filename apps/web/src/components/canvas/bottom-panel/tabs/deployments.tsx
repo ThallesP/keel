@@ -109,6 +109,15 @@ function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
   );
 }
 
+function Empty({ node, now, text }: { node: InfraNode; now: number; text: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <MetaStrip node={node} now={now} />
+      <p className="px-5 py-4 text-xs text-faint">{text}</p>
+    </div>
+  );
+}
+
 function CurrentCard({
   d,
   pill,
@@ -235,15 +244,12 @@ export function DeploymentsTab({ node }: { node: InfraNode }) {
   // Selection is the URL (`?deployment=`), so a row is a link and a reload keeps it.
   const selected = rows.find((r) => r.id === link.deploymentId) ?? current;
 
-  const empty = (text: string) => (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <MetaStrip node={node} now={now} />
-      <p className="px-5 py-4 text-xs text-faint">{text}</p>
-    </div>
-  );
-  if (node.type === "volume") return empty("Volumes are not deployed on their own.");
+  if (node.type === "volume") {
+    return <Empty node={node} now={now} text="Volumes are not deployed on their own." />;
+  }
   if (!current || !selected) {
-    return empty(docs === undefined ? "Loading…" : "No deployments yet. Press Deploy on the node.");
+    const text = docs === undefined ? "Loading…" : "No deployments yet. Press Deploy on the node.";
+    return <Empty node={node} now={now} text={text} />;
   }
 
   return (

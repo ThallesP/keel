@@ -10,7 +10,7 @@ import SignUpForm from "@/components/sign-up-form";
  * organization, everyone after it signs up from an invite link (`/invite/$invitationId`).
  */
 export function AuthForms() {
-  const open = useGetSignUpOpen().data?.open;
+  const { data: open } = useGetSignUpOpen({ query: { select: (s) => s.open } });
   const [showSignIn, setShowSignIn] = useState<boolean | null>(null);
   if (open === undefined) return <Loader />;
   // A fresh install lands on sign-up; once an account exists only sign-in is offered.

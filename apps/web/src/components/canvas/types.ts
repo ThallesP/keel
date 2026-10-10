@@ -33,20 +33,12 @@ export type RuntimeData = {
   finishedAt?: number;
   /** Reachable from the internet through keel-proxy (at least one endpoint). */
   public: boolean;
-  endpoints: Endpoint[];
+  endpoints: EndpointView[];
 };
-
-/**
- * A public endpoint, as the API sends it: `protocol`, the container `port` the proxy dials,
- * `domain` (http only), `publicPort` (tcp / udp only: the port on the control plane), `address`
- * (`https://<domain>` or `<public IP>:<publicPort>`), `state` (http `starting`: loaded, waiting
- * for its certificate) and `error`.
- */
-export type Endpoint = EndpointView;
 
 export type ServiceData = RuntimeData & {
   /** The first https endpoint, shown as the card's subtitle. */
-  http?: Endpoint;
+  http?: EndpointView;
 };
 
 export type DatabaseData = RuntimeData & {
@@ -76,7 +68,6 @@ export type VolumeNode = Node<VolumeData, "volume">;
 export type GroupNode = Node<GroupData, "group">;
 
 export type CanvasNode = ServiceNode | DatabaseNode | CacheNode | VolumeNode | GroupNode;
-export type CanvasNodeType = NonNullable<CanvasNode["type"]>;
 /** Everything except "group" — the shell-rendered nodes. */
 export type InfraNode = Exclude<CanvasNode, GroupNode>;
 export type InfraNodeType = NonNullable<InfraNode["type"]>;

@@ -53,7 +53,10 @@ export type ServiceLabel = { text: string; tone: string };
  */
 export function useServices() {
   const { environmentId } = useEnvironment();
-  const nodes = useListNodes({ path: { id: environmentId } }).data?.nodes;
+  const { data: nodes } = useListNodes(
+    { path: { id: environmentId } },
+    { query: { select: (l) => l.nodes } },
+  );
   return useMemo(() => {
     const byId = new Map<string, ServiceLabel>();
     const byName = new Map<string, ServiceLabel>();
@@ -63,10 +66,8 @@ export function useServices() {
       byName.set(n.name, label);
     });
     return {
-      /** A log line's service, by node id. */
       ofLine: (id: string): ServiceLabel =>
         byId.get(id) ?? { text: id.slice(0, 8), tone: "text-faint" },
-      /** A span's service, by OTel service.name. */
       ofSpan: (name: string): ServiceLabel =>
         byName.get(name) ?? { text: name, tone: "text-faint" },
     };

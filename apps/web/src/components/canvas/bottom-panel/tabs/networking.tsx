@@ -3,13 +3,18 @@ import { Plus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { exposeRequestSchema, useExposeNode, useGetControlPlane } from "@/api/gen";
+import {
+  type EndpointView,
+  exposeRequestSchema,
+  useExposeNode,
+  useGetControlPlane,
+} from "@/api/gen";
 import { errorMessage } from "@/lib/api";
 import { formValues } from "@/lib/form";
 
 import { useCanvasActions } from "../../actions";
 import { EndpointAddress } from "../../endpoint-address";
-import type { Endpoint, RuntimeNode } from "../../types";
+import type { RuntimeNode } from "../../types";
 
 const PROTOCOLS = [
   { id: "http", label: "HTTPS" },
@@ -25,13 +30,13 @@ const firstProtocol: Record<RuntimeNode["type"], Protocol> = {
   cache: "tcp",
 };
 
-const stateLabel: Record<Protocol, Record<Endpoint["state"], string>> = {
+const stateLabel: Record<Protocol, Record<EndpointView["state"], string>> = {
   http: { live: "live", starting: "getting a certificate…", failed: "failed" },
   tcp: { live: "live", starting: "starting", failed: "failed" },
   udp: { live: "live", starting: "starting", failed: "failed" },
 };
 
-const stateTone: Record<Endpoint["state"], string> = {
+const stateTone: Record<EndpointView["state"], string> = {
   live: "text-success",
   starting: "text-faint",
   failed: "text-danger",
@@ -87,7 +92,7 @@ export function NetworkingSection({ node }: { node: RuntimeNode }) {
   );
 }
 
-function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoint }) {
+function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: EndpointView }) {
   const actions = useCanvasActions();
   const { label } = PROTOCOLS.find((p) => p.id === e.protocol)!;
   const status = e.state === "failed" && e.error ? e.error : stateLabel[e.protocol][e.state];

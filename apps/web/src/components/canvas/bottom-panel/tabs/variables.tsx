@@ -95,13 +95,13 @@ function Editor({
     keyRef.current?.focus();
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") void submit();
     if (e.key === "Escape") {
       if (onCancel) onCancel();
       else {
         reset();
-        (e.target as HTMLElement).blur();
+        e.currentTarget.blur();
       }
     }
   };

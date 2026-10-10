@@ -13,6 +13,8 @@ import {
   useStopNode,
   useUnexposeNode,
   useUpdateNode,
+  type EndpointView,
+  type NodeList,
   type NodeView,
   type Position,
 } from "@/api/gen";
@@ -21,7 +23,7 @@ import { CanvasOverlay } from "@/lib/canvas-overlay";
 import { useEnvironment } from "./environment";
 import { attempt } from "./errors";
 import { useCanvasDispatch } from "./store";
-import type { Endpoint, InfraNodeType } from "./types";
+import type { InfraNodeType } from "./types";
 import { useDeploymentLink } from "./use-deployment-link";
 
 /**
@@ -41,7 +43,7 @@ export type ExposeOptions = {
   publicPort?: number;
 };
 
-export type EndpointRef = Pick<Endpoint, "protocol" | "domain" | "publicPort">;
+export type EndpointRef = Pick<EndpointView, "protocol" | "domain" | "publicPort">;
 
 export type CanvasActions = {
   create: (type: InfraNodeType, position: Position, options?: CreateOptions) => Promise<void>;
@@ -73,9 +75,6 @@ export type CanvasActions = {
 
 const Context = createContext<CanvasActions | null>(null);
 
-/** `GET /api/environments/{id}/nodes` as cached (`useListNodes`' data). */
-type NodeListData = { nodes: NodeView[] | null };
-
 /** Every mutation the canvas fires, scoped to the current environment. Failures become toasts. */
 export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   const { environmentId } = useEnvironment();
@@ -85,16 +84,16 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
   const [overlay] = useState(() => new CanvasOverlay());
 
   // `mutateAsync` is stable for the life of each hook.
-  const createNode = useCreateNode().mutateAsync;
-  const updateNode = useUpdateNode().mutateAsync;
-  const duplicateNode = useDuplicateNode().mutateAsync;
-  const shipEnvironment = useShipEnvironment().mutateAsync;
-  const startNode = useStartNode().mutateAsync;
-  const stopNode = useStopNode().mutateAsync;
-  const moveNode = useMoveNode().mutateAsync;
-  const deleteNode = useDeleteNode().mutateAsync;
-  const exposeNode = useExposeNode().mutateAsync;
-  const unexposeNode = useUnexposeNode().mutateAsync;
+  const { mutateAsync: createNode } = useCreateNode();
+  const { mutateAsync: updateNode } = useUpdateNode();
+  const { mutateAsync: duplicateNode } = useDuplicateNode();
+  const { mutateAsync: shipEnvironment } = useShipEnvironment();
+  const { mutateAsync: startNode } = useStartNode();
+  const { mutateAsync: stopNode } = useStopNode();
+  const { mutateAsync: moveNode } = useMoveNode();
+  const { mutateAsync: deleteNode } = useDeleteNode();
+  const { mutateAsync: exposeNode } = useExposeNode();
+  const { mutateAsync: unexposeNode } = useUnexposeNode();
 
   const value = useMemo<CanvasActions>(() => {
     const env = { id: environmentId };
@@ -107,9 +106,9 @@ export function CanvasActionsProvider({ children }: { children: ReactNode }) {
     // the server has it, and `attempt` toasts why.
     const editNodes = async (edit: (nodes: NodeView[]) => NodeView[]) => {
       await queryClient.cancelQueries({ queryKey: nodesKey });
-      queryClient.setQueryData<NodeListData>(
+      queryClient.setQueryData<NodeList>(
         nodesKey,
-        (old) => old && { ...old, nodes: edit(old.nodes ?? []) },
+        (old) => old && { ...old, nodes: edit(old.nodes) },
       );
     };
     const settled = async (ok: boolean, settle: () => void) => {

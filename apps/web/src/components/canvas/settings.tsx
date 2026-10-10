@@ -40,9 +40,8 @@ export function SettingsPage() {
  * in with Axiom lands back on Observability, where a pending org picker shows.
  */
 function ObservabilitySettings() {
-  const { data } = useGetLogSink();
   // undefined while loading, null when the organization logs to Docker only.
-  const sink = data?.sink;
+  const { data: sink } = useGetLogSink({ query: { select: (s) => s.sink } });
   const { organization } = useSession();
   const [confirming, setConfirming] = useState(false);
   const projects = organization ? `every project in ${organization.name}` : "every project";
@@ -136,12 +135,9 @@ function DisconnectDialog({
   onOpenChange: (open: boolean) => void;
   projects: string;
 }) {
-  const disconnect = useDisconnectLogSink();
-  const [busy, setBusy] = useState(false);
+  const { mutateAsync: disconnect, isPending } = useDisconnectLogSink();
   const confirm = async () => {
-    setBusy(true);
-    const ok = await succeeded(disconnect.mutateAsync(undefined));
-    setBusy(false);
+    const ok = await succeeded(disconnect(undefined));
     if (!ok) return;
     onOpenChange(false);
     toast("Axiom disconnected for every project");
@@ -160,7 +156,7 @@ function DisconnectDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => void confirm()}>
+          <Button variant="destructive" disabled={isPending} onClick={() => void confirm()}>
             Disconnect
           </Button>
         </DialogFooter>

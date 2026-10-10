@@ -24,12 +24,11 @@ export function TraceDetail({
   onBack: () => void;
 }) {
   const { environmentId } = useEnvironment();
-  const lookup = useGetTrace(
+  const { data: trace, error: failure } = useGetTrace(
     { path: { id: environmentId, traceId }, query: at === undefined ? undefined : { at } },
     { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false } } },
   );
-  const trace = lookup.data ?? null;
-  const error = lookup.error ? errorMessage(lookup.error) : null;
+  const error = failure ? errorMessage(failure) : null;
   const [selected, setSelected] = useState<string | null>(null);
 
   const rows = useMemo(() => (trace ? tree(trace.spans, trace.logs) : []), [trace]);

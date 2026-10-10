@@ -43,9 +43,11 @@ export const Route = createFileRoute("/_auth/p/$projectId")({
 /** Resolves the slug to its production environment and hands it to the canvas. */
 function ProjectPage() {
   const { projectId } = Route.useParams();
-  const { data, error } = useGetProjectBySlug({ path: { slug: projectId } });
   // undefined while loading; null when no such project, or not the caller's.
-  const project = data?.project;
+  const { data: project, error } = useGetProjectBySlug(
+    { path: { slug: projectId } },
+    { query: { select: (p) => p.project } },
+  );
 
   if (project === undefined && !error) {
     return (

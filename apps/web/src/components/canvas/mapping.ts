@@ -1,15 +1,9 @@
-import type { Deployment as ApiDeployment, NodeView } from "@/api/gen";
+import type { Deployment as ApiDeployment, EndpointView, NodeView } from "@/api/gen";
 
 import { formatClock } from "./format";
-import type { CanvasNode, Deployment, Endpoint, RuntimeData } from "./types";
+import type { CanvasNode, Deployment, RuntimeData } from "./types";
 
 // API answers → the UI's own types (types.ts stays the source of truth for components).
-
-/**
- * @deprecated Ids are plain strings now; pass them as they are. Kept (an identity) only so files
- * still migrating keep compiling; delete once nothing imports it.
- */
-export const asNodeId = (id: string): string => id;
 
 const ENGINE_NAMES: Record<string, string> = {
   postgres: "Postgres",
@@ -47,7 +41,7 @@ function runtime(n: NodeView): RuntimeData {
 const RANK = { live: 0, starting: 1, failed: 2 } as const;
 
 /** The https endpoint the card names: one that serves beats one on its way beats a failed one. */
-function bestHttp(endpoints: Endpoint[]) {
+function bestHttp(endpoints: EndpointView[]) {
   return endpoints
     .filter((e) => e.protocol === "http")
     .sort((a, b) => RANK[a.state] - RANK[b.state])[0];

@@ -38,7 +38,7 @@ export function AxiomGate() {
 
 /** Connected, but before traces existed: signing in again adds the traces dataset. */
 export function TracesBanner() {
-  const orgs = useListPendingAxiomOrgs().data?.orgs;
+  const { data: orgs } = useListPendingAxiomOrgs({ query: { select: (p) => p.orgs } });
   if (orgs) {
     return (
       <div className="w-[380px] rounded-lg border border-line p-6">
@@ -56,8 +56,6 @@ export function TracesBanner() {
     </div>
   );
 }
-
-// ── Backdrop ────────────────────────────────────────────────────────────────────────────────
 
 const SAMPLE = [
   ["api", "GET /v1/projects 200 12ms"],
@@ -118,8 +116,6 @@ function Backdrop() {
   );
 }
 
-// ── Sign in ─────────────────────────────────────────────────────────────────────────────────
-
 /**
  * Axiom's logo mark (axiom.co). The sign-in button wears Axiom's brand orange (`#de5820`, its
  * light-theme value) with this mark in white, like any third-party sign-in button; it is the one
@@ -176,7 +172,7 @@ export function SignInButton({ compact = false }: { compact?: boolean }) {
 
 /** The card: Sign in with Axiom, or the org picker while a sign-in with several orgs is pending. */
 function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
-  const orgs = useListPendingAxiomOrgs().data?.orgs;
+  const { data: orgs } = useListPendingAxiomOrgs({ query: { select: (p) => p.orgs } });
   const chooseOrg = useChooseAxiomOrg();
   const cancel = useCancelAxiomSignIn();
   const [busy, setBusy] = useState<string | null>(null);

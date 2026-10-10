@@ -50,8 +50,6 @@ export function useSession(): Session {
   };
 }
 
-// ── Gates ───────────────────────────────────────────────────────────────────────────────────
-
 /**
  * Renders `children` for a signed-in user, `signedOut` for a signed-out visitor and `loading`
  * until the session is known. Signing out never navigates: the gate flips in place, so the URL
@@ -70,26 +68,6 @@ export function SessionGate({
   if (isLoading) return <>{loading}</>;
   return <>{isSignedIn ? children : signedOut}</>;
 }
-
-/** Drop-in for convex/react's `<Authenticated>`: children only for a signed-in user. */
-export function Authenticated({ children }: { children: React.ReactNode }) {
-  const { isSignedIn } = useSession();
-  return isSignedIn ? <>{children}</> : null;
-}
-
-/** Drop-in for convex/react's `<Unauthenticated>`: children only once known signed out. */
-export function Unauthenticated({ children }: { children: React.ReactNode }) {
-  const { isLoading, isSignedIn } = useSession();
-  return !isLoading && !isSignedIn ? <>{children}</> : null;
-}
-
-/** Drop-in for convex/react's `<AuthLoading>`: children until the session is known. */
-export function AuthLoading({ children }: { children: React.ReactNode }) {
-  const { isLoading } = useSession();
-  return isLoading ? <>{children}</> : null;
-}
-
-// ── Account actions ─────────────────────────────────────────────────────────────────────────
 
 export type AuthActions = {
   /** `POST /api/auth/sign-in`. Throws ApiError (`Invalid email or password`, …). */

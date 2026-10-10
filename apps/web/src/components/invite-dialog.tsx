@@ -33,18 +33,15 @@ export function InviteDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** @deprecated Unused: the server takes the organization from the session. */
-  organizationId?: string;
 }) {
   const [email, setEmail] = useState("");
   const [link, setLink] = useState<string | null>(null);
-  const createInvitation = useCreateInvitation();
-  const busy = createInvitation.isPending;
+  const { mutateAsync: createInvitation, isPending } = useCreateInvitation();
 
   const create = async () => {
     let id: string;
     try {
-      ({ id } = await createInvitation.mutateAsync({
+      ({ id } = await createInvitation({
         body: { email: email.trim(), role: "member" },
       }));
     } catch (err) {
@@ -118,8 +115,8 @@ export function InviteDialog({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
             />
-            <Button type="submit" disabled={busy || email.trim() === ""} className="self-end">
-              {busy ? "Creating…" : "Create invite link"}
+            <Button type="submit" disabled={isPending || email.trim() === ""} className="self-end">
+              {isPending ? "Creating…" : "Create invite link"}
             </Button>
           </form>
         )}

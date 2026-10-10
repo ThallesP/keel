@@ -1,51 +1,44 @@
 package http
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/ThallesP/keel/internal/app"
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 func (s *Server) registerIngressRaw(mux *http.ServeMux) {
 	mux.HandleFunc("POST /proxy/events", s.proxyEvents)
 }
 
-const ingressMaxBody = 256 * 1024
-
 func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 	if !ingressBearerOK(r, s.app.Config.WorkerToken) {
 		ingressText(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 3*ingressMaxBody+1))
-	if err != nil {
-		ingressText(w, http.StatusBadRequest, "bad json")
-		return
-	}
-	if len(body) > 3*ingressMaxBody || domain.UTF16Len(string(body)) > ingressMaxBody {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
 		ingressText(w, http.StatusRequestEntityTooLarge, "too large")
 		return
 	}
-	var v any
-	if err := json.Unmarshal(body, &v); err != nil {
-		ingressText(w, http.StatusBadRequest, "bad json")
-		return
+	var report struct {
+		Event string `json:"event"`
+		Name  string `json:"name"`
+		Error string `json:"error"`
 	}
-	report, _ := v.(map[string]any)
-	event, _ := report["event"].(string)
-	name, isString := report["name"].(string)
-	if (event != app.CertObtained && event != app.CertFailed) || !isString {
+	if err != nil || json.Unmarshal(body, &report) != nil || report.Name == "" ||
+		(report.Event != app.CertObtained && report.Event != app.CertFailed) {
 		ingressText(w, http.StatusBadRequest, "bad report")
 		return
 	}
-	certError, _ := report["error"].(string)
-	if err := s.app.ReportCert(r.Context(), event, name, certError); err != nil {
-		s.app.Log.Error("proxy cert report", "name", name, "err", err)
+	if err := s.app.ReportCert(r.Context(), report.Event, report.Name, report.Error); err != nil {
+		s.app.Log.Error("proxy cert report", "name", report.Name, "err", err)
 		ingressText(w, http.StatusInternalServerError, "server error")
 		return
 	}
@@ -53,17 +46,12 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func ingressBearerOK(r *http.Request, expected string) bool {
-	header := r.Header.Get("Authorization")
-	if expected == "" || !strings.HasPrefix(header, "Bearer ") {
+	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if expected == "" || !ok {
 		return false
 	}
-	got := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	lengthOK := subtle.ConstantTimeEq(int32(len(got)), int32(len(expected)))
-	n := max(len(got), len(expected))
-	a, b := make([]byte, n), make([]byte, n)
-	copy(a, got)
-	copy(b, expected)
-	return subtle.ConstantTimeCompare(a, b)&lengthOK == 1
+	a, b := sha256.Sum256([]byte(strings.TrimSpace(got))), sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
 
 func ingressText(w http.ResponseWriter, status int, body string) {

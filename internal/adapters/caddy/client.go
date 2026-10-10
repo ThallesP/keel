@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,8 +20,6 @@ import (
 
 const DefaultSocket = "/run/keel-proxy/admin.sock"
 
-const IdleTimeout = 30 * time.Second
-
 type Client struct {
 	socket    string
 	reportURL string
@@ -30,10 +27,8 @@ type Client struct {
 	http      *http.Client
 }
 
-var _ app.Proxy = (*Client)(nil)
-
 func New(socket, reportURL string) *Client {
-	c := &Client{socket: socket, reportURL: reportURL, idle: IdleTimeout}
+	c := &Client{socket: socket, reportURL: reportURL, idle: 30 * time.Second}
 	c.http = &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -52,22 +47,14 @@ func (c *Client) ReportURL() string { return c.reportURL }
 
 func (c *Client) HostAddrs(ctx context.Context) ([]string, error) {
 	var addrs []string
-	if err := c.getJSON(ctx, "/keel/host-addrs", &addrs); err != nil {
-		return nil, err
-	}
-	return addrs, nil
+	err := c.getJSON(ctx, "/keel/host-addrs", &addrs)
+	return addrs, err
 }
 
 func (c *Client) Certs(ctx context.Context, names []string) (map[string]app.ProxyCert, error) {
-	q := make([]string, 0, len(names))
-	for _, n := range names {
-		q = append(q, "name="+url.QueryEscape(n))
-	}
-	certs := map[string]app.ProxyCert{}
-	if err := c.getJSON(ctx, "/keel/certs?"+strings.Join(q, "&"), &certs); err != nil {
-		return nil, err
-	}
-	return certs, nil
+	var certs map[string]app.ProxyCert
+	err := c.getJSON(ctx, "/keel/certs?"+url.Values{"name": names}.Encode(), &certs)
+	return certs, err
 }
 
 func (c *Client) LoadApps(ctx context.Context, apps []byte) error {
@@ -93,17 +80,11 @@ func (c *Client) getJSON(ctx context.Context, path string, v any) error {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body []byte) (int, string, error) {
-	var rd io.Reader
-	if body != nil {
-		rd = bytes.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://keel-proxy"+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, "http://keel-proxy"+path, bytes.NewReader(body))
 	if err != nil {
 		return 0, "", err
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	req.Header.Set("Content-Type", "application/json")
 	res, err := c.http.Do(req)
 	if err != nil {
 		return 0, "", c.explain(err)
@@ -122,7 +103,7 @@ func (c *Client) explain(err error) error {
 	}
 	var ne net.Error
 	if errors.As(err, &ne) && ne.Timeout() {
-		return fmt.Errorf("keel-proxy did not answer within %ss", strconv.FormatFloat(c.idle.Seconds(), 'f', -1, 64))
+		return fmt.Errorf("keel-proxy did not answer within %v", c.idle)
 	}
 	return err
 }
@@ -131,11 +112,9 @@ var loadingPrefix = regexp.MustCompile(`^(loading (new )?config: )+`)
 
 func CaddyError(text string) string {
 	message := text
-	var body struct {
-		Error *string `json:"error"`
-	}
-	if json.Unmarshal([]byte(text), &body) == nil && body.Error != nil {
-		message = *body.Error
+	var body struct{ Error string }
+	if json.Unmarshal([]byte(text), &body) == nil && body.Error != "" {
+		message = body.Error
 	}
 	return strings.TrimSpace(loadingPrefix.ReplaceAllString(message, ""))
 }

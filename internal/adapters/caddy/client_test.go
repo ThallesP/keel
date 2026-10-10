@@ -35,7 +35,7 @@ func TestClientCalls(t *testing.T) {
 			io.WriteString(w, `["203.0.113.7","2001:db8::1"]`)
 		case r.Method == "GET" && r.URL.Path == "/keel/certs":
 			gotQuery = r.URL.RawQuery
-			io.WriteString(w, `{"a.example.com":{"state":"ok","notAfter":"2027-01-06T10:00:00Z"},"b.example.com":{"state":"failed","error":"boom"}}`)
+			io.WriteString(w, `{"a.example.com":{"state":"ok"},"b.example.com":{"state":"failed","error":"boom"}}`)
 		case r.Method == "POST" && r.URL.Path == "/config/apps":
 			b, _ := io.ReadAll(r.Body)
 			gotBody, gotType = string(b), r.Header.Get("Content-Type")
@@ -105,7 +105,7 @@ func TestClientErrors(t *testing.T) {
 	slow := serveAdmin(t, func(w http.ResponseWriter, r *http.Request) { time.Sleep(300 * time.Millisecond) })
 	c := New(slow, "")
 	c.idle = 50 * time.Millisecond
-	if _, err := c.HostAddrs(ctx); err == nil || err.Error() != "keel-proxy did not answer within 0.05s" {
+	if _, err := c.HostAddrs(ctx); err == nil || err.Error() != "keel-proxy did not answer within 50ms" {
 		t.Fatalf("timeout: %v", err)
 	}
 

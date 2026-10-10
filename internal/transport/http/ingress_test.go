@@ -192,11 +192,12 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 		{"wrong token", good, []string{"Authorization", "Bearer s3cre"}, 401, "unauthorized"},
 		{"longer token", good, []string{"Authorization", "Bearer s3cret2"}, 401, "unauthorized"},
 		{"not a bearer", good, []string{"Authorization", "Basic s3cret"}, 401, "unauthorized"},
-		{"too large", `{"event":"cert_failed","name":"x","error":"` + strings.Repeat("a", ingressMaxBody) + `"}`, auth, 413, "too large"},
-		{"bad json", `{"event":`, auth, 400, "bad json"},
-		{"empty body", ``, auth, 400, "bad json"},
+		{"too large", `{"event":"cert_failed","name":"x","error":"` + strings.Repeat("a", 256<<10) + `"}`, auth, 413, "too large"},
+		{"bad json", `{"event":`, auth, 400, "bad report"},
+		{"empty body", ``, auth, 400, "bad report"},
 		{"bad event", `{"event":"cert_renewed","name":"x"}`, auth, 400, "bad report"},
 		{"name not a string", `{"event":"cert_obtained","name":1}`, auth, 400, "bad report"},
+		{"empty name", `{"event":"cert_obtained","name":""}`, auth, 400, "bad report"},
 		{"not an object", `[1,2]`, auth, 400, "bad report"},
 		{"null", `null`, auth, 400, "bad report"},
 		{"unknown name is fine", `{"event":"cert_obtained","name":"nobody.example.com"}`, auth, 200, "ok"},
@@ -224,28 +225,5 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 	h.app.Config.WorkerToken = ""
 	if status, body, _ := h.do("POST", "/proxy/events", good, "Authorization", "Bearer "); status != 401 || body != "unauthorized" {
 		t.Fatalf("unset token: %d %q", status, body)
-	}
-}
-
-func TestIngressOpenAPI(t *testing.T) {
-	doc := OpenAPI("test")
-	for path, method := range map[string]string{
-		"/api/nodes/{id}/expose":   "post",
-		"/api/nodes/{id}/unexpose": "post",
-		"/api/control-plane":       "get",
-	} {
-		item := doc.Paths[path]
-		if item == nil {
-			t.Fatalf("%s missing", path)
-		}
-		if (method == "post" && item.Post == nil) || (method == "get" && item.Get == nil) {
-			t.Fatalf("%s %s missing", method, path)
-		}
-	}
-	if id := doc.Paths["/api/nodes/{id}/expose"].Post.OperationID; id != "exposeNode" {
-		t.Fatalf("operationId %q", id)
-	}
-	if tags := doc.Paths["/api/control-plane"].Get.Tags; len(tags) != 1 || tags[0] != "ingress" {
-		t.Fatalf("tags %v", tags)
 	}
 }

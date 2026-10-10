@@ -18,36 +18,36 @@ const (
 )
 
 type DeployStep struct {
-	NodeID     string     `json:"nodeId,omitempty"`
-	Label      string     `json:"label"`
-	Status     StepStatus `json:"status"`
-	StartedAt  *int64     `json:"startedAt,omitempty"`
-	AppliedAt  *int64     `json:"appliedAt,omitempty"`
-	FinishedAt *int64     `json:"finishedAt,omitempty"`
+	NodeID     string
+	Label      string
+	Status     StepStatus
+	StartedAt  *int64
+	AppliedAt  *int64
+	FinishedAt *int64
 }
 
 type LogLine struct {
-	At     int64  `json:"at"`
-	NodeID string `json:"nodeId,omitempty"`
-	Text   string `json:"text"`
+	At     int64
+	NodeID string
+	Text   string
 }
 
 type Deployment struct {
-	ID            string           `json:"id"`
-	EnvironmentID string           `json:"environmentId"`
-	Sha           string           `json:"sha,omitempty"`
-	Message       string           `json:"message"`
-	Status        DeploymentStatus `json:"status"`
-	StartedAt     int64            `json:"startedAt"`
-	FinishedAt    *int64           `json:"finishedAt,omitempty"`
-	Steps         []DeployStep     `json:"steps"`
-	Log           []LogLine        `json:"log"`
+	ID            string
+	EnvironmentID string
+	Sha           string
+	Message       string
+	Status        DeploymentStatus
+	StartedAt     int64
+	FinishedAt    *int64
+	Steps         []DeployStep
+	Log           []LogLine
 }
 
 type Variable struct {
-	ID     string `json:"id"`
-	NodeID string `json:"nodeId"`
-	Key    string `json:"key"`
-	Value  string `json:"value"`
-	Secret bool   `json:"secret"`
+	ID     string
+	NodeID string
+	Key    string
+	Value  string
+	Secret bool
 }

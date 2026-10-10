@@ -9,10 +9,12 @@ import (
 	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-const deployLogCap = 500
-
-func deploymentOf(r sqlc.Deployment) domain.Deployment {
-	return domain.Deployment{
+func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, error) {
+	steps, err := t.q.DeployListSteps(t.ctx, r.ID)
+	if err != nil {
+		return domain.Deployment{}, err
+	}
+	d := domain.Deployment{
 		ID:            r.ID,
 		EnvironmentID: r.EnvironmentID,
 		Sha:           str(r.Sha),
@@ -20,39 +22,18 @@ func deploymentOf(r sqlc.Deployment) domain.Deployment {
 		Status:        domain.DeploymentStatus(r.Status),
 		StartedAt:     r.StartedAt,
 		FinishedAt:    r.FinishedAt,
+		Steps:         make([]domain.DeployStep, 0, len(steps)),
 	}
-}
-
-func deployStepOf(r sqlc.DeploymentStep) domain.DeployStep {
-	return domain.DeployStep{
-		NodeID:     str(r.NodeID),
-		Label:      r.Label,
-		Status:     domain.StepStatus(r.Status),
-		StartedAt:  r.StartedAt,
-		AppliedAt:  r.AppliedAt,
-		FinishedAt: r.FinishedAt,
+	for _, s := range steps {
+		d.Steps = append(d.Steps, domain.DeployStep{
+			NodeID:     str(s.NodeID),
+			Label:      s.Label,
+			Status:     domain.StepStatus(s.Status),
+			StartedAt:  s.StartedAt,
+			AppliedAt:  s.AppliedAt,
+			FinishedAt: s.FinishedAt,
+		})
 	}
-}
-
-func (t *tx) deploySteps(id string) ([]domain.DeployStep, error) {
-	rows, err := t.q.DeployListSteps(t.ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	steps := make([]domain.DeployStep, 0, len(rows))
-	for _, r := range rows {
-		steps = append(steps, deployStepOf(r))
-	}
-	return steps, nil
-}
-
-func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, error) {
-	d := deploymentOf(r)
-	steps, err := t.deploySteps(d.ID)
-	if err != nil {
-		return domain.Deployment{}, err
-	}
-	d.Steps = steps
 	if withLog {
 		if d.Log, err = t.DeploymentLog(d.ID); err != nil {
 			return domain.Deployment{}, err
@@ -150,15 +131,7 @@ func (t *tx) DeploymentLog(id string) ([]domain.LogLine, error) {
 }
 
 func (t *tx) RunningDeployments(environmentID string) ([]domain.Deployment, error) {
-	var (
-		rows []sqlc.Deployment
-		err  error
-	)
-	if environmentID == "" {
-		rows, err = t.q.DeployListRunning(t.ctx)
-	} else {
-		rows, err = t.q.DeployListRunningInEnvironment(t.ctx, environmentID)
-	}
+	rows, err := t.q.DeployListRunning(t.ctx, environmentID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +161,7 @@ func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) er
 			return err
 		}
 	}
-	return t.q.DeployTrimLog(t.ctx, sqlc.DeployTrimLogParams{DeploymentID: d.ID, Offset: deployLogCap})
+	return t.q.DeployTrimLog(t.ctx, sqlc.DeployTrimLogParams{DeploymentID: d.ID, Offset: 500})
 }
 
 func (t *tx) ClusterServers() (int, error) {

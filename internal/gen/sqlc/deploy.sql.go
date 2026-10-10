@@ -263,47 +263,13 @@ func (q *Queries) DeployListRecent(ctx context.Context, arg DeployListRecentPara
 }
 
 const deployListRunning = `-- name: DeployListRunning :many
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments WHERE status = 'running' ORDER BY started_at, rowid
-`
-
-func (q *Queries) DeployListRunning(ctx context.Context) ([]Deployment, error) {
-	rows, err := q.db.QueryContext(ctx, deployListRunning)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Deployment{}
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.EnvironmentID,
-			&i.Sha,
-			&i.Message,
-			&i.Status,
-			&i.StartedAt,
-			&i.FinishedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deployListRunningInEnvironment = `-- name: DeployListRunningInEnvironment :many
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments WHERE status = 'running' AND environment_id = ?
+SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments
+WHERE status = 'running' AND (environment_id = ?1 OR ?1 = '')
 ORDER BY started_at, rowid
 `
 
-func (q *Queries) DeployListRunningInEnvironment(ctx context.Context, environmentID string) ([]Deployment, error) {
-	rows, err := q.db.QueryContext(ctx, deployListRunningInEnvironment, environmentID)
+func (q *Queries) DeployListRunning(ctx context.Context, environmentID string) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, deployListRunning, environmentID)
 	if err != nil {
 		return nil, err
 	}

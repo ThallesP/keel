@@ -61,7 +61,7 @@ func DeploymentOf(d domain.Deployment) Deployment {
 		})
 	}
 	for _, l := range d.Log {
-		out.Log = append(out.Log, DeployLogLine{At: l.At, NodeID: l.NodeID, Text: l.Text})
+		out.Log = append(out.Log, DeployLogLine(l))
 	}
 	return out
 }

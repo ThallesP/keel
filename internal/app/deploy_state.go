@@ -60,15 +60,13 @@ var (
 )
 
 const (
-	deployTimeout         = 5 * time.Minute
-	observeDebounce       = 500 * time.Millisecond
-	observeSettleDelay    = 2 * time.Second
-	observeSettleMax      = 2
-	observeUpdatingMax    = int(deployTimeout / observeSettleDelay)
-	applyDeadline         = 15 * time.Minute
-	dockerCallDeadline    = time.Minute
-	recentDeploymentsScan = 50
-	nodeDeploymentsMax    = 20
+	deployTimeout      = 5 * time.Minute
+	observeDebounce    = 500 * time.Millisecond
+	observeSettleDelay = 2 * time.Second
+	observeSettleMax   = 2
+	observeUpdatingMax = int(deployTimeout / observeSettleDelay)
+	applyDeadline      = 15 * time.Minute
+	dockerCallDeadline = time.Minute
 )
 
 func deploymentChanged(ch *Changes, org string, d domain.Deployment) {

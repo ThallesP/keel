@@ -23,10 +23,8 @@ SELECT * FROM deployments WHERE environment_id = ?
 ORDER BY started_at DESC, rowid DESC LIMIT ?;
 
 -- name: DeployListRunning :many
-SELECT * FROM deployments WHERE status = 'running' ORDER BY started_at, rowid;
-
--- name: DeployListRunningInEnvironment :many
-SELECT * FROM deployments WHERE status = 'running' AND environment_id = ?
+SELECT * FROM deployments
+WHERE status = 'running' AND (environment_id = sqlc.arg(environment_id) OR sqlc.arg(environment_id) = '')
 ORDER BY started_at, rowid;
 
 -- name: DeployInsertStep :exec

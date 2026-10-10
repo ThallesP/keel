@@ -6,22 +6,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func (a *App) BeginDeploymentForTest(ctx context.Context, environmentID string, opts ShipOptions) (string, error) {
-	var id string
-	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		scope, ok, err := ownedEnvironment(tx, domain.SystemActor, environmentID)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return ErrNoRow
-		}
-		id, err = a.beginDeployment(tx, ch, scope, opts)
-		return err
-	})
-	return id, err
-}
-
 func (a *App) TimeoutDeploymentForTest(ctx context.Context, id string) { a.timeoutDeployment(ctx, id) }
 
 type DeploySeams struct {

@@ -98,14 +98,10 @@ func TestShipOnly(t *testing.T) {
 	}
 }
 
-func TestBeginDeploymentVerb(t *testing.T) {
+func TestShipVerb(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", shipped(1), replicas(0))
-	id, err := w.app.BeginDeploymentForTest(ctx, "env", app.ShipOptions{Only: []string{a.ID}, Verb: "stop"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d := w.deployment(id); d.Message != "stop api" {
+	if d := w.deployment(w.ship(app.ShipOptions{Only: []string{a.ID}, Verb: "stop"})); d.Message != "stop api" {
 		t.Fatalf("message %q", d.Message)
 	}
 }
@@ -155,7 +151,7 @@ func TestDeploymentReads(t *testing.T) {
 	}
 
 	var apiIDs, workerIDs []string
-	for i := 0; i < 55; i++ {
+	for i := range 55 {
 		target, ids := a, &apiIDs
 		if i >= 25 {
 			target, ids = b, &workerIDs
@@ -190,7 +186,7 @@ func TestApplyHappyPath(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", port(8080))
 	w.envVars[a.ID] = map[string]string{"PORT": "8080", "DATABASE_URL": "postgres://x"}
-	*w.clock += 1
+	*w.clock++
 	id := w.ship(app.ShipOptions{})
 	w.jobs.run()
 	if len(w.swarm.creates) != 1 {
@@ -449,7 +445,7 @@ func TestDeploymentTimeout(t *testing.T) {
 
 func TestRecover(t *testing.T) {
 	w := newWorld(t)
-	a := w.addNode("api")
+	w.addNode("api")
 	b := w.addNode("worker", inEnv("env2"))
 	old := w.ship(app.ShipOptions{})
 	*w.clock += 4 * 60_000
@@ -474,7 +470,6 @@ func TestRecover(t *testing.T) {
 	if len(w.swarm.creates) != 2 {
 		t.Fatalf("creates: %+v", w.swarm.creates)
 	}
-	_ = a
 	w.swarm.tasks[b.ID] = []app.SwarmTask{{DesiredState: "running", State: "pending", Labels: map[string]string{"keel.revision": "1"}}}
 	w.app.ScheduleObserve(b.ID)
 	w.jobs.advance(time.Second)
@@ -596,7 +591,7 @@ func TestObservePublishesOnlyChanges(t *testing.T) {
 func TestReconcileOnlyTheAffectedEnvironment(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
-	b := w.addNode("other", inEnv("env2"))
+	w.addNode("other", inEnv("env2"))
 	d1 := w.ship(app.ShipOptions{})
 	d2, err := w.app.ShipEnvironment(ctx, w.outsider, "env2", app.ShipOptions{})
 	if err != nil {
@@ -612,7 +607,6 @@ func TestReconcileOnlyTheAffectedEnvironment(t *testing.T) {
 	if len(w.pub.topics["org2"]) != 0 {
 		t.Fatalf("org2 was told: %v", w.pub.topics)
 	}
-	_ = b
 }
 
 func TestUpdateSettlesWithoutEvents(t *testing.T) {

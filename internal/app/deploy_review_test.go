@@ -96,9 +96,9 @@ func TestDeploymentLogKeepsLast500(t *testing.T) {
 	w := newWorld(t)
 	w.addNode("api")
 	id := w.ship(app.ShipOptions{})
-	for batch := 0; batch < 2; batch++ {
+	for batch := range 2 {
 		var lines []domain.LogLine
-		for i := 0; i < 300; i++ {
+		for i := range 300 {
 			lines = append(lines, domain.LogLine{At: int64(batch*300 + i), Text: "line " + strconv.Itoa(batch*300+i)})
 		}
 		err := w.store.Write(ctx, func(tx app.Tx) error {

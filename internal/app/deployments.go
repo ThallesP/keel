@@ -3,15 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
-)
-
-const (
-	MsgDeploymentRunning = "A deployment is already running"
-	MsgNothingToShip     = "Nothing to ship"
 )
 
 const healthStepLabel = "health checks"
@@ -29,31 +25,23 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		return "", err
 	}
 	if running {
-		return "", domain.E(domain.CodeDeploymentRunning, MsgDeploymentRunning)
+		return "", domain.E(domain.CodeDeploymentRunning, "A deployment is already running")
 	}
 	nodes, err := tx.Nodes(envID)
 	if err != nil {
 		return "", err
-	}
-	var wanted map[string]bool
-	if opts.Only != nil {
-		wanted = make(map[string]bool, len(opts.Only))
-		for _, id := range opts.Only {
-			wanted[id] = true
-		}
 	}
 	var affected []domain.Node
 	for _, n := range nodes {
 		if n.Desired == nil || !n.Type.Deployable() {
 			continue
 		}
-		if wanted != nil && !wanted[n.ID] || wanted == nil && !n.Dirty {
-			continue
+		if opts.Only == nil && n.Dirty || slices.Contains(opts.Only, n.ID) {
+			affected = append(affected, n)
 		}
-		affected = append(affected, n)
 	}
 	if len(affected) == 0 {
-		return "", domain.E(domain.CodeNothingToShip, MsgNothingToShip)
+		return "", domain.E(domain.CodeNothingToShip, "Nothing to ship")
 	}
 
 	now := a.Now()
@@ -65,7 +53,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		d.Revision++
 		n.Desired = &d
 		n.Dirty = false
-		n.ShippedAt = deployPtr(now)
+		n.ShippedAt = new(now)
 		n.ApplyError = ""
 		if err := tx.UpdateNode(*n); err != nil {
 			return "", err
@@ -78,9 +66,9 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	word := opts.Verb
 	if word == "" {
 		switch {
-		case wanted != nil && opts.Refresh:
+		case opts.Only != nil && opts.Refresh:
 			word = "redeploy"
-		case wanted != nil:
+		case opts.Only != nil:
 			word = "deploy"
 		default:
 			word = "ship"
@@ -116,13 +104,10 @@ func (a *App) ShipEnvironment(ctx context.Context, actor domain.Actor, environme
 		if err != nil {
 			return err
 		}
-		id, err = a.beginDeployment(tx, ch, scope, ShipOptions{Only: opts.Only, Refresh: opts.Refresh})
+		id, err = a.beginDeployment(tx, ch, scope, opts)
 		return err
 	})
-	if err != nil {
-		return "", err
-	}
-	return id, nil
+	return id, err
 }
 
 func (a *App) LatestDeployment(ctx context.Context, actor domain.Actor, environmentID string) (*domain.Deployment, error) {
@@ -172,15 +157,15 @@ func (a *App) ListNodeDeployments(ctx context.Context, actor domain.Actor, nodeI
 		if err != nil || !ok {
 			return err
 		}
-		recent, err := tx.RecentDeployments(scope.Environment.ID, recentDeploymentsScan)
+		recent, err := tx.RecentDeployments(scope.Environment.ID, 50)
 		if err != nil {
 			return err
 		}
 		for _, d := range recent {
-			if len(out) == nodeDeploymentsMax {
+			if len(out) == 20 {
 				break
 			}
-			if !deploymentHasNode(d, nodeID) {
+			if !slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == nodeID }) {
 				continue
 			}
 			if d.Log, err = tx.DeploymentLog(d.ID); err != nil {
@@ -191,15 +176,6 @@ func (a *App) ListNodeDeployments(ctx context.Context, actor domain.Actor, nodeI
 		return nil
 	})
 	return out, err
-}
-
-func deploymentHasNode(d domain.Deployment, nodeID string) bool {
-	for _, s := range d.Steps {
-		if s.NodeID == nodeID {
-			return true
-		}
-	}
-	return false
 }
 
 type stepChange int
@@ -220,29 +196,23 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 		return err
 	}
 	now := a.Now()
-	failed := change == stepFailed
 	for i := range d.Steps {
 		s := &d.Steps[i]
 		switch {
-		case s.NodeID == nodeID:
-			switch change {
-			case stepRunning:
-				s.Status, s.StartedAt = domain.StepRunning, deployPtr(now)
-			case stepApplied:
-				s.AppliedAt = deployPtr(now)
-			case stepFailed:
-				s.Status, s.FinishedAt = domain.StepFailed, deployPtr(now)
-			}
-		case failed && s.NodeID == "":
-			s.Status, s.FinishedAt = domain.StepFailed, deployPtr(now)
+		case s.NodeID == nodeID && change == stepRunning:
+			s.Status, s.StartedAt = domain.StepRunning, new(now)
+		case s.NodeID == nodeID && change == stepApplied:
+			s.AppliedAt = new(now)
+		case change == stepFailed && (s.NodeID == nodeID || s.NodeID == ""):
+			s.Status, s.FinishedAt = domain.StepFailed, new(now)
 		}
 	}
 	var appended []domain.LogLine
 	if text != "" {
 		appended = []domain.LogLine{{At: now, NodeID: nodeID, Text: text}}
 	}
-	if failed && d.Status == domain.DeploymentRunning {
-		d.Status, d.FinishedAt = domain.DeploymentFailed, deployPtr(now)
+	if change == stepFailed && d.Status == domain.DeploymentRunning {
+		d.Status, d.FinishedAt = domain.DeploymentFailed, new(now)
 	}
 	if err := tx.UpdateDeployment(d, appended); err != nil {
 		return err
@@ -270,10 +240,7 @@ func (a *App) writeStep(ctx context.Context, deploymentID, nodeID string, change
 func deployPtr[T any](v T) *T { return &v }
 
 func (a *App) scheduleDeploymentTimeout(deploymentID string, delay time.Duration) {
-	if delay < 0 {
-		delay = 0
-	}
-	a.Jobs.After("timeout:"+deploymentID, delay, func(ctx context.Context) {
+	a.Jobs.After("timeout:"+deploymentID, max(delay, 0), func(ctx context.Context) {
 		a.timeoutDeployment(ctx, deploymentID)
 	})
 }

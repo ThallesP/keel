@@ -18,6 +18,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/ThallesP/keel/internal/agent"
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/app"
 )
 
@@ -27,7 +28,7 @@ type itClient struct {
 	token string
 }
 
-func (c *itClient) do(method, path string, body any) (int, map[string]any) {
+func (c *itClient) do(method, path string, body any) (int, []byte) {
 	c.t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -47,42 +48,41 @@ func (c *itClient) do(method, path string, body any) (int, map[string]any) {
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	return resp.StatusCode, out
+	return resp.StatusCode, raw
 }
 
-func (c *itClient) ok(method, path string, body any) map[string]any {
+func call[T any](c *itClient, method, path string, body any) T {
 	c.t.Helper()
-	code, out := c.do(method, path, body)
-	if code >= 300 {
-		c.t.Fatalf("%s %s: %d %v", method, path, code, out)
+	code, raw := c.do(method, path, body)
+	var out T
+	if code >= 300 || len(raw) > 0 && json.Unmarshal(raw, &out) != nil {
+		c.t.Fatalf("%s %s: %d %s", method, path, code, raw)
 	}
 	return out
 }
 
-func (c *itClient) settle(env string) map[string]any {
+func (c *itClient) settle(env string) api.Deployment {
 	c.t.Helper()
 	deadline := time.Now().Add(3 * time.Minute)
 	for time.Now().Before(deadline) {
-		d, _ := c.ok("GET", "/api/environments/"+env+"/deployments/latest", nil)["deployment"].(map[string]any)
-		if d != nil && d["status"] != "running" {
-			return d
+		d := call[api.DeploymentEnvelope](c, "GET", "/api/environments/"+env+"/deployments/latest", nil).Deployment
+		if d != nil && d.Status != "running" {
+			return *d
 		}
 		time.Sleep(time.Second)
 	}
 	c.t.Fatal("deployment did not settle in 3 minutes")
-	return nil
+	return api.Deployment{}
 }
 
-func (c *itClient) node(env, id string) map[string]any {
+func (c *itClient) node(env, id string) api.NodeView {
 	c.t.Helper()
-	for _, n := range c.ok("GET", "/api/environments/"+env+"/nodes", nil)["nodes"].([]any) {
-		if m := n.(map[string]any); m["id"] == id {
-			return m
+	for _, n := range call[api.NodeList](c, "GET", "/api/environments/"+env+"/nodes", nil).Nodes {
+		if n.ID == id {
+			return n
 		}
 	}
-	return nil
+	return api.NodeView{}
 }
 
 func TestSwarmIT(t *testing.T) {
@@ -142,31 +142,28 @@ func TestSwarmIT(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	signUp := c.ok("POST", "/api/auth/sign-up", map[string]any{"email": "it@example.com", "password": "correct horse battery", "name": "IT"})
-	c.token = signUp["token"].(string)
-	slug := c.ok("POST", "/api/projects/default", nil)["slug"].(string)
-	project := c.ok("GET", "/api/projects/by-slug/"+slug, nil)["project"].(map[string]any)
-	env := project["environment"].(map[string]any)["id"].(string)
+	c.token = call[api.SignedIn](c, "POST", "/api/auth/sign-up", api.SignUpRequest{Email: "it@example.com", Password: "correct horse battery", Name: "IT"}).Token
+	slug := call[api.DefaultProject](c, "POST", "/api/projects/default", nil).Slug
+	env := call[api.ProjectBySlug](c, "GET", "/api/projects/by-slug/"+slug, nil).Project.Environment.ID
 
-	n := c.ok("POST", "/api/environments/"+env+"/nodes", map[string]any{
-		"type": "service", "name": fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), "image": "nginx:alpine", "port": 80, "deploy": true,
-	})
-	id := n["id"].(string)
+	id := call[api.CreatedNode](c, "POST", "/api/environments/"+env+"/nodes", api.CreateNodeRequest{
+		Type: "service", Name: fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), Image: new("nginx:alpine"), Port: new(80.0), Deploy: true,
+	}).ID
 	created = append(created, id)
-	if d := c.settle(env); d["status"] != "success" {
-		t.Fatalf("first deploy: %v", d)
+	if d := c.settle(env); d.Status != "success" {
+		t.Fatalf("first deploy: %+v", d)
 	}
-	if v := c.node(env, id); v["status"] != "healthy" || v["running"] != float64(1) {
-		t.Fatalf("after deploy: %v", v)
+	if v := c.node(env, id); v.Status != "healthy" || v.Running != 1 {
+		t.Fatalf("after deploy: %+v", v)
 	}
 
-	c.ok("POST", "/api/nodes/"+id+"/variables", map[string]any{"key": "GREETING", "value": "port ${{ " + c.node(env, id)["name"].(string) + ".PORT }}", "secret": false})
-	if s := c.ok("GET", "/api/environments/"+env+"/summary", nil)["summary"].(map[string]any); s["pendingChanges"] != float64(1) {
-		t.Fatalf("summary after a variable: %v", s)
+	call[struct{}](c, "POST", "/api/nodes/"+id+"/variables", api.SetVariableRequest{Key: "GREETING", Value: "port ${{ " + c.node(env, id).Name + ".PORT }}"})
+	if s := call[api.EnvironmentSummaryResult](c, "GET", "/api/environments/"+env+"/summary", nil).Summary; s.PendingChanges != 1 {
+		t.Fatalf("summary after a variable: %+v", s)
 	}
-	c.ok("POST", "/api/environments/"+env+"/deployments", map[string]any{})
-	if d := c.settle(env); d["status"] != "success" {
-		t.Fatalf("ship: %v", d)
+	call[api.ShipResponse](c, "POST", "/api/environments/"+env+"/deployments", api.ShipRequest{})
+	if d := c.settle(env); d.Status != "success" {
+		t.Fatalf("ship: %+v", d)
 	}
 	svc, err := docker.ServiceInspect(context.Background(), "svc-"+id, client.ServiceInspectOptions{})
 	if err != nil {
@@ -176,30 +173,27 @@ func TestSwarmIT(t *testing.T) {
 		t.Fatalf("service env: %v", env)
 	}
 
-	c.ok("POST", "/api/nodes/"+id+"/stop", nil)
-	if d := c.settle(env); d["status"] != "success" || c.node(env, id)["status"] != "stopped" {
-		t.Fatalf("stop: %v / %v", d, c.node(env, id))
+	call[api.StoppedNode](c, "POST", "/api/nodes/"+id+"/stop", nil)
+	if d := c.settle(env); d.Status != "success" || c.node(env, id).Status != "stopped" {
+		t.Fatalf("stop: %+v / %+v", d, c.node(env, id))
 	}
-	c.ok("POST", "/api/nodes/"+id+"/start", nil)
-	if d := c.settle(env); d["status"] != "success" || c.node(env, id)["status"] != "healthy" {
-		t.Fatalf("start: %v / %v", d, c.node(env, id))
+	call[api.StartedNode](c, "POST", "/api/nodes/"+id+"/start", nil)
+	if d := c.settle(env); d.Status != "success" || c.node(env, id).Status != "healthy" {
+		t.Fatalf("start: %+v / %+v", d, c.node(env, id))
 	}
-	c.ok("POST", "/api/environments/"+env+"/deployments", map[string]any{"only": []string{id}, "refresh": true})
-	if d := c.settle(env); d["status"] != "success" || !strings.HasPrefix(d["message"].(string), "redeploy ") {
-		t.Fatalf("redeploy: %v", d)
+	call[api.ShipResponse](c, "POST", "/api/environments/"+env+"/deployments", api.ShipRequest{Only: []string{id}, Refresh: true})
+	if d := c.settle(env); d.Status != "success" || !strings.HasPrefix(d.Message, "redeploy ") {
+		t.Fatalf("redeploy: %+v", d)
 	}
 
-	if code, out := c.do("DELETE", "/api/nodes/"+id, nil); code != 204 {
-		t.Fatalf("delete: %d %v", code, out)
+	if code, raw := c.do("DELETE", "/api/nodes/"+id, nil); code != 204 {
+		t.Fatalf("delete: %d %s", code, raw)
 	}
-	for i := 0; ; i++ {
-		_, err := docker.ServiceInspect(context.Background(), "svc-"+id, client.ServiceInspectOptions{})
-		if err != nil {
-			break
-		}
-		if i > 30 {
-			t.Fatal("svc still there 30 s after delete")
+	for range 30 {
+		if _, err := docker.ServiceInspect(context.Background(), "svc-"+id, client.ServiceInspectOptions{}); err != nil {
+			return
 		}
 		time.Sleep(time.Second)
 	}
+	t.Fatal("svc still there 30 s after delete")
 }

@@ -19,7 +19,6 @@ import (
 	"github.com/ThallesP/keel/internal/adapters/realtime"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
 	"github.com/ThallesP/keel/internal/app"
-	"github.com/ThallesP/keel/internal/domain"
 	transport "github.com/ThallesP/keel/internal/transport/http"
 )
 
@@ -86,13 +85,7 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	}
 	defer closeAdapters(closers, log)
 
-	rt, err := realtime.New(realtime.Config{
-		Authenticate: func(r *http.Request) (domain.Actor, error) {
-			return a.ResolveSession(r.Context(), transport.SessionToken(r))
-		},
-		SiteURL: cfg.SiteURL,
-		Log:     log,
-	})
+	rt, err := realtime.New(realtime.Config{Actor: transport.ActorFrom, SiteURL: cfg.SiteURL, Log: log})
 	if err != nil {
 		return fmt.Errorf("realtime: %w", err)
 	}

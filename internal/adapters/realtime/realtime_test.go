@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -27,12 +26,18 @@ var actors = map[string]domain.Actor{
 	"expired": {},
 }
 
-func authenticate(r *http.Request) (domain.Actor, error) {
-	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if tok == "boom" {
-		return domain.Actor{}, errors.New("database is down")
-	}
-	return actors[tok], nil
+type actorKey struct{}
+
+func actorOf(ctx context.Context) domain.Actor {
+	a, _ := ctx.Value(actorKey{}).(domain.Actor)
+	return a
+}
+
+func withActor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		actor := actors[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
+	})
 }
 
 type harness struct {
@@ -44,16 +49,16 @@ type harness struct {
 func newHarness(t *testing.T, window time.Duration) *harness {
 	t.Helper()
 	rt, err := New(Config{
-		Authenticate: authenticate,
-		SiteURL:      "https://keel.example.com",
-		Window:       window,
-		Log:          slog.New(slog.DiscardHandler),
+		Actor:   actorOf,
+		SiteURL: "https://keel.example.com",
+		Window:  window,
+		Log:     slog.New(slog.DiscardHandler),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/ws", rt.Handler())
+	mux.Handle("GET /api/ws", withActor(rt.Handler()))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -235,18 +240,6 @@ func TestSignedOutRejected(t *testing.T) {
 	}
 }
 
-func TestAuthenticateErrorAsksToRetry(t *testing.T) {
-	h := newHarness(t, -1)
-	c, _, err := h.dial("boom", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.send(`"connect":{}`)
-	if got := c.closeStatus(); got != 3004 {
-		t.Fatalf("close %d, want 3004", got)
-	}
-}
-
 func TestMemberReceivesOrganizationPublications(t *testing.T) {
 	h := newHarness(t, 30*time.Millisecond)
 	c, _, err := h.dial("alice", "")
@@ -413,7 +406,7 @@ func TestShutdown(t *testing.T) {
 }
 
 func TestHandshakeCarriesRenewedCookie(t *testing.T) {
-	rt, err := New(Config{Authenticate: authenticate, Window: -1, Log: slog.New(slog.DiscardHandler)})
+	rt, err := New(Config{Actor: actorOf, Window: -1, Log: slog.New(slog.DiscardHandler)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +419,7 @@ func TestHandshakeCarriesRenewedCookie(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	}
-	srv := httptest.NewServer(renew(rt.Handler()))
+	srv := httptest.NewServer(withActor(renew(rt.Handler())))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

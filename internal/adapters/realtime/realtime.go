@@ -27,10 +27,10 @@ import (
 var DisconnectSignedOut = centrifuge.Disconnect{Code: 4501, Reason: "signed out"}
 
 type Config struct {
-	Authenticate func(r *http.Request) (domain.Actor, error)
-	SiteURL      string
-	Window       time.Duration
-	Log          *slog.Logger
+	Actor   func(context.Context) domain.Actor
+	SiteURL string
+	Window  time.Duration
+	Log     *slog.Logger
 }
 
 type Invalidation struct {
@@ -42,28 +42,20 @@ func Channel(organizationID string) string { return "org:" + organizationID }
 
 type Server struct {
 	node     *centrifuge.Node
-	auth     func(r *http.Request) (domain.Actor, error)
+	actor    func(context.Context) domain.Actor
 	siteHost string
 	window   time.Duration
 	log      *slog.Logger
 
 	mu      sync.Mutex
-	closed  bool
 	pending map[string]map[string]bool
 }
 
 var _ app.Publisher = (*Server)(nil)
 
-type connKey struct{}
-
-type conn struct {
-	actor domain.Actor
-	err   error
-}
-
 func New(cfg Config) (*Server, error) {
 	s := &Server{
-		auth:    cfg.Authenticate,
+		actor:   cfg.Actor,
 		window:  cmp.Or(cfg.Window, 100*time.Millisecond),
 		log:     cfg.Log,
 		pending: map[string]map[string]bool{},
@@ -90,18 +82,8 @@ func New(cfg Config) (*Server, error) {
 }
 
 func (s *Server) Handler() http.Handler {
-	ws := centrifuge.NewWebsocketHandler(s.node, centrifuge.WebsocketConfig{
-		CheckOrigin: func(*http.Request) bool { return true },
-	})
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.originAllowed(r) {
-			http.Error(w, "Origin not allowed", http.StatusForbidden)
-			return
-		}
-		actor, err := s.auth(r)
-		ctx := context.WithValue(r.Context(), connKey{}, conn{actor: actor, err: err})
-		ws.ServeHTTP(cookieCarrier{w}, r.WithContext(ctx))
-	})
+	ws := centrifuge.NewWebsocketHandler(s.node, centrifuge.WebsocketConfig{CheckOrigin: s.originAllowed})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { ws.ServeHTTP(cookieCarrier{w}, r) })
 }
 
 type cookieCarrier struct{ http.ResponseWriter }
@@ -118,18 +100,9 @@ func (c cookieCarrier) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if err != nil || len(cookies) == 0 {
 		return nc, brw, err
 	}
-	var extra []byte
-	for _, v := range cookies {
-		extra = append(extra, "Set-Cookie: "...)
-		for _, b := range []byte(v) {
-			if b < ' ' || b == 0x7f {
-				b = ' '
-			}
-			extra = append(extra, b)
-		}
-		extra = append(extra, "\r\n"...)
-	}
-	return &handshakeConn{Conn: nc, extra: extra}, brw, nil
+	var extra bytes.Buffer
+	_ = http.Header{"Set-Cookie": cookies}.Write(&extra)
+	return &handshakeConn{Conn: nc, extra: extra.Bytes()}, brw, nil
 }
 
 type handshakeConn struct {
@@ -165,20 +138,16 @@ func (s *Server) originAllowed(r *http.Request) bool {
 }
 
 func (s *Server) onConnecting(ctx context.Context, _ centrifuge.ConnectEvent) (centrifuge.ConnectReply, error) {
-	c := ctx.Value(connKey{}).(conn)
-	if c.err != nil {
-		s.log.Error("realtime: resolve session", "err", c.err)
-		return centrifuge.ConnectReply{}, centrifuge.DisconnectServerError
-	}
-	if !c.actor.SignedIn() {
+	actor := s.actor(ctx)
+	if !actor.SignedIn() {
 		return centrifuge.ConnectReply{}, DisconnectSignedOut
 	}
 	reply := centrifuge.ConnectReply{
-		Credentials: &centrifuge.Credentials{UserID: c.actor.UserID},
-		Labels:      map[string]string{"session": c.actor.SessionID},
+		Credentials: &centrifuge.Credentials{UserID: actor.UserID},
+		Labels:      map[string]string{"session": actor.SessionID},
 	}
-	if c.actor.OrganizationID != "" {
-		reply.Subscriptions = map[string]centrifuge.SubscribeOptions{Channel(c.actor.OrganizationID): {}}
+	if actor.OrganizationID != "" {
+		reply.Subscriptions = map[string]centrifuge.SubscribeOptions{Channel(actor.OrganizationID): {}}
 	}
 	return reply, nil
 }
@@ -186,9 +155,6 @@ func (s *Server) onConnecting(ctx context.Context, _ centrifuge.ConnectEvent) (c
 func (s *Server) Publish(organizationID string, topics []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
-		return
-	}
 	batch, ok := s.pending[organizationID]
 	if !ok {
 		batch = map[string]bool{}
@@ -204,11 +170,7 @@ func (s *Server) flush(organizationID string) {
 	s.mu.Lock()
 	batch := s.pending[organizationID]
 	delete(s.pending, organizationID)
-	closed := s.closed
 	s.mu.Unlock()
-	if closed {
-		return
-	}
 	data, _ := json.Marshal(Invalidation{Type: "invalidate", Topics: slices.Sorted(maps.Keys(batch))})
 	if _, err := s.node.Publish(Channel(organizationID), data); err != nil {
 		s.log.Error("realtime: publish", "org", organizationID, "err", err)
@@ -232,12 +194,7 @@ func (s *Server) DisconnectUser(userID string) {
 	}
 }
 
-func (s *Server) Shutdown(ctx context.Context) error {
-	s.mu.Lock()
-	s.closed = true
-	s.mu.Unlock()
-	return s.node.Shutdown(ctx)
-}
+func (s *Server) Shutdown(ctx context.Context) error { return s.node.Shutdown(ctx) }
 
 func (s *Server) logEntry(e centrifuge.LogEntry) {
 	level := slog.LevelWarn

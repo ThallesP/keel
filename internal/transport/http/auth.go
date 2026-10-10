@@ -65,7 +65,7 @@ func authOrganizationView(o app.MyOrganization) api.Organization {
 }
 
 func authDeviceResponses(h huma.API, statuses ...string) map[string]*huma.Response {
-	schema := h.OpenAPI().Components.Schemas.Schema(reflect.TypeOf(api.DeviceError{}), true, "DeviceError")
+	schema := h.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[api.DeviceError](), true, "DeviceError")
 	out := map[string]*huma.Response{}
 	for _, st := range statuses {
 		out[st] = &huma.Response{
@@ -292,27 +292,17 @@ func (s *Server) registerAuth(h huma.API) {
 		})
 	}
 
-	authNullable(h, reflect.TypeOf(api.Me{}), "user", "organization")
-	authNullable(h, reflect.TypeOf(api.InvitationLookup{}), "invitation")
+	authNullable[api.Me](h, "user", "organization")
+	authNullable[api.InvitationLookup](h, "invitation")
 }
 
-func authNullable(h huma.API, t reflect.Type, fields ...string) {
+func authNullable[T any](h huma.API, fields ...string) {
 	reg := h.OpenAPI().Components.Schemas
-	s := reg.Schema(t, true, "")
-	if s != nil && s.Ref != "" {
-		s = reg.SchemaFromRef(s.Ref)
-	}
-	if s == nil {
-		return
-	}
+	s := reg.SchemaFromRef(reg.Schema(reflect.TypeFor[T](), true, "").Ref)
 	for _, f := range fields {
 		p := s.Properties[f]
-		if p == nil || len(p.OneOf) > 0 {
-			continue
-		}
-		desc := p.Description
+		s.Properties[f] = &huma.Schema{Description: p.Description, OneOf: []*huma.Schema{p, {Type: "null"}}}
 		p.Description = ""
-		s.Properties[f] = &huma.Schema{Description: desc, OneOf: []*huma.Schema{p, {Type: "null"}}}
 	}
 }
 

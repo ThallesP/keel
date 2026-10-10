@@ -13,6 +13,7 @@ import (
 
 	"github.com/ThallesP/keel/internal/adapters/password"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
 	transport "github.com/ThallesP/keel/internal/transport/http"
@@ -21,7 +22,6 @@ import (
 type authHTTP struct {
 	t   *testing.T
 	srv *httptest.Server
-	app *app.App
 	now int64
 }
 
@@ -33,12 +33,12 @@ func authServe(t *testing.T, siteURL string) *authHTTP {
 	}
 	t.Cleanup(func() { store.Close() })
 	h := &authHTTP{t: t, now: 1_800_000_000_000}
-	h.app = app.New(app.App{
+	a := app.New(app.App{
 		Store: store, Config: app.Config{SiteURL: siteURL},
 		Passwords: &password.Hasher{Params: password.Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}},
 		Now:       func() int64 { return h.now },
 	})
-	h.srv = httptest.NewServer(transport.New(h.app, transport.Options{}))
+	h.srv = httptest.NewServer(transport.New(a, transport.Options{}))
 	t.Cleanup(h.srv.Close)
 	return h
 }
@@ -55,8 +55,12 @@ type authReq struct {
 type authResp struct {
 	status int
 	header http.Header
-	json   map[string]any
 	raw    string
+}
+
+type authMe struct {
+	User         api.User         `json:"user"`
+	Organization api.Organization `json:"organization"`
 }
 
 func (h *authHTTP) do(r authReq) authResp {
@@ -91,22 +95,21 @@ func (h *authHTTP) do(r authReq) authResp {
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(res.Body)
-	out := authResp{status: res.StatusCode, header: res.Header, raw: string(raw)}
-	_ = json.Unmarshal(raw, &out.json)
-	return out
+	return authResp{status: res.StatusCode, header: res.Header, raw: string(raw)}
 }
 
-func (r authResp) str(path ...string) string {
-	var v any = r.json
-	for _, p := range path {
-		m, ok := v.(map[string]any)
-		if !ok {
-			return ""
-		}
-		v = m[p]
+func (h *authHTTP) signUp(email, invitationID string) authResp {
+	return h.do(authReq{method: "POST", path: "/api/auth/sign-up", body: map[string]string{
+		"email": email, "password": "correct-horse-battery", "name": "CI", "invitationId": invitationID}})
+}
+
+func authBody[T any](t *testing.T, r authResp) T {
+	t.Helper()
+	var v T
+	if err := json.Unmarshal([]byte(r.raw), &v); err != nil {
+		t.Fatalf("%d %s: %v", r.status, r.raw, err)
 	}
-	s, _ := v.(string)
-	return s
+	return v
 }
 
 func (r authResp) sessionCookie() *http.Cookie {
@@ -120,8 +123,15 @@ func (r authResp) sessionCookie() *http.Cookie {
 
 func authExpect(t *testing.T, r authResp, status int, code, detail string) {
 	t.Helper()
-	if r.status != status || r.str("code") != code || r.str("detail") != detail {
-		t.Fatalf("got %d %s %q (%s), want %d %s %q", r.status, r.str("code"), r.str("detail"), r.raw, status, code, detail)
+	if p := authBody[api.Problem](t, r); r.status != status || p.Code != code || p.Detail != detail {
+		t.Fatalf("got %d %s, want %d %s %q", r.status, r.raw, status, code, detail)
+	}
+}
+
+func authExpectDevice(t *testing.T, r authResp, status int, code, description string) {
+	t.Helper()
+	if e := authBody[api.DeviceError](t, r); r.status != status || e != (api.DeviceError{Error: code, ErrorDescription: description}) {
+		t.Fatalf("got %d %s, want %d %s %q", r.status, r.raw, status, code, description)
 	}
 }
 
@@ -134,47 +144,46 @@ func TestAuthHTTPAccounts(t *testing.T) {
 		t.Fatalf("signed-out me: %d %s", me.status, me.raw)
 	}
 	open := h.do(authReq{method: "GET", path: "/api/auth/sign-up-open"})
-	if open.status != 200 || open.json["open"] != true {
+	if open.status != 200 || !authBody[api.SignUpOpen](t, open).Open {
 		t.Fatalf("sign-up-open: %d %s", open.status, open.raw)
 	}
 
-	up := h.do(authReq{method: "POST", path: "/api/auth/sign-up", origin: origin,
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}})
-	if up.status != 200 || up.str("token") == "" || up.str("user", "id") == "" || up.str("user", "email") != "ci@example.com" {
+	up := h.signUp("ci@example.com", "")
+	signedIn := authBody[api.SignedIn](t, up)
+	if up.status != 200 || signedIn.Token == "" || signedIn.User.ID == "" || signedIn.User.Email != "ci@example.com" {
 		t.Fatalf("sign-up: %d %s", up.status, up.raw)
 	}
 	c := up.sessionCookie()
-	if c == nil || c.Value != up.str("token") || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.Path != "/" || c.Secure ||
+	if c == nil || c.Value != signedIn.Token || !c.HttpOnly || c.SameSite != http.SameSiteLaxMode || c.Path != "/" || c.Secure ||
 		c.MaxAge != int(domain.SessionTTL/1000) {
 		t.Fatalf("cookie: %+v", c)
 	}
 	token := c.Value
 
-	second := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "second@example.com", "password": "correct-horse-battery", "name": "Second"}})
-	authExpect(t, second, 403, "FORBIDDEN", "Sign-up is by invitation. Ask a member for an invite link.")
+	authExpect(t, h.signUp("second@example.com", ""), 403, "FORBIDDEN", "Sign-up is by invitation. Ask a member for an invite link.")
 	short := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
 		body: map[string]string{"email": "x@example.com", "password": "short", "name": "X"}})
 	authExpect(t, short, 422, "INVALID_INPUT", "Password too short")
 
 	me = h.do(authReq{method: "GET", path: "/api/me", cookie: token})
-	if me.str("user", "email") != "ci@example.com" || me.str("organization", "slug") != "default" || me.str("organization", "role") != "owner" {
+	if m := authBody[authMe](t, me); m.User.Email != "ci@example.com" || m.Organization.Slug != "default" || m.Organization.Role != "owner" {
 		t.Fatalf("me: %s", me.raw)
 	}
 
 	in := h.do(authReq{method: "POST", path: "/api/auth/sign-in", body: map[string]string{"email": "CI@example.com", "password": "correct-horse-battery"}})
-	if in.status != 200 || in.str("token") == "" || in.sessionCookie() == nil {
+	if in.status != 200 || authBody[api.SignedIn](t, in).Token == "" || in.sessionCookie() == nil {
 		t.Fatalf("sign-in: %d %s", in.status, in.raw)
 	}
 	bad := h.do(authReq{method: "POST", path: "/api/auth/sign-in", body: map[string]string{"email": "ci@example.com", "password": "nope-nope"}})
 	authExpect(t, bad, 401, "NOT_AUTHENTICATED", "Invalid email or password")
 
-	inv := h.do(authReq{method: "POST", path: "/api/organization/invitations", bearer: token, body: map[string]string{"email": "Guest@example.com"}})
-	if inv.status != 200 || inv.str("email") != "guest@example.com" || inv.str("role") != "member" || len(inv.str("id")) != 26 {
-		t.Fatalf("invite: %d %s", inv.status, inv.raw)
+	created := h.do(authReq{method: "POST", path: "/api/organization/invitations", bearer: token, body: map[string]string{"email": "Guest@example.com"}})
+	inv := authBody[api.CreatedInvitation](t, created)
+	if created.status != 200 || inv.Email != "guest@example.com" || inv.Role != "member" || len(inv.ID) != 26 {
+		t.Fatalf("invite: %d %s", created.status, created.raw)
 	}
-	look := h.do(authReq{method: "GET", path: "/api/invitations/" + inv.str("id")})
-	if look.str("invitation", "email") != "guest@example.com" || look.str("invitation", "organization") != "Default" {
+	look := h.do(authReq{method: "GET", path: "/api/invitations/" + inv.ID})
+	if l := authBody[api.InvitationLookup](t, look).Invitation; l == nil || *l != (api.PublicInvitation{Email: "guest@example.com", Organization: "Default"}) {
 		t.Fatalf("lookup: %s", look.raw)
 	}
 	missing := h.do(authReq{method: "GET", path: "/api/invitations/nope"})
@@ -182,14 +191,14 @@ func TestAuthHTTPAccounts(t *testing.T) {
 		t.Fatalf("missing lookup: %d %s", missing.status, missing.raw)
 	}
 	list := h.do(authReq{method: "GET", path: "/api/organization/invitations", bearer: token})
-	if invs, _ := list.json["invitations"].([]any); len(invs) != 1 {
+	if len(authBody[api.Invitations](t, list).Invitations) != 1 {
 		t.Fatalf("list: %s", list.raw)
 	}
 	members := h.do(authReq{method: "GET", path: "/api/organization/members", bearer: token})
-	if ms, _ := members.json["members"].([]any); len(ms) != 1 {
+	if len(authBody[api.Members](t, members).Members) != 1 {
 		t.Fatalf("members: %s", members.raw)
 	}
-	del := h.do(authReq{method: "DELETE", path: "/api/organization/invitations/" + inv.str("id"), bearer: token})
+	del := h.do(authReq{method: "DELETE", path: "/api/organization/invitations/" + inv.ID, bearer: token})
 	if del.status != 204 {
 		t.Fatalf("cancel: %d %s", del.status, del.raw)
 	}
@@ -200,28 +209,24 @@ func TestAuthHTTPAccounts(t *testing.T) {
 
 	out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", cookie: token, origin: origin})
 	cleared := out.sessionCookie()
-	if out.status != 200 || out.json["success"] != true || cleared == nil || cleared.Value != "" || cleared.MaxAge >= 0 {
+	if out.status != 200 || !authBody[api.AuthSuccess](t, out).Success || cleared == nil || cleared.Value != "" || cleared.MaxAge >= 0 {
 		t.Fatalf("sign-out: %d %s %+v", out.status, out.raw, cleared)
 	}
-	if me := h.do(authReq{method: "GET", path: "/api/me", cookie: token}); me.str("user", "id") != "" {
+	if me := h.do(authReq{method: "GET", path: "/api/me", cookie: token}); authBody[authMe](t, me).User.ID != "" {
 		t.Fatalf("still signed in: %s", me.raw)
 	}
 }
 
 func TestAuthHTTPSecureCookieOnHTTPS(t *testing.T) {
 	h := authServe(t, "https://keel.example.com")
-	up := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}})
-	if c := up.sessionCookie(); c == nil || !c.Secure {
+	if c := h.signUp("ci@example.com", "").sessionCookie(); c == nil || !c.Secure {
 		t.Fatalf("cookie on https: %+v", c)
 	}
 }
 
 func TestAuthHTTPCSRF(t *testing.T) {
 	h := authServe(t, "http://keel.example.com:8080")
-	up := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}})
-	token := up.str("token")
+	token := authBody[api.SignedIn](t, h.signUp("ci@example.com", "")).Token
 	invite := func(r authReq) authResp {
 		r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
 		return h.do(r)
@@ -246,13 +251,13 @@ func TestAuthHTTPCSRF(t *testing.T) {
 	}
 	for _, c := range cases {
 		r := invite(c.req)
-		if r.status != c.status {
-			t.Errorf("%s: %d %s, want %d", c.name, r.status, r.raw, c.status)
+		p := authBody[api.Problem](t, r)
+		if r.status != c.status || p.Detail != c.detail {
+			t.Errorf("%s: %d %s, want %d %q", c.name, r.status, r.raw, c.status, c.detail)
 			continue
 		}
-		if c.status == 403 && (r.str("code") != "FORBIDDEN" || r.str("detail") != c.detail ||
-			r.header.Get("Content-Type") != "application/problem+json") {
-			t.Errorf("%s: %s", c.name, r.raw)
+		if c.status == 403 && (p.Code != "FORBIDDEN" || r.header.Get("Content-Type") != "application/problem+json") {
+			t.Errorf("%s: %v %s", c.name, r.header, r.raw)
 		}
 	}
 	if r := h.do(authReq{method: "GET", path: "/api/organization/invitations", cookie: token}); r.status != 200 {
@@ -262,28 +267,26 @@ func TestAuthHTTPCSRF(t *testing.T) {
 
 func TestAuthHTTPSessionRenewalResendsCookie(t *testing.T) {
 	h := authServe(t, "http://keel.test")
-	token := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}}).str("token")
+	token := authBody[api.SignedIn](t, h.signUp("ci@example.com", "")).Token
 	if r := h.do(authReq{method: "GET", path: "/api/me", cookie: token}); r.sessionCookie() != nil {
 		t.Fatal("cookie re-sent without a renewal")
 	}
 	h.now += 2 * domain.SessionUpdateAge
 	r := h.do(authReq{method: "GET", path: "/api/me", cookie: token})
 	c := r.sessionCookie()
-	if c == nil || c.Value != token || c.MaxAge != int(domain.SessionTTL/1000) || r.str("user", "email") != "ci@example.com" {
+	if c == nil || c.Value != token || c.MaxAge != int(domain.SessionTTL/1000) || authBody[authMe](t, r).User.Email != "ci@example.com" {
 		t.Fatalf("renewal cookie: %+v %s", c, r.raw)
 	}
 	h.now += 2 * domain.SessionUpdateAge
-	if r := h.do(authReq{method: "GET", path: "/api/me", bearer: token}); r.sessionCookie() != nil || r.str("user", "id") == "" {
+	if r := h.do(authReq{method: "GET", path: "/api/me", bearer: token}); r.sessionCookie() != nil || authBody[authMe](t, r).User.ID == "" {
 		t.Fatalf("bearer renewal: %+v %s", r.sessionCookie(), r.raw)
 	}
 }
 
 func TestAuthHTTPSignInRateLimit(t *testing.T) {
 	h := authServe(t, "http://keel.test")
-	h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}})
-	for i := 0; i < app.SignInAttempts; i++ {
+	h.signUp("ci@example.com", "")
+	for i := range app.SignInAttempts {
 		r := h.do(authReq{method: "POST", path: "/api/auth/sign-in", body: map[string]string{"email": "ci@example.com", "password": "wrong-password"}})
 		if r.status != 401 {
 			t.Fatalf("try %d: %d", i, r.status)
@@ -298,86 +301,74 @@ func TestAuthHTTPSignInRateLimit(t *testing.T) {
 
 func TestAuthHTTPDeviceLogin(t *testing.T) {
 	h := authServe(t, "http://keel.test")
-	token := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "ci@example.com", "password": "correct-horse-battery", "name": "CI"}}).str("token")
+	token := authBody[api.SignedIn](t, h.signUp("ci@example.com", "")).Token
 
 	bad := h.do(authReq{method: "POST", path: "/api/auth/device/code", body: map[string]string{"client_id": "other"}})
 	if bad.status != 400 || bad.raw != "{\"error\":\"invalid_client\",\"error_description\":\"Invalid client ID\"}\n" {
 		t.Fatalf("bad client: %d %s", bad.status, bad.raw)
 	}
-	code := h.do(authReq{method: "POST", path: "/api/auth/device/code", body: map[string]string{"client_id": "keel-cli"}})
-	if code.status != 200 || code.header.Get("Cache-Control") != "no-store" || len(code.str("device_code")) != 40 ||
-		code.json["expires_in"] != float64(1800) || code.json["interval"] != float64(5) ||
-		code.str("verification_uri") != "http://keel.test/device" ||
-		code.str("verification_uri_complete") != "http://keel.test/device?user_code="+code.str("user_code") {
-		t.Fatalf("device code: %d %v %s", code.status, code.header, code.raw)
+	started := h.do(authReq{method: "POST", path: "/api/auth/device/code", body: map[string]string{"client_id": "keel-cli"}})
+	code := authBody[api.DeviceCode](t, started)
+	if started.status != 200 || started.header.Get("Cache-Control") != "no-store" || len(code.DeviceCode) != 40 ||
+		code.ExpiresIn != 1800 || code.Interval != 5 || code.VerificationURI != "http://keel.test/device" ||
+		code.VerificationURIComplete != "http://keel.test/device?user_code="+code.UserCode {
+		t.Fatalf("device code: %d %v %s", started.status, started.header, started.raw)
 	}
 	poll := func() authResp {
 		return h.do(authReq{method: "POST", path: "/api/auth/device/token", body: map[string]string{
-			"grant_type": domain.DeviceGrantType, "device_code": code.str("device_code"), "client_id": "keel-cli"}})
+			"grant_type": domain.DeviceGrantType, "device_code": code.DeviceCode, "client_id": "keel-cli"}})
 	}
 	p := poll()
-	if p.status != 400 || p.str("error") != "authorization_pending" || p.str("error_description") != "Authorization pending" ||
-		!strings.HasPrefix(p.header.Get("Content-Type"), "application/json") {
-		t.Fatalf("pending: %d %v %s", p.status, p.header, p.raw)
+	authExpectDevice(t, p, 400, "authorization_pending", "Authorization pending")
+	if !strings.HasPrefix(p.header.Get("Content-Type"), "application/json") {
+		t.Fatalf("pending content type: %v", p.header)
 	}
-	if p := poll(); p.str("error") != "slow_down" {
-		t.Fatalf("slow_down: %s", p.raw)
-	}
+	authExpectDevice(t, poll(), 400, "slow_down", "Polling too frequently")
 
-	userCode := code.str("user_code")
-	noSession := h.do(authReq{method: "POST", path: "/api/auth/device/approve", body: map[string]string{"userCode": userCode}})
-	if noSession.status != 401 || noSession.str("error") != "unauthorized" || noSession.str("error_description") != "Authentication required" {
-		t.Fatalf("approve signed out: %d %s", noSession.status, noSession.raw)
-	}
-	look := h.do(authReq{method: "GET", path: "/api/auth/device?user_code=" + userCode[:4] + "-" + userCode[4:], bearer: token})
-	if look.status != 200 || look.str("status") != "pending" || look.str("user_code") != userCode[:4]+"-"+userCode[4:] {
+	approve := authReq{method: "POST", path: "/api/auth/device/approve", body: map[string]string{"userCode": code.UserCode}}
+	authExpectDevice(t, h.do(approve), 401, "unauthorized", "Authentication required")
+	pretty := code.UserCode[:4] + "-" + code.UserCode[4:]
+	look := h.do(authReq{method: "GET", path: "/api/auth/device?user_code=" + pretty, bearer: token})
+	if s := authBody[api.DeviceStatus](t, look); look.status != 200 || s != (api.DeviceStatus{UserCode: pretty, Status: "pending"}) {
 		t.Fatalf("lookup: %d %s", look.status, look.raw)
 	}
 	unknown := h.do(authReq{method: "GET", path: "/api/auth/device?user_code=NOPE", bearer: token})
-	if unknown.status != 400 || unknown.str("error") != "invalid_request" || unknown.str("error_description") != "Invalid user code" {
-		t.Fatalf("unknown code: %d %s", unknown.status, unknown.raw)
-	}
-	ok := h.do(authReq{method: "POST", path: "/api/auth/device/approve", bearer: token, body: map[string]string{"userCode": userCode}})
-	if ok.status != 200 || ok.json["success"] != true {
+	authExpectDevice(t, unknown, 400, "invalid_request", "Invalid user code")
+	approve.bearer = token
+	if ok := h.do(approve); ok.status != 200 || !authBody[api.AuthSuccess](t, ok).Success {
 		t.Fatalf("approve: %d %s", ok.status, ok.raw)
 	}
 
 	h.now += 5_000
 	got := poll()
-	if got.status != 200 || got.str("access_token") == "" || got.str("token_type") != "Bearer" ||
-		got.json["expires_in"] != float64(domain.SessionTTL/1000) || got.header.Get("Cache-Control") != "no-store" ||
-		got.header.Get("Pragma") != "no-cache" {
+	cli := authBody[api.DeviceToken](t, got)
+	if got.status != 200 || cli.AccessToken == "" || cli.TokenType != "Bearer" || cli.ExpiresIn != domain.SessionTTL/1000 ||
+		got.header.Get("Cache-Control") != "no-store" || got.header.Get("Pragma") != "no-cache" {
 		t.Fatalf("token: %d %v %s", got.status, got.header, got.raw)
 	}
-	me := h.do(authReq{method: "GET", path: "/api/me", bearer: got.str("access_token")})
-	if me.str("user", "email") != "ci@example.com" {
+	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: cli.AccessToken}); authBody[authMe](t, me).User.Email != "ci@example.com" {
 		t.Fatalf("CLI me: %s", me.raw)
 	}
 	h.now += 5_000
-	if again := poll(); again.status != 400 || again.str("error") != "invalid_grant" {
-		t.Fatalf("second token: %d %s", again.status, again.raw)
-	}
-	if out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", bearer: got.str("access_token"), body: map[string]string{}}); out.status != 200 {
+	authExpectDevice(t, poll(), 400, "invalid_grant", "Invalid device code")
+	if out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", bearer: cli.AccessToken, body: map[string]string{}}); out.status != 200 {
 		t.Fatalf("CLI sign-out: %d %s", out.status, out.raw)
 	}
-	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: got.str("access_token")}); me.str("user", "id") != "" {
+	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: cli.AccessToken}); authBody[authMe](t, me).User.ID != "" {
 		t.Fatalf("CLI session survived sign-out: %s", me.raw)
 	}
 }
 
 func TestAuthHTTPBearerWinsOverCookie(t *testing.T) {
 	h := authServe(t, "http://keel.test")
-	owner := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
-		body: map[string]string{"email": "owner@example.com", "password": "correct-horse-battery", "name": "Owner"}}).str("token")
+	owner := authBody[api.SignedIn](t, h.signUp("owner@example.com", "")).Token
 	inv := h.do(authReq{method: "POST", path: "/api/organization/invitations", bearer: owner, body: map[string]string{"email": "member@example.com"}})
-	member := h.do(authReq{method: "POST", path: "/api/auth/sign-up", body: map[string]string{
-		"email": "member@example.com", "password": "correct-horse-battery", "name": "Member", "invitationId": inv.str("id")}}).str("token")
+	member := authBody[api.SignedIn](t, h.signUp("member@example.com", authBody[api.CreatedInvitation](t, inv).ID)).Token
 	if member == "" {
 		t.Fatal("member sign-up failed")
 	}
 
-	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: member, cookie: owner}); me.str("user", "email") != "member@example.com" {
+	if me := h.do(authReq{method: "GET", path: "/api/me", bearer: member, cookie: owner}); authBody[authMe](t, me).User.Email != "member@example.com" {
 		t.Fatalf("me with bearer and cookie: %s", me.raw)
 	}
 	invite := func(r authReq) authResp {

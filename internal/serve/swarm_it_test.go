@@ -63,8 +63,7 @@ func call[T any](c *itClient, method, path string, body any) T {
 
 func (c *itClient) settle(env string) api.Deployment {
 	c.t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for time.Now().Before(deadline) {
+	for range 180 {
 		d := call[api.DeploymentEnvelope](c, "GET", "/api/environments/"+env+"/deployments/latest", nil).Deployment
 		if d != nil && d.Status != "running" {
 			return *d
@@ -106,7 +105,7 @@ func TestSwarmIT(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(logs, nil))
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
-	go func() { served <- serveOn(ctx, ln, cfg, Options{Version: "it"}, log) }()
+	go func() { served <- serveOn(ctx, ln, cfg, nil, log) }()
 
 	t.Setenv("KEEL_URL", base)
 	t.Setenv("KEEL_WORKER_TOKEN", cfg.WorkerToken)
@@ -118,12 +117,12 @@ func TestSwarmIT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var created []string
+	var id string
 	t.Cleanup(func() {
 		cancel()
 		<-served
 		<-agentDone
-		for _, id := range created {
+		if id != "" {
 			_, _ = docker.ServiceRemove(context.Background(), "svc-"+id, client.ServiceRemoveOptions{})
 		}
 		docker.Close()
@@ -133,23 +132,13 @@ func TestSwarmIT(t *testing.T) {
 	})
 
 	c := &itClient{t: t, base: base}
-	for i := 0; ; i++ {
-		if code, _ := c.do("GET", "/api/meta", nil); code == 200 {
-			break
-		}
-		if i > 50 {
-			t.Fatal("serve did not come up")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
 	c.token = call[api.SignedIn](c, "POST", "/api/auth/sign-up", api.SignUpRequest{Email: "it@example.com", Password: "correct horse battery", Name: "IT"}).Token
 	slug := call[api.DefaultProject](c, "POST", "/api/projects/default", nil).Slug
 	env := call[api.ProjectBySlug](c, "GET", "/api/projects/by-slug/"+slug, nil).Project.Environment.ID
 
-	id := call[api.CreatedNode](c, "POST", "/api/environments/"+env+"/nodes", api.CreateNodeRequest{
+	id = call[api.CreatedNode](c, "POST", "/api/environments/"+env+"/nodes", api.CreateNodeRequest{
 		Type: "service", Name: fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), Image: new("nginx:alpine"), Port: new(80.0), Deploy: true,
 	}).ID
-	created = append(created, id)
 	if d := c.settle(env); d.Status != "success" {
 		t.Fatalf("first deploy: %+v", d)
 	}

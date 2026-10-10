@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -63,10 +62,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	return serveOn(ctx, ln, cfg, opts, log)
+	return serveOn(ctx, ln, cfg, opts.Web, log)
 }
 
-func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options, log *slog.Logger) (err error) {
+func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, log *slog.Logger) (err error) {
 	defer ln.Close()
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return err
@@ -92,24 +91,13 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	a.Events = rt
 	a.Conns = rt
 
-	handler := transport.New(a, transport.Options{Web: opts.Web, WS: rt.Handler()})
+	handler := transport.New(a, transport.Options{Web: web, WS: rt.Handler()})
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	log.Info("keel serve", "listen", ln.Addr().String(), "data", cfg.DataDir, "version", cfg.Version,
-		"site", cfg.SiteURL, "dashboard", opts.Web != nil)
+		"site", cfg.SiteURL, "dashboard", web != nil)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
-
-	recoverCtx, cancelRecover := context.WithCancel(context.Background())
-	recovered := make(chan struct{})
-	go func() {
-		defer close(recovered)
-		defer func() {
-			if r := recover(); r != nil {
-				log.Error("keel serve: recovery pass panicked", "panic", r, "stack", string(debug.Stack()))
-			}
-		}()
-		a.Recover(recoverCtx)
-	}()
+	sched.After("recover", 0, a.Recover)
 
 	var serveErr error
 	select {
@@ -122,14 +110,8 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	deadline := time.Now().Add(ShutdownTimeout)
 	shutdown, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
-	cancelRecover()
 	if err := srv.Shutdown(shutdown); err != nil {
 		log.Error("keel serve: http shutdown", "err", err)
-	}
-	select {
-	case <-recovered:
-	case <-shutdown.Done():
-		log.Error("keel serve: recovery pass still running at shutdown")
 	}
 	jobsCtx, cancelJobs := context.WithDeadline(shutdown, deadline.Add(-jobsCancelGrace))
 	defer cancelJobs()

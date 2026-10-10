@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -22,25 +21,20 @@ import (
 )
 
 type fakeAdapter struct {
-	mu     sync.Mutex
-	app    *app.App
+	built  chan *app.App
 	closed bool
 }
 
 func (f *fakeAdapter) build(a *app.App) (func() error, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.app = a
+	f.built <- a
 	return func() error {
-		f.mu.Lock()
-		defer f.mu.Unlock()
 		f.closed = true
 		return nil
 	}, nil
 }
 
 func TestServeOn(t *testing.T) {
-	fake := &fakeAdapter{}
+	fake := &fakeAdapter{built: make(chan *app.App, 1)}
 	saved := adapters
 	adapters = []adapter{{"fake", fake.build}}
 	t.Cleanup(func() { adapters = saved })
@@ -60,7 +54,7 @@ func TestServeOn(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- serveOn(ctx, ln, cfg, Options{Version: cfg.Version, Web: web}, slog.New(slog.DiscardHandler))
+		done <- serveOn(ctx, ln, cfg, web, slog.New(slog.DiscardHandler))
 	}()
 
 	get := func(path string) (*http.Response, string) {
@@ -88,12 +82,7 @@ func TestServeOn(t *testing.T) {
 		t.Fatalf("/assets: %v %s", resp.Header, body)
 	}
 
-	fake.mu.Lock()
-	a := fake.app
-	fake.mu.Unlock()
-	if a == nil {
-		t.Fatal("adapter not built")
-	}
+	a := <-fake.built
 	if _, ok := a.Events.(*realtime.Server); !ok {
 		t.Fatalf("app.Events = %T, want the realtime server", a.Events)
 	}
@@ -137,10 +126,7 @@ func TestServeOn(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("serveOn did not return after cancel")
 	}
-	fake.mu.Lock()
-	closed := fake.closed
-	fake.mu.Unlock()
-	if !closed {
+	if !fake.closed {
 		t.Fatal("adapter not released at shutdown")
 	}
 	if _, err := http.Get(base + "/api/meta"); err == nil {
@@ -159,7 +145,7 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	}
 	savedTimeout, savedGrace := ShutdownTimeout, jobsCancelGrace
 	ShutdownTimeout, jobsCancelGrace = 400*time.Millisecond, 200*time.Millisecond
-	fake := &fakeAdapter{}
+	fake := &fakeAdapter{built: make(chan *app.App, 1)}
 	saved := adapters
 	adapters = []adapter{{"fake", fake.build}}
 	t.Cleanup(func() { adapters, ShutdownTimeout, jobsCancelGrace = saved, savedTimeout, savedGrace })
@@ -173,16 +159,9 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- serveOn(ctx, ln, cfg, Options{}, slog.New(slog.DiscardHandler))
+		done <- serveOn(ctx, ln, cfg, nil, slog.New(slog.DiscardHandler))
 	}()
-	waitUntil(t, "adapter built", func() bool {
-		fake.mu.Lock()
-		defer fake.mu.Unlock()
-		return fake.app != nil
-	})
-	fake.mu.Lock()
-	a := fake.app
-	fake.mu.Unlock()
+	a := <-fake.built
 
 	started, wrote := make(chan struct{}), make(chan error, 1)
 	a.Jobs.After("apply", 0, func(ctx context.Context) {
@@ -215,19 +194,8 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	}
 }
 
-func waitUntil(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-}
-
 func TestWireAdaptersReleasesOnFailure(t *testing.T) {
-	first := &fakeAdapter{}
+	first := &fakeAdapter{built: make(chan *app.App, 1)}
 	saved := adapters
 	adapters = []adapter{
 		{"first", first.build},

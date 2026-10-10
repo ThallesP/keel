@@ -1425,14 +1425,11 @@
         "additionalProperties": false,
         "properties": {
           "orgs": {
-            "description": "null when no sign-in waits for an org pick",
+            "description": "empty when no sign-in waits for an org pick",
             "items": {
               "$ref": "#/components/schemas/AxiomOrgChoice"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
           }
         },
         "required": [

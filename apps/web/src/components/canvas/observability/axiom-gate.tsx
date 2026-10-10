@@ -39,7 +39,7 @@ export function AxiomGate() {
 /** Connected, but before traces existed: signing in again adds the traces dataset. */
 export function TracesBanner() {
   const { data: orgs } = useListPendingAxiomOrgs({ query: { select: (p) => p.orgs } });
-  if (orgs) {
+  if (orgs?.length) {
     return (
       <div className="w-[380px] rounded-lg border border-line p-6">
         <AxiomSignIn title="" copy="" />
@@ -189,7 +189,7 @@ function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
     }
   };
 
-  if (orgs) {
+  if (orgs?.length) {
     return (
       <>
         <h2 className="text-md font-semibold text-ink">Pick an Axiom organization</h2>

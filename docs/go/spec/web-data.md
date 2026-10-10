@@ -218,8 +218,8 @@ Identical `(function, args)` pairs are one Convex subscription however many comp
 | Q4 | `components/canvas/settings.tsx:42` | `api.logSinks.get` | `{}` | `undefined` → spinner; `kind === "axiom"`; `org` (optional label); `dataset`; `traces` (`null` → "None: this connection predates traces." + Sign in button) | yes | `useGetLogSink` ← `GET /api/organization/log-sink` → `{sink: LogSinkView \| null}`; key `["/api/organization/log-sink"]`; topic `/api/organization` |
 | Q5 | `components/canvas/settings.tsx:43` | `api.organizations.current` | none | `name` (copy "every project in {name}") | low | `useSession().organization` |
 | Q6 | `components/canvas/observability/page.tsx:17` | `api.logSinks.get` | `{}` | `undefined` → Loader; `kind !== "axiom"` → `AxiomGate`; else passes `{domain, dataset, traces, org}` as `Sink` to `Explorer` (which only reads `traces` truthiness) | yes (the gate swaps to the Explorer by itself when an org pick completes) | same hook as Q4 |
-| Q7 | `components/canvas/observability/axiom-gate.tsx:37` (`TracesBanner`) | `api.logSinks.pendingOrgs` | `{}` | truthiness → renders the org picker card instead of the banner | yes | `useListPendingAxiomOrgs` ← `GET /api/organization/axiom/pending-orgs` → `{orgs: [{id, name}] \| null}`; key `["/api/organization/axiom/pending-orgs"]`; topic `/api/organization` |
-| Q8 | `components/canvas/observability/axiom-gate.tsx:171` (`AxiomSignIn`) | `api.logSinks.pendingOrgs` | `{}` | `[{id, name}]` → picker buttons; `null` → title/copy + Sign in button | yes | same as Q7 |
+| Q7 | `components/canvas/observability/axiom-gate.tsx:37` (`TracesBanner`) | `api.logSinks.pendingOrgs` | `{}` | non-empty → renders the org picker card instead of the banner | yes | `useListPendingAxiomOrgs` ← `GET /api/organization/axiom/pending-orgs` → `{orgs: [{id, name}]}` (empty when no sign-in waits); key `["/api/organization/axiom/pending-orgs"]`; topic `/api/organization` |
+| Q8 | `components/canvas/observability/axiom-gate.tsx:171` (`AxiomSignIn`) | `api.logSinks.pendingOrgs` | `{}` | non-empty `[{id, name}]` → picker buttons; `[]` → title/copy + Sign in button | yes | same as Q7 |
 | Q9 | `components/canvas/observability/chrome.tsx:59` (`useServices`) | `api.nodes.list` | `{environmentId}` | array **order** (index `i` picks the tone `SERVICE_TONES[i % 6]`), `id`, `name` | yes | `useListNodes` ← `GET /api/environments/{environmentId}/nodes` → `NodeView[]`; key `["/api/environments/{id}/nodes"]`; topic `/api/environments/{id}` |
 | Q10 | `components/canvas/topbar.tsx:25` (`ShipButton`) | `api.nodes.list` | `{environmentId}` | `id` only (set of alive node ids for Retry) | yes | same as Q9 |
 | Q11 | `components/canvas/use-synced-graph.ts:14` | `api.nodes.list` | `{environmentId}` | everything `toCanvasNodes` maps (section 8) | crit | same as Q9 |
@@ -448,7 +448,7 @@ project slug when visible to the caller.
 | Function | Shape |
 | --- | --- |
 | `logSinks.get` | `{kind: "axiom", domain, dataset, traces: string \| null, org: string \| null, tokenHint: "…<last4>"} \| null`; the web's `Sink` type (`chrome.tsx:14`) is `{domain, dataset, traces, org}` |
-| `logSinks.pendingOrgs` | `[{id, name}] \| null` |
+| `logSinks.pendingOrgs` | `[{id, name}]` (empty when none) |
 | `logSinks.beginAxiomSignIn` | `{url}` |
 | `logSinks.signInAxiom` | `{choose: true} \| {choose: false, dataset, org}` |
 | `logSinks.chooseAxiomOrg` | `{dataset, org}` |
@@ -694,7 +694,7 @@ in-flight fetch). This keeps components free of query-key knowledge.
 
 | Convex behaviour | Target equivalent |
 | --- | --- |
-| `useQuery` returns `undefined` while loading, the value (possibly `null`) after | `data` is `undefined` while pending. Nullable reads return 200 with an envelope whose field may be `null` (`{project: …\|null}`, `{deployment: …\|null}`, `{sink: …\|null}`, `{orgs: …\|null}`, `{tracing: …\|null}`, `{summary: …\|null}`, `{invitation: …\|null}`). Never a 404 for "not found or not yours" on these: a 404 would become an error with retries. Components read `data?.project` and keep the `undefined` / `null` distinction. |
+| `useQuery` returns `undefined` while loading, the value (possibly `null`) after | `data` is `undefined` while pending. Nullable reads return 200 with an envelope whose field may be `null` (`{project: …\|null}`, `{deployment: …\|null}`, `{sink: …\|null}`, `{tracing: …\|null}`, `{summary: …\|null}`, `{invitation: …\|null}`). Never a 404 for "not found or not yours" on these: a 404 would become an error with retries. Components read `data?.project` and keep the `undefined` / `null` distinction. |
 | `useQuery(fn, "skip")` | `enabled: false` (Q14: `enabled: !!deploymentId`) |
 | A query that throws rethrows during render (no error boundary in the app) | TanStack exposes `error`; do not use `throwOnError`. Only Q21 and Q16 could throw today. |
 | Query result objects are new on every update | TanStack structural sharing keeps references stable when content is equal. `ReferencePalette` keys its pages on `JSON.stringify(sources)` to survive identical re-queries; that stays correct and becomes cheaper. `useSyncedGraph` re-merges only on real changes. |

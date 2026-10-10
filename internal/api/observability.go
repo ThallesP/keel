@@ -19,7 +19,7 @@ type ConnectAxiomResult struct {
 }
 
 type PendingAxiomOrgs struct {
-	Orgs []domain.AxiomOrgChoice `json:"orgs" nullable:"true" doc:"null when no sign-in waits for an org pick"`
+	Orgs []domain.AxiomOrgChoice `json:"orgs" doc:"empty when no sign-in waits for an org pick"`
 }
 
 type BeginAxiomSignInRequest struct {

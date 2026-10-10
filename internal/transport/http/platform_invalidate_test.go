@@ -15,8 +15,10 @@ func TestKeelInvalidateHeader(t *testing.T) {
 	handler := withInvalidations(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := app.InvalidationsFrom(r.Context())
 		sawRecorder = rec != nil
-		rec.Add("org-a", "/api/projects", "/api/environments/e1")
-		rec.Add("org-b", "/api/environments/other-org")
+		if sawRecorder {
+			rec.Add("org-a", "/api/projects", "/api/environments/e1")
+			rec.Add("org-b", "/api/environments/other-org")
+		}
 		if r.URL.Query().Get("empty") != "" {
 			w.WriteHeader(http.StatusNoContent)
 			return

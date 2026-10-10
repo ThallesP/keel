@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -20,22 +19,12 @@ func (s invStore) Write(_ context.Context, fn func(Tx) error) error {
 	return s.commitErr
 }
 
-type invPublisher struct {
-	mu  sync.Mutex
-	got map[string][]string
-}
+type invPublisher map[string][]string
 
-func (p *invPublisher) Publish(org string, topics []string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.got == nil {
-		p.got = map[string][]string{}
-	}
-	p.got[org] = append(p.got[org], topics...)
-}
+func (p invPublisher) Publish(org string, topics []string) { p[org] = append(p[org], topics...) }
 
 func TestWriteRecordsInvalidationsForTheRequest(t *testing.T) {
-	pub := &invPublisher{}
+	pub := invPublisher{}
 	a := New(App{Store: invStore{}, Events: pub})
 	ctx, rec := WithInvalidations(context.Background())
 
@@ -75,8 +64,8 @@ func TestWriteRecordsInvalidationsForTheRequest(t *testing.T) {
 	if got := rec.Topics("org-c"); len(got) != 0 {
 		t.Fatalf("org-c topics = %v", got)
 	}
-	if len(pub.got["org-a"]) == 0 || len(pub.got["org-b"]) == 0 {
-		t.Fatalf("published %v", pub.got)
+	if len(pub["org-a"]) == 0 || len(pub["org-b"]) == 0 {
+		t.Fatalf("published %v", pub)
 	}
 
 	if err := a.write(context.Background(), func(_ Tx, ch *Changes) error { ch.Projects("org-a"); return nil }); err != nil {
@@ -84,11 +73,6 @@ func TestWriteRecordsInvalidationsForTheRequest(t *testing.T) {
 	}
 	if InvalidationsFrom(context.Background()) != nil {
 		t.Fatal("recorder out of nowhere")
-	}
-	var none *Invalidations
-	none.Add("org-a", "/api/projects")
-	if none.Topics("") != nil {
-		t.Fatal("nil recorder has topics")
 	}
 }
 

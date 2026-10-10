@@ -11,11 +11,7 @@ const InvalidateHeader = "Keel-Invalidate"
 
 func withInvalidations(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authSafeMethod(r.Method) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
+		if authSafeMethod(r.Method) || !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

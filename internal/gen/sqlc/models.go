@@ -35,7 +35,6 @@ type Cluster struct {
 type Deployment struct {
 	ID            string
 	EnvironmentID string
-	Sha           *string
 	Message       string
 	Status        string
 	StartedAt     int64

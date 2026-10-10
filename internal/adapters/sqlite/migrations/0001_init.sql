@@ -123,8 +123,7 @@ CREATE TABLE nodes (
 );
 CREATE INDEX nodes_by_environment ON nodes(environment_id);
 -- Node names are unique per environment: `${{ name.KEY }}` references resolve by name
--- (docs/go/spec/projects.md section 0). The use cases still check first and map a violation to
--- the same message.
+-- (docs/go/spec/projects.md section 0). A violation surfaces as app.ErrCanvasTaken.
 CREATE UNIQUE INDEX nodes_environment_name ON nodes(environment_id, name);
 
 -- A node's public endpoints. Domains and public ports are unique across the install.
@@ -159,7 +158,6 @@ CREATE TABLE variables (
 CREATE TABLE deployments (
   id             TEXT PRIMARY KEY,
   environment_id TEXT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
-  sha            TEXT,
   message        TEXT NOT NULL,
   status         TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed')),
   started_at     INTEGER NOT NULL,

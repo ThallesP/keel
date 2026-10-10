@@ -19,7 +19,7 @@ func (q *Queries) DeployDeleteSteps(ctx context.Context, deploymentID string) er
 }
 
 const deployGet = `-- name: DeployGet :one
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments WHERE id = ?
+SELECT id, environment_id, message, status, started_at, finished_at FROM deployments WHERE id = ?
 `
 
 func (q *Queries) DeployGet(ctx context.Context, id string) (Deployment, error) {
@@ -28,7 +28,6 @@ func (q *Queries) DeployGet(ctx context.Context, id string) (Deployment, error) 
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
-		&i.Sha,
 		&i.Message,
 		&i.Status,
 		&i.StartedAt,
@@ -140,7 +139,7 @@ func (q *Queries) DeployInsertStep(ctx context.Context, arg DeployInsertStepPara
 }
 
 const deployLatest = `-- name: DeployLatest :one
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments WHERE environment_id = ?
+SELECT id, environment_id, message, status, started_at, finished_at FROM deployments WHERE environment_id = ?
 ORDER BY started_at DESC, rowid DESC LIMIT 1
 `
 
@@ -150,7 +149,6 @@ func (q *Queries) DeployLatest(ctx context.Context, environmentID string) (Deplo
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
-		&i.Sha,
 		&i.Message,
 		&i.Status,
 		&i.StartedAt,
@@ -220,7 +218,7 @@ func (q *Queries) DeployListOrganizationIDs(ctx context.Context) ([]string, erro
 }
 
 const deployListRecent = `-- name: DeployListRecent :many
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments WHERE environment_id = ?
+SELECT id, environment_id, message, status, started_at, finished_at FROM deployments WHERE environment_id = ?
 ORDER BY started_at DESC, rowid DESC LIMIT ?
 `
 
@@ -241,7 +239,6 @@ func (q *Queries) DeployListRecent(ctx context.Context, arg DeployListRecentPara
 		if err := rows.Scan(
 			&i.ID,
 			&i.EnvironmentID,
-			&i.Sha,
 			&i.Message,
 			&i.Status,
 			&i.StartedAt,
@@ -261,7 +258,7 @@ func (q *Queries) DeployListRecent(ctx context.Context, arg DeployListRecentPara
 }
 
 const deployListRunning = `-- name: DeployListRunning :many
-SELECT id, environment_id, sha, message, status, started_at, finished_at FROM deployments
+SELECT id, environment_id, message, status, started_at, finished_at FROM deployments
 WHERE status = 'running' AND (environment_id = ?1 OR ?1 = '')
 ORDER BY started_at, rowid
 `
@@ -278,7 +275,6 @@ func (q *Queries) DeployListRunning(ctx context.Context, environmentID string) (
 		if err := rows.Scan(
 			&i.ID,
 			&i.EnvironmentID,
-			&i.Sha,
 			&i.Message,
 			&i.Status,
 			&i.StartedAt,

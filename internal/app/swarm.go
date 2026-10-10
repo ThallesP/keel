@@ -136,13 +136,14 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	record := context.WithoutCancel(parent)
 	id := req.nodeID
 	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
+	superseded := func(revision int) { step(stepFailed, "superseded by revision "+strconv.Itoa(revision)) }
 	fail := func(err error) {
 		if errors.Is(context.Cause(parent), errApplySuperseded) {
 			rev, _, rerr := a.wantedRevision(record, id)
 			if rerr != nil || rev <= req.revision {
 				rev = req.revision + 1
 			}
-			a.applySuperseded(record, req, rev)
+			superseded(rev)
 			return
 		}
 		if parent.Err() != nil {
@@ -163,7 +164,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 	if in.desired.Revision > req.revision {
-		a.applySuperseded(record, req, in.desired.Revision)
+		superseded(in.desired.Revision)
 		return
 	}
 	image := in.desired.Image
@@ -199,7 +200,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 	if rev > req.revision {
-		a.applySuperseded(record, req, rev)
+		superseded(rev)
 		return
 	}
 
@@ -261,10 +262,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		a.ScheduleProxySync()
 	}
 	a.scheduleObserve(record, id, observeDebounce, 0)
-}
-
-func (a *App) applySuperseded(ctx context.Context, req applyRequest, revision int) {
-	a.writeStep(ctx, req.deploymentID, req.nodeID, stepFailed, "superseded by revision "+strconv.Itoa(revision))
 }
 
 func (a *App) createOrUpdate(ctx context.Context, spec ServiceSpec) (bool, error) {

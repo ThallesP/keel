@@ -28,11 +28,12 @@ func main() {
 			}
 			for _, group := range f.Comments {
 				for _, c := range group.List {
-					if isDirective(c.Text) {
+					if strings.HasPrefix(c.Text, "//go:") || strings.HasPrefix(c.Text, "//line ") {
 						continue
 					}
 					found++
-					fmt.Printf("%s: %s\n", fset.Position(c.Pos()), firstLine(c.Text))
+					line, _, _ := strings.Cut(c.Text, "\n")
+					fmt.Printf("%s: %s\n", fset.Position(c.Pos()), line)
 				}
 			}
 		}
@@ -41,15 +42,6 @@ func main() {
 		fmt.Printf("\n%d comments. Go code carries none (CLAUDE.md, Code rules): say it with a name, a type or a test, and put the reason in docs/ or the commit message.\n", found)
 		os.Exit(1)
 	}
-}
-
-func isDirective(text string) bool {
-	return strings.HasPrefix(text, "//go:") || strings.HasPrefix(text, "//line ")
-}
-
-func firstLine(text string) string {
-	line, _, _ := strings.Cut(text, "\n")
-	return line
 }
 
 func fail(err error) {

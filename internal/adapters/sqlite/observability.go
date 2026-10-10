@@ -125,11 +125,7 @@ func (t *tx) AxiomPendingOf(organizationID string) (app.AxiomPending, error) {
 }
 
 func (t *tx) StashAxiomPending(p app.AxiomPending) error {
-	orgs := p.Orgs
-	if orgs == nil {
-		orgs = []domain.AxiomOrg{}
-	}
-	b, err := json.Marshal(orgs)
+	b, err := json.Marshal(p.Orgs)
 	if err != nil {
 		return err
 	}

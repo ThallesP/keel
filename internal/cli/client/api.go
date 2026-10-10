@@ -46,7 +46,7 @@ func (c *Client) Services(ctx context.Context, environmentID string) ([]Service,
 	}
 	services := []Service{}
 	for _, n := range out.Nodes {
-		if n.Type == "group" {
+		if n.Type == domain.NodeGroup {
 			continue
 		}
 		services = append(services, serviceOf(n))
@@ -63,7 +63,7 @@ func (c *Client) Variables(ctx context.Context, serviceID string) ([]api.Variabl
 }
 
 func (c *Client) CreateService(ctx context.Context, environmentID, name, image string, port, replicas *int) (*Service, error) {
-	in := api.CreateNodeRequest{Type: "service", Name: name, Image: &image, Port: port, Replicas: replicas}
+	in := api.CreateNodeRequest{Type: domain.NodeService, Name: name, Image: &image, Port: port, Replicas: replicas}
 	var created api.CreatedNode
 	if err := c.call(ctx, http.MethodPost, apiPath("/api/environments/%s/nodes", environmentID), nil, in, &created); err != nil {
 		return nil, err

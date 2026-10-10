@@ -12,6 +12,7 @@ import (
 
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/output"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 const defaultWait = 10 * time.Minute
@@ -131,13 +132,13 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 		}
 		printed = len(d.Log)
 		switch d.Status {
-		case "running":
+		case domain.DeploymentRunning:
 			select {
 			case <-ctx.Done():
 			case <-time.After(time.Second):
 			}
 			continue
-		case "success":
+		case domain.DeploymentSuccess:
 			a.printDeployment(d, func(w io.Writer) {
 				fmt.Fprintf(w, "Deployed: %s in %s\n", d.Message, duration(d))
 			})
@@ -145,7 +146,7 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 		}
 		var failed []string
 		for _, step := range d.Steps {
-			if step.Status == "failed" && step.ServiceID != "" {
+			if step.Status == domain.StepFailed && step.ServiceID != "" {
 				failed = append(failed, step.Label)
 			}
 		}
@@ -260,7 +261,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 				}
 				return output.Errorf(output.CodeDeploymentNotFound, "keel deployment list <service>", "%s", what)
 			}
-			if wait && d.Status != "success" {
+			if wait && d.Status != domain.DeploymentSuccess {
 				var services []client.Service
 				if env != nil {
 					services, _ = s.api.Services(ctx, env.ID)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ThallesP/keel/internal/cli/client"
 	"github.com/ThallesP/keel/internal/cli/output"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 func (a *app) tracingCmd() *cobra.Command {
@@ -102,9 +103,9 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 				}
 				fmt.Fprintf(w, "Tracing for %s: %s\n", svc.Name, state)
 				switch tracing.Store {
-				case "off":
+				case domain.TracesOff:
 					fmt.Fprintln(w, "Nowhere to send spans yet: open Observability in the dashboard and Sign in with Axiom")
-				case "old":
+				case domain.TracesOld:
 					fmt.Fprintln(w, "This Axiom connection predates traces: Sign in with Axiom again on Observability")
 				}
 				if !tracing.Enabled {
@@ -145,7 +146,7 @@ with traces (TRACES_OFF otherwise).`,
 			if err != nil {
 				return err
 			}
-			if svc.Type != "service" {
+			if svc.Type != domain.NodeService {
 				return output.Errorf(output.CodeInvalidInput, "Pick a service: keel service list",
 					"%s is a %s; only services can be traced", svc.Name, svc.Type)
 			}

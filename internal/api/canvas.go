@@ -72,40 +72,40 @@ type NodeDeploy struct {
 }
 
 type NodeView struct {
-	ID               string         `json:"id"`
-	Type             string         `json:"type" enum:"service,database,cache,volume,group"`
-	Name             string         `json:"name"`
-	ParentID         string         `json:"parentId,omitempty" doc:"The group it is in; position is then relative to it"`
-	Position         Position       `json:"position"`
-	Config           NodeConfig     `json:"config"`
-	Dirty            bool           `json:"dirty" doc:"Has a staged change (the CLI's staged)"`
-	Status           string         `json:"status" enum:"healthy,done,deploying,stopping,error,stopped,pending"`
-	Image            string         `json:"image,omitempty"`
-	Port             *int           `json:"port,omitempty"`
-	Replicas         int            `json:"replicas"`
-	Running          int            `json:"running"`
-	Revision         int            `json:"revision" doc:"0 = never shipped"`
-	DeployedRevision *int           `json:"deployedRevision,omitempty"`
-	Public           bool           `json:"public" doc:"Has at least one endpoint"`
-	PublicURL        string         `json:"publicUrl,omitempty" doc:"The first http endpoint's address"`
-	Endpoints        []EndpointView `json:"endpoints"`
-	Error            string         `json:"error,omitempty"`
-	Deploy           *NodeDeploy    `json:"deploy,omitempty" doc:"Only while deploying"`
-	StoppedAt        *int64         `json:"stoppedAt,omitempty" doc:"When the stop shipped (stopping, stopped)"`
-	FinishedAt       *int64         `json:"finishedAt,omitempty" doc:"When a one-shot run finished (done)"`
+	ID               string            `json:"id"`
+	Type             domain.NodeType   `json:"type" enum:"service,database,cache,volume,group"`
+	Name             string            `json:"name"`
+	ParentID         string            `json:"parentId,omitempty" doc:"The group it is in; position is then relative to it"`
+	Position         Position          `json:"position"`
+	Config           NodeConfig        `json:"config"`
+	Dirty            bool              `json:"dirty" doc:"Has a staged change (the CLI's staged)"`
+	Status           domain.NodeStatus `json:"status" enum:"healthy,done,deploying,stopping,error,stopped,pending"`
+	Image            string            `json:"image,omitempty"`
+	Port             *int              `json:"port,omitempty"`
+	Replicas         int               `json:"replicas"`
+	Running          int               `json:"running"`
+	Revision         int               `json:"revision" doc:"0 = never shipped"`
+	DeployedRevision *int              `json:"deployedRevision,omitempty"`
+	Public           bool              `json:"public" doc:"Has at least one endpoint"`
+	PublicURL        string            `json:"publicUrl,omitempty" doc:"The first http endpoint's address"`
+	Endpoints        []EndpointView    `json:"endpoints"`
+	Error            string            `json:"error,omitempty"`
+	Deploy           *NodeDeploy       `json:"deploy,omitempty" doc:"Only while deploying"`
+	StoppedAt        *int64            `json:"stoppedAt,omitempty" doc:"When the stop shipped (stopping, stopped)"`
+	FinishedAt       *int64            `json:"finishedAt,omitempty" doc:"When a one-shot run finished (done)"`
 }
 
 func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	status := domain.DeriveStatus(n)
 	v := NodeView{
 		ID:        n.ID,
-		Type:      string(n.Type),
+		Type:      n.Type,
 		Name:      n.Name,
 		ParentID:  n.ParentID,
 		Position:  Position(n.Position),
 		Config:    NodeConfig(n.Config),
 		Dirty:     n.Dirty,
-		Status:    string(status),
+		Status:    status,
 		Public:    len(n.Endpoints) > 0,
 		Endpoints: make([]EndpointView, 0, len(n.Endpoints)),
 	}

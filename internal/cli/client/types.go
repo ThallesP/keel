@@ -9,17 +9,17 @@ import (
 )
 
 type Service struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Status    string `json:"status"`
-	Image     string `json:"image,omitempty"`
-	Port      int    `json:"port,omitempty"`
-	Replicas  int    `json:"replicas"`
-	Running   int    `json:"running"`
-	Staged    bool   `json:"staged"`
-	PublicURL string `json:"publicUrl,omitempty"`
-	Error     string `json:"error,omitempty"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Type      domain.NodeType   `json:"type"`
+	Status    domain.NodeStatus `json:"status"`
+	Image     string            `json:"image,omitempty"`
+	Port      int               `json:"port,omitempty"`
+	Replicas  int               `json:"replicas"`
+	Running   int               `json:"running"`
+	Staged    bool              `json:"staged"`
+	PublicURL string            `json:"publicUrl,omitempty"`
+	Error     string            `json:"error,omitempty"`
 }
 
 func serviceOf(n api.NodeView) Service {
@@ -78,19 +78,19 @@ type Tracing struct {
 }
 
 type Deployment struct {
-	ID         string     `json:"id"`
-	Status     string     `json:"status"`
-	Message    string     `json:"message"`
-	StartedAt  Time       `json:"startedAt"`
-	FinishedAt *Time      `json:"finishedAt,omitempty"`
-	Steps      []Step     `json:"steps"`
-	Log        []LogEntry `json:"log,omitempty"`
+	ID         string                  `json:"id"`
+	Status     domain.DeploymentStatus `json:"status"`
+	Message    string                  `json:"message"`
+	StartedAt  Time                    `json:"startedAt"`
+	FinishedAt *Time                   `json:"finishedAt,omitempty"`
+	Steps      []Step                  `json:"steps"`
+	Log        []LogEntry              `json:"log,omitempty"`
 }
 
 type Step struct {
-	ServiceID string `json:"serviceId,omitempty"`
-	Label     string `json:"label"`
-	Status    string `json:"status"`
+	ServiceID string            `json:"serviceId,omitempty"`
+	Label     string            `json:"label"`
+	Status    domain.StepStatus `json:"status"`
 }
 
 type LogEntry struct {

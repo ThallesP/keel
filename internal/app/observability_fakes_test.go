@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type obsFakeAxiom struct {
@@ -97,7 +98,7 @@ type obsFakeLogReader struct {
 	body     []byte
 	found    bool
 	err      error
-	tasks    []app.LogReplica
+	tasks    []domain.LogReplica
 	tasksErr error
 	service  string
 	tail     int
@@ -108,6 +109,6 @@ func (r *obsFakeLogReader) ReadServiceLogs(_ context.Context, service string, ta
 	return r.body, r.found, r.err
 }
 
-func (r *obsFakeLogReader) ListLogReplicas(context.Context, string) ([]app.LogReplica, error) {
+func (r *obsFakeLogReader) ListLogReplicas(context.Context, string) ([]domain.LogReplica, error) {
 	return r.tasks, r.tasksErr
 }

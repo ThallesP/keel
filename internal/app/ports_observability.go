@@ -152,11 +152,5 @@ func (e *OAuthError) Error() string {
 
 type LogReader interface {
 	ReadServiceLogs(ctx context.Context, service string, tail int) (body []byte, found bool, err error)
-	ListLogReplicas(ctx context.Context, service string) ([]LogReplica, error)
-}
-
-type LogReplica struct {
-	ID    string
-	Slot  int
-	State string
+	ListLogReplicas(ctx context.Context, service string) ([]domain.LogReplica, error)
 }

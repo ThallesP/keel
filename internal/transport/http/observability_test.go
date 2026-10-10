@@ -35,8 +35,8 @@ func (l *obsFakeLogs) ReadServiceLogs(_ context.Context, _ string, tail int) ([]
 	l.tail = tail
 	return nil, true, nil
 }
-func (l *obsFakeLogs) ListLogReplicas(context.Context, string) ([]app.LogReplica, error) {
-	return nil, nil
+func (l *obsFakeLogs) ListLogReplicas(context.Context, string) ([]domain.LogReplica, error) {
+	return []domain.LogReplica{}, nil
 }
 
 type obsHarness struct {

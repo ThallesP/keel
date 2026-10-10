@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"math"
 
@@ -91,13 +90,10 @@ func (a *App) dockerTail(ctx context.Context, nodeID string, n int) (domain.LogT
 	if !found {
 		return domain.LogTail{Source: domain.LogSourceDocker, Lines: []domain.ServiceLogLine{}, Replicas: []domain.LogReplica{}}, nil
 	}
-	tasks, err := a.Logs.ListLogReplicas(ctx, service)
+	replicas, err := a.Logs.ListLogReplicas(ctx, service)
 	if err != nil {
 		a.Log.Warn("logs: list replicas", "service", service, "err", err)
-	}
-	replicas := make([]domain.LogReplica, len(tasks))
-	for i, t := range tasks {
-		replicas[i] = domain.LogReplica{Task: t.ID, Slot: t.Slot, State: cmp.Or(t.State, "unknown")}
+		replicas = []domain.LogReplica{}
 	}
 	sortLogReplicas(replicas)
 	return domain.LogTail{Source: domain.LogSourceDocker, Lines: demuxDockerLogs(body), Replicas: replicas}, nil

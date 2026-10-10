@@ -16,7 +16,7 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 	logs := &obsFakeLogReader{
 		found: true,
 		body:  append(app.DockerFrame(1, "2026-10-08T12:00:01.000000001Z com.docker.swarm.task.id=t2 b\n"), app.DockerFrame(2, "2026-10-08T12:00:00Z com.docker.swarm.task.id=t1 a\n")...),
-		tasks: []app.LogReplica{{ID: "t2", Slot: 2, State: "running"}, {ID: "t1", Slot: 1, State: "shutdown"}, {ID: "t0", Slot: 1}},
+		tasks: []domain.LogReplica{{Task: "t2", Slot: 2, State: "running"}, {Task: "t1", Slot: 1, State: "shutdown"}, {Task: "t0", Slot: 1, State: "unknown"}},
 	}
 	e.app.Logs = logs
 	tail, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 5000)

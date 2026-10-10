@@ -1,6 +1,7 @@
 package swarm
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"strconv"
@@ -8,7 +9,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
 
-	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 func (s *Swarm) ReadServiceLogs(ctx context.Context, service string, tail int) ([]byte, bool, error) {
@@ -33,14 +34,14 @@ func (s *Swarm) ReadServiceLogs(ctx context.Context, service string, tail int) (
 	return body, true, nil
 }
 
-func (s *Swarm) ListLogReplicas(ctx context.Context, service string) ([]app.LogReplica, error) {
+func (s *Swarm) ListLogReplicas(ctx context.Context, service string) ([]domain.LogReplica, error) {
 	res, err := s.cli.TaskList(ctx, client.TaskListOptions{Filters: make(client.Filters).Add("service", service)})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]app.LogReplica, len(res.Items))
+	out := make([]domain.LogReplica, len(res.Items))
 	for i, t := range res.Items {
-		out[i] = app.LogReplica{ID: t.ID, Slot: t.Slot, State: string(t.Status.State)}
+		out[i] = domain.LogReplica{Task: t.ID, Slot: t.Slot, State: cmp.Or(string(t.Status.State), "unknown")}
 	}
 	return out, nil
 }

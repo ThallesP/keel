@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 func TestReadServiceLogs(t *testing.T) {
@@ -52,7 +52,7 @@ func TestListLogReplicas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(tasks, []app.LogReplica{{ID: "t1", Slot: 2, State: "running"}, {ID: "t0"}}) {
+	if !reflect.DeepEqual(tasks, []domain.LogReplica{{Task: "t1", Slot: 2, State: "running"}, {Task: "t0", State: "unknown"}}) {
 		t.Fatalf("tasks %+v", tasks)
 	}
 	if !strings.Contains(filters, `"service":{"svc-abc":true}`) {

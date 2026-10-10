@@ -282,7 +282,8 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	if created {
 		// Deleted between the check and the create: the delete's remove already ran against
 		// nothing, so take back the service we just made.
-		if _, wanted, err = a.wantedRevision(ctx, id); err != nil {
+		_, wanted, err = a.wantedRevision(ctx, id)
+		if err != nil {
 			fail(err)
 			return
 		}

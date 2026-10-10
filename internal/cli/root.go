@@ -64,9 +64,6 @@ Environment:
 The same binary runs Keel itself: keel serve (the control plane), keel proxy (its public edge),
 keel agent (on every Swarm node).`
 
-// Root is the keel command.
-func Root() *cobra.Command { return (&app{}).root() }
-
 // Execute runs the command line and returns the process exit code.
 func Execute(ctx context.Context) int {
 	client.UserAgent = "keel-cli/" + Version

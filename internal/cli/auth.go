@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -174,7 +175,7 @@ func (a *app) loginTarget(cmd *cobra.Command, cfg *config.Config, args []string,
 		if err != nil {
 			return "", nil, usage(cmd, "%v", err)
 		}
-		name = or(name, hostOf(webURL))
+		name = cmp.Or(name, hostOf(webURL))
 		if inst = cfg.Instances[name]; inst == nil || inst.URL != webURL {
 			inst = &config.Instance{URL: webURL}
 		}
@@ -251,10 +252,10 @@ func (a *app) logoutCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if inst.Token == "" {
-				// Only a pending login: nothing to revoke.
-			} else if err := client.New(inst.URL, inst.Token).SignOut(cmd.Context()); err != nil {
-				a.out.Warn("couldn't revoke the session on the server (%v); forgetting it here anyway", err)
+			if inst.Token != "" {
+				if err := client.New(inst.URL, inst.Token).SignOut(cmd.Context()); err != nil {
+					a.out.Warn("couldn't revoke the session on the server (%v); forgetting it here anyway", err)
+				}
 			}
 			cfg.RemoveInstance(name)
 			if err := saveConfig(cfg); err != nil {
@@ -327,11 +328,4 @@ to run keel where you can't log in, such as CI. It is a full session: treat it a
 			return nil
 		},
 	}
-}
-
-func or(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }

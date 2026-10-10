@@ -78,7 +78,7 @@ func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 	if inst == nil {
 		if name != "" && len(cfg.Instances) > 0 {
 			return "", nil, output.Errorf(output.CodeNotAuthenticated, "keel login <dashboard-url> --name "+name,
-				"Not logged in to an instance named %q (known: %s)", name, strings.Join(instanceNames(cfg), ", "))
+				"Not logged in to an instance named %q (known: %s)", name, strings.Join(slices.Sorted(maps.Keys(cfg.Instances)), ", "))
 		}
 		return "", nil, output.Errorf(output.CodeNotAuthenticated,
 			"keel login <dashboard-url>, or set KEEL_URL and KEEL_TOKEN", "Not logged in")
@@ -269,10 +269,6 @@ func normalizeURL(raw string) (string, error) {
 func hostOf(webURL string) string {
 	u, _ := url.Parse(webURL)
 	return u.Host
-}
-
-func instanceNames(cfg *config.Config) []string {
-	return slices.Sorted(maps.Keys(cfg.Instances))
 }
 
 func cwd() string {

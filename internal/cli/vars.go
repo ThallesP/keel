@@ -10,8 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-const masked = "••••••••"
-
 func (a *app) varCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "var",
@@ -103,7 +101,7 @@ func (a *app) varListCmd() *cobra.Command {
 
 func orMasked(s *string) string {
 	if s == nil {
-		return masked
+		return "••••••••"
 	}
 	return *s
 }

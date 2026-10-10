@@ -160,11 +160,9 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 			}
 		}
 		fix := "keel deployment get " + d.ID
-		if len(failed) > 0 {
-			fix = "keel logs " + failed[0]
-		}
 		what := d.Message
 		if len(failed) > 0 {
+			fix = "keel logs " + failed[0]
 			what = strings.Join(failed, ", ")
 		}
 		return &output.Error{
@@ -261,7 +259,6 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 				return err
 			}
 			var d *client.Deployment
-			var services []client.Service
 			if len(args) == 1 {
 				d, err = s.api.Deployment(ctx, args[0])
 			} else {
@@ -282,6 +279,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 				return output.Errorf(output.CodeDeploymentNotFound, "keel deployment list <service>", "%s", what)
 			}
 			if wait && d.Status != "success" { // await also turns a failed one into a non-zero exit
+				var services []client.Service
 				if _, env, err := a.project(ctx, s); err == nil {
 					services, _ = s.api.Services(ctx, env.ID)
 				}

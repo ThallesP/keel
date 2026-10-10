@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -120,12 +121,7 @@ func runEnv(shell []string, vars []client.Variable, tracing map[string]string, e
 	if tracing != nil {
 		ownEndpoint := set["OTEL_EXPORTER_OTLP_ENDPOINT"] || set["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]
 		add("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
-		keys := make([]string, 0, len(tracing))
-		for k := range tracing {
-			keys = append(keys, k)
-		}
-		slices.Sort(keys)
-		for _, k := range keys {
+		for _, k := range slices.Sorted(maps.Keys(tracing)) {
 			if k == "OTEL_EXPORTER_OTLP_HEADERS" && ownEndpoint {
 				continue
 			}

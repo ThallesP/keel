@@ -6,6 +6,7 @@ package client
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -155,9 +156,7 @@ func (c *Client) failure(what string, r *reply) *output.Error {
 	if code == "" {
 		return output.Errorf(output.CodeServer, "", "%s: HTTP %d: %s", what, r.status, snippet(r.body))
 	}
-	if msg == "" {
-		msg = or(p.Title, http.StatusText(r.status))
-	}
+	msg = cmp.Or(msg, p.Title, http.StatusText(r.status))
 	return withFix(code, msg, p.Slug, c.URL, r.header)
 }
 
@@ -235,9 +234,6 @@ func codeOfMessage(msg string) string {
 // translate turns a transport error into the CLI's: CANCELLED, TIMEOUT, NETWORK_ERROR, or
 // SERVER_ERROR for anything else.
 func translate(err error, webURL string) error {
-	if err == nil {
-		return nil
-	}
 	var oe *output.Error
 	if errors.As(err, &oe) {
 		return oe
@@ -286,13 +282,6 @@ func snippet(b []byte) string {
 		s = s[:200] + "…"
 	}
 	return s
-}
-
-func or(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 // apiPath fills the %s of an API path with ids, escaped: they may come from the user.

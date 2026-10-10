@@ -3,7 +3,7 @@
 # See docs/workers.md, "Cluster bootstrap". Idempotent: safe to re-run.
 # install.sh runs this before the control plane starts, because keel-proxy (deploy/compose.yml)
 # joins the `keel` overlay. The per-node agent (keel-agent) is not deployed here: `keel serve`
-# creates and updates it. `--swarm-only` is accepted for older callers and changes nothing.
+# creates and updates it.
 set -euo pipefail
 
 TAILSCALE_IP="${TAILSCALE_IP:-$(tailscale ip -4)}"

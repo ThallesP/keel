@@ -2,8 +2,6 @@
 # `keel proxy`, `keel agent` and the CLI, built from the root Dockerfile.
 #   main  -> :latest and :sha-<short>
 #   v1.2.3 tag -> :1.2.3 and :sha-<short>
-# The Convex-era images (keel-web, keel-functions, keel-worker, keel-proxy) are no longer built.
-# Their tags stay published on ghcr.io, so older installs and rollbacks keep pulling them.
 # ci.yml (Go and web checks, install.sh end to end) runs first and gates everything below:
 # nothing is pushed to the registry when it fails. Each platform then builds natively (arm64 on
 # GitHub's arm runners, no QEMU) and pushes by digest, and a merge job stitches the multi-arch

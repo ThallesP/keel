@@ -62,8 +62,8 @@ services:
     cap_add: [SYS_ADMIN, NET_BIND_SERVICE]
     security_opt: ["no-new-privileges:true"]
     environment:
-      # Caddy's storage and autosave stay where the caddy-based keel-proxy image kept them, so an
-      # upgrade keeps its certificates, ACME accounts and last config.
+      # Caddy's storage (/data/caddy) and autosave (/config/caddy) land in the volumes below, so
+      # certificates, ACME accounts and the last config survive restarts and upgrades.
       XDG_DATA_HOME: /data
       XDG_CONFIG_HOME: /config
       KEEL_PROXY_REPORT_URL: http://${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}/proxy/events
@@ -84,8 +84,6 @@ networks:
   keel:
     external: true
 
-# keel_convex-data (the Convex-era control plane's data) is not declared here: an upgrade leaves
-# it in place, untouched, for `keel import-convex`.
 volumes:
   keel-data:
   proxy-admin:

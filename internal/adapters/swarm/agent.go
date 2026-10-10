@@ -103,7 +103,7 @@ func (s *Swarm) removeStaleAgentSecrets(ctx context.Context, keep string) {
 		return
 	}
 	for _, sec := range res.Items {
-		if strings.HasPrefix(sec.Spec.Name, agentSecretPrefix) && sec.Spec.Name != keep {
+		if sec.Spec.Name != keep {
 			_, _ = s.cli.SecretRemove(ctx, sec.ID, client.SecretRemoveOptions{})
 		}
 	}

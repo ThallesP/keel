@@ -30,7 +30,7 @@ func TestCanvasCreateProject(t *testing.T) {
 	}{
 		{"   ", domain.CodeInvalidInput, "Project name: 1–60 characters"},
 		{strings.Repeat("a", 61), domain.CodeInvalidInput, "Project name: 1–60 characters"},
-		{strings.Repeat("😀", 31), domain.CodeInvalidInput, "Project name: 1–60 characters"},
+		{strings.Repeat("é", 61), domain.CodeInvalidInput, "Project name: 1–60 characters"},
 		{"!!!", domain.CodeInvalidInput, "Project name needs a letter or digit (a-z, 0-9)"},
 		{"Ação api", domain.CodeNameTaken, `Project "acao-api" already exists`},
 	}
@@ -38,8 +38,8 @@ func TestCanvasCreateProject(t *testing.T) {
 		_, err := k.app.CreateProject(k.ctx, a, c.name)
 		canvasWantErr(t, err, c.code, c.msg)
 	}
-	p, err = k.app.CreateProject(k.ctx, a, strings.Repeat("b", 60))
-	if err != nil || p.Project.Slug != strings.Repeat("b", 40) {
+	p, err = k.app.CreateProject(k.ctx, a, strings.Repeat("é", 60))
+	if err != nil || p.Project.Slug != strings.Repeat("e", 40) {
 		t.Fatalf("60 chars: %+v %v", p.Project, err)
 	}
 	if _, err := k.app.CreateProject(k.ctx, canvasMember(canvasOther), "Ação API"); err != nil {

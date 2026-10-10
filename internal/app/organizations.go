@@ -12,19 +12,20 @@ func authMembershipChanged(ch *Changes, org string) {
 	ch.Add(org, "/api/me")
 }
 
-func foundOrganization(tx Tx, ownerID string, now int64) (domain.Organization, error) {
-	org := domain.Organization{ID: domain.NewID(), Name: domain.DefaultOrganizationName, Slug: domain.DefaultOrganizationSlug, CreatedAt: now}
+func foundOrganization(tx Tx, ch *Changes, ownerID string, now int64) error {
+	org := domain.Organization{ID: domain.NewID(), Name: "Default", Slug: "default", CreatedAt: now}
 	if err := tx.AuthInsertOrganization(org); err != nil {
-		return domain.Organization{}, err
+		return err
 	}
 	err := tx.AuthInsertMember(domain.Member{ID: domain.NewID(), OrganizationID: org.ID, UserID: ownerID, Role: domain.RoleOwner, CreatedAt: now})
-	return org, err
+	if err != nil {
+		return err
+	}
+	authMembershipChanged(ch, org.ID)
+	return nil
 }
 
 func authFreshMember(tx Tx, actor domain.Actor) (domain.Member, error) {
-	if err := actor.RequireMember(); err != nil {
-		return domain.Member{}, err
-	}
 	m, err := tx.AuthMembership(actor.UserID)
 	if errors.Is(err, ErrNoRow) || (err == nil && m.OrganizationID != actor.OrganizationID) {
 		return domain.Member{}, domain.ErrNoOrganization
@@ -77,7 +78,7 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 			return err
 		}
 		if member {
-			return domain.Conflict(domain.MsgAlreadyMember)
+			return domain.Conflict("User is already a member of this organization")
 		}
 		if err := tx.AuthCancelPendingInvitations(m.OrganizationID, email, now); err != nil {
 			return err
@@ -87,7 +88,7 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 			return err
 		}
 		if n >= domain.InvitationLimit {
-			return domain.E(domain.CodeForbidden, domain.MsgInvitationLimit)
+			return domain.E(domain.CodeForbidden, "Invitation limit reached")
 		}
 		inv = domain.Invitation{
 			ID:             domain.NewSecret(16),
@@ -120,7 +121,7 @@ func (a *App) CancelInvitation(ctx context.Context, actor domain.Actor, id strin
 			return err
 		}
 		if !domain.CanManageInvitations(m.Role) {
-			return domain.E(domain.CodeForbidden, domain.MsgNotAllowedToCancel)
+			return domain.E(domain.CodeForbidden, "You are not allowed to cancel this invitation")
 		}
 		if !inv.Standing(a.Now()) {
 			return nil
@@ -146,9 +147,6 @@ func (a *App) GetInvitation(ctx context.Context, id string) (*PublicInvitation, 
 			return err
 		}
 		org, err := tx.AuthOrganization(inv.OrganizationID)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
 		if err != nil {
 			return err
 		}
@@ -172,18 +170,17 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 		if inv == nil {
 			return domain.NotFound(domain.MsgInvitationNotFound)
 		}
-		if !domain.SameUserEmail(inv.Email, actor.Email) {
-			return domain.E(domain.CodeForbidden, domain.MsgNotRecipient)
+		if inv.Email != actor.Email {
+			return domain.E(domain.CodeForbidden, "You are not the recipient of the invitation")
 		}
-		if _, err := tx.AuthMembership(actor.UserID); err == nil {
-			return domain.Conflict(domain.MsgAlreadyInOrganization)
-		} else if !errors.Is(err, ErrNoRow) {
+		_, err = tx.AuthMembership(actor.UserID)
+		if err == nil {
+			return domain.Conflict("You're already in an organization")
+		}
+		if !errors.Is(err, ErrNoRow) {
 			return err
 		}
 		org, err := tx.AuthOrganization(inv.OrganizationID)
-		if errors.Is(err, ErrNoRow) {
-			return domain.NotFound(domain.MsgInvitationNotFound)
-		}
 		if err != nil {
 			return err
 		}
@@ -192,7 +189,7 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 			return err
 		}
 		if n >= domain.MembershipLimit {
-			return domain.E(domain.CodeForbidden, domain.MsgMembershipLimit)
+			return domain.E(domain.CodeForbidden, "Organization membership limit reached")
 		}
 		if err := joinWithInvitation(tx, ch, *inv, actor.UserID, now); err != nil {
 			return err

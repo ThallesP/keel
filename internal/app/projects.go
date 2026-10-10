@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -17,14 +19,13 @@ type ProjectHome struct {
 	Environment domain.Environment
 }
 
-var canvasDefaultProject = struct{ Name, Slug string }{"acme-support", "acme-support"}
-
 func canvasInsertProject(tx Tx, org, name, slug string, now int64) (ProjectSummary, error) {
 	p := domain.Project{ID: domain.NewID(), OrganizationID: org, Name: name, Slug: slug, CreatedAt: now}
-	if err := tx.CanvasInsertProject(p); err != nil {
-		if errors.Is(err, ErrCanvasTaken) {
-			return ProjectSummary{}, canvasProjectExists(slug)
-		}
+	err := tx.CanvasInsertProject(p)
+	if errors.Is(err, ErrCanvasTaken) {
+		return ProjectSummary{}, domain.E(domain.CodeNameTaken, "Project %q already exists", slug)
+	}
+	if err != nil {
 		return ProjectSummary{}, err
 	}
 	env := domain.Environment{ID: domain.NewID(), ProjectID: p.ID, Name: "production", IsProduction: true, CreatedAt: now}
@@ -32,10 +33,6 @@ func canvasInsertProject(tx Tx, org, name, slug string, now int64) (ProjectSumma
 		return ProjectSummary{}, err
 	}
 	return ProjectSummary{Project: p, Environments: []domain.Environment{env}}, nil
-}
-
-func canvasProjectExists(slug string) error {
-	return domain.E(domain.CodeNameTaken, "Project \"%s\" already exists", slug)
 }
 
 func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (string, error) {
@@ -52,11 +49,12 @@ func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (str
 			slug = own[0].Slug
 			return nil
 		}
-		if _, err := canvasInsertProject(tx, actor.OrganizationID, canvasDefaultProject.Name, canvasDefaultProject.Slug, a.Now()); err != nil {
+		created, err := canvasInsertProject(tx, actor.OrganizationID, "acme-support", "acme-support", a.Now())
+		if err != nil {
 			return err
 		}
 		ch.Projects(actor.OrganizationID)
-		slug = canvasDefaultProject.Slug
+		slug = created.Project.Slug
 		return nil
 	})
 	return slug, err
@@ -66,21 +64,16 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 	if err := actor.RequireMember(); err != nil {
 		return ProjectSummary{}, err
 	}
+	name = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(name); n == 0 || n > 60 {
+		return ProjectSummary{}, domain.Invalid("Project name: 1–60 characters")
+	}
+	slug := domain.Slug(name)
+	if slug == "" {
+		return ProjectSummary{}, domain.Invalid("Project name needs a letter or digit (a-z, 0-9)")
+	}
 	var out ProjectSummary
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		name := domain.TrimJS(name)
-		if n := domain.UTF16Len(name); n == 0 || n > 60 {
-			return domain.Invalid("Project name: 1–60 characters")
-		}
-		slug := domain.Slug(name)
-		if slug == "" {
-			return domain.Invalid("Project name needs a letter or digit (a-z, 0-9)")
-		}
-		if _, err := tx.CanvasProjectBySlug(actor.OrganizationID, slug); err == nil {
-			return canvasProjectExists(slug)
-		} else if !errors.Is(err, ErrNoRow) {
-			return err
-		}
 		created, err := canvasInsertProject(tx, actor.OrganizationID, name, slug, a.Now())
 		if err != nil {
 			return err
@@ -93,11 +86,11 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 }
 
 func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string) (*ProjectHome, error) {
+	if actor.OrganizationID == "" {
+		return nil, nil
+	}
 	var out *ProjectHome
 	err := a.read(ctx, func(tx Tx) error {
-		if actor.OrganizationID == "" {
-			return nil
-		}
 		p, err := tx.CanvasProjectBySlug(actor.OrganizationID, slug)
 		if errors.Is(err, ErrNoRow) {
 			return nil
@@ -106,7 +99,7 @@ func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string
 			return err
 		}
 		envs, err := tx.CanvasEnvironments(p.ID)
-		if err != nil || len(envs) == 0 {
+		if err != nil {
 			return err
 		}
 		out = &ProjectHome{Project: p, Environment: canvasProductionFirst(envs)[0]}

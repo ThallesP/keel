@@ -19,11 +19,9 @@ const (
 type DeviceCode struct {
 	ID           string
 	UserCode     string
-	ClientID     string
 	Status       DeviceStatus
 	UserID       string
-	IntervalS    int
-	LastPolledAt *int64
+	LastPolledAt int64
 	ExpiresAt    int64
 	CreatedAt    int64
 }
@@ -53,7 +51,7 @@ const (
 )
 
 func DecidePoll(dc DeviceCode, now int64) (PollAction, *DeviceRefusal) {
-	if dc.LastPolledAt != nil && now-*dc.LastPolledAt < int64(dc.IntervalS)*1000 {
+	if now-dc.LastPolledAt < DeviceIntervalS*1000 {
 		return PollRefuse, &DeviceRefusal{400, "slow_down", "Polling too frequently"}
 	}
 	if dc.Expired(now) {

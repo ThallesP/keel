@@ -24,8 +24,6 @@ type Store struct {
 	r *sql.DB
 }
 
-var _ app.Store = (*Store)(nil)
-
 func Open(ctx context.Context, path string) (*Store, error) {
 	dsn := func(lock string) string {
 		return "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)" +
@@ -112,8 +110,7 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 		return err
 	}
 	defer sqlTx.Rollback()
-	t := &tx{ctx: ctx, q: sqlc.New(sqlTx), sql: sqlTx}
-	if err := fn(t); err != nil {
+	if err := fn(&tx{ctx: ctx, q: sqlc.New(sqlTx)}); err != nil {
 		return err
 	}
 	return sqlTx.Commit()
@@ -122,10 +119,7 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 type tx struct {
 	ctx context.Context
 	q   *sqlc.Queries
-	sql *sql.Tx
 }
-
-var _ app.Tx = (*tx)(nil)
 
 func noRow(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {

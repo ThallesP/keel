@@ -35,7 +35,7 @@ func authServe(t *testing.T, siteURL string) *authHTTP {
 	h := &authHTTP{t: t, now: 1_800_000_000_000}
 	a := app.New(app.App{
 		Store: store, Config: app.Config{SiteURL: siteURL},
-		Passwords: &password.Hasher{Params: password.Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}},
+		Passwords: &password.Hasher{Memory: 64, Time: 1, Threads: 1},
 		Now:       func() int64 { return h.now },
 	})
 	h.srv = httptest.NewServer(transport.New(a, transport.Options{}))

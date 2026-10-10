@@ -36,11 +36,6 @@ type Organization struct {
 	CreatedAt int64
 }
 
-const (
-	DefaultOrganizationName = "Default"
-	DefaultOrganizationSlug = "default"
-)
-
 type Member struct {
 	ID             string
 	OrganizationID string

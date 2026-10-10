@@ -41,8 +41,8 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client Clie
 			return err
 		}
 		return tx.AuthInsertDeviceCode(domain.DeviceCode{
-			ID: domain.NewID(), UserCode: userCode, ClientID: clientID, Status: domain.DevicePending,
-			IntervalS: domain.DeviceIntervalS, ExpiresAt: now + domain.DeviceCodeTTL, CreatedAt: now,
+			ID: domain.NewID(), UserCode: userCode, Status: domain.DevicePending,
+			ExpiresAt: now + domain.DeviceCodeTTL, CreatedAt: now,
 		}, domain.HashSecret(deviceCode))
 	})
 	if err != nil {
@@ -95,11 +95,8 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 				return err
 			}
 			s, err := issueSession(tx, user, now, client)
-			if err != nil {
-				return err
-			}
 			token = s.Token
-			return nil
+			return err
 		default:
 			return nil
 		}
@@ -120,10 +117,7 @@ func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode 
 		return err
 	})
 	if err == nil && actor.SignedIn() {
-		err = a.write(ctx, func(tx Tx, _ *Changes) error {
-			_, err := tx.AuthBindDeviceCode(dc.ID, actor.UserID)
-			return err
-		})
+		err = a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthBindDeviceCode(dc.ID, actor.UserID) })
 	}
 	if err != nil {
 		return DeviceView{}, err
@@ -147,8 +141,7 @@ func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCod
 		if approve {
 			status = domain.DeviceApproved
 		}
-		_, err = tx.AuthDecideDeviceCode(dc.ID, status, actor.UserID)
-		return err
+		return tx.AuthDecideDeviceCode(dc.ID, status, actor.UserID)
 	})
 }
 

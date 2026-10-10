@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -39,76 +38,51 @@ type Me struct {
 	Organization *MyOrganization
 }
 
-var errPasswordsMissing = errors.New("app: Passwords is not set")
-
-func authClip(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
-}
-
 func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, error) {
 	if token == "" {
 		return domain.Actor{}, nil
 	}
-	hash := domain.HashSecret(token)
-	now := a.Now()
-	var (
-		found  bool
-		s      domain.Session
-		u      domain.User
-		member domain.Member
-		inOrg  bool
-	)
+	var actor domain.Actor
 	err := a.read(ctx, func(tx Tx) error {
-		var err error
-		if s, err = tx.AuthSession(hash); err != nil {
-			return authMissing(err)
-		}
-		if u, err = tx.AuthUser(s.UserID); err != nil {
-			return authMissing(err)
-		}
-		found = true
-		member, err = tx.AuthMembership(u.ID)
+		s, err := tx.AuthSession(domain.HashSecret(token))
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
-		inOrg = err == nil
+		if err != nil {
+			return err
+		}
+		u, err := tx.AuthUser(s.UserID)
+		if err != nil {
+			return err
+		}
+		actor = domain.Actor{UserID: u.ID, Email: u.Email, Name: u.Name, SessionID: s.ID, SessionExpiresAt: s.ExpiresAt}
+		m, err := tx.AuthMembership(u.ID)
+		if errors.Is(err, ErrNoRow) {
+			return nil
+		}
+		actor.OrganizationID, actor.Role = m.OrganizationID, m.Role
 		return err
 	})
-	if err != nil || !found {
+	if err != nil || !actor.SignedIn() {
 		return domain.Actor{}, err
 	}
-	if domain.SessionExpired(s.ExpiresAt, now) {
-		if err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthDeleteSession(s.ID) }); err != nil {
+	now := a.Now()
+	if domain.SessionExpired(actor.SessionExpiresAt, now) {
+		if err := a.SignOut(ctx, actor); err != nil {
 			a.Log.Warn("delete expired session", "err", err)
-		} else if a.Conns != nil {
-			a.Conns.DisconnectSession(s.ID)
 		}
 		return domain.Actor{}, nil
 	}
-	actor := domain.Actor{UserID: u.ID, Email: u.Email, Name: u.Name, SessionID: s.ID, SessionExpiresAt: s.ExpiresAt}
-	if inOrg {
-		actor.OrganizationID, actor.Role = member.OrganizationID, member.Role
+	if !domain.SessionNeedsRenewal(actor.SessionExpiresAt, now) {
+		return actor, nil
 	}
-	if domain.SessionNeedsRenewal(s.ExpiresAt, now) {
-		expires := now + domain.SessionTTL
-		err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthExtendSession(s.ID, expires, now) })
-		if err != nil {
-			a.Log.Warn("renew session", "err", err)
-		} else {
-			actor.SessionExpiresAt, actor.SessionRenewed = expires, true
-		}
+	expires := now + domain.SessionTTL
+	if err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthExtendSession(actor.SessionID, expires, now) }); err != nil {
+		a.Log.Warn("renew session", "err", err)
+		return actor, nil
 	}
+	actor.SessionExpiresAt, actor.SessionRenewed = expires, true
 	return actor, nil
-}
-
-func authMissing(err error) error {
-	if errors.Is(err, ErrNoRow) {
-		return nil
-	}
-	return err
 }
 
 func (a *App) SignUpOpen(ctx context.Context) (bool, error) {
@@ -118,9 +92,6 @@ func (a *App) SignUpOpen(ctx context.Context) (bool, error) {
 }
 
 func standingInvitation(tx Tx, id string, now int64) (*domain.Invitation, error) {
-	if id == "" {
-		return nil, nil
-	}
 	inv, err := tx.AuthInvitation(id)
 	if errors.Is(err, ErrNoRow) {
 		return nil, nil
@@ -134,59 +105,54 @@ func standingInvitation(tx Tx, id string, now int64) (*domain.Invitation, error)
 	return &inv, nil
 }
 
-func signUpRule(tx Tx, email, invitationID string, now int64) (*domain.Invitation, bool, error) {
-	if _, err := tx.AuthCredentials(email); err == nil {
-		return nil, false, domain.Conflict(domain.MsgUserExists)
-	} else if !errors.Is(err, ErrNoRow) {
-		return nil, false, err
+func signUpRule(tx Tx, email, invitationID string, now int64) (*domain.Invitation, error) {
+	_, err := tx.AuthCredentials(email)
+	if err == nil {
+		return nil, domain.Conflict("User already exists. Use another email.")
+	}
+	if !errors.Is(err, ErrNoRow) {
+		return nil, err
 	}
 	someone, err := tx.AuthAnyUser()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	inv, err := standingInvitation(tx, invitationID, now)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	if inv != nil && !domain.SameUserEmail(inv.Email, email) {
+	if inv != nil && inv.Email != email {
 		inv = nil
 	}
 	if someone && inv == nil {
-		return nil, false, domain.E(domain.CodeForbidden, domain.MsgSignUpByInvitation)
+		return nil, domain.E(domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 	}
-	return inv, !someone, nil
+	return inv, nil
 }
 
 func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
-	email := strings.TrimSpace(in.Email)
+	email := domain.NormalizeUserEmail(in.Email)
 	if !domain.ValidUserEmail(email) {
 		return SignedIn{}, domain.Invalid(domain.MsgInvalidEmail)
 	}
 	if err := domain.ValidPassword(in.Password); err != nil {
 		return SignedIn{}, err
 	}
-	if a.Passwords == nil {
-		return SignedIn{}, errPasswordsMissing
-	}
 	if err := a.limited(a.limits().perIP, in.Client.IP); err != nil {
 		return SignedIn{}, err
 	}
-	email = domain.NormalizeUserEmail(email)
 	err := a.read(ctx, func(tx Tx) error {
-		_, _, err := signUpRule(tx, email, in.InvitationID, a.Now())
+		_, err := signUpRule(tx, email, in.InvitationID, a.Now())
 		return err
 	})
 	if err != nil {
 		return SignedIn{}, err
 	}
-	hash, err := a.Passwords.Hash(in.Password)
-	if err != nil {
-		return SignedIn{}, err
-	}
+	hash := a.Passwords.Hash(in.Password)
 	var out SignedIn
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		now := a.Now()
-		inv, first, err := signUpRule(tx, email, in.InvitationID, now)
+		inv, err := signUpRule(tx, email, in.InvitationID, now)
 		if err != nil {
 			return err
 		}
@@ -194,17 +160,13 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 		if err := tx.AuthInsertUser(user, hash); err != nil {
 			return err
 		}
-		switch {
-		case inv != nil:
-			if err := joinWithInvitation(tx, ch, *inv, user.ID, now); err != nil {
-				return err
-			}
-		case first:
-			org, err := foundOrganization(tx, user.ID, now)
-			if err != nil {
-				return err
-			}
-			authMembershipChanged(ch, org.ID)
+		if inv == nil {
+			err = foundOrganization(tx, ch, user.ID, now)
+		} else {
+			err = joinWithInvitation(tx, ch, *inv, user.ID, now)
+		}
+		if err != nil {
+			return err
 		}
 		out, err = issueSession(tx, user, now, in.Client)
 		return err
@@ -232,10 +194,10 @@ func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (Signed
 	if err := tx.AuthDeleteExpiredSessions(now); err != nil {
 		return SignedIn{}, err
 	}
-	token := domain.NewSecret(domain.SessionTokenBytes)
+	token := domain.NewSecret(32)
 	s := domain.Session{
 		ID: domain.NewID(), UserID: user.ID, ExpiresAt: now + domain.SessionTTL, CreatedAt: now,
-		UserAgent: authClip(client.UserAgent, 512), IP: authClip(client.IP, 64),
+		UserAgent: client.UserAgent[:min(len(client.UserAgent), 512)], IP: client.IP[:min(len(client.IP), 64)],
 	}
 	if err := tx.AuthInsertSession(s, domain.HashSecret(token)); err != nil {
 		return SignedIn{}, err
@@ -244,14 +206,10 @@ func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (Signed
 }
 
 func (a *App) SignIn(ctx context.Context, email, password string, client ClientInfo) (SignedIn, error) {
-	email = strings.TrimSpace(email)
+	email = domain.NormalizeUserEmail(email)
 	if !domain.ValidUserEmail(email) {
 		return SignedIn{}, domain.Invalid(domain.MsgInvalidEmail)
 	}
-	if a.Passwords == nil {
-		return SignedIn{}, errPasswordsMissing
-	}
-	email = domain.NormalizeUserEmail(email)
 	if err := a.limited(a.limits().perIP, client.IP); err != nil {
 		return SignedIn{}, err
 	}
@@ -261,34 +219,22 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 		return SignedIn{}, err
 	}
 	var cred Credentials
-	found := false
-	err := a.read(ctx, func(tx Tx) error {
-		var err error
+	err := a.read(ctx, func(tx Tx) (err error) {
 		cred, err = tx.AuthCredentials(email)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
-		found = err == nil
 		return err
 	})
 	if err != nil {
 		return SignedIn{}, err
 	}
-	ok := a.Passwords.Verify(cred.PasswordHash, password)
-	if !found || !ok {
-		return SignedIn{}, domain.E(domain.CodeNotAuthenticated, domain.MsgInvalidEmailOrPassword)
+	if !a.Passwords.Verify(cred.PasswordHash, password) {
+		return SignedIn{}, domain.E(domain.CodeNotAuthenticated, "Invalid email or password")
 	}
 	var out SignedIn
-	err = a.write(ctx, func(tx Tx, _ *Changes) error {
-		now := a.Now()
-		user, err := tx.AuthUser(cred.User.ID)
-		if errors.Is(err, ErrNoRow) {
-			return domain.E(domain.CodeNotAuthenticated, domain.MsgInvalidEmailOrPassword)
-		}
-		if err != nil {
-			return err
-		}
-		out, err = issueSession(tx, user, now, client)
+	err = a.write(ctx, func(tx Tx, _ *Changes) (err error) {
+		out, err = issueSession(tx, cred.User, a.Now(), client)
 		return err
 	})
 	if err != nil {
@@ -317,16 +263,11 @@ func (a *App) GetMe(ctx context.Context, actor domain.Actor) (Me, error) {
 	if actor.OrganizationID == "" {
 		return me, nil
 	}
-	err := a.read(ctx, func(tx Tx) error {
-		org, err := tx.AuthOrganization(actor.OrganizationID)
-		if errors.Is(err, ErrNoRow) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		me.Organization = &MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: actor.Role}
-		return nil
-	})
-	return me, err
+	var org domain.Organization
+	err := a.read(ctx, func(tx Tx) (err error) { org, err = tx.AuthOrganization(actor.OrganizationID); return })
+	if err != nil {
+		return Me{}, err
+	}
+	me.Organization = &MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: actor.Role}
+	return me, nil
 }

@@ -23,7 +23,7 @@ func (q *Queries) AuthAnyUser(ctx context.Context) (bool, error) {
 	return found, err
 }
 
-const authBindDeviceCode = `-- name: AuthBindDeviceCode :execrows
+const authBindDeviceCode = `-- name: AuthBindDeviceCode :exec
 UPDATE device_codes SET user_id = ?
 WHERE id = ? AND status = 'pending' AND user_id IS NULL
 `
@@ -33,12 +33,9 @@ type AuthBindDeviceCodeParams struct {
 	ID     string
 }
 
-func (q *Queries) AuthBindDeviceCode(ctx context.Context, arg AuthBindDeviceCodeParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, authBindDeviceCode, arg.UserID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+func (q *Queries) AuthBindDeviceCode(ctx context.Context, arg AuthBindDeviceCodeParams) error {
+	_, err := q.db.ExecContext(ctx, authBindDeviceCode, arg.UserID, arg.ID)
+	return err
 }
 
 const authCancelPendingInvitations = `-- name: AuthCancelPendingInvitations :exec
@@ -55,18 +52,6 @@ type AuthCancelPendingInvitationsParams struct {
 func (q *Queries) AuthCancelPendingInvitations(ctx context.Context, arg AuthCancelPendingInvitationsParams) error {
 	_, err := q.db.ExecContext(ctx, authCancelPendingInvitations, arg.OrganizationID, arg.Email, arg.ExpiresAt)
 	return err
-}
-
-const authConsumeApprovedDeviceCode = `-- name: AuthConsumeApprovedDeviceCode :execrows
-DELETE FROM device_codes WHERE id = ? AND status = 'approved'
-`
-
-func (q *Queries) AuthConsumeApprovedDeviceCode(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, authConsumeApprovedDeviceCode, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
 }
 
 const authCountMembers = `-- name: AuthCountMembers :one
@@ -97,7 +82,7 @@ func (q *Queries) AuthCountPendingInvitations(ctx context.Context, arg AuthCount
 	return count, err
 }
 
-const authDecideDeviceCode = `-- name: AuthDecideDeviceCode :execrows
+const authDecideDeviceCode = `-- name: AuthDecideDeviceCode :exec
 UPDATE device_codes SET status = ?, user_id = ?
 WHERE id = ? AND status = 'pending'
 `
@@ -108,12 +93,9 @@ type AuthDecideDeviceCodeParams struct {
 	ID     string
 }
 
-func (q *Queries) AuthDecideDeviceCode(ctx context.Context, arg AuthDecideDeviceCodeParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, authDecideDeviceCode, arg.Status, arg.UserID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+func (q *Queries) AuthDecideDeviceCode(ctx context.Context, arg AuthDecideDeviceCodeParams) error {
+	_, err := q.db.ExecContext(ctx, authDecideDeviceCode, arg.Status, arg.UserID, arg.ID)
+	return err
 }
 
 const authDeleteDeviceCode = `-- name: AuthDeleteDeviceCode :exec
@@ -168,7 +150,7 @@ func (q *Queries) AuthExtendSession(ctx context.Context, arg AuthExtendSessionPa
 }
 
 const authGetDeviceCodeByHash = `-- name: AuthGetDeviceCodeByHash :one
-SELECT id, device_code_hash, user_code, client_id, status, user_id, interval_s, last_polled_at, expires_at, created_at FROM device_codes WHERE device_code_hash = ?
+SELECT id, device_code_hash, user_code, status, user_id, last_polled_at, expires_at, created_at FROM device_codes WHERE device_code_hash = ?
 `
 
 func (q *Queries) AuthGetDeviceCodeByHash(ctx context.Context, deviceCodeHash string) (DeviceCode, error) {
@@ -178,10 +160,8 @@ func (q *Queries) AuthGetDeviceCodeByHash(ctx context.Context, deviceCodeHash st
 		&i.ID,
 		&i.DeviceCodeHash,
 		&i.UserCode,
-		&i.ClientID,
 		&i.Status,
 		&i.UserID,
-		&i.IntervalS,
 		&i.LastPolledAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -190,7 +170,7 @@ func (q *Queries) AuthGetDeviceCodeByHash(ctx context.Context, deviceCodeHash st
 }
 
 const authGetDeviceCodeByUserCode = `-- name: AuthGetDeviceCodeByUserCode :one
-SELECT id, device_code_hash, user_code, client_id, status, user_id, interval_s, last_polled_at, expires_at, created_at FROM device_codes WHERE user_code = ?
+SELECT id, device_code_hash, user_code, status, user_id, last_polled_at, expires_at, created_at FROM device_codes WHERE user_code = ?
 `
 
 func (q *Queries) AuthGetDeviceCodeByUserCode(ctx context.Context, userCode string) (DeviceCode, error) {
@@ -200,10 +180,8 @@ func (q *Queries) AuthGetDeviceCodeByUserCode(ctx context.Context, userCode stri
 		&i.ID,
 		&i.DeviceCodeHash,
 		&i.UserCode,
-		&i.ClientID,
 		&i.Status,
 		&i.UserID,
-		&i.IntervalS,
 		&i.LastPolledAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -321,20 +299,15 @@ func (q *Queries) AuthGetUserByEmail(ctx context.Context, email string) (User, e
 }
 
 const authInsertDeviceCode = `-- name: AuthInsertDeviceCode :exec
-INSERT INTO device_codes (id, device_code_hash, user_code, client_id, status, user_id, interval_s,
-  last_polled_at, expires_at, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO device_codes (id, device_code_hash, user_code, status, expires_at, created_at)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type AuthInsertDeviceCodeParams struct {
 	ID             string
 	DeviceCodeHash string
 	UserCode       string
-	ClientID       string
 	Status         string
-	UserID         *string
-	IntervalS      int64
-	LastPolledAt   *int64
 	ExpiresAt      int64
 	CreatedAt      int64
 }
@@ -344,11 +317,7 @@ func (q *Queries) AuthInsertDeviceCode(ctx context.Context, arg AuthInsertDevice
 		arg.ID,
 		arg.DeviceCodeHash,
 		arg.UserCode,
-		arg.ClientID,
 		arg.Status,
-		arg.UserID,
-		arg.IntervalS,
-		arg.LastPolledAt,
 		arg.ExpiresAt,
 		arg.CreatedAt,
 	)
@@ -600,7 +569,7 @@ UPDATE device_codes SET last_polled_at = ? WHERE id = ?
 `
 
 type AuthSetDevicePolledParams struct {
-	LastPolledAt *int64
+	LastPolledAt int64
 	ID           string
 }
 

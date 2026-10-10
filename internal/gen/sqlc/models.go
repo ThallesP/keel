@@ -65,11 +65,9 @@ type DeviceCode struct {
 	ID             string
 	DeviceCodeHash string
 	UserCode       string
-	ClientID       string
 	Status         string
 	UserID         *string
-	IntervalS      int64
-	LastPolledAt   *int64
+	LastPolledAt   int64
 	ExpiresAt      int64
 	CreatedAt      int64
 }

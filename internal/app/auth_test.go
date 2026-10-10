@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/adapters/password"
@@ -16,43 +14,12 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-type authRecorder struct {
-	mu     sync.Mutex
-	topics map[string]map[string]bool
-}
-
-func (r *authRecorder) Publish(org string, topics []string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.topics == nil {
-		r.topics = map[string]map[string]bool{}
-	}
-	if r.topics[org] == nil {
-		r.topics[org] = map[string]bool{}
-	}
-	for _, t := range topics {
-		r.topics[org][t] = true
-	}
-}
-
-func (r *authRecorder) take(org string) []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []string
-	for t := range r.topics[org] {
-		out = append(out, t)
-	}
-	delete(r.topics, org)
-	sort.Strings(out)
-	return out
-}
-
 type authFixture struct {
 	t      *testing.T
 	ctx    context.Context
 	app    *app.App
 	store  *sqlite.Store
-	events *authRecorder
+	events canvasPublisher
 	now    int64
 	hasher *password.Hasher
 }
@@ -66,8 +33,8 @@ func authSetup(t *testing.T) *authFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	f := &authFixture{t: t, ctx: context.Background(), store: store, events: &authRecorder{}, now: authT0,
-		hasher: &password.Hasher{Params: password.Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}}}
+	f := &authFixture{t: t, ctx: context.Background(), store: store, events: canvasPublisher{}, now: authT0,
+		hasher: &password.Hasher{Memory: 64, Time: 1, Threads: 1}}
 	f.app = app.New(app.App{
 		Store: store, Events: f.events, Passwords: f.hasher,
 		Config: app.Config{SiteURL: "http://keel.test"},
@@ -104,40 +71,14 @@ func (f *authFixture) exec(q string, args ...any) {
 	}
 }
 
-func (f *authFixture) insertUser(id, email, hash string) {
-	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Guest', ?, 1, 1)`, id, email, hash)
-}
-
-func (f *authFixture) hash(pw string) string {
-	h, err := f.hasher.Hash(pw)
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	return h
-}
-
-func authWant(t *testing.T, err error, code, msg string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("no error, want %s %q", code, msg)
-	}
-	var de *domain.Error
-	if !errors.As(err, &de) {
-		t.Fatalf("error %v (%T), want %s %q", err, err, code, msg)
-	}
-	if de.Code != code || de.Message != msg {
-		t.Fatalf("got %s %q, want %s %q", de.Code, de.Message, code, msg)
-	}
+func (f *authFixture) insertUser(id, email, password string) {
+	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Guest', ?, 1, 1)`, id, email, f.hasher.Hash(password))
 }
 
 func authWantRefusal(t *testing.T, err error, status int, code, desc string) {
 	t.Helper()
-	var r *domain.DeviceRefusal
-	if !errors.As(err, &r) {
-		t.Fatalf("error %v (%T), want refusal %d %s", err, err, status, code)
-	}
-	if r.Status != status || r.Code != code || r.Description != desc {
-		t.Fatalf("got %d %s %q, want %d %s %q", r.Status, r.Code, r.Description, status, code, desc)
+	if r, ok := errors.AsType[*domain.DeviceRefusal](err); !ok || *r != (domain.DeviceRefusal{Status: status, Code: code, Description: desc}) {
+		t.Fatalf("got %v, want refusal %d %s %q", err, status, code, desc)
 	}
 }
 
@@ -149,11 +90,11 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	}
 
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "not-an-email", Password: "correct-horse-battery"})
-	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Invalid email")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: "short"})
-	authWant(t, err, domain.CodeInvalidInput, "Password too short")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Password too short")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: strings.Repeat("x", 129)})
-	authWant(t, err, domain.CodeInvalidInput, "Password too long")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Password too long")
 
 	owner := f.signUp(" Founder@Example.com ", "")
 	if owner.User.Email != "founder@example.com" || len(owner.Token) < 50 {
@@ -181,11 +122,11 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	}
 
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "FOUNDER@example.com", Password: "correct-horse-battery"})
-	authWant(t, err, domain.CodeConflict, "User already exists. Use another email.")
+	canvasWantErr(t, err, domain.CodeConflict, "User already exists. Use another email.")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "second@example.com", Password: "correct-horse-battery"})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "second@example.com", Password: "correct-horse-battery", InvitationID: "nope"})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 
 	inv, err := f.app.CreateInvitation(f.ctx, oa, "  Second@Example.com ", "")
 	if err != nil {
@@ -203,7 +144,7 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	}
 
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "third@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 
 	f.now += 1000
 	second := f.signUp("SECOND@example.com", inv.ID)
@@ -223,7 +164,7 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 		t.Fatalf("members: %+v %v", members, err)
 	}
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "again@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 }
 
 func TestAuthSignUpWithExpiredInvitation(t *testing.T) {
@@ -242,7 +183,7 @@ func TestAuthSignUpWithExpiredInvitation(t *testing.T) {
 		t.Fatal("expired invitation still shows")
 	}
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "late@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 	if invs, _ := f.app.ListInvitations(f.ctx, oa); len(invs) != 0 {
 		t.Fatalf("expired invitation listed: %+v", invs)
 	}
@@ -253,14 +194,14 @@ func TestAuthSignIn(t *testing.T) {
 	f.signUp("ci@example.com", "")
 
 	_, err := f.app.SignIn(f.ctx, "nope", "x", authClient)
-	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Invalid email")
 	for _, c := range []struct{ email, pw string }{
 		{"ci@example.com", "wrong-password"},
 		{"nobody@example.com", "correct-horse-battery"},
 		{"ci@example.com", ""},
 	} {
 		_, err := f.app.SignIn(f.ctx, c.email, c.pw, authClient)
-		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+		canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 	}
 	out, err := f.app.SignIn(f.ctx, "CI@Example.com", "correct-horse-battery", authClient)
 	if err != nil {
@@ -275,9 +216,9 @@ func TestAuthSignIn(t *testing.T) {
 func TestAuthSignInLimiter(t *testing.T) {
 	f := authSetup(t)
 	f.signUp("ci@example.com", "")
-	for i := 0; i < app.SignInAttempts; i++ {
+	for range app.SignInAttempts {
 		_, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient)
-		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+		canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 		f.now += 1000
 	}
 	_, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
@@ -288,19 +229,19 @@ func TestAuthSignInLimiter(t *testing.T) {
 	if limited.RetryAfterSeconds != 290 {
 		t.Fatalf("retry after %d", limited.RetryAfterSeconds)
 	}
-	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	canvasWantErr(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 
 	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", app.ClientInfo{IP: "100.64.0.10"}); err != nil {
 		t.Fatalf("other IP: %v", err)
 	}
 	_, err = f.app.SignIn(f.ctx, "other@example.com", "x-password", authClient)
-	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 
 	f.now = authT0 + app.SignInWindow.Milliseconds()
 	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient); err != nil {
 		t.Fatalf("after the window: %v", err)
 	}
-	for i := 0; i < app.SignInAttempts; i++ {
+	for i := range app.SignInAttempts {
 		if _, err := f.app.SignIn(f.ctx, "ci@example.com", "wrong-password", authClient); errors.As(err, &limited) {
 			t.Fatalf("limited after a success reset, try %d", i)
 		}
@@ -382,17 +323,17 @@ func TestAuthInvitationRules(t *testing.T) {
 	}
 
 	_, err = f.app.CreateInvitation(f.ctx, member, "x@example.com", "")
-	authWant(t, err, domain.CodeForbidden, "You are not allowed to invite users to this organization")
+	canvasWantErr(t, err, domain.CodeForbidden, "You are not allowed to invite users to this organization")
 	_, err = f.app.CreateInvitation(f.ctx, admin, "x@example.com", "owner")
-	authWant(t, err, domain.CodeForbidden, "You are not allowed to invite a user with this role")
+	canvasWantErr(t, err, domain.CodeForbidden, "You are not allowed to invite a user with this role")
 	_, err = f.app.CreateInvitation(f.ctx, owner, "x@example.com", "root")
-	authWant(t, err, domain.CodeInvalidInput, "Role not found: root")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Role not found: root")
 	_, err = f.app.CreateInvitation(f.ctx, owner, "x@", "")
-	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
+	canvasWantErr(t, err, domain.CodeInvalidInput, "Invalid email")
 	_, err = f.app.CreateInvitation(f.ctx, owner, "MEMBER@example.com", "")
-	authWant(t, err, domain.CodeConflict, "User is already a member of this organization")
+	canvasWantErr(t, err, domain.CodeConflict, "User is already a member of this organization")
 	_, err = f.app.CreateInvitation(f.ctx, domain.Actor{}, "x@example.com", "")
-	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 
 	first, err := f.app.CreateInvitation(f.ctx, admin, "x@example.com", "")
 	if err != nil {
@@ -411,9 +352,9 @@ func TestAuthInvitationRules(t *testing.T) {
 	}
 
 	err = f.app.CancelInvitation(f.ctx, member, second.ID)
-	authWant(t, err, domain.CodeForbidden, "You are not allowed to cancel this invitation")
+	canvasWantErr(t, err, domain.CodeForbidden, "You are not allowed to cancel this invitation")
 	err = f.app.CancelInvitation(f.ctx, owner, "unknown")
-	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
 	f.events.take(org)
 	if err := f.app.CancelInvitation(f.ctx, admin, second.ID); err != nil {
 		t.Fatal(err)
@@ -428,20 +369,20 @@ func TestAuthInvitationRules(t *testing.T) {
 		t.Fatalf("cancelling twice: %v", err)
 	}
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "x@example.com", Password: "correct-horse-battery", InvitationID: second.ID})
-	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
+	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 }
 
 func TestAuthInvitationLimit(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
-	for i := 0; i < domain.InvitationLimit; i++ {
-		if _, err := f.app.CreateInvitation(f.ctx, owner, "u"+strings.Repeat("x", i%7)+string(rune('a'+i%26))+string(rune('a'+i/26))+"@example.com", ""); err != nil {
+	for i := range domain.InvitationLimit {
+		if _, err := f.app.CreateInvitation(f.ctx, owner, fmt.Sprintf("u%d@example.com", i), ""); err != nil {
 			t.Fatalf("invitation %d: %v", i, err)
 		}
 	}
 	_, err := f.app.CreateInvitation(f.ctx, owner, "one-more@example.com", "")
-	authWant(t, err, domain.CodeForbidden, "Invitation limit reached")
-	if _, err := f.app.CreateInvitation(f.ctx, owner, "uaa@example.com", ""); err != nil {
+	canvasWantErr(t, err, domain.CodeForbidden, "Invitation limit reached")
+	if _, err := f.app.CreateInvitation(f.ctx, owner, "u0@example.com", ""); err != nil {
 		t.Fatalf("re-invite at the limit: %v", err)
 	}
 	f.now += domain.InvitationTTL + 1
@@ -453,8 +394,8 @@ func TestAuthInvitationLimit(t *testing.T) {
 func TestAuthAcceptInvitation(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
-	f.insertUser("guest1", "guest@example.com", f.hash("guest-password"))
-	f.insertUser("guest2", "other@example.com", f.hash("guest-password"))
+	f.insertUser("guest1", "guest@example.com", "guest-password")
+	f.insertUser("guest2", "other@example.com", "guest-password")
 	signIn := func(email string) domain.Actor {
 		out, err := f.app.SignIn(f.ctx, email, "guest-password", authClient)
 		if err != nil {
@@ -469,13 +410,13 @@ func TestAuthAcceptInvitation(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = f.app.AcceptInvitation(f.ctx, domain.Actor{}, inv.ID)
-	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 	_, err = f.app.AcceptInvitation(f.ctx, guest, "unknown")
-	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
 	_, err = f.app.AcceptInvitation(f.ctx, other, inv.ID)
-	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
+	canvasWantErr(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
 	_, err = f.app.AcceptInvitation(f.ctx, owner, inv.ID)
-	authWant(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
+	canvasWantErr(t, err, domain.CodeForbidden, "You are not the recipient of the invitation")
 
 	f.events.take(owner.OrganizationID)
 	org, err := f.app.AcceptInvitation(f.ctx, guest, inv.ID)
@@ -489,14 +430,14 @@ func TestAuthAcceptInvitation(t *testing.T) {
 		t.Fatalf("accept published %v", got)
 	}
 	_, err = f.app.AcceptInvitation(f.ctx, guest, inv.ID)
-	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
 
 	again, _ := f.app.CreateInvitation(f.ctx, owner, "other@example.com", "")
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org2', 'Second', 'second', 1)`)
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('m2', 'org2', 'guest2', 'owner', 1)`)
 	other = signIn("other@example.com")
 	_, err = f.app.AcceptInvitation(f.ctx, other, again.ID)
-	authWant(t, err, domain.CodeConflict, "You're already in an organization")
+	canvasWantErr(t, err, domain.CodeConflict, "You're already in an organization")
 }
 
 func TestAuthForeignOrganizationIsMissing(t *testing.T) {
@@ -507,7 +448,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('orgb', 'Other', 'other', 1)`)
-	f.insertUser("ub", "b@example.com", f.hash("b-password-123"))
+	f.insertUser("ub", "b@example.com", "b-password-123")
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('mb', 'orgb', 'ub', 'owner', 1)`)
 	out, err := f.app.SignIn(f.ctx, "b@example.com", "b-password-123", authClient)
 	if err != nil {
@@ -525,7 +466,7 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 		t.Fatalf("b sees members: %+v %v", ms, err)
 	}
 	err = f.app.CancelInvitation(f.ctx, b, inv.ID)
-	authWant(t, err, domain.CodeNotFound, "Invitation not found")
+	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
 	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub == nil {
 		t.Fatal("b's cancel touched the invitation")
 	}
@@ -548,10 +489,10 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to approve this device authorization")
 
 	_, err = f.app.ListMembers(f.ctx, domain.Actor{})
-	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
-	f.insertUser("loner", "loner@example.com", "")
+	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
+	f.insertUser("loner", "loner@example.com", "loner-password")
 	_, err = f.app.ListInvitations(f.ctx, domain.Actor{UserID: "loner"})
-	authWant(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
+	canvasWantErr(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }
 
 func TestAuthDeviceLogin(t *testing.T) {
@@ -693,29 +634,29 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 func TestAuthPerIPLimits(t *testing.T) {
 	f := authSetup(t)
 	spray := app.ClientInfo{IP: "100.64.0.66"}
-	for i := 0; i < app.AuthPerIP; i++ {
+	for i := range app.AuthPerIP {
 		_, err := f.app.SignIn(f.ctx, fmt.Sprintf("victim%d@example.com", i), "Summer2026!", spray)
-		authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+		canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 	}
 	_, err := f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
-	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	canvasWantErr(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: spray})
-	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	canvasWantErr(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 	if _, err := f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: app.ClientInfo{IP: "100.64.0.67"}}); err != nil {
 		t.Fatalf("other address: %v", err)
 	}
 	f.now += app.AuthPerIPWindow.Milliseconds()
 	_, err = f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
-	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
+	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 
-	for i := 0; i < app.DeviceStartPerIP; i++ {
+	for i := range app.DeviceStartPerIP {
 		if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", spray); err != nil {
 			t.Fatalf("device code %d: %v", i, err)
 		}
 	}
 	_, err = f.app.StartDeviceLogin(f.ctx, "keel-cli", spray)
-	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
+	canvasWantErr(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 
 	_, err = f.app.SignIn(f.ctx, strings.Repeat("a", 1<<20)+"@example.com", "x", app.ClientInfo{IP: "100.64.0.68"})
-	authWant(t, err, domain.CodeInvalidInput, domain.MsgInvalidEmail)
+	canvasWantErr(t, err, domain.CodeInvalidInput, domain.MsgInvalidEmail)
 }

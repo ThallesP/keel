@@ -17,24 +17,10 @@ type NodeScope struct {
 	Node domain.Node
 }
 
-func ownedProject(tx Tx, actor domain.Actor, id string) (domain.Project, bool, error) {
-	if !actor.System && actor.OrganizationID == "" {
-		return domain.Project{}, false, nil
-	}
-	p, err := tx.Project(id)
-	if errors.Is(err, ErrNoRow) {
-		return domain.Project{}, false, nil
-	}
-	if err != nil {
-		return domain.Project{}, false, err
-	}
-	if !actor.System && p.OrganizationID != actor.OrganizationID {
-		return domain.Project{}, false, nil
-	}
-	return p, true, nil
-}
-
 func ownedEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, bool, error) {
+	if !actor.System && actor.OrganizationID == "" {
+		return EnvScope{}, false, nil
+	}
 	env, err := tx.Environment(id)
 	if errors.Is(err, ErrNoRow) {
 		return EnvScope{}, false, nil
@@ -42,9 +28,12 @@ func ownedEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, bool, err
 	if err != nil {
 		return EnvScope{}, false, err
 	}
-	p, ok, err := ownedProject(tx, actor, env.ProjectID)
-	if err != nil || !ok {
+	p, err := tx.Project(env.ProjectID)
+	if err != nil {
 		return EnvScope{}, false, err
+	}
+	if !actor.System && p.OrganizationID != actor.OrganizationID {
+		return EnvScope{}, false, nil
 	}
 	return EnvScope{Org: p.OrganizationID, Project: p, Environment: env}, true, nil
 }

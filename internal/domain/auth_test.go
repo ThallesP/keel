@@ -33,41 +33,21 @@ func TestValidUserEmail(t *testing.T) {
 	}
 }
 
-func TestSameUserEmail(t *testing.T) {
-	if !SameUserEmail("  Ci@Example.COM ", "ci@example.com") {
-		t.Error("case and spaces should not matter")
-	}
-	if SameUserEmail("ci@example.com", "cj@example.com") {
-		t.Error("different emails matched")
-	}
-}
-
 func TestValidPassword(t *testing.T) {
-	cases := []struct {
-		pw   string
-		want string
-	}{
-		{"1234567", MsgPasswordTooShort},
-		{"12345678", ""},
-		{strings.Repeat("a", 128), ""},
-		{strings.Repeat("a", 129), MsgPasswordTooLong},
-		{"😀😀😀😀", ""},
-		{"😀😀😀", MsgPasswordTooShort},
-		{strings.Repeat("😀", 64), ""},
-		{strings.Repeat("😀", 65), MsgPasswordTooLong},
-		{"éééééééé", ""},
-	}
-	for _, c := range cases {
-		err := ValidPassword(c.pw)
-		got := ""
-		if err != nil {
-			got = err.Error()
-			if CodeOf(err) != CodeInvalidInput {
-				t.Errorf("%q: code %s", c.pw, CodeOf(err))
-			}
-		}
-		if got != c.want {
-			t.Errorf("ValidPassword(%q) = %q, want %q", c.pw, got, c.want)
+	short, long := Invalid("Password too short"), Invalid("Password too long")
+	for pw, want := range map[string]error{
+		"1234567":                short,
+		"12345678":               nil,
+		strings.Repeat("a", 128): nil,
+		strings.Repeat("a", 129): long,
+		strings.Repeat("😀", 7):   short,
+		strings.Repeat("😀", 8):   nil,
+		strings.Repeat("😀", 128): nil,
+		strings.Repeat("😀", 129): long,
+		"éééééééé":               nil,
+	} {
+		if err := ValidPassword(pw); !reflect.DeepEqual(err, want) {
+			t.Errorf("ValidPassword(%q) = %v, want %v", pw, err, want)
 		}
 	}
 }
@@ -166,22 +146,22 @@ func TestDecidePoll(t *testing.T) {
 	cases := []struct {
 		name         string
 		status       DeviceStatus
-		lastPolledAt *int64
+		lastPolledAt int64
 		expiresAt    int64
 		action       PollAction
 		refusal      *DeviceRefusal
 	}{
-		{"slow down", DevicePending, new(now - 4_999), later, PollRefuse, slowDown},
-		{"slow down beats expiry", DevicePending, new(now - 1), now - 1, PollRefuse, slowDown},
-		{"interval elapsed", DevicePending, new(now - 5_000), later, PollTouch, pending},
-		{"pending", DevicePending, nil, later, PollTouch, pending},
-		{"expired", DevicePending, nil, now - 1, PollTouchDelete, &DeviceRefusal{400, "expired_token", "Device code has expired"}},
-		{"expires now is still valid", DevicePending, nil, now, PollTouch, pending},
-		{"denied", DeviceDenied, nil, later, PollTouchDelete, &DeviceRefusal{400, "access_denied", "Access denied"}},
-		{"approved", DeviceApproved, nil, later, PollIssue, nil},
+		{"slow down", DevicePending, now - 4_999, later, PollRefuse, slowDown},
+		{"slow down beats expiry", DevicePending, now - 1, now - 1, PollRefuse, slowDown},
+		{"interval elapsed", DevicePending, now - 5_000, later, PollTouch, pending},
+		{"pending", DevicePending, 0, later, PollTouch, pending},
+		{"expired", DevicePending, 0, now - 1, PollTouchDelete, &DeviceRefusal{400, "expired_token", "Device code has expired"}},
+		{"expires now is still valid", DevicePending, 0, now, PollTouch, pending},
+		{"denied", DeviceDenied, 0, later, PollTouchDelete, &DeviceRefusal{400, "access_denied", "Access denied"}},
+		{"approved", DeviceApproved, 0, later, PollIssue, nil},
 	}
 	for _, c := range cases {
-		dc := DeviceCode{Status: c.status, IntervalS: 5, LastPolledAt: c.lastPolledAt, ExpiresAt: c.expiresAt}
+		dc := DeviceCode{Status: c.status, LastPolledAt: c.lastPolledAt, ExpiresAt: c.expiresAt}
 		action, refusal := DecidePoll(dc, now)
 		if action != c.action || !reflect.DeepEqual(refusal, c.refusal) {
 			t.Errorf("%s: %d %+v, want %d %+v", c.name, action, refusal, c.action, c.refusal)

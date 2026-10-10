@@ -1,30 +1,18 @@
 package http
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/danielgtaylor/huma/v2"
-
 	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/app"
-	"github.com/ThallesP/keel/internal/domain"
 )
-
-func authViaCookie(r *http.Request) bool {
-	if authViaBearer(r) {
-		return false
-	}
-	c, err := r.Cookie(SessionCookie)
-	return err == nil && c.Value != ""
-}
 
 func authViaBearer(r *http.Request) bool {
 	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -35,28 +23,21 @@ func authSafeMethod(method string) bool {
 }
 
 func (s *Server) authCSRFRefusal(r *http.Request) string {
-	src := r.Header.Get("Origin")
-	if src == "" {
-		src = r.Header.Get("Referer")
-	}
+	src := cmp.Or(r.Header.Get("Origin"), r.Header.Get("Referer"))
 	if src == "" || src == "null" {
-		return domain.MsgMissingOrigin
+		return "Missing or null Origin"
 	}
 	u, err := url.Parse(src)
 	if err != nil || u.Host == "" {
-		return domain.MsgInvalidOrigin
+		return "Invalid origin"
 	}
 	if strings.EqualFold(u.Host, r.Host) {
 		return ""
 	}
-	if site, err := url.Parse(s.app.Config.SiteURL); err == nil && site.Host != "" && strings.EqualFold(u.Host, site.Host) {
+	if site, err := url.Parse(s.app.Config.SiteURL); err == nil && strings.EqualFold(u.Host, site.Host) {
 		return ""
 	}
-	return domain.MsgInvalidOrigin
-}
-
-func (s *Server) authSecure() bool {
-	return strings.HasPrefix(strings.ToLower(s.app.Config.SiteURL), "https://")
+	return "Invalid origin"
 }
 
 func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
@@ -66,28 +47,16 @@ func (s *Server) authSessionCookie(token string, expiresAt int64) http.Cookie {
 	}
 	return http.Cookie{
 		Name: SessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-		Secure: s.authSecure(), MaxAge: maxAge, Expires: time.UnixMilli(expiresAt).UTC(),
+		Secure: strings.HasPrefix(strings.ToLower(s.app.Config.SiteURL), "https://"),
+		MaxAge: maxAge, Expires: time.UnixMilli(expiresAt).UTC(),
 	}
-}
-
-func (s *Server) authClearedCookie() http.Cookie {
-	return http.Cookie{
-		Name: SessionCookie, Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-		Secure: s.authSecure(), MaxAge: -1, Expires: time.Unix(0, 0).UTC(),
-	}
-}
-
-func authRemoteIP(remoteAddr string) string {
-	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
-		return host
-	}
-	return remoteAddr
 }
 
 type authClientKey struct{}
 
 func authWithClient(ctx context.Context, r *http.Request) context.Context {
-	return context.WithValue(ctx, authClientKey{}, app.ClientInfo{IP: authRemoteIP(r.RemoteAddr), UserAgent: r.UserAgent()})
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return context.WithValue(ctx, authClientKey{}, app.ClientInfo{IP: ip, UserAgent: r.UserAgent()})
 }
 
 func authClientOf(ctx context.Context) app.ClientInfo {
@@ -103,24 +72,3 @@ type authDeviceError struct {
 func (e *authDeviceError) Error() string                { return e.body.ErrorDescription }
 func (e *authDeviceError) GetStatus() int               { return e.status }
 func (e *authDeviceError) MarshalJSON() ([]byte, error) { return json.Marshal(e.body) }
-
-func authOp[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Context, in *I) (*O, error)) {
-	huma.Register(h, o, func(ctx context.Context, in *I) (*O, error) {
-		out, err := handler(ctx, in)
-		if err == nil {
-			return out, nil
-		}
-		var refusal *domain.DeviceRefusal
-		if errors.As(err, &refusal) {
-			return nil, &authDeviceError{status: refusal.Status, body: api.DeviceError{Error: refusal.Code, ErrorDescription: refusal.Description}}
-		}
-		var limited *domain.RateLimitError
-		if errors.As(err, &limited) {
-			p := &api.Problem{Status: http.StatusTooManyRequests, Title: http.StatusText(http.StatusTooManyRequests),
-				Detail: domain.MsgTooManyRequests, Code: domain.CodeRateLimited}
-			after := strconv.FormatInt(limited.RetryAfterSeconds, 10)
-			return nil, huma.ErrorWithHeaders(p, http.Header{"Retry-After": {after}})
-		}
-		return nil, problemOf(err)
-	})
-}

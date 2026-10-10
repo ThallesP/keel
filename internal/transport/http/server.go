@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -33,15 +35,11 @@ func init() {
 	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
 		p := &api.Problem{Status: status, Title: http.StatusText(status), Detail: msg, Code: codeForStatus(status)}
 		for _, e := range errs {
-			var d *huma.ErrorDetail
-			if errors.As(e, &d) {
+			if d, ok := errors.AsType[*huma.ErrorDetail](e); ok {
 				p.Errors = append(p.Errors, api.ErrorDetail{Message: d.Message, Location: d.Location, Value: d.Value})
 			} else if e != nil && p.Detail == "" {
 				p.Detail = e.Error()
 			}
-		}
-		if status == http.StatusUnprocessableEntity || status == http.StatusBadRequest {
-			p.Code = domain.CodeInvalidInput
 		}
 		return p
 	}
@@ -114,8 +112,9 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 			return
 		}
 		token := SessionToken(r)
-		viaCookie := authViaCookie(r)
-		browserWrite := !authSafeMethod(r.Method) && !authViaBearer(r) &&
+		bearer := authViaBearer(r)
+		viaCookie := !bearer && token != ""
+		browserWrite := !authSafeMethod(r.Method) && !bearer &&
 			(viaCookie || r.Header.Get("Origin") != "" || r.Header.Get("Referer") != "")
 		if browserWrite {
 			if msg := s.authCSRFRefusal(r); msg != "" {
@@ -123,20 +122,15 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 				return
 			}
 		}
-		actor := domain.Actor{}
-		if token != "" {
-			a, err := s.app.ResolveSession(r.Context(), token)
-			if err != nil {
-				s.app.Log.Error("resolve session", "err", err)
-				writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
-					Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
-				return
-			}
-			actor = a
+		actor, err := s.app.ResolveSession(r.Context(), token)
+		if err != nil {
+			s.app.Log.Error("resolve session", "err", err)
+			writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
+				Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
+			return
 		}
 		if viaCookie && actor.SessionRenewed {
-			c := s.authSessionCookie(token, actor.SessionExpiresAt)
-			http.SetCookie(w, &c)
+			http.SetCookie(w, new(s.authSessionCookie(token, actor.SessionExpiresAt)))
 		}
 		ctx := authWithClient(context.WithValue(r.Context(), actorKey{}, actor), r)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -144,8 +138,8 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 }
 
 func SessionToken(r *http.Request) string {
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		return strings.TrimSpace(token)
 	}
 	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
 		return c.Value
@@ -169,12 +163,18 @@ func op[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Context
 }
 
 func problemOf(err error) error {
-	var p *api.Problem
-	if errors.As(err, &p) {
+	if p, ok := errors.AsType[*api.Problem](err); ok {
 		return p
 	}
-	var de *domain.Error
-	if errors.As(err, &de) {
+	if r, ok := errors.AsType[*domain.DeviceRefusal](err); ok {
+		return &authDeviceError{status: r.Status, body: api.DeviceError{Error: r.Code, ErrorDescription: r.Description}}
+	}
+	if limited, ok := errors.AsType[*domain.RateLimitError](err); ok {
+		p := &api.Problem{Status: http.StatusTooManyRequests, Title: http.StatusText(http.StatusTooManyRequests),
+			Detail: domain.MsgTooManyRequests, Code: domain.CodeRateLimited}
+		return huma.ErrorWithHeaders(p, http.Header{"Retry-After": {strconv.FormatInt(limited.RetryAfterSeconds, 10)}})
+	}
+	if de, ok := errors.AsType[*domain.Error](err); ok {
 		status := StatusOf(de.Code)
 		return &api.Problem{Status: status, Title: http.StatusText(status), Detail: de.Message, Code: de.Code}
 	}
@@ -236,10 +236,5 @@ func writeProblem(w http.ResponseWriter, p *api.Problem) {
 }
 
 func machineRoute(path string) bool {
-	for _, p := range []string{"/worker/", "/proxy/", "/otlp/"} {
-		if strings.HasPrefix(path, p) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{"/worker/", "/proxy/", "/otlp/"}, func(p string) bool { return strings.HasPrefix(path, p) })
 }

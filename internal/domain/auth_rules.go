@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -16,11 +17,6 @@ const (
 	InvitationTTL   = 7 * authDay
 	InvitationLimit = 100
 	MembershipLimit = 100
-
-	PasswordMinLength = 8
-	PasswordMaxLength = 128
-
-	SessionTokenBytes = 32
 )
 
 var userEmailRE = regexp.MustCompile(`^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$`)
@@ -31,15 +27,13 @@ func ValidUserEmail(email string) bool {
 
 func NormalizeUserEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
 
-func SameUserEmail(a, b string) bool { return NormalizeUserEmail(a) == NormalizeUserEmail(b) }
-
 func ValidPassword(password string) error {
-	n := UTF16Len(password)
-	if n < PasswordMinLength {
-		return Invalid(MsgPasswordTooShort)
+	n := utf8.RuneCountInString(password)
+	if n < 8 {
+		return Invalid("Password too short")
 	}
-	if n > PasswordMaxLength {
-		return Invalid(MsgPasswordTooLong)
+	if n > 128 {
+		return Invalid("Password too long")
 	}
 	return nil
 }

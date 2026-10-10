@@ -88,7 +88,7 @@ func (s *Server) registerAuth(h huma.API) {
 		return &authSignUpOpenOutput{Body: api.SignUpOpen{Open: open}}, nil
 	})
 
-	authOp(h, huma.Operation{
+	op(h, huma.Operation{
 		OperationID: "signUp", Method: http.MethodPost, Path: "/api/auth/sign-up", Tags: authTags,
 		Summary:     "Create an account and sign in",
 		Description: "The first account founds the install's organization. Later ones need `invitationId` from an invite link for the same email. Sets the keel_session cookie and returns the same session as `token`.",
@@ -104,7 +104,7 @@ func (s *Server) registerAuth(h huma.API) {
 		return s.authSignedIn(out), nil
 	})
 
-	authOp(h, huma.Operation{
+	op(h, huma.Operation{
 		OperationID: "signIn", Method: http.MethodPost, Path: "/api/auth/sign-in", Tags: authTags,
 		Summary:     "Sign in with email and password",
 		Description: "Sets the keel_session cookie and returns the same session as `token`. At most 10 tries per client and email in 5 minutes (429 RATE_LIMITED, Retry-After).",
@@ -124,7 +124,7 @@ func (s *Server) registerAuth(h huma.API) {
 		if err := s.app.SignOut(ctx, ActorFrom(ctx)); err != nil {
 			return nil, err
 		}
-		return &authSignOutOutput{SetCookie: s.authClearedCookie(), Body: api.AuthSuccess{Success: true}}, nil
+		return &authSignOutOutput{SetCookie: s.authSessionCookie("", 0), Body: api.AuthSuccess{Success: true}}, nil
 	})
 
 	op(h, huma.Operation{
@@ -228,7 +228,7 @@ func (s *Server) registerAuth(h huma.API) {
 		return &authAcceptedOutput{Body: api.AcceptedInvitation{Organization: authOrganizationView(org)}}, nil
 	})
 
-	authOp(h, huma.Operation{
+	op(h, huma.Operation{
 		OperationID: "createDeviceCode", Method: http.MethodPost, Path: "/api/auth/device/code", Tags: authTags,
 		Summary: "Start a keel login: a code and the link a person approves", Security: authPublic,
 		Responses: authDeviceResponses(h, "400"),
@@ -243,7 +243,7 @@ func (s *Server) registerAuth(h huma.API) {
 		}}, nil
 	})
 
-	authOp(h, huma.Operation{
+	op(h, huma.Operation{
 		OperationID: "pollDeviceToken", Method: http.MethodPost, Path: "/api/auth/device/token", Tags: authTags,
 		Summary:     "Poll a keel login; once approved, the session token (handed out once)",
 		Description: "Errors are RFC 8628 bodies: authorization_pending, slow_down (poll at most every `interval` seconds), expired_token, access_denied, invalid_grant.",
@@ -258,7 +258,7 @@ func (s *Server) registerAuth(h huma.API) {
 			Body: api.DeviceToken{AccessToken: t.AccessToken, TokenType: "Bearer", ExpiresIn: t.ExpiresIn}}, nil
 	})
 
-	authOp(h, huma.Operation{
+	op(h, huma.Operation{
 		OperationID: "claimDeviceCode", Method: http.MethodGet, Path: "/api/auth/device", Tags: authTags,
 		Summary:     "Look a keel login code up; signed in, also claim it",
 		Description: "While signed in, an unclaimed pending code is bound to you: only you can then approve or deny it.",
@@ -279,7 +279,7 @@ func (s *Server) registerAuth(h huma.API) {
 		{"approveDevice", "/api/auth/device/approve", "Approve a keel login you claimed", true},
 		{"denyDevice", "/api/auth/device/deny", "Deny a keel login you claimed", false},
 	} {
-		authOp(h, huma.Operation{
+		op(h, huma.Operation{
 			OperationID: d.id, Method: http.MethodPost, Path: d.path, Tags: authTags, Summary: d.summary,
 			Responses: authDeviceResponses(h, "400", "401", "403"),
 		}, func(ctx context.Context, in *authDeviceDecideInput) (*authSuccessOutput, error) {

@@ -62,11 +62,9 @@ CREATE TABLE device_codes (
   id               TEXT PRIMARY KEY,
   device_code_hash TEXT NOT NULL UNIQUE,
   user_code        TEXT NOT NULL UNIQUE,
-  client_id        TEXT NOT NULL,
   status           TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')),
   user_id          TEXT REFERENCES users(id) ON DELETE CASCADE,
-  interval_s       INTEGER NOT NULL DEFAULT 5,
-  last_polled_at   INTEGER,
+  last_polled_at   INTEGER NOT NULL DEFAULT 0,
   expires_at       INTEGER NOT NULL,
   created_at       INTEGER NOT NULL
 );

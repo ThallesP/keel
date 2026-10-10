@@ -10,24 +10,14 @@ func authUserOf(u sqlc.User) domain.User {
 	return domain.User{ID: u.ID, Email: u.Email, Name: u.Name, CreatedAt: u.CreatedAt}
 }
 
-func authSessionOf(s sqlc.Session) domain.Session {
-	return domain.Session{ID: s.ID, UserID: s.UserID, ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt,
-		UserAgent: s.UserAgent, IP: s.Ip}
-}
-
-func authMemberOf(m sqlc.Member) domain.Member {
-	return domain.Member{ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt}
-}
-
 func authInvitationOf(i sqlc.Invitation) domain.Invitation {
 	return domain.Invitation{ID: i.ID, OrganizationID: i.OrganizationID, Email: i.Email, Role: i.Role,
 		Status: domain.InvitationStatus(i.Status), InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt}
 }
 
 func authDeviceCodeOf(d sqlc.DeviceCode) domain.DeviceCode {
-	return domain.DeviceCode{ID: d.ID, UserCode: d.UserCode, ClientID: d.ClientID, Status: domain.DeviceStatus(d.Status),
-		UserID: str(d.UserID), IntervalS: int(d.IntervalS), LastPolledAt: d.LastPolledAt, ExpiresAt: d.ExpiresAt,
-		CreatedAt: d.CreatedAt}
+	return domain.DeviceCode{ID: d.ID, UserCode: d.UserCode, Status: domain.DeviceStatus(d.Status), UserID: str(d.UserID),
+		LastPolledAt: d.LastPolledAt, ExpiresAt: d.ExpiresAt, CreatedAt: d.CreatedAt}
 }
 
 func (t *tx) AuthAnyUser() (bool, error) { return t.q.AuthAnyUser(t.ctx) }
@@ -58,7 +48,8 @@ func (t *tx) AuthSession(tokenHash string) (domain.Session, error) {
 	if err != nil {
 		return domain.Session{}, noRow(err)
 	}
-	return authSessionOf(s), nil
+	return domain.Session{ID: s.ID, UserID: s.UserID, ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt,
+		UserAgent: s.UserAgent, IP: s.Ip}, nil
 }
 
 func (t *tx) AuthInsertSession(s domain.Session, tokenHash string) error {
@@ -93,7 +84,7 @@ func (t *tx) AuthMembership(userID string) (domain.Member, error) {
 	if err != nil {
 		return domain.Member{}, noRow(err)
 	}
-	return authMemberOf(m), nil
+	return domain.Member{ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt}, nil
 }
 
 func (t *tx) AuthInsertMember(m domain.Member) error {
@@ -101,9 +92,8 @@ func (t *tx) AuthInsertMember(m domain.Member) error {
 		UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt})
 }
 
-func (t *tx) AuthCountMembers(organizationID string) (int, error) {
-	n, err := t.q.AuthCountMembers(t.ctx, organizationID)
-	return int(n), err
+func (t *tx) AuthCountMembers(organizationID string) (int64, error) {
+	return t.q.AuthCountMembers(t.ctx, organizationID)
 }
 
 func (t *tx) AuthMembers(organizationID string) ([]app.MemberAccount, error) {
@@ -149,9 +139,8 @@ func (t *tx) AuthCancelPendingInvitations(organizationID, email string, now int6
 		Email: email, ExpiresAt: now})
 }
 
-func (t *tx) AuthCountPendingInvitations(organizationID string, now int64) (int, error) {
-	n, err := t.q.AuthCountPendingInvitations(t.ctx, sqlc.AuthCountPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
-	return int(n), err
+func (t *tx) AuthCountPendingInvitations(organizationID string, now int64) (int64, error) {
+	return t.q.AuthCountPendingInvitations(t.ctx, sqlc.AuthCountPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
 }
 
 func (t *tx) AuthPendingInvitations(organizationID string, now int64) ([]domain.Invitation, error) {
@@ -184,29 +173,21 @@ func (t *tx) AuthDeviceCodeByUserCode(userCode string) (domain.DeviceCode, error
 
 func (t *tx) AuthInsertDeviceCode(dc domain.DeviceCode, deviceCodeHash string) error {
 	return t.q.AuthInsertDeviceCode(t.ctx, sqlc.AuthInsertDeviceCodeParams{ID: dc.ID, DeviceCodeHash: deviceCodeHash,
-		UserCode: dc.UserCode, ClientID: dc.ClientID, Status: string(dc.Status), UserID: nullStr(dc.UserID),
-		IntervalS: int64(dc.IntervalS), LastPolledAt: dc.LastPolledAt, ExpiresAt: dc.ExpiresAt, CreatedAt: dc.CreatedAt})
+		UserCode: dc.UserCode, Status: string(dc.Status), ExpiresAt: dc.ExpiresAt, CreatedAt: dc.CreatedAt})
 }
 
 func (t *tx) AuthSetDevicePolled(id string, at int64) error {
-	return t.q.AuthSetDevicePolled(t.ctx, sqlc.AuthSetDevicePolledParams{LastPolledAt: &at, ID: id})
+	return t.q.AuthSetDevicePolled(t.ctx, sqlc.AuthSetDevicePolledParams{LastPolledAt: at, ID: id})
 }
 
 func (t *tx) AuthDeleteDeviceCode(id string) error { return t.q.AuthDeleteDeviceCode(t.ctx, id) }
 
-func (t *tx) AuthConsumeApprovedDeviceCode(id string) (bool, error) {
-	n, err := t.q.AuthConsumeApprovedDeviceCode(t.ctx, id)
-	return n > 0, err
+func (t *tx) AuthBindDeviceCode(id, userID string) error {
+	return t.q.AuthBindDeviceCode(t.ctx, sqlc.AuthBindDeviceCodeParams{UserID: &userID, ID: id})
 }
 
-func (t *tx) AuthBindDeviceCode(id, userID string) (bool, error) {
-	n, err := t.q.AuthBindDeviceCode(t.ctx, sqlc.AuthBindDeviceCodeParams{UserID: &userID, ID: id})
-	return n > 0, err
-}
-
-func (t *tx) AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) (bool, error) {
-	n, err := t.q.AuthDecideDeviceCode(t.ctx, sqlc.AuthDecideDeviceCodeParams{Status: string(status), UserID: &userID, ID: id})
-	return n > 0, err
+func (t *tx) AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) error {
+	return t.q.AuthDecideDeviceCode(t.ctx, sqlc.AuthDecideDeviceCodeParams{Status: string(status), UserID: &userID, ID: id})
 }
 
 func (t *tx) AuthDeleteExpiredDeviceCodes(now int64) error {

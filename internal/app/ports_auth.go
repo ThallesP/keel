@@ -19,7 +19,7 @@ type AuthTx interface {
 
 	AuthMembership(userID string) (domain.Member, error)
 	AuthInsertMember(m domain.Member) error
-	AuthCountMembers(organizationID string) (int, error)
+	AuthCountMembers(organizationID string) (int64, error)
 	AuthMembers(organizationID string) ([]MemberAccount, error)
 	AuthIsMemberByEmail(organizationID, email string) (bool, error)
 
@@ -27,7 +27,7 @@ type AuthTx interface {
 	AuthInsertInvitation(inv domain.Invitation) error
 	AuthSetInvitationStatus(id string, from, to domain.InvitationStatus) (bool, error)
 	AuthCancelPendingInvitations(organizationID, email string, now int64) error
-	AuthCountPendingInvitations(organizationID string, now int64) (int, error)
+	AuthCountPendingInvitations(organizationID string, now int64) (int64, error)
 	AuthPendingInvitations(organizationID string, now int64) ([]domain.Invitation, error)
 
 	AuthDeviceCodeByHash(hash string) (domain.DeviceCode, error)
@@ -35,9 +35,8 @@ type AuthTx interface {
 	AuthInsertDeviceCode(dc domain.DeviceCode, deviceCodeHash string) error
 	AuthSetDevicePolled(id string, at int64) error
 	AuthDeleteDeviceCode(id string) error
-	AuthConsumeApprovedDeviceCode(id string) (bool, error)
-	AuthBindDeviceCode(id, userID string) (bool, error)
-	AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) (bool, error)
+	AuthBindDeviceCode(id, userID string) error
+	AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) error
 	AuthDeleteExpiredDeviceCodes(now int64) error
 }
 
@@ -53,6 +52,6 @@ type MemberAccount struct {
 }
 
 type Passwords interface {
-	Hash(password string) (string, error)
+	Hash(password string) string
 	Verify(hash, password string) bool
 }

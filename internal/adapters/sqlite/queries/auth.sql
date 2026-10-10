@@ -88,9 +88,8 @@ SELECT * FROM device_codes WHERE device_code_hash = ?;
 SELECT * FROM device_codes WHERE user_code = ?;
 
 -- name: AuthInsertDeviceCode :exec
-INSERT INTO device_codes (id, device_code_hash, user_code, client_id, status, user_id, interval_s,
-  last_polled_at, expires_at, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO device_codes (id, device_code_hash, user_code, status, expires_at, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: AuthSetDevicePolled :exec
 UPDATE device_codes SET last_polled_at = ? WHERE id = ?;
@@ -98,14 +97,11 @@ UPDATE device_codes SET last_polled_at = ? WHERE id = ?;
 -- name: AuthDeleteDeviceCode :exec
 DELETE FROM device_codes WHERE id = ?;
 
--- name: AuthConsumeApprovedDeviceCode :execrows
-DELETE FROM device_codes WHERE id = ? AND status = 'approved';
-
--- name: AuthBindDeviceCode :execrows
+-- name: AuthBindDeviceCode :exec
 UPDATE device_codes SET user_id = ?
 WHERE id = ? AND status = 'pending' AND user_id IS NULL;
 
--- name: AuthDecideDeviceCode :execrows
+-- name: AuthDecideDeviceCode :exec
 UPDATE device_codes SET status = ?, user_id = ?
 WHERE id = ? AND status = 'pending';
 

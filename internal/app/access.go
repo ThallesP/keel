@@ -6,23 +6,17 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Access rules (convex/access.ts). Everything a member sees belongs to their organization; a
-// foreign or missing row is the same "not found" so ids reveal nothing.
-
-// EnvScope is an environment the actor may touch, with what it belongs to.
 type EnvScope struct {
 	Org         string
 	Project     domain.Project
 	Environment domain.Environment
 }
 
-// NodeScope is a node the actor may touch.
 type NodeScope struct {
 	EnvScope
 	Node domain.Node
 }
 
-// ownedProject: the project when it is in the actor's organization, else ok=false.
 func ownedProject(tx Tx, actor domain.Actor, id string) (domain.Project, bool, error) {
 	if !actor.System && actor.OrganizationID == "" {
 		return domain.Project{}, false, nil
@@ -70,7 +64,6 @@ func ownedNode(tx Tx, actor domain.Actor, id string) (NodeScope, bool, error) {
 	return NodeScope{EnvScope: scope, Node: n}, true, nil
 }
 
-// requireEnvironment: signed out → NOT_AUTHENTICATED; missing/foreign → "Environment not found".
 func requireEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
 	if err := actor.RequireUser(); err != nil {
 		return EnvScope{}, err
@@ -80,14 +73,11 @@ func requireEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) 
 		return EnvScope{}, err
 	}
 	if !ok {
-		// PROJECT_NOT_FOUND: what the CLI branches on (cli-install.md C1).
 		return EnvScope{}, domain.E(domain.CodeProjectNotFound, domain.MsgEnvironmentNotFound)
 	}
 	return scope, nil
 }
 
-// requireNode: signed out → NOT_AUTHENTICATED; missing/foreign → "Node not found" (code
-// SERVICE_NOT_FOUND, which is what the CLI branches on).
 func requireNode(tx Tx, actor domain.Actor, id string) (NodeScope, error) {
 	if err := actor.RequireUser(); err != nil {
 		return NodeScope{}, err

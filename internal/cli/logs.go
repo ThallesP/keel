@@ -13,8 +13,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// Matches the Logs tab: there is no push, so following is polling the tail. A poll that hangs is
-// dropped and retried rather than ending the stream.
 const (
 	followEvery = 2 * time.Second
 	pollTimeout = 15 * time.Second
@@ -57,7 +55,6 @@ object per line: {"service","time","stream","task","text"}.`,
 				return err
 			}
 			sortLines(tail.Lines)
-			// Docker tails each task (old replicas too), so the server can return more than asked.
 			fetched := tail.Lines
 			tail.Lines = tail.Lines[max(0, len(tail.Lines)-lines):]
 			if !follow {
@@ -87,7 +84,7 @@ object per line: {"service","time","stream","task","text"}.`,
 				}
 			}
 			for _, l := range fetched[:len(fetched)-len(tail.Lines)] {
-				seen.add(l) // older than what -n asked for: never print them later
+				seen.add(l)
 			}
 			emit(tail.Lines)
 			tick := time.NewTicker(followEvery)
@@ -95,7 +92,7 @@ object per line: {"service","time","stream","task","text"}.`,
 			for {
 				select {
 				case <-ctx.Done():
-					return nil // interrupting is how --follow ends
+					return nil
 				case <-tick.C:
 				}
 				poll, cancel := context.WithTimeout(ctx, pollTimeout)
@@ -129,11 +126,9 @@ func sortLines(ls []client.LogLine) {
 	slices.SortStableFunc(ls, func(a, b client.LogLine) int { return a.Time.Compare(b.Time.Time) })
 }
 
-// lineSet remembers what --follow printed. Each poll returns an overlapping tail; a line is new
-// when it is later than the last printed one, or as late but not printed yet.
 type lineSet struct {
 	last time.Time
-	at   map[string]bool // lines printed at `last`
+	at   map[string]bool
 }
 
 func newLineSet() *lineSet { return &lineSet{at: map[string]bool{}} }

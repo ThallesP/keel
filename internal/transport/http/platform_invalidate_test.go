@@ -11,7 +11,6 @@ import (
 )
 
 func TestKeelInvalidateHeader(t *testing.T) {
-	// handler stands for a use case: its writes add to the request's recorder.
 	var sawRecorder bool
 	handler := withInvalidations(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := app.InvalidationsFrom(r.Context())
@@ -36,7 +35,6 @@ func TestKeelInvalidateHeader(t *testing.T) {
 	}
 	member := domain.Actor{UserID: "u1", OrganizationID: "org-a"}
 
-	// A write names its caller's organization's topics only, sorted.
 	w := do(http.MethodPost, "/api/nodes/n1/variables", member)
 	if got := w.Header().Get(InvalidateHeader); got != "/api/environments/e1,/api/projects" {
 		t.Fatalf("POST: %s = %q", InvalidateHeader, got)
@@ -46,16 +44,13 @@ func TestKeelInvalidateHeader(t *testing.T) {
 			t.Fatalf("%s: %q", m, got)
 		}
 	}
-	// A body-less 204 carries it too.
 	if got := do(http.MethodPost, "/api/nodes/n1/variables?empty=1", member).Header().Get(InvalidateHeader); got == "" {
 		t.Fatal("204 without the header")
 	}
-	// Without an organization yet (sign-up, founding): what the request published.
 	newbie := domain.Actor{UserID: "u2"}
 	if got := do(http.MethodPost, "/api/projects/default", newbie).Header().Get(InvalidateHeader); got != "/api/environments/e1,/api/environments/other-org,/api/projects" {
 		t.Fatalf("no-org caller: %q", got)
 	}
-	// Reads, the WebSocket and the agent/proxy/OTLP callbacks are left alone.
 	for _, tc := range []struct{ method, target string }{
 		{http.MethodGet, "/api/projects"},
 		{http.MethodHead, "/api/projects"},
@@ -68,7 +63,6 @@ func TestKeelInvalidateHeader(t *testing.T) {
 			t.Fatalf("%s %s: recorder %v, header %q", tc.method, tc.target, sawRecorder, w.Header().Get(InvalidateHeader))
 		}
 	}
-	// Nothing published: no header.
 	quiet := withInvalidations(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))

@@ -27,7 +27,6 @@ func svc(r, update, msg string) *SwarmService {
 	return &SwarmService{Name: "svc-x", Labels: rev(r), UpdateState: update, UpdateMessage: msg}
 }
 
-// TestSummarizeTasks pins swarm.ts summarize case by case.
 func TestSummarizeTasks(t *testing.T) {
 	const now = 1000
 	cases := []struct {
@@ -123,7 +122,7 @@ func TestTaskRevision(t *testing.T) {
 		{nil, 0, false},
 		{rev("3"), 3, true},
 		{rev(" 4 "), 4, true},
-		{rev(""), 0, true}, // Number("") is 0
+		{rev(""), 0, true},
 		{rev("x"), 0, false},
 		{rev("1.5"), 0, false},
 	}

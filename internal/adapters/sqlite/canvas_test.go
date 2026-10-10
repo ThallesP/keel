@@ -14,7 +14,6 @@ func TestCanvasTx(t *testing.T) {
 	env := seedEnvironment(t, s)
 	ctx := context.Background()
 	err := s.Write(ctx, func(tx app.Tx) error {
-		// Unique node name per environment (0002_canvas.sql) surfaces as ErrCanvasTaken.
 		a := domain.Node{ID: "a", EnvironmentID: env, Type: domain.NodeService, Name: "api", CreatedAt: 1}
 		if err := tx.CanvasInsertNode(a); err != nil {
 			return err
@@ -30,7 +29,6 @@ func TestCanvasTx(t *testing.T) {
 			t.Errorf("rename onto a taken name: %v", err)
 		}
 
-		// Variables: row order survives a key rename; unique key per node.
 		for _, k := range []string{"Z", "A", "M"} {
 			if err := tx.CanvasInsertVariable(domain.Variable{ID: "v" + k, NodeID: "a", Key: k, Value: k}); err != nil {
 				return err
@@ -75,7 +73,6 @@ func TestCanvasTx(t *testing.T) {
 			t.Errorf("left %+v", vs)
 		}
 
-		// Projects, environments, cluster.
 		if _, err := tx.CanvasProjectBySlug("org", "nope"); !errors.Is(err, app.ErrNoRow) {
 			t.Errorf("missing slug: %v", err)
 		}

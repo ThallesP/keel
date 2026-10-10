@@ -80,10 +80,6 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 }
 
-// Without KEEL_STATE the state file goes on the mounted state volume: keel-agent's
-// /var/lib/keel-agent (B7, B6.4), or the Bun worker's /var/lib/keel-worker when only that one is
-// mounted (image swapped on the keel-worker service). Off the volume it would be lost at every
-// restart and every container re-read from its sink's connect time.
 func TestDefaultStatePath(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -117,8 +113,6 @@ func TestDefaultStatePath(t *testing.T) {
 	}
 }
 
-// controlPlaneStub serves /worker/config (first answer: no sinks, then the given body) and
-// records /worker/events.
 type controlPlaneStub struct {
 	mu      sync.Mutex
 	configs int
@@ -158,9 +152,6 @@ func (c *controlPlaneStub) snapshot() (int, []post) {
 	return c.configs, append([]post(nil), c.events...)
 }
 
-// End to end: the agent starts, asks for a sweep, forwards a container start, polls the config
-// early because that container was not routed yet, ships its log line to Axiom, and on the
-// signal flushes and writes both resume points.
 func TestAgentRun(t *testing.T) {
 	as := &axiomServer{}
 	axiom := httptest.NewServer(as)
@@ -197,7 +188,7 @@ func TestAgentRun(t *testing.T) {
 		t.Fatalf("ingest body = %s", as.requests()[0])
 	}
 
-	cancel(errors.New("terminated signal received")) // what signal.NotifyContext sets on SIGTERM
+	cancel(errors.New("terminated signal received"))
 	select {
 	case err := <-done:
 		if err != nil {

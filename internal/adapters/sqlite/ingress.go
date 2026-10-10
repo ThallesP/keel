@@ -6,8 +6,6 @@ import (
 	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-// Implements app.IngressTx.
-
 func (t *tx) IngressHasVariable(nodeID, key string) (bool, error) {
 	return t.q.IngressHasVariable(t.ctx, sqlc.IngressHasVariableParams{NodeID: nodeID, Key: key})
 }

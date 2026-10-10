@@ -36,7 +36,6 @@ func (j *recordedJobs) has(prefix string) bool {
 	return false
 }
 
-// deployTestApp: org "org" owns environment "env" with one dirty service; org "org2" exists too.
 func deployTestApp(t *testing.T, token string) (*app.App, *recordedJobs, domain.Node) {
 	t.Helper()
 	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
@@ -99,7 +98,7 @@ func TestParseWorkerEvents(t *testing.T) {
 			t.Errorf("%s: %v", c.name, err)
 			continue
 		}
-		if c.name == "array" { // compare the time by value
+		if c.name == "array" {
 			if got[0].Time == nil || *got[0].Time != 1700000000 {
 				t.Errorf("%s: time %v", c.name, got[0].Time)
 			}
@@ -150,21 +149,18 @@ func TestWorkerEventsRoute(t *testing.T) {
 		}
 	}
 
-	// Events schedule a debounced scan of our node; resync asks for a sweep.
 	jobs.keys = nil
 	w := post(h, "/worker/events", "Bearer s3cret", `{"Type":"container","Action":"die","Actor":{"Attributes":{"com.docker.swarm.service.name":"svc-`+n.ID+`"}}}`, "X-Keel-Resync", "1")
 	if w.Code != 200 || !jobs.has("observe:"+n.ID) || !jobs.has("observe:all") {
 		t.Fatalf("%d jobs %v", w.Code, jobs.keys)
 	}
 
-	// No token configured: everything is refused.
 	a2, _, _ := deployTestApp(t, "")
 	if w := post(New(a2, Options{}), "/worker/events", "Bearer ", "[]"); w.Code != 401 {
 		t.Fatalf("unset token: %d", w.Code)
 	}
 }
 
-// deployAPI serves the deploy operations with a fixed actor (the auth area resolves real ones).
 func deployAPI(a *app.App, actor domain.Actor) http.Handler {
 	mux := http.NewServeMux()
 	s := &Server{app: a}
@@ -192,7 +188,6 @@ func TestDeploymentRoutes(t *testing.T) {
 	outsider := deployAPI(a, domain.Actor{UserID: "u2", OrganizationID: "org2"})
 	signedOut := deployAPI(a, domain.Actor{})
 
-	// Ship: nothing listed → 409 NOTHING_TO_SHIP; then a real ship.
 	if code, body, _ := call(member, "POST", "/api/environments/env/deployments", `{"only":[]}`); code != 409 || body["code"] != "NOTHING_TO_SHIP" || body["detail"] != "Nothing to ship" {
 		t.Fatalf("empty only: %d %v", code, body)
 	}
@@ -214,7 +209,6 @@ func TestDeploymentRoutes(t *testing.T) {
 		t.Fatalf("signed-out ship: %d %v", code, body)
 	}
 
-	// Reads: the member sees it; everyone else gets null / [].
 	_, body, raw = call(member, "GET", "/api/deployments/"+id, "")
 	d, _ := body["deployment"].(map[string]any)
 	if d == nil || d["id"] != id || d["message"] != "ship api" || d["status"] != "running" || d["_id"] != nil {

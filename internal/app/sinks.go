@@ -1,10 +1,5 @@
 package app
 
-// One log sink per organization, shared by every project in it (logSinks.ts). Absent = the
-// Docker default (read from the manager, ship nothing). The agent on every node polls
-// /worker/config for the sink and the services of every project and streams container lines
-// there; logs.go reads them back.
-
 import (
 	"context"
 	"errors"
@@ -15,8 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// LogSink is the caller's organization's sink as the UI may see it (kind and where, never the
-// token); nil when signed out, without an organization, or without a sink.
 func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkView, error) {
 	if !actor.SignedIn() || actor.OrganizationID == "" {
 		return nil, nil
@@ -40,8 +33,6 @@ func (a *App) LogSink(ctx context.Context, actor domain.Actor) (*domain.LogSinkV
 	return view, err
 }
 
-// saveSink makes sink the actor's organization's, replacing whatever it had (a fresh row: its
-// creation is the connect time the agent reads containers from).
 func (a *App) saveSink(ctx context.Context, actor domain.Actor, sink domain.LogSink) error {
 	if err := actor.RequireMember(); err != nil {
 		return err
@@ -55,8 +46,6 @@ func (a *App) saveSink(ctx context.Context, actor domain.Actor, sink domain.LogS
 	})
 }
 
-// DisconnectLogSink goes back to the Docker default for every project. The agents stop shipping
-// on their next poll. Tracing switches and ingest keys stay: the relay then accepts and drops.
 func (a *App) DisconnectLogSink(ctx context.Context, actor domain.Actor) error {
 	if err := actor.RequireMember(); err != nil {
 		return err
@@ -70,16 +59,13 @@ func (a *App) DisconnectLogSink(ctx context.Context, actor domain.Actor) error {
 	})
 }
 
-// ConnectAxiomInput is a pasted Axiom API token (no UI; scripts, agents, OAuth fallback).
 type ConnectAxiomInput struct {
 	Domain  string
 	Dataset string
-	Traces  *string // nil = no traces dataset
+	Traces  *string
 	Token   string
 }
 
-// ConnectAxiom verifies the token against Axiom (creating the datasets if needed), then makes it
-// the organization's sink. Returns the logs and traces datasets.
 func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAxiomInput) (string, *string, error) {
 	if err := actor.RequireMember(); err != nil {
 		return "", nil, err
@@ -121,14 +107,6 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 	return in.Dataset, in.Traces, nil
 }
 
-// BeginAxiomSignIn makes the PKCE verifier + state here (the browser may be on plain http, where
-// WebCrypto is unavailable) and returns the authorize URL. Axiom redirects to /axiom/callback,
-// which hands state + code to CompleteAxiomSignIn: exchange for a personal token, list orgs, and
-// provision right away in the org picked on Axiom's consent page or the only one. Failing both,
-// the token waits in axiom_pending until the Observability page calls ChooseAxiomOrg. Both
-// pending tables are per organization, single use, and expire after 10 minutes.
-
-// BeginAxiomSignIn returns Axiom's authorize URL for redirectURI (<origin>/axiom/callback).
 func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirectURI string) (string, error) {
 	u, err := url.Parse(redirectURI)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.EscapedPath() != "/axiom/callback" {
@@ -158,7 +136,6 @@ func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirect
 			}
 			return "", obsInvalid(err)
 		}
-		// First writer wins; this sign-in still uses the client it registered.
 		clientID = id
 		err = a.write(ctx, func(tx Tx, _ *Changes) error { return tx.SaveAxiomClient(redirectURI, clientID, a.Now()) })
 		if err != nil {
@@ -178,14 +155,12 @@ func (a *App) BeginAxiomSignIn(ctx context.Context, actor domain.Actor, redirect
 	return authorize, nil
 }
 
-// AxiomSignInResult: Choose when the user has to pick an org first; else the provisioned sink.
 type AxiomSignInResult struct {
 	Choose  bool
 	Dataset string
 	Org     string
 }
 
-// CompleteAxiomSignIn is the /axiom/callback step.
 func (a *App) CompleteAxiomSignIn(ctx context.Context, actor domain.Actor, state, code string) (AxiomSignInResult, error) {
 	started, err := a.takeSignIn(ctx, actor, state)
 	if err != nil {
@@ -245,8 +220,6 @@ func (a *App) CompleteAxiomSignIn(ctx context.Context, actor domain.Actor, state
 	return AxiomSignInResult{Choose: true}, nil
 }
 
-// takeSignIn is the started sign-in for state, deleted on read. nil when unknown, expired, or
-// another organization's (a foreign row is left alone).
 func (a *App) takeSignIn(ctx context.Context, actor domain.Actor, state string) (*AxiomSignIn, error) {
 	var out *AxiomSignIn
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
@@ -271,8 +244,6 @@ func (a *App) takeSignIn(ctx context.Context, actor domain.Actor, state string) 
 	return out, err
 }
 
-// ChooseAxiomOrg finishes a sign-in that saw several orgs. The pending pick is consumed even when
-// orgID is not one of them (the user signs in again).
 func (a *App) ChooseAxiomOrg(ctx context.Context, actor domain.Actor, orgID string) (string, string, error) {
 	var pending *AxiomPending
 	if actor.OrganizationID != "" {
@@ -308,8 +279,6 @@ func (a *App) ChooseAxiomOrg(ctx context.Context, actor domain.Actor, orgID stri
 	return "", "", domain.NotFound(msgOrgNotFound)
 }
 
-// PendingAxiomOrgs is the orgs to choose from while a sign-in with several orgs is pending (names
-// only), else nil.
 func (a *App) PendingAxiomOrgs(ctx context.Context, actor domain.Actor) ([]domain.AxiomOrgChoice, error) {
 	if !actor.SignedIn() || actor.OrganizationID == "" {
 		return nil, nil
@@ -335,7 +304,6 @@ func (a *App) PendingAxiomOrgs(ctx context.Context, actor domain.Actor) ([]domai
 	return out, err
 }
 
-// CancelAxiomSignIn drops a pending org pick (the user backed out). No-op without one.
 func (a *App) CancelAxiomSignIn(ctx context.Context, actor domain.Actor) error {
 	if !actor.SignedIn() || actor.OrganizationID == "" {
 		return nil
@@ -356,9 +324,6 @@ func (a *App) CancelAxiomSignIn(ctx context.Context, actor domain.Actor) error {
 	})
 }
 
-// provisionAxiom creates the datasets and the scoped token with the personal token, proves the
-// token can query both, and saves the sink. The personal token is never stored; the token being
-// replaced stays valid in Axiom.
 func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token string, org domain.AxiomOrg) (string, string, error) {
 	if err := actor.RequireMember(); err != nil {
 		return "", "", err
@@ -391,17 +356,13 @@ func (a *App) provisionAxiom(ctx context.Context, actor domain.Actor, token stri
 	return sink.Dataset, org.Name, nil
 }
 
-// WorkerSinkEntry is one project's routing for the agents (GET /worker/config).
 type WorkerSinkEntry struct {
 	ProjectID  string
 	ServiceIDs []string
 	Sink       domain.LogSink
-	Since      int64 // when the organization connected the sink
+	Since      int64
 }
 
-// WorkerConfig is what every node's agent receives: per project with an organization sink, its
-// services (nodes with desired set) and the sink (token included). Bearer-protected by the
-// transport; no actor.
 func (a *App) WorkerConfig(ctx context.Context) ([]WorkerSinkEntry, error) {
 	out := []WorkerSinkEntry{}
 	err := a.read(ctx, func(tx Tx) error {

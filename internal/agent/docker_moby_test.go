@@ -19,10 +19,9 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// dockerAPI is a fake Docker Engine API: it records every request and answers the agent's GETs.
 type dockerAPI struct {
 	mu   sync.Mutex
-	reqs []string // "METHOD /path?query" with the /v1.xx prefix removed
+	reqs []string
 }
 
 var versionPrefix = regexp.MustCompile(`^/v1\.\d+`)
@@ -193,8 +192,6 @@ func TestMobyEvents(t *testing.T) {
 	}
 }
 
-// The agent never mutates the daemon: anything but GET (and the HEAD /_ping of version
-// negotiation) is refused before it leaves the process.
 func TestMobyReadOnly(t *testing.T) {
 	d, api := newTestMoby(t)
 	_, err := d.cli.ContainerRemove(context.Background(), "c1", client.ContainerRemoveOptions{Force: true})
@@ -217,7 +214,6 @@ func TestMobyReadOnly(t *testing.T) {
 	}
 }
 
-// The constructor the agent runs with (DOCKER_SOCKET) installs the read-only guard itself.
 func TestNewMobyDockerIsReadOnly(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "d.sock")
 	ln, err := net.Listen("unix", sock)
@@ -229,7 +225,7 @@ func TestNewMobyDockerIsReadOnly(t *testing.T) {
 	srv.Listener = ln
 	srv.Start()
 	defer srv.Close()
-	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1") // DOCKER_SOCKET wins over DOCKER_HOST
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
 	d, err := NewMobyDocker(sock)
 	if err != nil {
 		t.Fatal(err)

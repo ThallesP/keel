@@ -6,10 +6,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Test-only access for package app_test (compiled only with this package's tests).
-
-// BeginDeploymentForTest runs beginDeployment (with a verb, as the canvas area's node actions do)
-// in its own transaction.
 func (a *App) BeginDeploymentForTest(ctx context.Context, environmentID string, opts ShipOptions) (string, error) {
 	var id string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -26,17 +22,14 @@ func (a *App) BeginDeploymentForTest(ctx context.Context, environmentID string, 
 	return id, err
 }
 
-// TimeoutDeploymentForTest runs the 5-minute timeout of a deployment now.
 func (a *App) TimeoutDeploymentForTest(ctx context.Context, id string) { a.timeoutDeployment(ctx, id) }
 
-// DeploySeams stand in for other areas' seams that apply calls.
 type DeploySeams struct {
 	ComputeEnv func(tx Tx, n domain.Node) (map[string]string, error)
 	FollowPort func(tx Tx, ch *Changes, scope NodeScope, port int, now int64) (bool, error)
 	ProxySync  func()
 }
 
-// UseDeploySeams installs s (tracing adds nothing) and returns the restore function.
 func UseDeploySeams(s DeploySeams) (restore func()) {
 	env, tracing, follow, sync := deployComputeEnv, deployWithTracing, deployFollowPort, deployProxySync
 	deployComputeEnv = s.ComputeEnv

@@ -2,17 +2,11 @@ package api
 
 import "github.com/ThallesP/keel/internal/domain"
 
-// Deployments (docs/go/spec/web-data.md §5.3; projects.md §9.5). JSON uses `id`, never `_id`.
-// Optional fields are absent when unset; `steps` and `log` are always arrays.
-
-// ShipRequest is POST /api/environments/{id}/deployments. Without `only`: Ship every dirty node.
-// With `only` (even empty): exactly those nodes; `refresh` pulls their images again.
 type ShipRequest struct {
 	Only    []string `json:"only,omitempty" doc:"Node ids to deploy; absent = every node with staged changes"`
 	Refresh bool     `json:"refresh,omitempty" doc:"Pull the images again (Redeploy, Retry)"`
 }
 
-// ShipResponse is the new deployment's id.
 type ShipResponse struct {
 	ID string `json:"id"`
 }
@@ -44,13 +38,10 @@ type Deployment struct {
 	Log           []DeployLogLine `json:"log" doc:"The last 500 lines, oldest first"`
 }
 
-// DeploymentEnvelope is GET /api/deployments/{id} and GET /api/environments/{id}/deployments/latest:
-// `deployment` is null when there is none or it is not the caller's.
 type DeploymentEnvelope struct {
 	Deployment *Deployment `json:"deployment"`
 }
 
-// DeploymentOf is the wire form of d.
 func DeploymentOf(d domain.Deployment) Deployment {
 	out := Deployment{
 		ID:            d.ID,

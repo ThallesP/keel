@@ -11,9 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Deployments: Ship / redeploy / retry and the deployment reads (docs/go/spec/web-data.md §4.1
-// Q13–Q15, §4.2 M6–M7, §5.3; ARCHITECTURE "Resolved API decisions").
-
 var deployTags = []string{"deploy"}
 
 type shipEnvironmentInput struct {
@@ -35,11 +32,8 @@ type nodeDeploymentsInput struct {
 	ID string `path:"id" doc:"Node id"`
 }
 
-// DeploymentEnvelope is api.DeploymentEnvelope with `deployment` typed as nullable in the OpenAPI
-// document (Huma cannot mark an object field nullable on its own).
 type DeploymentEnvelope api.DeploymentEnvelope
 
-// TransformSchema: deployment is `Deployment | null`.
 func (DeploymentEnvelope) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
 	if p := s.Properties["deployment"]; p != nil {
 		s.Properties["deployment"] = &huma.Schema{

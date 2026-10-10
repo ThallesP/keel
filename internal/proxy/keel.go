@@ -1,17 +1,5 @@
 //go:build linux
 
-// Package proxy is `keel proxy`, the control plane's public edge (was apps/proxy + the keel-proxy
-// image): Caddy and caddy-l4 as libraries, with only the modules Keel's config uses, plus Keel's
-// own modules. `keel serve` owns the configuration and pushes all of it through the admin API on
-// a unix socket only it shares (adapters/caddy); this package adds what stock Caddy lacks for that:
-//
-//   - networks `host-tcp` and `host-udp`: listeners in the host's network namespace (hostns.go)
-//   - GET /keel/host-addrs: the host addresses to bind, so the control plane can write the listen lists
-//   - GET /keel/certs?name=…: what the proxy knows about each hostname's certificate
-//   - event handler `keel`: reports cert_obtained / cert_failed to POST /proxy/events as they happen
-//
-// It runs in its own container (proxy-ingress.md §12.4 option 1): the process that parses
-// internet traffic never holds the Docker socket. See docs/networking.md.
 package proxy
 
 import (
@@ -37,7 +25,6 @@ func init() {
 	caddy.RegisterModule(Reporter{})
 }
 
-// Admin serves Keel's routes on the admin endpoint (a unix socket only the control plane can reach).
 type Admin struct{}
 
 func (Admin) CaddyModule() caddy.ModuleInfo {
@@ -62,10 +49,8 @@ func serveHostAddrs(w http.ResponseWriter, r *http.Request) error {
 	return writeJSON(w, addrs)
 }
 
-// Cert is one hostname's certificate as far as this process knows. `pending`: neither a cert
-// nor a failure yet (ACME is working on it, or the name is not managed).
 type Cert struct {
-	State    string    `json:"state"` // ok | failed | pending
+	State    string    `json:"state"`
 	Error    string    `json:"error,omitempty"`
 	NotAfter time.Time `json:"notAfter,omitzero"`
 }
@@ -95,8 +80,6 @@ func certOf(name string) Cert {
 	return Cert{State: "pending"}
 }
 
-// matchingCerts is caddytls.AllMatchingCertificates (the in-memory cert cache, wildcards
-// included), or nothing before any TLS app has created the cache.
 func matchingCerts(name string) (certs []certmagic.Certificate) {
 	defer func() {
 		if recover() != nil {
@@ -106,16 +89,11 @@ func matchingCerts(name string) (certs []certmagic.Certificate) {
 	return caddytls.AllMatchingCertificates(name)
 }
 
-// Last obtain/renew failure per hostname, cleared when a cert arrives. Package state on purpose:
-// it outlives config reloads, which recreate every module.
 var (
 	failuresMu sync.Mutex
 	failures   = map[string]string{}
 )
 
-// Reporter is the `keel` event handler: the control plane subscribes it to cert_obtained and
-// cert_failed so a certificate's outcome reaches the canvas without polling (POST /proxy/events,
-// worker token).
 type Reporter struct {
 	URL   string `json:"url,omitempty"`
 	Token string `json:"token,omitempty"`
@@ -130,8 +108,6 @@ func (Reporter) CaddyModule() caddy.ModuleInfo {
 
 func (r *Reporter) Provision(ctx caddy.Context) error {
 	r.logger = ctx.Logger()
-	// Dial from the host namespace: the control plane listens on the host (tailnet address, or
-	// loopback in development), which the container's own namespace may not route to.
 	r.client = &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
@@ -150,7 +126,7 @@ func (r *Reporter) Provision(ctx caddy.Context) error {
 }
 
 type certEvent struct {
-	Event string `json:"event"` // cert_obtained | cert_failed
+	Event string `json:"event"`
 	Name  string `json:"name"`
 	Error string `json:"error,omitempty"`
 }
@@ -168,11 +144,9 @@ func (r *Reporter) Handle(_ context.Context, e caddy.Event) error {
 		failuresMu.Unlock()
 	case "cert_failed":
 		report.Error = errorText(e.Data["error"])
-		// A config reload cancelled this attempt; the new config starts another.
 		if strings.Contains(report.Error, "context canceled") {
 			return nil
 		}
-		// A failed renewal: the current certificate keeps serving while Caddy retries.
 		if certOf(name).State == "ok" {
 			return nil
 		}
@@ -188,11 +162,8 @@ func (r *Reporter) Handle(_ context.Context, e caddy.Event) error {
 	return nil
 }
 
-// reportBackoff is the pause before retry n (1..3): 2, 4, 6 s. A variable for tests.
 var reportBackoff = func(attempt int) time.Duration { return time.Duration(attempt) * 2 * time.Second }
 
-// post delivers one report, retrying briefly. A lost report only delays the canvas: the next
-// sync reads /keel/certs.
 func (r *Reporter) post(report certEvent) {
 	body, _ := json.Marshal(report)
 	for attempt := range 4 {

@@ -12,7 +12,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// fakeDevice serves one device endpoint and returns a client pointing at it and the body it got.
 func fakeDevice(t *testing.T, path string, status int, body string) (*Client, *map[string]string) {
 	t.Helper()
 	got := map[string]string{}
@@ -100,7 +99,6 @@ func TestPollLogin(t *testing.T) {
 	}
 }
 
-// retryAfter adds a Retry-After header to every response, as the server's limiter does.
 type retryAfter struct{ seconds string }
 
 func (r retryAfter) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -124,7 +122,6 @@ func TestMe(t *testing.T) {
 	if err != nil || user.Email != "me@example.com" || org.Role != "owner" || auth != "Bearer tok" {
 		t.Fatalf("me = %+v, %+v, %v (auth %q)", user, org, err, auth)
 	}
-	// Signed out (the session is gone): 200 with user null.
 	body = `{"user":null,"organization":null}`
 	_, _, err = New(srv.URL, "dead").Me(context.Background())
 	if oe, ok := err.(*output.Error); !ok || oe.Code != output.CodeNotAuthenticated ||
@@ -136,23 +133,19 @@ func TestMe(t *testing.T) {
 	}
 }
 
-// KEEL_URL (or a saved install) that is not Keel's API: the session check says what it is, as
-// keel login would, instead of a SERVER_ERROR with an HTML page in it.
 func TestMeNotKeel(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		mux  map[string]string // path → 200 body; anything else 404
+		mux  map[string]string
 		code string
 		msg  string
 	}{
-		// Convex era: nginx answers every path with index.html, /config.js names Convex URLs.
 		{"older keel", map[string]string{
 			"/api/me":    `<!doctype html><html></html>`,
 			"/api/meta":  `<!doctype html><html></html>`,
 			"/config.js": `window.__KEEL__ = {"convexUrl":"http://100.64.0.1:3210","convexSiteUrl":"http://100.64.0.1:3211"};`,
 		}, output.CodeDiscoveryFailed, "runs an older Keel"},
 		{"something else", map[string]string{}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
-		// Keel itself failing keeps its own error.
 		{"keel failing", map[string]string{
 			"/api/me":   `{"user":`,
 			"/api/meta": `{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`,
@@ -184,7 +177,6 @@ func TestDiscover(t *testing.T) {
 		msg  string
 	}{
 		{"keel", map[string]string{"/api/meta": `{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`}, "", ""},
-		// Convex era: nginx answers every path with index.html, /config.js names Convex URLs.
 		{"older keel", map[string]string{
 			"/api/meta":  `<!doctype html><html></html>`,
 			"/config.js": `window.__KEEL__ = {"convexUrl":"http://100.64.0.1:3210","convexSiteUrl":"http://100.64.0.1:3211"};`,
@@ -210,7 +202,6 @@ func TestDiscover(t *testing.T) {
 			}
 		})
 	}
-	// Nothing listening.
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
 	srv.Close()

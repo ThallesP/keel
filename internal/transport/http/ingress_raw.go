@@ -11,17 +11,10 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Raw (non-Huma) routes.
-//
-//	POST /proxy/events  keel-proxy's `keel` event handler reporting a certificate obtained or
-//	                    failed. Same bearer as the agent (KEEL_WORKER_TOKEN), which the sync writes
-//	                    into the proxy's config. Path and answers unchanged from Convex
-//	                    (proxy-ingress.md §5.9): deployed proxies keep calling it.
 func (s *Server) registerIngressRaw(mux *http.ServeMux) {
 	mux.HandleFunc("POST /proxy/events", s.proxyEvents)
 }
 
-// ingressMaxBody: 256 KiB counted as JavaScript string length (UTF-16 code units), as Convex did.
 const ingressMaxBody = 256 * 1024
 
 func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +22,6 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 		ingressText(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	// A UTF-16 unit takes at most 3 UTF-8 bytes: more than 3×max bytes is more than max units.
 	body, err := io.ReadAll(io.LimitReader(r.Body, 3*ingressMaxBody+1))
 	if err != nil {
 		ingressText(w, http.StatusBadRequest, "bad json")
@@ -60,9 +52,6 @@ func (s *Server) proxyEvents(w http.ResponseWriter, r *http.Request) {
 	ingressText(w, http.StatusOK, "ok")
 }
 
-// ingressBearerOK: `Authorization: Bearer <token>` with the trimmed token equal to expected, in
-// constant time (a length mismatch counts as a difference, not a shortcut). No expected token →
-// never.
 func ingressBearerOK(r *http.Request, expected string) bool {
 	header := r.Header.Get("Authorization")
 	if expected == "" || !strings.HasPrefix(header, "Bearer ") {

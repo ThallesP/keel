@@ -1,7 +1,5 @@
 package sqlite
 
-// Implements app.ObservabilityTx.
-
 import (
 	"encoding/json"
 	"fmt"

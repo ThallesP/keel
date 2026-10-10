@@ -6,26 +6,17 @@ import (
 	"strings"
 )
 
-// Variable references, Railway-style: `${{ postgres.DATABASE_URL }}` (another node of the
-// environment, by name) or `${{ POSTGRES_USER }}` (the row's own node). They resolve at apply time,
-// so every ship sees current values (docs/go/spec/projects.md §5).
-
-// canvasJSSpace is ECMAScript `\s` (RE2's `\s` is ASCII only and lacks \v).
 const canvasJSSpace = `[\t\n\v\f\r \x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]*`
 
-// canvasRefRE is convex/variables.ts REF_RE.
 var canvasRefRE = regexp.MustCompile(`\$\{\{` + canvasJSSpace + `(?:([a-z0-9-]{1,40})\.)?([A-Z_][A-Z0-9_]{0,63})` + canvasJSSpace + `\}\}`)
 
-// MaxRefDepth guards reference chains (a → b → a): anything deeper resolves to "".
 const MaxRefDepth = 5
 
-// RefMatch is one reference in a value. Name is "" for an unqualified (own node) reference.
 type RefMatch struct {
-	Start, End int // byte offsets of the whole `${{ … }}`
+	Start, End int
 	Name, Key  string
 }
 
-// FindRefs: every reference in value, left to right, non-overlapping.
 func FindRefs(value string) []RefMatch {
 	idx := canvasRefRE.FindAllStringSubmatchIndex(value, -1)
 	out := make([]RefMatch, 0, len(idx))
@@ -39,7 +30,6 @@ func FindRefs(value string) []RefMatch {
 	return out
 }
 
-// canvasPointsAt: does a reference found in a row of rowNodeID name node?
 func canvasPointsAt(name, rowNodeID string, node Node) bool {
 	if name == "" {
 		return rowNodeID == node.ID
@@ -47,10 +37,6 @@ func canvasPointsAt(name, rowNodeID string, node Node) bool {
 	return name == node.Name
 }
 
-// RewriteRefs replaces every reference in value (a row of rowNodeID) that points at node with the
-// name and key `to` returns: unqualified ones keep their form (`${{ KEY }}`), qualified ones take
-// both (`${{ name.KEY }}`). Others are kept byte for byte; rewritten ones come out with single
-// spaces inside the braces.
 func RewriteRefs(value, rowNodeID string, node Node, to func(oldKey string) (name, key string)) string {
 	refs := FindRefs(value)
 	if len(refs) == 0 {
@@ -76,14 +62,12 @@ func RewriteRefs(value, rowNodeID string, node Node, to func(oldKey string) (nam
 	return b.String()
 }
 
-// Referrers: every node whose variables depend on start, transitively (`api` → `worker.QUEUE_URL`
-// → `redis.REDIS_URL`), in breadth-first order, start excluded. Self references never count.
 func Referrers(nodes []Node, vars []Variable, startID string) []string {
 	byName := make(map[string]string, len(nodes))
 	for _, n := range nodes {
 		byName[n.Name] = n.ID
 	}
-	referrers := map[string]map[string]bool{} // target → nodes referencing it
+	referrers := map[string]map[string]bool{}
 	for _, v := range vars {
 		for _, m := range FindRefs(v.Value) {
 			target := v.NodeID
@@ -103,7 +87,6 @@ func Referrers(nodes []Node, vars []Variable, startID string) []string {
 	queue := []string{startID}
 	var out []string
 	for at := 0; at < len(queue); at++ {
-		// Node order, not map order, so the result is deterministic.
 		for _, n := range nodes {
 			if !referrers[queue[at]][n.ID] || seen[n.ID] {
 				continue
@@ -116,8 +99,6 @@ func Referrers(nodes []Node, vars []Variable, startID string) []string {
 	return out
 }
 
-// EncodeURIComponent is JavaScript's encodeURIComponent: UTF-8 bytes, keeping A–Z a–z 0–9 and
-// - _ . ! ~ * ' ( ). Not url.QueryEscape / url.PathEscape, which differ on several of those.
 func EncodeURIComponent(s string) string {
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
@@ -136,17 +117,12 @@ func EncodeURIComponent(s string) string {
 	return b.String()
 }
 
-// ProvidedKey is a key a runtime node answers to without storing it.
 type ProvidedKey struct {
 	Key    string
 	Value  string
 	Secret bool
 }
 
-// ProvidedKeys is what a node with a runtime offers to references: a ready-made connection URL,
-// then its overlay HOST and PORT (that order). get reads one of the node's own variables
-// (references expanded) or returns the fallback. Volumes and groups provide nothing. Credentials
-// are percent-encoded (RFC 3986) so a `@`, `/` or `#` in a password cannot break the URL.
 func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKey {
 	d := node.Desired
 	if d == nil {
@@ -203,14 +179,11 @@ func SuggestedKey(node, key string) string {
 
 func RefText(node, key string) string { return "${{ " + node + "." + key + " }}" }
 
-// RefPart is a piece of a variable's value: literal text, or a reference (Ref non-nil).
 type RefPart struct {
 	Text string
 	Ref  *Ref
 }
 
-// Ref is a reference as the variables view shows it. Node is "" for the own node; NodeID is ""
-// when the name resolves to nothing; Missing when nothing was found (name, key, or depth).
 type Ref struct {
 	Node    string
 	NodeID  string
@@ -218,21 +191,17 @@ type Ref struct {
 	Missing bool
 }
 
-// Expansion is a value with every reference expanded.
 type Expansion struct {
 	Resolved string
-	Secret   bool // a referenced value is secret
+	Secret   bool
 	Parts    []RefPart
 }
 
-// Resolver expands references within one environment (convex/variables.ts resolver).
 type Resolver struct {
 	byName map[string]Node
-	vars   map[string][]Variable // node id → its rows, in row order
+	vars   map[string][]Variable
 }
 
-// NewResolver: nodes = every node of the environment (any type); vars = their variables in row
-// order (rows of other environments are ignored by lookup, never reached).
 func NewResolver(nodes []Node, vars []Variable) *Resolver {
 	r := &Resolver{byName: make(map[string]Node, len(nodes)), vars: map[string][]Variable{}}
 	for _, n := range nodes {
@@ -244,7 +213,6 @@ func NewResolver(nodes []Node, vars []Variable) *Resolver {
 	return r
 }
 
-// Own is a node's own rows, in row order.
 func (r *Resolver) Own(nodeID string) []Variable { return r.vars[nodeID] }
 
 func (r *Resolver) row(nodeID, key string) (Variable, bool) {
@@ -256,7 +224,6 @@ func (r *Resolver) row(nodeID, key string) (Variable, bool) {
 	return Variable{}, false
 }
 
-// Expand expands value as a variable of node. Parts are what the top-level value is made of.
 func (r *Resolver) Expand(node Node, value string) Expansion { return r.expand(node, value, 0) }
 
 func (r *Resolver) expand(node Node, value string, depth int) Expansion {
@@ -295,7 +262,6 @@ func (r *Resolver) expand(node Node, value string, depth int) Expansion {
 	return out
 }
 
-// lookup: key on target: its own variable (expanded) wins over a provided one.
 func (r *Resolver) lookup(target Node, key string, depth int) *ProvidedKey {
 	if row, ok := r.row(target.ID, key); ok {
 		inner := r.expand(target, row.Value, depth+1)
@@ -315,8 +281,6 @@ func (r *Resolver) lookup(target Node, key string, depth int) *ProvidedKey {
 	return nil
 }
 
-// Env is the node's container environment: `KEY=<value expanded>` for each own row, in row order.
-// Provided keys are not added (a database container gets no DATABASE_URL).
 func (r *Resolver) Env(node Node) []string {
 	rows := r.vars[node.ID]
 	env := make([]string, 0, len(rows))

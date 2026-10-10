@@ -14,8 +14,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// Deployments settle within the server's 5-minute timeout (one still running then fails); this
-// only guards a control plane that stopped answering.
 const defaultWait = 10 * time.Minute
 
 type waitFlags struct {
@@ -103,8 +101,6 @@ func (a *app) deploy(cmd *cobra.Command, names []string, refresh bool, wait wait
 	return a.await(ctx, s, id, services, wait.timeout)
 }
 
-// await polls a deployment until it settles, streaming its log to stderr. Success prints the
-// deployment; failure is a DEPLOYMENT_FAILED error that carries it.
 func (a *app) await(ctx context.Context, s *session, id string, services []client.Service, timeout time.Duration) error {
 	names := map[string]string{}
 	for _, svc := range services {
@@ -133,7 +129,7 @@ func (a *app) await(ctx context.Context, s *session, id string, services []clien
 		if first {
 			a.out.Progress("%s (%s)", capitalize(d.Message), d.ID)
 		}
-		if printed > len(d.Log) { // the server keeps the last 500 entries
+		if printed > len(d.Log) {
 			printed = 0
 		}
 		for _, l := range d.Log[printed:] {
@@ -278,7 +274,7 @@ func (a *app) deploymentGetCmd() *cobra.Command {
 				}
 				return output.Errorf(output.CodeDeploymentNotFound, "keel deployment list <service>", "%s", what)
 			}
-			if wait && d.Status != "success" { // await also turns a failed one into a non-zero exit
+			if wait && d.Status != "success" {
 				var services []client.Service
 				if _, env, err := a.project(ctx, s); err == nil {
 					services, _ = s.api.Services(ctx, env.ID)

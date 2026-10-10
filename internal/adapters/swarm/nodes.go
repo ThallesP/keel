@@ -7,7 +7,6 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// Servers: GET /nodes. ready = Swarm nodes whose status is ready (the status bar's "N servers").
 func (s *Swarm) Servers(ctx context.Context) (ready, total int, err error) {
 	res, err := s.cli.NodeList(ctx, client.NodeListOptions{})
 	if err != nil {

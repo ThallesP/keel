@@ -1,8 +1,3 @@
-// Package serve wires `keel serve`: config from the environment, adapters, the app, the HTTP
-// server, background jobs. Nothing else constructs adapters.
-//
-// Files: serve.go (config, Run, start-up and shutdown order), adapters.go (one function per
-// external adapter: Swarm, proxy, Axiom), configjs.go (GET /config.js).
 package serve
 
 import (
@@ -27,23 +22,14 @@ import (
 	transport "github.com/ThallesP/keel/internal/transport/http"
 )
 
-// Options are what main passes in; everything else comes from the environment.
 type Options struct {
 	Version string
-	Web     fs.FS // the embedded dashboard, nil in dev builds
+	Web     fs.FS
 }
 
-// The graceful shutdown's budget. It has to end before the container runtime's SIGKILL: `docker
-// stop` waits 10 s by default and deploy/compose.yml's stop_grace_period is 15 s, so the whole
-// ordered sequence (HTTP, recovery pass, jobs, sockets, adapters, database) fits in about 9 s.
-// Variables so tests can shorten them.
 var (
-	// ShutdownTimeout bounds stopping HTTP, the recovery pass and the jobs.
-	ShutdownTimeout = 8 * time.Second
-	// jobsCancelGrace: jobs still running this long before the deadline get their context
-	// cancelled, and the rest of the budget to record that outcome while the database is open.
-	jobsCancelGrace = time.Second
-	// realtimeCloseTimeout: closing the WebSockets, after the jobs (which may still publish).
+	ShutdownTimeout      = 8 * time.Second
+	jobsCancelGrace      = time.Second
 	realtimeCloseTimeout = time.Second
 )
 
@@ -54,7 +40,6 @@ func Env(key, def string) string {
 	return def
 }
 
-// ConfigFromEnv is app.Config from the environment (docs/go/ARCHITECTURE.md, "Env").
 func ConfigFromEnv(version string) app.Config {
 	return app.Config{
 		Version:         version,
@@ -73,7 +58,6 @@ func ConfigFromEnv(version string) app.Config {
 	}
 }
 
-// Run serves until ctx is cancelled (SIGINT/SIGTERM), then shuts down gracefully.
 func Run(ctx context.Context, opts Options) error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(log)
@@ -85,11 +69,6 @@ func Run(ctx context.Context, opts Options) error {
 	return serveOn(ctx, ln, cfg, opts, log)
 }
 
-// serveOn runs the control plane on ln until ctx is done. Start-up order: database, jobs,
-// realtime, external adapters, HTTP, then the recovery pass in the background. Shutdown order,
-// all inside ShutdownTimeout (+ realtimeCloseTimeout): stop accepting HTTP (in-flight requests
-// finish), wait for the recovery pass, stop jobs (running ones finish, or are cancelled shortly
-// before the deadline and waited for), close WebSockets, release adapters, close the database.
 func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options, log *slog.Logger) (err error) {
 	defer ln.Close()
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -110,7 +89,7 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 		return fmt.Errorf("realtime: %w", err)
 	}
 	a.Events = rt
-	a.Conns = rt // sign-out closes a session's sockets; a membership change moves them
+	a.Conns = rt
 
 	closers, err := wireAdapters(a, log)
 	if err != nil {
@@ -127,8 +106,6 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 
-	// The recovery pass replaces durable scheduling (observe everything, re-arm timeouts, proxy
-	// sync, data migrations). It runs once the listener is up so the API answers meanwhile.
 	recoverCtx, cancelRecover := context.WithCancel(context.Background())
 	recovered := make(chan struct{})
 	go func() {
@@ -152,20 +129,15 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	deadline := time.Now().Add(ShutdownTimeout)
 	shutdown, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
-	cancelRecover() // winds down while HTTP drains
-	// 1. Stop accepting; in-flight requests finish (WebSockets are hijacked: realtime closes them).
+	cancelRecover()
 	if err := srv.Shutdown(shutdown); err != nil {
 		log.Error("keel serve: http shutdown", "err", err)
 	}
-	// 2. The recovery pass writes to the database and schedules jobs: let it end first.
 	select {
 	case <-recovered:
 	case <-shutdown.Done():
 		log.Error("keel serve: recovery pass still running at shutdown")
 	}
-	// 3. Jobs: pending ones are dropped (the next start's recovery pass redoes what matters).
-	// Running ones may finish until shortly before the deadline; then their context is cancelled
-	// and they get the remaining moment to record that, before the database closes under them.
 	jobsCtx, cancelJobs := context.WithDeadline(shutdown, deadline.Add(-jobsCancelGrace))
 	if err := sched.Stop(jobsCtx); err != nil {
 		log.Error("keel serve: jobs still running at shutdown, cancelled", "err", err)
@@ -174,14 +146,10 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 		}
 	}
 	cancelJobs()
-	// 4. WebSockets: clients reconnect to the next process and refetch everything.
 	shutdownRealtime(rt, log)
-	// 5. Adapters, then 6. the database (deferred above, in that order).
 	return serveErr
 }
 
-// authenticator resolves the WebSocket upgrade request's session (cookie, else bearer) the same
-// way the HTTP middleware does.
 func authenticator(a *app.App) func(r *http.Request) (domain.Actor, error) {
 	return func(r *http.Request) (domain.Actor, error) {
 		token := transport.SessionToken(r)
@@ -208,7 +176,6 @@ func shutdownRealtime(rt *realtime.Server, log *slog.Logger) {
 	}
 }
 
-// recoverPanic logs a panic in a background goroutine instead of crashing the control plane.
 func recoverPanic(log *slog.Logger, what string) {
 	if r := recover(); r != nil {
 		log.Error("keel serve: "+what+" panicked", "panic", r, "stack", string(debug.Stack()))

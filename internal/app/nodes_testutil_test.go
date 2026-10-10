@@ -13,12 +13,9 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Canvas test kit: a temp SQLite store, a clock, a publisher that records topics, and fakes for
-// the seams other areas own (joinOrFound, beginDeployment, the delete schedulers).
-
 type canvasPublisher struct {
 	mu     sync.Mutex
-	topics map[string][]string // org → topics, accumulated
+	topics map[string][]string
 }
 
 func (p *canvasPublisher) Publish(org string, topics []string) {
@@ -30,7 +27,6 @@ func (p *canvasPublisher) Publish(org string, topics []string) {
 	p.topics[org] = append(p.topics[org], topics...)
 }
 
-// take returns and clears the topics published to org, sorted and deduplicated.
 func (p *canvasPublisher) take(org string) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -72,7 +68,6 @@ const (
 	canvasOther = "org-b"
 )
 
-// canvasSetup: two organizations (a and b), a member of each, and the seams faked.
 func canvasSetup(t *testing.T) *canvasKit {
 	t.Helper()
 	ctx := context.Background()
@@ -85,8 +80,6 @@ func canvasSetup(t *testing.T) *canvasKit {
 	k.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org-a', 'A', 'a', 1), ('org-b', 'B', 'b', 1)`)
 	k.app = app.New(app.App{Store: store, Events: k.pub, Now: func() int64 { k.now++; return k.now }, Config: app.Config{PublicIP: "203.0.113.7"}})
 	app.StubCanvasSeams(t, app.CanvasSeams{
-		// joinOrFound: an actor with a membership keeps it; without one, founding is refused (the
-		// organizations exist), which is what the auth area does on this install.
 		Join: func(tx app.Tx, actor domain.Actor, now int64) (domain.Actor, error) {
 			if actor.OrganizationID == "" {
 				return actor, domain.ErrNoOrganization
@@ -116,12 +109,10 @@ func (k *canvasKit) exec(q string, args ...any) {
 	}
 }
 
-// member is a signed-in member of org.
 func canvasMember(org string) domain.Actor {
 	return domain.Actor{UserID: "user-" + org, Email: org + "@example.com", OrganizationID: org, Role: domain.RoleMember}
 }
 
-// project creates a project in org and returns its production environment id.
 func (k *canvasKit) project(org, name string) string {
 	k.t.Helper()
 	p, err := k.app.CreateProject(k.ctx, canvasMember(org), name)
@@ -173,14 +164,12 @@ func (k *canvasKit) setVar(id, key, value string) {
 	}
 }
 
-// clean marks every node of the environment as shipped and not dirty (what a Ship leaves).
 func (k *canvasKit) clean(env string) {
 	k.exec(`UPDATE nodes SET dirty = 0 WHERE environment_id = ?`, env)
 }
 
 func canvasPtr[T any](v T) *T { return &v }
 
-// wantErr checks code and message.
 func canvasWantErr(t *testing.T, err error, code, msg string) {
 	t.Helper()
 	if err == nil {

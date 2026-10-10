@@ -9,15 +9,13 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// obsFakeAxiom is an in-memory app.Axiom. Errors are injected per method; every call is recorded
-// as a short line ("Query keel-logs <apl>", "CreateDataset org=o1 keel-logs", …).
 type obsFakeAxiom struct {
 	mu    sync.Mutex
 	calls []string
 
 	queryErr    func(t app.AxiomTarget, q app.AxiomQuery) error
 	queryRows   []*app.JSONObject
-	createErr   map[string]error // by dataset name
+	createErr   map[string]error
 	datasets    []app.AxiomDataset
 	datasetsErr error
 	minted      string
@@ -98,7 +96,6 @@ func (f *obsFakeAxiom) ForwardTraces(_ context.Context, fw app.OTLPForward) (app
 	return f.forwardRes, f.forwardErr
 }
 
-// obsFakeLogReader is an in-memory app.LogReader.
 type obsFakeLogReader struct {
 	body     []byte
 	found    bool

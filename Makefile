@@ -5,7 +5,7 @@
 #                   proxies /api (and the /api/ws WebSocket), /worker, /otlp and /config.js to
 #                   127.0.0.1:3400, so dashboard, API and socket share one origin as in production.
 #                   Set KEEL_SITE_URL to the URL you open (e.g. your ts.net HTTPS name).
-#   make test       go vet, go test, gofmt check
+#   make test       go vet, go test, gofmt and no-comments checks
 #   make openapi    regenerate openapi.json (the dashboard's API client is generated from it)
 #   make web        build apps/web/dist
 #   make build      bin/keel with the dashboard embedded (-tags embedweb)
@@ -29,10 +29,11 @@ dev:
 test:
 	$(GO) vet ./...
 	$(GO) test ./...
-	@out="$$($(GOFMT) -l cmd internal apps/web/*.go)"; if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
+	$(GO) run ./tools/nocomments $$($(GO) list -f '{{.Dir}}' ./...)
+	@out="$$($(GOFMT) -l cmd internal tools apps/web/*.go)"; if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 fmt:
-	$(GOFMT) -w cmd internal apps/web/*.go
+	$(GOFMT) -w cmd internal tools apps/web/*.go
 
 openapi:
 	$(GO) run ./cmd/keel openapi > openapi.json

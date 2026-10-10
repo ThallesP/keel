@@ -11,8 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Public ingress: expose / unexpose a node through keel-proxy, and the control plane's public IP.
-
 type ingressExposeInput struct {
 	ID   string             `path:"id" doc:"Node id"`
 	Body *api.ExposeRequest `required:"false"`

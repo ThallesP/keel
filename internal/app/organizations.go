@@ -7,17 +7,11 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Organizations, members and invitations (docs/go/spec/auth-orgs.md §6–§7). One organization per
-// install; every member sees the same resources; only owners and admins manage invitations.
-
-// authMembershipChanged: someone joined (or an organization was founded). Members, invitations
-// and every session's view of its organization (/api/me) change.
 func authMembershipChanged(ch *Changes, org string) {
 	ch.Organization(org)
 	ch.Add(org, "/api/me")
 }
 
-// foundOrganization creates the install's organization with ownerID as its owner.
 func foundOrganization(tx Tx, ownerID string, now int64) (domain.Organization, error) {
 	org := domain.Organization{ID: domain.NewID(), Name: domain.DefaultOrganizationName, Slug: domain.DefaultOrganizationSlug, CreatedAt: now}
 	if err := tx.AuthInsertOrganization(org); err != nil {
@@ -27,16 +21,6 @@ func foundOrganization(tx Tx, ownerID string, now int64) (domain.Organization, e
 	return org, err
 }
 
-// joinOrFound is the actor's membership, founding the install's organization when there is none
-// yet (convex/projects.ts joinOrFound). Returns the actor with OrganizationID/Role set.
-// Errors: NOT_AUTHENTICATED; NO_ORGANIZATION when an organization exists and the actor is not in
-// it. Called by: canvas (EnsureDefaultProject, CreateProject).
-//
-// It reads the membership inside the caller's write transaction (single writer), so two
-// concurrent founders cannot make two organizations. When it founds one (the returned actor has
-// an OrganizationID the given one did not), the caller should also publish
-// ch.Organization(org) and ch.Add(org, "/api/me"); accounts made since the Go port are founded or
-// joined at sign-up, so this only happens for accounts imported without a membership.
 func joinOrFound(tx Tx, actor domain.Actor, now int64) (domain.Actor, error) {
 	if !actor.SignedIn() {
 		return actor, domain.ErrNotAuthenticated
@@ -64,8 +48,6 @@ func joinOrFound(tx Tx, actor domain.Actor, now int64) (domain.Actor, error) {
 	return actor, nil
 }
 
-// authFreshMember is the actor's membership as stored now. The actor's own fields were read at
-// the start of the request; roles and memberships are re-read inside writes.
 func authFreshMember(tx Tx, actor domain.Actor) (domain.Member, error) {
 	if err := actor.RequireMember(); err != nil {
 		return domain.Member{}, err
@@ -77,7 +59,6 @@ func authFreshMember(tx Tx, actor domain.Actor) (domain.Member, error) {
 	return m, err
 }
 
-// ListMembers: every member of the caller's organization, in joining order.
 func (a *App) ListMembers(ctx context.Context, actor domain.Actor) ([]MemberAccount, error) {
 	if err := actor.RequireMember(); err != nil {
 		return nil, err
@@ -87,8 +68,6 @@ func (a *App) ListMembers(ctx context.Context, actor domain.Actor) ([]MemberAcco
 	return out, err
 }
 
-// ListInvitations: the caller's organization's standing invitations, oldest first. Any member
-// may list them (Better Auth list-invitations only needs membership).
 func (a *App) ListInvitations(ctx context.Context, actor domain.Actor) ([]domain.Invitation, error) {
 	if err := actor.RequireMember(); err != nil {
 		return nil, err
@@ -101,9 +80,6 @@ func (a *App) ListInvitations(ctx context.Context, actor domain.Actor) ([]domain
 	return out, err
 }
 
-// CreateInvitation invites email into the caller's organization (Better Auth
-// organization/invite-member, auth-orgs.md §7.2). Inviting again cancels the previous standing
-// invitation for that email. Nothing is mailed: the inviter copies the link.
 func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, role string) (domain.Invitation, error) {
 	if err := actor.RequireMember(); err != nil {
 		return domain.Invitation{}, err
@@ -141,7 +117,6 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 			return domain.E(domain.CodeForbidden, domain.MsgInvitationLimit)
 		}
 		inv = domain.Invitation{
-			// The id is the secret in the invite link: 128 bits, more than domain.NewID's 100.
 			ID:             domain.NewSecret(16),
 			OrganizationID: m.OrganizationID, Email: email, Role: grant, Status: domain.InvitationPending,
 			InviterID: actor.UserID, ExpiresAt: now + domain.InvitationTTL, CreatedAt: now,
@@ -155,9 +130,6 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email, r
 	return inv, err
 }
 
-// CancelInvitation cancels a standing invitation of the caller's organization (owners and admins).
-// Unknown and foreign ids are "Invitation not found"; an invitation that no longer stands
-// (accepted, canceled, expired) is left as it is.
 func (a *App) CancelInvitation(ctx context.Context, actor domain.Actor, id string) error {
 	if err := actor.RequireMember(); err != nil {
 		return err
@@ -188,14 +160,11 @@ func (a *App) CancelInvitation(ctx context.Context, actor domain.Actor, id strin
 	})
 }
 
-// PublicInvitation is what an invite link shows before sign-up.
 type PublicInvitation struct {
 	Email        string
-	Organization string // the organization's name
+	Organization string
 }
 
-// GetInvitation is the invite link's page data, or nil when the link is unknown, spent or expired
-// (convex organizations.invitation). Public: the id is the secret in the link.
 func (a *App) GetInvitation(ctx context.Context, id string) (*PublicInvitation, error) {
 	var out *PublicInvitation
 	err := a.read(ctx, func(tx Tx) error {
@@ -216,9 +185,6 @@ func (a *App) GetInvitation(ctx context.Context, id string) (*PublicInvitation, 
 	return out, err
 }
 
-// AcceptInvitation joins the signed-in account to the invitation's organization (the intended
-// behaviour of Better Auth's accept-invitation, which always failed in Keel on its email
-// verification gate, auth-orgs.md §7.4). The unguessable id is the proof of possession.
 func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id string) (MyOrganization, error) {
 	if err := actor.RequireUser(); err != nil {
 		return MyOrganization{}, err
@@ -266,7 +232,7 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 		return nil
 	})
 	if err == nil && a.Conns != nil {
-		a.Conns.DisconnectUser(actor.UserID) // reconnect onto the new organization's channel
+		a.Conns.DisconnectUser(actor.UserID)
 	}
 	return out, err
 }

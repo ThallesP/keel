@@ -8,33 +8,25 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Accounts and sessions (docs/go/spec/auth-orgs.md §4–§6). Replaces Better Auth's email/password
-// endpoints, its session table and convex/auth.ts's database hooks.
-
-// ClientInfo is where a request came from; it is recorded on the sessions it creates.
 type ClientInfo struct {
 	IP        string
 	UserAgent string
 }
 
-// SignedIn is a new session. Token is the secret the client keeps (cookie or bearer); it is
-// shown once and only its hash is stored.
 type SignedIn struct {
 	Token   string
 	User    domain.User
 	Session domain.Session
 }
 
-// SignUpInput is POST /api/auth/sign-up.
 type SignUpInput struct {
 	Email        string
 	Password     string
 	Name         string
-	InvitationID string // from an invite link; required once the first account exists
+	InvitationID string
 	Client       ClientInfo
 }
 
-// MyOrganization is the caller's organization and role (convex organizations.current).
 type MyOrganization struct {
 	ID   string
 	Name string
@@ -42,16 +34,13 @@ type MyOrganization struct {
 	Role string
 }
 
-// Me is GET /api/me: who is signed in and in which organization. Both nil when signed out.
 type Me struct {
 	User         *domain.User
 	Organization *MyOrganization
 }
 
-// errPasswordsMissing: serve did not set App.Passwords.
 var errPasswordsMissing = errors.New("app: Passwords is not set")
 
-// authClip bounds request metadata stored on a session.
 func authClip(s string, n int) string {
 	if len(s) > n {
 		return s[:n]
@@ -59,10 +48,6 @@ func authClip(s string, n int) string {
 	return s
 }
 
-// ResolveSession turns a session token (cookie or bearer) into the actor. A missing, unknown or
-// expired token is the signed-out actor, not an error. A session used more than a day after its
-// last renewal is pushed out to 7 days from now (actor.SessionRenewed tells the transport to
-// re-send the cookie); an expired one is deleted.
 func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, error) {
 	if token == "" {
 		return domain.Actor{}, nil
@@ -111,7 +96,7 @@ func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, e
 		expires := now + domain.SessionTTL
 		err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthExtendSession(s.ID, expires, now) })
 		if err != nil {
-			a.Log.Warn("renew session", "err", err) // still valid until its old expiry
+			a.Log.Warn("renew session", "err", err)
 		} else {
 			actor.SessionExpiresAt, actor.SessionRenewed = expires, true
 		}
@@ -119,7 +104,6 @@ func (a *App) ResolveSession(ctx context.Context, token string) (domain.Actor, e
 	return actor, nil
 }
 
-// authMissing: ErrNoRow means "not signed in", anything else is a failure.
 func authMissing(err error) error {
 	if errors.Is(err, ErrNoRow) {
 		return nil
@@ -127,15 +111,12 @@ func authMissing(err error) error {
 	return err
 }
 
-// SignUpOpen: true until the first account exists (convex auth.signUpOpen).
 func (a *App) SignUpOpen(ctx context.Context) (bool, error) {
 	var someone bool
 	err := a.read(ctx, func(tx Tx) (err error) { someone, err = tx.AuthAnyUser(); return })
 	return !someone, err
 }
 
-// standingInvitation is the invitation with that id if it is pending and unexpired, else nil
-// (convex/auth.ts pendingInvitation; unknown and malformed ids are nil too).
 func standingInvitation(tx Tx, id string, now int64) (*domain.Invitation, error) {
 	if id == "" {
 		return nil, nil
@@ -153,10 +134,6 @@ func standingInvitation(tx Tx, id string, now int64) (*domain.Invitation, error)
 	return &inv, nil
 }
 
-// signUpRule is Better Auth's sign-up order plus Keel's user.create hooks: a taken email is
-// refused first (so it never reveals the invite rule), then everyone but the first account needs
-// a standing invitation for that email. It returns the invitation to join (nil: none) and
-// whether this is the first account.
 func signUpRule(tx Tx, email, invitationID string, now int64) (*domain.Invitation, bool, error) {
 	if _, err := tx.AuthCredentials(email); err == nil {
 		return nil, false, domain.Conflict(domain.MsgUserExists)
@@ -180,12 +157,6 @@ func signUpRule(tx Tx, email, invitationID string, now int64) (*domain.Invitatio
 	return inv, !someone, nil
 }
 
-// SignUp creates an account and signs it in, in one transaction (user, membership, spent
-// invitation, session: Better Auth did these as separate writes, auth-orgs.md §5.1).
-//
-// The first account founds the install's organization and owns it (Go: eagerly, at sign-up;
-// Convex founded it on the first dashboard visit, which `keel login` could skip, §6.4). Later
-// accounts need a standing invitation for their email and join with its role.
 func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 	email := strings.TrimSpace(in.Email)
 	if !domain.ValidUserEmail(email) {
@@ -201,7 +172,6 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 		return SignedIn{}, err
 	}
 	email = domain.NormalizeUserEmail(email)
-	// Refuse early, before paying for a hash; the write checks again.
 	err := a.read(ctx, func(tx Tx) error {
 		_, _, err := signUpRule(tx, email, in.InvitationID, a.Now())
 		return err
@@ -248,7 +218,6 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 	return out, err
 }
 
-// joinWithInvitation spends the invitation and makes userID a member with its role.
 func joinWithInvitation(tx Tx, ch *Changes, inv domain.Invitation, userID string, now int64) error {
 	ok, err := tx.AuthSetInvitationStatus(inv.ID, domain.InvitationPending, domain.InvitationAccepted)
 	if err != nil {
@@ -269,8 +238,6 @@ func joinWithInvitation(tx Tx, ch *Changes, inv domain.Invitation, userID string
 	return nil
 }
 
-// issueSession creates a session for user (7 days) and returns its token. Expired sessions are
-// swept on the way (there is no cleanup job).
 func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (SignedIn, error) {
 	if err := tx.AuthDeleteExpiredSessions(now); err != nil {
 		return SignedIn{}, err
@@ -286,10 +253,6 @@ func issueSession(tx Tx, user domain.User, now int64, client ClientInfo) (Signed
 	return SignedIn{Token: token, User: user, Session: s}, nil
 }
 
-// SignIn checks an email and password and opens a session (Better Auth /sign-in/email). Every
-// failure is the same 401 so accounts cannot be enumerated; a miss still costs a hash. A Better
-// Auth (scrypt) hash is replaced with argon2id on success. At most SignInAttempts tries per
-// client IP and email in SignInWindow (RATE_LIMITED).
 func (a *App) SignIn(ctx context.Context, email, password string, client ClientInfo) (SignedIn, error) {
 	email = strings.TrimSpace(email)
 	if !domain.ValidUserEmail(email) {
@@ -357,7 +320,6 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 	return out, nil
 }
 
-// SignOut deletes the caller's session. Signed out already is fine.
 func (a *App) SignOut(ctx context.Context, actor domain.Actor) error {
 	if actor.SessionID == "" {
 		return nil
@@ -369,7 +331,6 @@ func (a *App) SignOut(ctx context.Context, actor domain.Actor) error {
 	return err
 }
 
-// GetMe is the caller and their organization (convex auth.getCurrentUser + organizations.current).
 func (a *App) GetMe(ctx context.Context, actor domain.Actor) (Me, error) {
 	if !actor.SignedIn() {
 		return Me{}, nil

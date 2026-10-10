@@ -16,7 +16,6 @@ type recordedPost struct {
 	body, resync, auth, contentType string
 }
 
-// eventsServer answers POST /worker/events with the given statuses in order (the last repeats).
 type eventsServer struct {
 	mu       sync.Mutex
 	statuses []int
@@ -133,8 +132,6 @@ func TestPostEventsRejected(t *testing.T) {
 	}
 }
 
-// 5xx and network errors are retried forever with n*5+5 s, n capped at 6, and every retry asks
-// for a resync.
 func TestPostEventsRetries(t *testing.T) {
 	es := &eventsServer{statuses: []int{500, 503, 502, 500, 500, 500, 500, 500, 500, 200}}
 	srv := httptest.NewServer(es)
@@ -169,7 +166,7 @@ func TestPostEventsRetries(t *testing.T) {
 func TestPostEventsNetworkErrorAndShutdown(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
-	srv.Close() // connection refused from now on
+	srv.Close()
 	cp, logs, _ := newTestControlPlane(t, url)
 	ctx, cancel := context.WithCancel(context.Background())
 	attempts := 0

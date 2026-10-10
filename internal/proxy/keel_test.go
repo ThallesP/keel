@@ -48,7 +48,6 @@ func reportServer(t *testing.T, status int) (*reports, *Reporter) {
 		rs.ch <- struct{}{}
 	}))
 	t.Cleanup(srv.Close)
-	// The real client dials from the host namespace; tests use the plain one.
 	return rs, &Reporter{URL: srv.URL + "/proxy/events", Token: "tok", client: srv.Client(), logger: zap.NewNop()}
 }
 
@@ -70,7 +69,6 @@ func TestReporterHandle(t *testing.T) {
 	rs, r := reportServer(t, http.StatusOK)
 	const name = "api-16w41g.203-0-113-7.sslip.io"
 
-	// Ignored: no identifier, other events, attempts a reload cancelled.
 	for _, e := range []caddy.Event{
 		newEvent(t, "cert_failed", map[string]any{"error": "x"}),
 		newEvent(t, "cert_obtaining", map[string]any{"identifier": name}),
@@ -111,7 +109,6 @@ func TestReporterHandle(t *testing.T) {
 		t.Fatalf("failure not cleared: %+v", c)
 	}
 
-	// No URL: state is still kept, nothing is sent.
 	quiet := &Reporter{logger: zap.NewNop()}
 	if err := quiet.Handle(context.Background(), newEvent(t, "cert_failed", map[string]any{"identifier": "q.example.com", "error": "boom"})); err != nil {
 		t.Fatal(err)

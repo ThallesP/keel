@@ -16,7 +16,6 @@ type post struct {
 	resync bool
 }
 
-// fakePoster records PostEvents calls and answers from results in order (the last repeats).
 type fakePoster struct {
 	mu      sync.Mutex
 	posts   []post
@@ -116,7 +115,7 @@ func TestForwarderStream(t *testing.T) {
 		f.Run(ctx)
 		close(done)
 	}()
-	waitFor(t, func() bool { return len(d.sinces()) >= 2 }) // reconnected after EOF
+	waitFor(t, func() bool { return len(d.sinces()) >= 2 })
 	cancel()
 	<-done
 
@@ -125,7 +124,7 @@ func TestForwarderStream(t *testing.T) {
 		{`{"Type":"container","Action":"start"}`, false},
 		{`{"Type":"service","Action":"update"}`, false},
 		{`{"Type":"node","Action":"update"}`, false},
-		{"[]", true}, // the reconnect asks for a sweep again
+		{"[]", true},
 	}
 	if got := p.all(); !slices.Equal(got, want) {
 		t.Fatalf("posts = %+v\nwant %+v", got, want)
@@ -154,7 +153,6 @@ func TestForwarderStream(t *testing.T) {
 	}
 }
 
-// A batch that was not accepted makes the next one ask for a resync, until one is accepted.
 func TestForwarderResyncAfterFailure(t *testing.T) {
 	d := newFakeDocker()
 	d.streams = []eventScript{{
@@ -189,7 +187,6 @@ func TestForwarderResyncAfterFailure(t *testing.T) {
 	}
 }
 
-// cancellingPoster accepts the first POST and is shut down (ctx cancelled) during the second.
 type cancellingPoster struct {
 	cancel context.CancelFunc
 	n      int
@@ -198,15 +195,13 @@ type cancellingPoster struct {
 func (p *cancellingPoster) PostEvents(ctx context.Context, _ []byte, _ bool) bool {
 	p.n++
 	if p.n < 3 {
-		return true // the resync "[]" and the first event
+		return true
 	}
-	p.cancel() // SIGTERM while this POST retries
+	p.cancel()
 	<-ctx.Done()
 	return false
 }
 
-// A signal during an event's POST leaves the resume point before that event: it was not
-// delivered, and the next start replays it.
 func TestForwarderShutdownMidPostKeepsTheEvent(t *testing.T) {
 	d := newFakeDocker()
 	d.streams = []eventScript{{events: []Event{
@@ -235,7 +230,7 @@ func TestForwarderDockerDown(t *testing.T) {
 		f.Run(ctx)
 		close(done)
 	}()
-	waitFor(t, func() bool { return len(p.all()) >= 1 }) // second connect works
+	waitFor(t, func() bool { return len(p.all()) >= 1 })
 	cancel()
 	<-done
 	if !strings.Contains(logs.String(), "[events] stream error: connect: no such file or directory, reconnecting in 2s") {

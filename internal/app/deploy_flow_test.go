@@ -19,9 +19,9 @@ func TestShipRulesAndMessages(t *testing.T) {
 		t.Fatalf("empty environment: %v", codeAndMessage(err))
 	}
 	a := w.addNode("api", applyErr("old failure"))
-	w.addNode("data", kind(domain.NodeVolume))               // dirty never matters: not deployable
-	c := w.addNode("cache", clean, shipped(4))               // not dirty: Ship leaves it
-	b := w.addNode("worker", image("ghcr.io/acme/worker:1")) // created after api
+	w.addNode("data", kind(domain.NodeVolume))
+	c := w.addNode("cache", clean, shipped(4))
+	b := w.addNode("worker", image("ghcr.io/acme/worker:1"))
 	w.addNode("elsewhere", inEnv("env2"))
 
 	id := w.ship(app.ShipOptions{})
@@ -50,7 +50,6 @@ func TestShipRulesAndMessages(t *testing.T) {
 		t.Fatalf("jobs: %v", w.jobs.keys())
 	}
 
-	// One running deployment per environment; the refused ship changes nothing.
 	w.addNode("late")
 	if _, err := w.app.ShipEnvironment(ctx, w.member, "env", app.ShipOptions{}); codeAndMessage(err) != "DEPLOYMENT_RUNNING: A deployment is already running" {
 		t.Fatalf("second ship: %v", codeAndMessage(err))
@@ -78,8 +77,8 @@ func TestShipOnly(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			w := newWorld(t)
-			a := w.addNode("api", clean, shipped(2)) // clean: only ships it regardless
-			w.addNode("other")                       // dirty, but not listed
+			a := w.addNode("api", clean, shipped(2))
+			w.addNode("other")
 			vol := w.addNode("data", kind(domain.NodeVolume))
 			id, err := w.app.ShipEnvironment(ctx, w.member, "env", c.opts(a, vol))
 			if c.err != "" {
@@ -111,8 +110,6 @@ func TestBeginDeploymentVerb(t *testing.T) {
 	}
 }
 
-// TestOrganizationIsolation: another organization's member sees nothing and changes nothing;
-// signed out is the same as foreign for reads.
 func TestOrganizationIsolation(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
@@ -138,7 +135,6 @@ func TestOrganizationIsolation(t *testing.T) {
 	if _, err := w.app.ShipEnvironment(ctx, domain.Actor{}, "env", app.ShipOptions{}); domain.CodeOf(err) != domain.CodeNotAuthenticated {
 		t.Errorf("signed-out ship: %v", codeAndMessage(err))
 	}
-	// The outsider's own environment does not leak ours either.
 	if d, _ := w.app.LatestDeployment(ctx, w.outsider, "env2"); d != nil {
 		t.Errorf("env2 latest: %+v", d)
 	}
@@ -158,7 +154,6 @@ func TestDeploymentReads(t *testing.T) {
 		t.Fatalf("malformed id: %v %v", d, err)
 	}
 
-	// 25 deployments of api and 30 of worker, alternating blocks; each fails right away.
 	var apiIDs, workerIDs []string
 	for i := 0; i < 55; i++ {
 		target, ids := a, &apiIDs
@@ -177,12 +172,10 @@ func TestDeploymentReads(t *testing.T) {
 	if len(latest.Log) == 0 || latest.Log[0].Text != "worker: timed out waiting for replicas" {
 		t.Fatalf("latest log: %+v", latest.Log)
 	}
-	// worker: the 20 newest of its 30.
 	ds, _ := w.app.ListNodeDeployments(ctx, w.member, b.ID)
 	if len(ds) != 20 || ds[0].ID != workerIDs[29] || ds[19].ID != workerIDs[10] || len(ds[0].Log) == 0 {
 		t.Fatalf("worker list: %d", len(ds))
 	}
-	// api: its deployments are older than the 50 newest except 20 of them.
 	ds, _ = w.app.ListNodeDeployments(ctx, w.member, a.ID)
 	if len(ds) != 20 || ds[0].ID != apiIDs[24] || ds[19].ID != apiIDs[5] {
 		t.Fatalf("api list: %d", len(ds))
@@ -199,7 +192,7 @@ func TestApplyHappyPath(t *testing.T) {
 	w.envVars[a.ID] = map[string]string{"PORT": "8080", "DATABASE_URL": "postgres://x"}
 	*w.clock += 1
 	id := w.ship(app.ShipOptions{})
-	w.jobs.run() // apply
+	w.jobs.run()
 	if len(w.swarm.creates) != 1 {
 		t.Fatalf("creates: %+v", w.swarm.creates)
 	}
@@ -217,7 +210,6 @@ func TestApplyHappyPath(t *testing.T) {
 	if !reflect.DeepEqual(w.follows, []int{8080}) {
 		t.Fatalf("followPort: %v", w.follows)
 	}
-	// The scan apply scheduled lands 500 ms later and settles the deployment.
 	w.jobs.advance(499 * time.Millisecond)
 	if len(w.swarm.observed) != 0 {
 		t.Fatalf("observed too early")
@@ -235,7 +227,6 @@ func TestApplyHappyPath(t *testing.T) {
 		t.Fatalf("node: %+v", n)
 	}
 
-	// Redeploy: cached, but refresh pulls again; the service is updated.
 	w.pub.reset()
 	id = w.ship(app.ShipOptions{Only: []string{a.ID}, Refresh: true})
 	w.jobs.advance(time.Second)
@@ -243,7 +234,6 @@ func TestApplyHappyPath(t *testing.T) {
 	if got := logTexts(d); len(got) < 3 || got[0] != "pulling nginx:alpine" || got[2] != "service updated · revision 2" || d.Status != domain.DeploymentSuccess {
 		t.Fatalf("redeploy log: %q %s", got, d.Status)
 	}
-	// Restart: cached and no refresh.
 	id = w.ship(app.ShipOptions{Only: []string{a.ID}})
 	w.jobs.advance(time.Second)
 	if got := logTexts(w.deployment(id)); got[0] != "using cached nginx:alpine" || got[1] != "service updated · revision 3" {
@@ -272,7 +262,6 @@ func TestApplyFailures(t *testing.T) {
 		if n := w.node(a.ID); n.ApplyError != "Error response from daemon: pull access denied for nope" || domain.DeriveStatus(n) != domain.StatusError {
 			t.Fatalf("node: %+v", n)
 		}
-		// The sibling still applies into the failed deployment (the Convex behaviour).
 		w.jobs.run()
 		if d := w.deployment(id); d.Steps[1].AppliedAt == nil || d.Status != domain.DeploymentFailed {
 			t.Fatalf("sibling: %+v", d.Steps[1])
@@ -323,8 +312,6 @@ func TestApplyFailures(t *testing.T) {
 	})
 }
 
-// TestApplySerializedAndSkipsStaleRevision: a node's applies run one after the other; an apply
-// overtaken by a newer ship of its node never reaches createOrUpdate.
 func TestApplySerializedAndSkipsStaleRevision(t *testing.T) {
 	t.Run("queued behind: skipped before pulling", func(t *testing.T) {
 		w := newWorld(t)
@@ -332,7 +319,7 @@ func TestApplySerializedAndSkipsStaleRevision(t *testing.T) {
 		x := w.addNode("x")
 		w.swarm.pullErr["broken:1"] = errors.New("not found")
 		d1 := w.ship(app.ShipOptions{})
-		w.jobs.runOne(t, "apply:"+a.ID) // fails d1: a new ship is allowed while x's apply waits
+		w.jobs.runOne(t, "apply:"+a.ID)
 		d2 := w.ship(app.ShipOptions{Only: []string{x.ID}})
 		if n := w.jobs.count("apply:" + x.ID); n != 1 {
 			t.Fatalf("x has %d apply jobs, want the one queue: %v", n, w.jobs.keys())
@@ -416,7 +403,6 @@ func TestApplyNodeDeleted(t *testing.T) {
 		if !reflect.DeepEqual(w.swarm.removed, []string{a.ID}) {
 			t.Fatalf("removed: %v", w.swarm.removed)
 		}
-		// ScheduleObserve of a gone node settles too (and observes nothing).
 		w.app.ScheduleObserve(a.ID)
 		if w.jobs.count("reconcile") != 1 || w.jobs.count("observe:") != 0 {
 			t.Fatalf("jobs: %v", w.jobs.keys())
@@ -438,7 +424,7 @@ func TestDeploymentTimeout(t *testing.T) {
 	if d.Status != domain.DeploymentRunning || stepStatuses(d) != "api=running worker=done health checks=running" {
 		t.Fatalf("before the timeout: %s %s", d.Status, stepStatuses(d))
 	}
-	w.deleteNode(b.ID) // a done step stays done; deletion only matters for unfinished steps
+	w.deleteNode(b.ID)
 	w.pub.reset()
 	w.jobs.advance(time.Second)
 	d = w.deployment(id)
@@ -455,7 +441,6 @@ func TestDeploymentTimeout(t *testing.T) {
 	if !w.pub.has("org", "/api/deployments/"+id) || !w.pub.has("org", "/api/environments/env") {
 		t.Fatalf("topics: %v", w.pub.topics)
 	}
-	// Late writes never revive it.
 	w.app.TimeoutDeploymentForTest(ctx, id)
 	if d2 := w.deployment(id); !reflect.DeepEqual(d2, d) {
 		t.Fatalf("second timeout changed it")
@@ -467,13 +452,12 @@ func TestRecover(t *testing.T) {
 	a := w.addNode("api")
 	b := w.addNode("worker", inEnv("env2"))
 	old := w.ship(app.ShipOptions{})
-	*w.clock += 4 * 60_000 // 4 minutes later
+	*w.clock += 4 * 60_000
 	fresh, err := w.app.ShipEnvironment(ctx, w.outsider, "env2", app.ShipOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A restart loses every in-memory job.
-	*w.clock += 2 * 60_000 // the old deployment is a minute overdue
+	*w.clock += 2 * 60_000
 	w.restart(app.Config{AgentImage: "ghcr.io/thallesp/keel:1.2.3", SiteURL: "http://100.64.0.1:8080", WorkerToken: "secret"})
 	w.app.Recover(ctx)
 
@@ -487,19 +471,17 @@ func TestRecover(t *testing.T) {
 	if w.swarm.observed[0] != "*" || w.swarm.tunnelSweeps != 1 {
 		t.Fatalf("no sweep: %v, tunnels %d", w.swarm.observed, w.swarm.tunnelSweeps)
 	}
-	// The pending applies of both deployments were re-queued.
 	if len(w.swarm.creates) != 2 {
 		t.Fatalf("creates: %+v", w.swarm.creates)
 	}
 	_ = a
-	// The fresh one healed through the scan; give it a pending task so only the timer ends it.
 	w.swarm.tasks[b.ID] = []app.SwarmTask{{DesiredState: "running", State: "pending", Labels: map[string]string{"keel.revision": "1"}}}
 	w.app.ScheduleObserve(b.ID)
 	w.jobs.advance(time.Second)
 	if d := w.deployment(fresh); d.Status != domain.DeploymentRunning {
 		t.Fatalf("fresh: %s %s", d.Status, stepStatuses(d))
 	}
-	w.jobs.advance(2*time.Minute + 57*time.Second) // started 2 min before the restart: 3 min left
+	w.jobs.advance(2*time.Minute + 57*time.Second)
 	if d := w.deployment(fresh); d.Status != domain.DeploymentRunning {
 		t.Fatalf("fresh timed out early")
 	}
@@ -527,10 +509,10 @@ func TestIngestEventsDebounce(t *testing.T) {
 	}
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{
 		svcEvent("container", "svc-"+a.ID),
-		svcEvent("service", "svc-"+a.ID), // same node, same batch: once
+		svcEvent("service", "svc-"+a.ID),
 		svcEvent("container", "svc-"+b.ID),
 		svcEvent("container", "svc-unknown"),
-		svcEvent("container", "postgres"), // a user's own container
+		svcEvent("container", "postgres"),
 		{Type: "network", Action: "connect"},
 		{Type: "node", Action: "update"},
 		{Type: "node", Action: "update"},
@@ -538,7 +520,6 @@ func TestIngestEventsDebounce(t *testing.T) {
 	if w.jobs.count("observe:servers") != 1 || w.jobs.count("observe:"+a.ID) != 1 || w.jobs.count("observe:"+b.ID) != 1 || w.jobs.count("observe:all") != 0 {
 		t.Fatalf("jobs: %v", w.jobs.keys())
 	}
-	// Another burst inside the debounce window coalesces.
 	w.jobs.advance(200 * time.Millisecond)
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{svcEvent("container", "svc-"+a.ID)}, false)
 	if w.jobs.count("observe:"+a.ID) != 1 {
@@ -549,7 +530,6 @@ func TestIngestEventsDebounce(t *testing.T) {
 		t.Fatalf("observed: %v", w.swarm.observed)
 	}
 
-	// A task mid-transition: re-checked 2 s later, at most twice.
 	w.swarm.observed = nil
 	w.swarm.tasks[a.ID] = []app.SwarmTask{{DesiredState: "running", State: "starting", Labels: map[string]string{"keel.revision": "1"}}}
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{svcEvent("container", "svc-"+a.ID)}, false)
@@ -557,7 +537,6 @@ func TestIngestEventsDebounce(t *testing.T) {
 	if w.jobs.count("observe:"+a.ID) != 1 {
 		t.Fatalf("no settle re-check: %v", w.jobs.keys())
 	}
-	// An event replaces the later re-check with a sooner scan (and the chain starts over).
 	w.jobs.advance(time.Second)
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{svcEvent("container", "svc-"+a.ID)}, false)
 	w.jobs.advance(500 * time.Millisecond)
@@ -565,11 +544,10 @@ func TestIngestEventsDebounce(t *testing.T) {
 		t.Fatalf("sooner scan did not run: %v", w.swarm.observed)
 	}
 	w.jobs.advance(10 * time.Second)
-	if len(w.swarm.observed) != 4 { // event scan + 2 re-checks; the replaced one never ran
+	if len(w.swarm.observed) != 4 {
 		t.Fatalf("scans: %d %v", len(w.swarm.observed), w.jobs.keys())
 	}
 
-	// Resync: one full sweep (coalesced).
 	w.app.IngestWorkerEvents(ctx, nil, true)
 	w.app.IngestWorkerEvents(ctx, nil, true)
 	if w.jobs.count("observe:all") != 1 {
@@ -595,7 +573,6 @@ func TestObservePublishesOnlyChanges(t *testing.T) {
 		t.Fatalf("a changed scan did not publish: %v", w.pub.topics)
 	}
 
-	// Servers: the cluster row reaches every organization, only when the count changes.
 	w.pub.reset()
 	w.swarm.ready, w.swarm.total = 2, 3
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, false)
@@ -625,7 +602,7 @@ func TestReconcileOnlyTheAffectedEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.jobs.run() // both applied; observes pending
+	w.jobs.run()
 	w.pub.reset()
 	*w.clock += 500
 	w.jobs.runOne(t, "observe:"+a.ID)
@@ -638,8 +615,6 @@ func TestReconcileOnlyTheAffectedEnvironment(t *testing.T) {
 	_ = b
 }
 
-// Without keel agent there are no Docker events: a rolling update that outlasts the settle
-// re-checks is polled until Swarm reports it done, so the deployment still settles.
 func TestUpdateSettlesWithoutEvents(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
@@ -647,7 +622,7 @@ func TestUpdateSettlesWithoutEvents(t *testing.T) {
 	w.jobs.advance(time.Second)
 	w.swarm.updateState[a.ID] = "updating"
 	id := w.ship(app.ShipOptions{Only: []string{a.ID}})
-	w.jobs.advance(10 * time.Second) // well past the two settle re-checks
+	w.jobs.advance(10 * time.Second)
 	if d := w.deployment(id); d.Status != domain.DeploymentRunning {
 		t.Fatalf("settled while Swarm still updates: %s", d.Status)
 	}
@@ -656,7 +631,6 @@ func TestUpdateSettlesWithoutEvents(t *testing.T) {
 	if d := w.deployment(id); d.Status != domain.DeploymentSuccess {
 		t.Fatalf("after Swarm completed: %s %s", d.Status, stepStatuses(d))
 	}
-	// And the polling stops once done.
 	n := len(w.swarm.observed)
 	w.jobs.advance(30 * time.Second)
 	if len(w.swarm.observed) != n {
@@ -664,8 +638,6 @@ func TestUpdateSettlesWithoutEvents(t *testing.T) {
 	}
 }
 
-// A pull that stalls must not hold the node's retry back: queueing a newer revision cancels the
-// running apply, which backs off as superseded without marking the node errored.
 func TestStalledPullYieldsToNewerRevision(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", image("slow:1"))
@@ -673,7 +645,6 @@ func TestStalledPullYieldsToNewerRevision(t *testing.T) {
 	var d2 string
 	w.swarm.onPull = func(img string) {
 		if d2 == "" {
-			// The deployment timed out meanwhile; the user retries while the pull still hangs.
 			w.failRunning(d1)
 			d2 = w.ship(app.ShipOptions{Only: []string{a.ID}, Refresh: true})
 		}

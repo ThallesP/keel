@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// State holds the resume points, persisted to a per-node volume so a restart neither replays nor
-// skips: eventsSince for the Docker event stream, logsSince[containerID] for each container tail
-// (delivery-confirmed: only advanced once the sink accepted the line). Same file and format as
-// the Bun worker's state.json, so an upgrade continues where it stopped
-// (docs/go/spec/swarm-worker.md §13.7):
-//
-//	{"eventsSince":"1727600000.123456790","logsSince":{"<full container id>":"1727600000.123456790"}}
-//
-// Losing the file costs one full observe sweep and, for logs, re-reading every container from its
-// sink's connect time (duplicates in the sink, never a gap).
 type State struct {
 	path string
 
@@ -26,7 +16,7 @@ type State struct {
 	data  stateFile
 	dirty bool
 
-	writeMu sync.Mutex // one file write at a time (the 1 s writer and the final write at shutdown)
+	writeMu sync.Mutex
 }
 
 type stateFile struct {
@@ -34,7 +24,6 @@ type stateFile struct {
 	LogsSince   map[string]string `json:"logsSince"`
 }
 
-// LoadState reads path. A missing or unreadable file is an empty state, as in the worker.
 func LoadState(path string) *State {
 	s := &State{path: path, data: stateFile{LogsSince: map[string]string{}}}
 	raw, err := os.ReadFile(path)
@@ -52,14 +41,12 @@ func LoadState(path string) *State {
 	return s
 }
 
-// EventsSince is the Docker events resume point ("" = none).
 func (s *State) EventsSince() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.data.EventsSince
 }
 
-// SetEventsSince records the events resume point.
 func (s *State) SetEventsSince(v string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -67,7 +54,6 @@ func (s *State) SetEventsSince(v string) {
 	s.dirty = true
 }
 
-// LogsSince is the delivery-confirmed resume point of a container.
 func (s *State) LogsSince(container string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,7 +61,6 @@ func (s *State) LogsSince(container string) (string, bool) {
 	return v, ok
 }
 
-// Checkpoint records resume points of delivered lines, in order (later entries win).
 func (s *State) Checkpoint(points []resumePoint) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -90,7 +75,6 @@ func (s *State) Checkpoint(points []resumePoint) {
 
 type resumePoint struct{ container, since string }
 
-// Forget drops a container's resume point (the container and its log are gone).
 func (s *State) Forget(container string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -100,7 +84,6 @@ func (s *State) Forget(container string) {
 	}
 }
 
-// LogsSinceIDs lists the containers that have a resume point.
 func (s *State) LogsSinceIDs() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -111,8 +94,6 @@ func (s *State) LogsSinceIDs() []string {
 	return ids
 }
 
-// Flush writes the file when something changed since the last write. As in the worker, the dirty
-// flag is cleared before writing: a failed write is retried at the next change.
 func (s *State) Flush() error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -127,7 +108,6 @@ func (s *State) Flush() error {
 	return writeFileAtomic(s.path, raw)
 }
 
-// RunWriter flushes every interval until ctx is done ("written at most once a second").
 func (s *State) RunWriter(ctx context.Context, every time.Duration, log *Logger) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -143,8 +123,6 @@ func (s *State) RunWriter(ctx context.Context, every time.Duration, log *Logger)
 	}
 }
 
-// writeFileAtomic writes through a temporary file in the same directory and renames it, so a
-// crash mid-write never leaves a truncated state file.
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

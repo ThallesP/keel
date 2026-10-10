@@ -106,13 +106,11 @@ func TestImport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A second import into the same database refuses.
 	if _, err := Import(ctx, store.DB(), writeZip(t)); err == nil || !strings.Contains(err.Error(), "already has an organization") {
 		t.Errorf("second import: %v", err)
 	}
 }
 
-// An install nobody signed up on exports empty tables: that is an empty import, not an error.
 func TestImportEmptyInstall(t *testing.T) {
 	dir := t.TempDir()
 	for _, table := range []string{"projects", "nodes", "_components/betterAuth/user"} {

@@ -46,7 +46,7 @@ func authServe(t *testing.T, siteURL string) *authHTTP {
 type authReq struct {
 	method, path string
 	body         any
-	cookie       string // keel_session value
+	cookie       string
 	bearer       string
 	origin       string
 	referer      string
@@ -169,7 +169,6 @@ func TestAuthHTTPAccounts(t *testing.T) {
 	bad := h.do(authReq{method: "POST", path: "/api/auth/sign-in", body: map[string]string{"email": "ci@example.com", "password": "nope-nope"}})
 	authExpect(t, bad, 401, "NOT_AUTHENTICATED", "Invalid email or password")
 
-	// Members and invitations over HTTP.
 	inv := h.do(authReq{method: "POST", path: "/api/organization/invitations", bearer: token, body: map[string]string{"email": "Guest@example.com"}})
 	if inv.status != 200 || inv.str("email") != "guest@example.com" || inv.str("role") != "member" || len(inv.str("id")) != 26 {
 		t.Fatalf("invite: %d %s", inv.status, inv.raw)
@@ -199,7 +198,6 @@ func TestAuthHTTPAccounts(t *testing.T) {
 	anon := h.do(authReq{method: "GET", path: "/api/organization/members"})
 	authExpect(t, anon, 401, "NOT_AUTHENTICATED", "Not authenticated")
 
-	// Sign-out deletes the session and clears the cookie.
 	out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", cookie: token, origin: origin})
 	cleared := out.sessionCookie()
 	if out.status != 200 || out.json["success"] != true || cleared == nil || cleared.Value != "" || cleared.MaxAge >= 0 {
@@ -257,7 +255,6 @@ func TestAuthHTTPCSRF(t *testing.T) {
 			t.Errorf("%s: %s", c.name, r.raw)
 		}
 	}
-	// Safe methods need no origin.
 	if r := h.do(authReq{method: "GET", path: "/api/organization/invitations", cookie: token}); r.status != 200 {
 		t.Fatalf("GET with cookie: %d %s", r.status, r.raw)
 	}
@@ -276,7 +273,6 @@ func TestAuthHTTPSessionRenewalResendsCookie(t *testing.T) {
 	if c == nil || c.Value != token || c.MaxAge != int(domain.SessionTTL/1000) || r.str("user", "email") != "ci@example.com" {
 		t.Fatalf("renewal cookie: %+v %s", c, r.raw)
 	}
-	// Bearer sessions renew too, without a cookie.
 	h.now += 2 * domain.SessionUpdateAge
 	if r := h.do(authReq{method: "GET", path: "/api/me", bearer: token}); r.sessionCookie() != nil || r.str("user", "id") == "" {
 		t.Fatalf("bearer renewal: %+v %s", r.sessionCookie(), r.raw)
@@ -329,7 +325,6 @@ func TestAuthHTTPDeviceLogin(t *testing.T) {
 		t.Fatalf("slow_down: %s", p.raw)
 	}
 
-	// Approve as CI does it: bearer, look the code up (binds it), approve.
 	userCode := code.str("user_code")
 	noSession := h.do(authReq{method: "POST", path: "/api/auth/device/approve", body: map[string]string{"userCode": userCode}})
 	if noSession.status != 401 || noSession.str("error") != "unauthorized" || noSession.str("error_description") != "Authentication required" {
@@ -363,7 +358,6 @@ func TestAuthHTTPDeviceLogin(t *testing.T) {
 	if again := poll(); again.status != 400 || again.str("error") != "invalid_grant" {
 		t.Fatalf("second token: %d %s", again.status, again.raw)
 	}
-	// CLI sign-out with its bearer, no Origin, and the `{}` body keel logout sends.
 	if out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", bearer: got.str("access_token"), body: map[string]string{}}); out.status != 200 {
 		t.Fatalf("CLI sign-out: %d %s", out.status, out.raw)
 	}
@@ -372,9 +366,6 @@ func TestAuthHTTPDeviceLogin(t *testing.T) {
 	}
 }
 
-// A request that carries a bearer is authenticated by that bearer, never by the browser's
-// cookie: its CSRF exemption rests on the bearer, so the ambient cookie must not be what it acts
-// with.
 func TestAuthHTTPBearerWinsOverCookie(t *testing.T) {
 	h := authServe(t, "http://keel.test")
 	owner := h.do(authReq{method: "POST", path: "/api/auth/sign-up",
@@ -393,11 +384,8 @@ func TestAuthHTTPBearerWinsOverCookie(t *testing.T) {
 		r.method, r.path, r.body = "POST", "/api/organization/invitations", map[string]string{"email": "g@example.com"}
 		return h.do(r)
 	}
-	// Cross-site with the owner's cookie and the member's bearer: acts as the member (who may not
-	// invite), not as the owner.
 	r := invite(authReq{bearer: member, cookie: owner, origin: "http://evil.example"})
 	authExpect(t, r, 403, "FORBIDDEN", "You are not allowed to invite users to this organization")
-	// A made-up bearer next to a valid cookie is signed out, not the cookie's account.
 	r = invite(authReq{bearer: "made-up", cookie: owner, origin: "http://evil.example"})
 	authExpect(t, r, 401, "NOT_AUTHENTICATED", "Not authenticated")
 	if r.sessionCookie() != nil {

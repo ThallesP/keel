@@ -1,6 +1,3 @@
-// Package http is Keel's HTTP transport: the Huma API under /api, the WebSocket, the raw routes
-// agents and services call, and the dashboard. Handlers translate wire types to use-case calls and
-// back; all logic is in app. See docs/go/ARCHITECTURE.md, "HTTP API".
 package http
 
 import (
@@ -20,10 +17,7 @@ import (
 )
 
 type Options struct {
-	// Web is the built dashboard (apps/web/dist), served with an SPA fallback. nil in dev: Vite
-	// serves it and proxies the API here.
-	Web fs.FS
-	// WS is the WebSocket handler mounted at /api/ws (adapters/realtime). nil disables it.
+	Web      fs.FS
 	WS       http.Handler
 	ConfigJS string
 }
@@ -37,8 +31,6 @@ const SessionCookie = "keel_session"
 
 func init() {
 	huma.DefaultArrayNullable = false
-	// Every error the API writes is an api.Problem, so the OpenAPI document (and the dashboard's
-	// generated types) describe exactly that shape.
 	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
 		p := &api.Problem{Status: status, Title: http.StatusText(status), Detail: msg, Code: codeForStatus(status)}
 		for _, e := range errs {
@@ -59,14 +51,12 @@ func init() {
 	}
 }
 
-// Config is the Huma configuration, shared by the server and `keel openapi`.
 func Config(version string) huma.Config {
 	c := huma.DefaultConfig("Keel", version)
 	c.Info.Description = "Keel control plane API. Errors are application/problem+json with a stable `code`."
 	c.OpenAPIPath = "/api/openapi"
 	c.DocsPath = "/api/docs"
 	c.SchemasPath = "/api/schemas"
-	// No `$schema` link in response bodies: it would leak into the dashboard's generated types.
 	c.CreateHooks = nil
 	c.Formats = map[string]huma.Format{"application/json": jsonFormat, "json": jsonFormat}
 	c.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
@@ -94,7 +84,6 @@ func (s *Server) Register(h huma.API) {
 	s.registerIngress(h)
 }
 
-// OpenAPI is the API document without a running server.
 func OpenAPI(version string) *huma.OpenAPI {
 	mux := http.NewServeMux()
 	h := humago.New(mux, Config(version))
@@ -102,8 +91,6 @@ func OpenAPI(version string) *huma.OpenAPI {
 	return h.OpenAPI()
 }
 
-// registerRaw adds the non-Huma routes: agent and proxy callbacks, OTLP, WebSocket, config.js,
-// and the dashboard.
 func (s *Server) registerRaw(mux *http.ServeMux) {
 	s.registerDeployRaw(mux)
 	s.registerObservabilityRaw(mux)
@@ -116,8 +103,6 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(s.opts.ConfigJS))
 	})
-	// Plain-text version, as Convex's /version answered (cli-install.md B3): older install
-	// verification steps still curl "$convexUrl/version", and convexUrl is now the dashboard URL.
 	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -133,23 +118,14 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 
 type actorKey struct{}
 
-// withActor resolves the session (cookie, else bearer) once per request. Cookie-authenticated
-// unsafe requests must come from this site (Origin, else Referer: CSRF, auth_session.go); bearer
-// requests are exempt. A session renewed on the way gets its cookie re-sent.
 func (s *Server) withActor(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if machineRoute(r.URL.Path) {
-			// Agents, keel-proxy and traced services carry their own bearer (worker token,
-			// ingest key), never a session: no lookup, no cookie, no CSRF.
 			next.ServeHTTP(w, r)
 			return
 		}
 		token := SessionToken(r)
 		viaCookie := authViaCookie(r)
-		// A browser write is checked whether or not it carries the cookie: a cross-origin page can
-		// POST JSON as a CORS simple request (no-cors, no Content-Type) to sign-up or sign-in.
-		// Browsers always send Origin on such a request; the CLI, curl and agents send none and
-		// authenticate with a bearer, so they are unaffected.
 		browserWrite := !authSafeMethod(r.Method) && !authViaBearer(r) &&
 			(viaCookie || r.Header.Get("Origin") != "" || r.Header.Get("Referer") != "")
 		if browserWrite {
@@ -162,7 +138,6 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 		if token != "" {
 			a, err := s.app.ResolveSession(r.Context(), token)
 			if err != nil {
-				// Not "signed out": the dashboard would drop its cache and the CLI its saved token.
 				s.app.Log.Error("resolve session", "err", err)
 				writeProblem(w, &api.Problem{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable),
 					Detail: "Could not check the session; try again", Code: domain.CodeUnavailable})
@@ -179,10 +154,6 @@ func (s *Server) withActor(next http.Handler) http.Handler {
 	})
 }
 
-// SessionToken: `Authorization: Bearer <token>` when the request has one, else the keel_session
-// cookie. The bearer wins so that the credential that authenticates a request is the one its
-// CSRF exemption is based on (authViaCookie): a bearer request is never acted on with the
-// browser's ambient cookie.
 func SessionToken(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
@@ -198,7 +169,6 @@ func ActorFrom(ctx context.Context) domain.Actor {
 	return a
 }
 
-// op registers a Huma operation whose handler returns domain errors; they become problems.
 func op[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Context, in *I) (*O, error)) {
 	huma.Register(h, o, func(ctx context.Context, in *I) (*O, error) {
 		out, err := handler(ctx, in)
@@ -209,7 +179,6 @@ func op[I, O any](h huma.API, o huma.Operation, handler func(ctx context.Context
 	})
 }
 
-// problemOf maps a domain error to its problem; anything else is a logged 500.
 func problemOf(err error) error {
 	var p *api.Problem
 	if errors.As(err, &p) {
@@ -227,7 +196,6 @@ func problemOf(err error) error {
 	return &api.Problem{Status: 500, Title: "Internal Server Error", Detail: "Something went wrong on the server", Code: domain.CodeServerError}
 }
 
-// StatusOf is the HTTP status of a domain error code (docs/go/ARCHITECTURE.md, "Errors").
 func StatusOf(code string) int {
 	switch code {
 	case domain.CodeNotAuthenticated:
@@ -278,7 +246,6 @@ func writeProblem(w http.ResponseWriter, p *api.Problem) {
 	_ = jsonEncode(w, p)
 }
 
-// machineRoute: paths called by machines with their own credentials, not by people.
 func machineRoute(path string) bool {
 	for _, p := range []string{"/worker/", "/agent/", "/proxy/", "/otlp/"} {
 		if strings.HasPrefix(path, p) {

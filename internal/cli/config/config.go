@@ -1,6 +1,3 @@
-// Package config is the CLI's state file, ~/.config/keel/config.json: the Keel installs you are
-// logged in to and the directories linked to a project. It holds session tokens, so it is 0600
-// in a 0700 directory and written atomically.
 package config
 
 import (
@@ -13,39 +10,26 @@ import (
 )
 
 type Config struct {
-	// Name of the instance commands use when nothing else picks one.
 	Current   string               `json:"current,omitempty"`
 	Instances map[string]*Instance `json:"instances,omitempty"`
-	// Absolute directory → project, resolved from the working directory upwards.
-	Links map[string]*Link `json:"links,omitempty"`
+	Links     map[string]*Link     `json:"links,omitempty"`
 
 	path string
 }
 
-// Instance is one Keel install. Files from the Convex era also hold "convexUrl" and
-// "convexSiteUrl": they still load (and are dropped on the next save); dashboard and API now share
-// URL.
 type Instance struct {
-	// Dashboard URL, which is also the API's origin.
-	URL   string `json:"url"`
-	Email string `json:"email,omitempty"`
-	// Session token, the bearer of every API call.
-	Token string `json:"token,omitempty"`
-	// A keel login waiting for someone to approve it in the dashboard. The first run that finds
-	// it approved swaps it for Token.
+	URL     string        `json:"url"`
+	Email   string        `json:"email,omitempty"`
+	Token   string        `json:"token,omitempty"`
 	Pending *PendingLogin `json:"pending,omitempty"`
 }
 
-// PendingLogin is a device authorization (RFC 8628) that keel login started.
 type PendingLogin struct {
-	// Secret: whoever holds it gets the session once the login is approved.
-	DeviceCode string `json:"deviceCode"`
-	UserCode   string `json:"userCode"`
-	// The dashboard page that approves it, with the user code filled in.
-	URL       string    `json:"url"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	// Seconds to wait between polls.
-	Interval int `json:"interval"`
+	DeviceCode string    `json:"deviceCode"`
+	UserCode   string    `json:"userCode"`
+	URL        string    `json:"url"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+	Interval   int       `json:"interval"`
 }
 
 func (p *PendingLogin) Expired() bool { return !time.Now().Before(p.ExpiresAt) }
@@ -55,7 +39,6 @@ type Link struct {
 	Project  string `json:"project"`
 }
 
-// Dir is $KEEL_CONFIG_DIR, else $XDG_CONFIG_HOME/keel, else ~/.config/keel, on every OS.
 func Dir() (string, error) {
 	if dir := os.Getenv("KEEL_CONFIG_DIR"); dir != "" {
 		return dir, nil
@@ -70,7 +53,6 @@ func Dir() (string, error) {
 	return filepath.Join(home, ".config", "keel"), nil
 }
 
-// Load reads the config file; a missing file is an empty config.
 func Load() (*Config, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -92,7 +74,6 @@ func Load() (*Config, error) {
 
 func (c *Config) Path() string { return c.path }
 
-// Save writes through a temp file and a rename, so a concurrent run never reads half a file.
 func (c *Config) Save() error {
 	if err := os.MkdirAll(filepath.Dir(c.path), 0o700); err != nil {
 		return err
@@ -120,7 +101,6 @@ func (c *Config) Save() error {
 	return os.Rename(tmp.Name(), c.path)
 }
 
-// LinkFor returns the link of dir or its closest linked parent, with the directory it is on.
 func (c *Config) LinkFor(dir string) (string, *Link) {
 	for {
 		if l, ok := c.Links[dir]; ok {
@@ -148,7 +128,6 @@ func (c *Config) SetInstance(name string, inst *Instance) {
 	c.Instances[name] = inst
 }
 
-// RemoveInstance drops the instance and every link to it.
 func (c *Config) RemoveInstance(name string) {
 	delete(c.Instances, name)
 	for dir, l := range c.Links {

@@ -7,11 +7,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Canvas nodes (convex/nodes.ts, docs/go/spec/projects.md §3, §9.3, §10). Expose / unexpose are
-// the ingress area's; Ship is the deploy area's.
-
-// ListNodes is the canvas: every node of the environment in creation order (groups included),
-// with its endpoints. Empty when the environment is missing or not the actor's.
 func (a *App) ListNodes(ctx context.Context, actor domain.Actor, environmentID string) ([]domain.Node, error) {
 	out := []domain.Node{}
 	err := a.read(ctx, func(tx Tx) error {
@@ -25,31 +20,21 @@ func (a *App) ListNodes(ctx context.Context, actor domain.Actor, environmentID s
 	return out, err
 }
 
-// CreateNodeInput is nodes.create's arguments.
 type CreateNodeInput struct {
-	Type domain.NodeType
-	// "" = named after what it runs (engine, image repo) or its type, made unique.
-	Name string
-	// nil = right of the rightmost top-level node (the CLI has no canvas to drop it on).
-	Position *domain.Position
-	// Services only: the image to run. Non-nil even when empty: "" is a bad image, not "none".
-	Image *string
-	// Databases and caches: picks image and port.
-	Engine domain.Engine
-	// Deployable types: instead of the engine's/type's port and 1 replica. JSON numbers, so 80.5
-	// gets the port message rather than a decoding error.
+	Type           domain.NodeType
+	Name           string
+	Position       *domain.Position
+	Image          *string
+	Engine         domain.Engine
 	Port, Replicas *float64
-	// Ship right away. Skipped silently when a deployment is already running (the node stays dirty).
-	Deploy bool
+	Deploy         bool
 }
 
-// CreatedNode: DeploymentID is "" when no deployment started.
 type CreatedNode struct {
 	ID           string
 	DeploymentID string
 }
 
-// CreateNode adds a node to the canvas. Checks run in the Convex order; the first failure wins.
 func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID string, in CreateNodeInput) (CreatedNode, error) {
 	var out CreatedNode
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -90,7 +75,6 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			}
 			image = *in.Image
 		}
-		// Named after what runs (`nginx`, `api-server`), not the node kind (`service`).
 		base := string(in.Engine)
 		if base == "" {
 			base = def.Name
@@ -170,7 +154,6 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			var refused *domain.Error
 			switch {
 			case errors.As(err, &refused):
-				// A deployment is already running: the node stays dirty, no deploymentId.
 			case err != nil:
 				return err
 			default:
@@ -185,26 +168,17 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 	return out, nil
 }
 
-// NodeUpdate is PATCH /api/nodes/{id}: every field optional, applied in this order in one
-// transaction (any failure changes nothing).
 type NodeUpdate struct {
-	// Rename (convex nodes.rename): references to the node follow; not a staged change.
-	Name *string
-	// Runtime (convex nodes.setDesired): always a staged change, also for the referrers.
+	Name           *string
 	Image          *string
 	Port, Replicas *float64
-	// Size of a volume, box of a group. Fields left nil keep their value. Not staged.
-	Config *domain.NodeConfig
-	// Group membership: a group's id, or "" for the top level. The node keeps its place on the
-	// canvas (its position is converted) unless Position is given too.
-	ParentID *string
-	// Position (relative to the parent) to set along with ParentID; a plain move is MoveNode.
-	Position *domain.Position
+	Config         *domain.NodeConfig
+	ParentID       *string
+	Position       *domain.Position
 }
 
 func (u NodeUpdate) runtime() bool { return u.Image != nil || u.Port != nil || u.Replicas != nil }
 
-// UpdateNode applies a NodeUpdate.
 func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u NodeUpdate) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, id)
@@ -245,9 +219,6 @@ func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u N
 	})
 }
 
-// canvasRename: same name is a no-op (before validation); references to the node are rewritten
-// (`${{ old.KEY }}` → `${{ new.KEY }}`). Endpoints keep their domain; OTEL_SERVICE_NAME follows
-// on the node's next ship.
 func canvasRename(tx Tx, node domain.Node, name string) (domain.Node, error) {
 	if name == node.Name {
 		return node, nil
@@ -275,8 +246,6 @@ func canvasRename(tx Tx, node domain.Node, name string) (domain.Node, error) {
 	return node, nil
 }
 
-// canvasSetDesired is convex nodes.setDesired: image, port (cannot be unset), replicas; revision
-// and tracing kept; dirty even when nothing changed (dirty is sticky, there is no diff).
 func canvasSetDesired(tx Tx, ch *Changes, org string, node domain.Node, u NodeUpdate) (domain.Node, error) {
 	if node.Desired == nil {
 		return node, domain.Invalid("This node type has no runtime settings")
@@ -309,7 +278,6 @@ func canvasSetDesired(tx Tx, ch *Changes, org string, node domain.Node, u NodeUp
 	return node, markReferrersDirty(tx, ch, org, node)
 }
 
-// canvasSetConfig: volumes have a size, groups a box. Not a staged change: neither reaches Swarm.
 func canvasSetConfig(tx Tx, node domain.Node, c domain.NodeConfig) (domain.Node, error) {
 	positive := func(p *float64) bool { return p == nil || *p > 0 }
 	if c.SizeGb != nil && node.Type != domain.NodeVolume {
@@ -338,9 +306,6 @@ func canvasSetConfig(tx Tx, node domain.Node, c domain.NodeConfig) (domain.Node,
 	return node, tx.CanvasUpdateNode(node)
 }
 
-// canvasSetParent moves a node into a group ("" = out of it). Groups do not nest (the dashboard
-// renders parents before children by putting groups first). Without an explicit position the node
-// keeps its place: positions are relative to the parent.
 func canvasSetParent(tx Tx, node domain.Node, parentID *string, pos *domain.Position) (domain.Node, error) {
 	if parentID != nil && *parentID != node.ParentID {
 		abs := node.Position
@@ -374,8 +339,6 @@ func canvasSetParent(tx Tx, node domain.Node, parentID *string, pos *domain.Posi
 	return node, tx.CanvasUpdateNode(node)
 }
 
-// MoveNode writes a canvas position (relative to the node's group when it has one). Any numbers;
-// not a staged change. The dashboard applies it optimistically on drag end.
 func (a *App) MoveNode(ctx context.Context, actor domain.Actor, id string, pos domain.Position) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, id)
@@ -392,10 +355,6 @@ func (a *App) MoveNode(ctx context.Context, actor domain.Actor, id string, pos d
 	})
 }
 
-// DuplicateNode copies a node next to the original (+40, +40) as `<name>-copy`: same type,
-// group, config, runtime (revision 0, so never shipped) and one-shot flag; variables verbatim in
-// order (a duplicated database shares the generated passwords). Observation, endpoints and errors
-// are not copied. Returns the copy's id.
 func (a *App) DuplicateNode(ctx context.Context, actor domain.Actor, id string) (string, error) {
 	var copyID string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -466,9 +425,6 @@ func canvasCopyConfig(c domain.NodeConfig) domain.NodeConfig {
 	return domain.NodeConfig{SizeGb: cp(c.SizeGb), Width: cp(c.Width), Height: cp(c.Height)}
 }
 
-// StartNode scales a node back to 1 replica (when stopped) and ships it: "deploy <name>" for a
-// never-shipped node, else "start <name>". Always ships, even when already running. A stopped
-// 3-replica service comes back with 1. Returns the deployment id.
 func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (string, error) {
 	var deploymentID string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -501,8 +457,6 @@ func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (str
 	return deploymentID, err
 }
 
-// StopNode scales a node to 0 and ships that ("stop <name>"); the Swarm service stays defined.
-// ok is false (and nothing is written) when it already is at 0 replicas.
 func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (deploymentID string, ok bool, err error) {
 	err = a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, id)
@@ -535,12 +489,6 @@ func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (depl
 	return deploymentID, ok, nil
 }
 
-// RemoveNode deletes a node with its variables (docs/go/spec/projects.md §10). A missing or
-// foreign node is not an error: a multi-select delete races itself. Nodes referencing it become
-// staged changes (their references now resolve to ""); its group's children move to the top
-// level, keeping their place. After commit: proxy sync if it had endpoints, Swarm service removal
-// and an observe (which settles a deployment waiting on it) if it had a runtime. Deployments and
-// their steps are kept.
 func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) error {
 	if err := actor.RequireUser(); err != nil {
 		return err
@@ -551,7 +499,6 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 			return err
 		}
 		node := scope.Node
-		// Before its own rows go: referrers are found through them and through its name.
 		if err := markReferrersDirty(tx, ch, scope.Org, node); err != nil {
 			return err
 		}
@@ -572,8 +519,6 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 				return err
 			}
 		}
-		// The row goes before the removal is scheduled: an in-flight apply that re-reads the node
-		// after this commit sees nothing and backs out (removing a service it just created).
 		if err := tx.DeleteNode(id); err != nil {
 			return err
 		}

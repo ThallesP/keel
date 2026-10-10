@@ -1,9 +1,5 @@
 package app
 
-// Span row parsing and Docker demux against the TypeScript (testdata/axiom_scenarios.golden.json,
-// produced by running traceProviders/axiom.ts spanOf and logProviders/docker.ts demux on the
-// same inputs).
-
 import (
 	"bytes"
 	"encoding/base64"
@@ -113,7 +109,7 @@ func TestDurationAndTime(t *testing.T) {
 		{"250µs", 0.25},
 		{"250μs", 0.25},
 		{"250us", 0.25},
-		{"10ns", 9.999999999999999e-06}, // 10 * 1e-6 in float64, as JS computes it
+		{"10ns", 9.999999999999999e-06},
 		{"00:00:01.5", 1500},
 		{"1.00:00:00", 86_400_000},
 		{"garbage", 0},
@@ -173,7 +169,6 @@ func TestRowPick(t *testing.T) {
 			t.Errorf("pick(%q) = %v, %v; want %v, %v", c.path, got, ok, c.want, c.ok)
 		}
 	}
-	// A present null ends the search: "n.y" is not looked for in "n" once "n.y" is null.
 	v, _ = DecodeJSON([]byte(`{"n.y":null,"n":{"y":1}}`))
 	if got, ok := rowPick(v, "n.y"); !ok || got != nil {
 		t.Errorf("present null: %v %v", got, ok)

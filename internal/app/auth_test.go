@@ -35,7 +35,6 @@ func (r *authRecorder) Publish(org string, topics []string) {
 	}
 }
 
-// take returns and forgets the topics published for org.
 func (r *authRecorder) take(org string) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -105,7 +104,6 @@ func (f *authFixture) exec(q string, args ...any) {
 	}
 }
 
-// legacyUser inserts an account the way the Convex import would: no membership.
 func (f *authFixture) legacyUser(id, email, hash string) {
 	f.exec(`INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES (?, ?, 'Legacy', ?, 1, 1)`, id, email, hash)
 }
@@ -150,7 +148,6 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 		t.Fatalf("sign-up open on a fresh install: %v %v", open, err)
 	}
 
-	// Validation comes first, in Better Auth's order.
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "not-an-email", Password: "correct-horse-battery"})
 	authWant(t, err, domain.CodeInvalidInput, "Invalid email")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: "short"})
@@ -158,7 +155,6 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "a@example.com", Password: strings.Repeat("x", 129)})
 	authWant(t, err, domain.CodeInvalidInput, "Password too long")
 
-	// The first account founds the organization and owns it (eagerly, in the same transaction).
 	owner := f.signUp(" Founder@Example.com ", "")
 	if owner.User.Email != "founder@example.com" || len(owner.Token) < 50 {
 		t.Fatalf("first account: %+v", owner)
@@ -184,7 +180,6 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 		t.Fatal("sign-up still open after the first account")
 	}
 
-	// Closed now: a taken email is refused before the invite rule, then the invite rule.
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "FOUNDER@example.com", Password: "correct-horse-battery"})
 	authWant(t, err, domain.CodeConflict, "User already exists. Use another email.")
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "second@example.com", Password: "correct-horse-battery"})
@@ -207,11 +202,9 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 		t.Fatalf("public invitation: %+v %v", pub, err)
 	}
 
-	// Another email cannot use it.
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "third@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
 	authWant(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 
-	// Its email joins with its role and spends it.
 	f.now += 1000
 	second := f.signUp("SECOND@example.com", inv.ID)
 	sa := f.actor(second.Token)
@@ -240,7 +233,7 @@ func TestAuthSignUpWithExpiredInvitation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.now += domain.InvitationTTL // expiresAt == now: still stands
+	f.now += domain.InvitationTTL
 	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub == nil {
 		t.Fatal("invitation should stand until its last millisecond")
 	}
@@ -279,8 +272,6 @@ func TestAuthSignIn(t *testing.T) {
 	}
 }
 
-// An account imported from Better Auth signs in with its scrypt hash, which is then replaced by
-// argon2id.
 func TestAuthSignInRehashesBetterAuthHash(t *testing.T) {
 	f := authSetup(t)
 	const scryptHash = "0123456789abcdef0123456789abcdef:68b228eae069737062c56fbe239acdc9517ba0c0ed53447e2697faa281de7aab26e6e87571f29175a258c42d8a9fde39d6cd344c160472b76897c7bcfe0a1f53"
@@ -306,7 +297,6 @@ func TestAuthSignInRehashesBetterAuthHash(t *testing.T) {
 	if _, err := f.app.SignIn(f.ctx, "legacy@example.com", "correct-horse-battery", authClient); err != nil {
 		t.Fatalf("sign in after rehash: %v", err)
 	}
-	// A legacy account has no membership: signed in, but no organization.
 	me, _ := f.app.GetMe(f.ctx, f.actor(out.Token))
 	if me.User == nil || me.Organization != nil {
 		t.Fatalf("legacy me: %+v", me)
@@ -326,20 +316,17 @@ func TestAuthSignInLimiter(t *testing.T) {
 	if !errors.As(err, &limited) {
 		t.Fatalf("11th try: %v", err)
 	}
-	// The window opened at T0 and the 11th try is at T0+10s: 290 s left.
 	if limited.RetryAfterSeconds != 290 {
 		t.Fatalf("retry after %d", limited.RetryAfterSeconds)
 	}
 	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 
-	// Per client and email: another address, or another account, is not limited.
 	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", app.ClientInfo{IP: "100.64.0.10"}); err != nil {
 		t.Fatalf("other IP: %v", err)
 	}
 	_, err = f.app.SignIn(f.ctx, "other@example.com", "x-password", authClient)
 	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
 
-	// After the window it works again, and a success clears the count.
 	f.now = authT0 + app.SignInWindow.Milliseconds()
 	if _, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient); err != nil {
 		t.Fatalf("after the window: %v", err)
@@ -364,17 +351,14 @@ func TestAuthSessionLifetime(t *testing.T) {
 	if a.SessionRenewed || a.SessionExpiresAt != authT0+domain.SessionTTL {
 		t.Fatalf("fresh session: %+v", a)
 	}
-	// A legacy Better Auth "<token>.<signature>" value is the same session.
 	if b := f.actor(s.Token + ".c2lnbmF0dXJl"); b.SessionID != a.SessionID {
 		t.Fatal("signed form of the token did not resolve")
 	}
 
-	// Under a day after the last renewal: nothing moves.
 	f.now = authT0 + domain.SessionUpdateAge - 1
 	if a := f.actor(s.Token); a.SessionRenewed {
 		t.Fatal("renewed too early")
 	}
-	// A day later: pushed out to 7 days from now.
 	f.now = authT0 + domain.SessionUpdateAge
 	a = f.actor(s.Token)
 	if !a.SessionRenewed || a.SessionExpiresAt != f.now+domain.SessionTTL {
@@ -384,7 +368,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 		t.Fatal("renewed twice in a row")
 	}
 
-	// Unused past its expiry: signed out, and the row is gone.
 	f.now += domain.SessionTTL
 	if a := f.actor(s.Token); a.SignedIn() {
 		t.Fatalf("expired session resolved: %+v", a)
@@ -395,7 +378,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 		t.Fatalf("%d sessions left", n)
 	}
 
-	// Sign-out deletes the presented session only.
 	one, err := f.app.SignIn(f.ctx, "ci@example.com", "correct-horse-battery", authClient)
 	if err != nil {
 		t.Fatal(err)
@@ -410,7 +392,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 	if err := f.app.SignOut(f.ctx, domain.Actor{}); err != nil {
 		t.Fatalf("signed-out sign-out: %v", err)
 	}
-	// Tokens are stored hashed.
 	var stored string
 	_ = f.store.DB().QueryRow(`SELECT token_hash FROM sessions`).Scan(&stored)
 	if stored == two.Token || stored != domain.HashSessionToken(two.Token) {
@@ -447,7 +428,6 @@ func TestAuthInvitationRules(t *testing.T) {
 	_, err = f.app.CreateInvitation(f.ctx, domain.Actor{}, "x@example.com", "")
 	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 
-	// Admins invite; inviting again cancels the previous link.
 	first, err := f.app.CreateInvitation(f.ctx, admin, "x@example.com", "")
 	if err != nil {
 		t.Fatal(err)
@@ -459,12 +439,11 @@ func TestAuthInvitationRules(t *testing.T) {
 	if pub, _ := f.app.GetInvitation(f.ctx, first.ID); pub != nil {
 		t.Fatal("re-invite left the first link standing")
 	}
-	invs, err := f.app.ListInvitations(f.ctx, member) // any member may list
+	invs, err := f.app.ListInvitations(f.ctx, member)
 	if err != nil || len(invs) != 1 || invs[0].ID != second.ID || invs[0].Role != "admin" || invs[0].InviterID != owner.UserID {
 		t.Fatalf("list: %+v %v", invs, err)
 	}
 
-	// Cancelling is for owners and admins.
 	err = f.app.CancelInvitation(f.ctx, member, second.ID)
 	authWant(t, err, domain.CodeForbidden, "You are not allowed to cancel this invitation")
 	err = f.app.CancelInvitation(f.ctx, owner, "unknown")
@@ -496,20 +475,15 @@ func TestAuthInvitationLimit(t *testing.T) {
 	}
 	_, err := f.app.CreateInvitation(f.ctx, owner, "one-more@example.com", "")
 	authWant(t, err, domain.CodeForbidden, "Invitation limit reached")
-	// Re-inviting someone already invited cancels first, so it fits.
 	if _, err := f.app.CreateInvitation(f.ctx, owner, "uaa@example.com", ""); err != nil {
 		t.Fatalf("re-invite at the limit: %v", err)
 	}
-	// Expired ones do not count.
 	f.now += domain.InvitationTTL + 1
 	if _, err := f.app.CreateInvitation(f.ctx, owner, "one-more@example.com", ""); err != nil {
 		t.Fatalf("after expiry: %v", err)
 	}
 }
 
-// Accounts without a membership (imported from before organizations) join through an invite
-// link while signed in: Better Auth's accept-invitation always failed here (email verification
-// gate); the Go port accepts.
 func TestAuthAcceptInvitation(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
@@ -551,7 +525,6 @@ func TestAuthAcceptInvitation(t *testing.T) {
 	_, err = f.app.AcceptInvitation(f.ctx, legacy, inv.ID)
 	authWant(t, err, domain.CodeNotFound, "Invitation not found")
 
-	// One membership per account.
 	again, _ := f.app.CreateInvitation(f.ctx, owner, "other@example.com", "")
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('org2', 'Second', 'second', 1)`)
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('m2', 'org2', 'legacy2', 'owner', 1)`)
@@ -565,7 +538,6 @@ func TestAuthJoinOrFound(t *testing.T) {
 	_, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{})
 	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 
-	// An install imported without an organization: the first one to need it founds it.
 	f.legacyUser("u1", "one@example.com", "")
 	f.legacyUser("u2", "two@example.com", "")
 	one, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1", Email: "one@example.com"})
@@ -576,12 +548,10 @@ func TestAuthJoinOrFound(t *testing.T) {
 	if me.Organization == nil || me.Organization.Name != "Default" || me.Organization.Slug != "default" {
 		t.Fatalf("founded: %+v", me.Organization)
 	}
-	// Again: the same membership, nothing new.
 	again, err := app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u1"})
 	if err != nil || again.OrganizationID != one.OrganizationID {
 		t.Fatalf("second call: %+v %v", again, err)
 	}
-	// Someone else without a membership: the organization exists, so they need an invitation.
 	_, err = app.AuthJoinOrFoundForTest(f.app, f.ctx, domain.Actor{UserID: "u2"})
 	authWant(t, err, domain.CodeNoOrganization, "You're not in an organization yet. Ask a member for an invite link.")
 	var n int
@@ -591,8 +561,6 @@ func TestAuthJoinOrFound(t *testing.T) {
 	}
 }
 
-// A member of another organization cannot see or change this organization's members,
-// invitations or device logins: foreign is the same as missing.
 func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
@@ -600,7 +568,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A second organization (not possible through the API today; one per install).
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('orgb', 'Other', 'other', 1)`)
 	f.legacyUser("ub", "b@example.com", f.hash("b-password-123"))
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('mb', 'orgb', 'ub', 'owner', 1)`)
@@ -629,7 +596,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 		t.Fatalf("b's me: %+v", me.Organization)
 	}
 
-	// A login link claimed by the owner cannot be decided by b.
 	start, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	if err != nil {
 		t.Fatal(err)
@@ -643,7 +609,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	err = f.app.DecideDeviceLogin(f.ctx, b, start.UserCode, true)
 	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to approve this device authorization")
 
-	// Signed out or without an organization: nothing.
 	_, err = f.app.ListMembers(f.ctx, domain.Actor{})
 	authWant(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 	f.legacyUser("loner", "loner@example.com", "")
@@ -683,11 +648,10 @@ func TestAuthDeviceLogin(t *testing.T) {
 	f.now += 4_999
 	_, err = poll(start.DeviceCode)
 	authWantRefusal(t, err, 400, "slow_down", "Polling too frequently")
-	f.now += 1 // 5 s after the last counted poll (a slow_down does not count)
+	f.now += 1
 	_, err = poll(start.DeviceCode)
 	authWantRefusal(t, err, 400, "authorization_pending", "Authorization pending")
 
-	// Deciding needs a claim first, and a session.
 	err = f.app.DecideDeviceLogin(f.ctx, domain.Actor{}, pretty, true)
 	authWantRefusal(t, err, 401, "unauthorized", "Authentication required")
 	err = f.app.DecideDeviceLogin(f.ctx, alice, pretty, true)
@@ -695,7 +659,6 @@ func TestAuthDeviceLogin(t *testing.T) {
 	err = f.app.DecideDeviceLogin(f.ctx, alice, "ZZZZ-ZZZZ", true)
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 
-	// Looking it up signed out shows it without claiming it.
 	v, err := f.app.ClaimDeviceCode(f.ctx, domain.Actor{}, pretty)
 	if err != nil || v.UserCode != pretty || v.Status != domain.DevicePending {
 		t.Fatalf("anonymous lookup: %+v %v", v, err)
@@ -705,7 +668,6 @@ func TestAuthDeviceLogin(t *testing.T) {
 	_, err = f.app.ClaimDeviceCode(f.ctx, alice, "nope")
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 
-	// Alice claims it; the next signed-in viewer does not take it over.
 	if _, err := f.app.ClaimDeviceCode(f.ctx, alice, pretty); err != nil {
 		t.Fatal(err)
 	}
@@ -726,7 +688,6 @@ func TestAuthDeviceLogin(t *testing.T) {
 		t.Fatalf("status after approval: %s", v.Status)
 	}
 
-	// The CLI's next poll gets a session for Alice, once.
 	f.now += 5_000
 	tok, err := poll(start.DeviceCode)
 	if err != nil {
@@ -773,8 +734,6 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	authWantRefusal(t, poll(expired.DeviceCode), 400, "expired_token", "Device code has expired")
 	authWantRefusal(t, poll(expired.DeviceCode), 400, "invalid_grant", "Invalid device code")
 
-	// A new link does not sweep a code that just expired: its poller (keel login --wait) and its
-	// /device tab still hear "expired", as with Better Auth, which never swept.
 	stale, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	f.now += domain.DeviceCodeTTL + 1
 	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{}); err != nil {
@@ -784,7 +743,6 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	authWantRefusal(t, err, 400, "expired_token", "User code has expired")
 	authWantRefusal(t, poll(stale.DeviceCode), 400, "expired_token", "Device code has expired")
 
-	// Long-expired codes nobody polled are swept by the next new link.
 	forgotten, _ := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{})
 	f.now += domain.DeviceCodeTTL + domain.DeviceCodeKeep + 1
 	if _, err := f.app.StartDeviceLogin(f.ctx, "keel-cli", app.ClientInfo{}); err != nil {
@@ -794,8 +752,6 @@ func TestAuthDeviceLoginDeniedAndExpired(t *testing.T) {
 	authWantRefusal(t, err, 400, "invalid_request", "Invalid user code")
 }
 
-// One address gets AuthPerIP sign-ins and sign-ups a minute whatever the email (spraying one
-// password across accounts), and DeviceStartPerIP device codes.
 func TestAuthPerIPLimits(t *testing.T) {
 	f := authSetup(t)
 	spray := app.ClientInfo{IP: "100.64.0.66"}
@@ -805,13 +761,11 @@ func TestAuthPerIPLimits(t *testing.T) {
 	}
 	_, err := f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
 	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
-	// Sign-up shares the budget; another address does not.
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: spray})
 	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 	if _, err := f.app.SignUp(f.ctx, app.SignUpInput{Email: "new@example.com", Password: "correct-horse-battery", Name: "N", Client: app.ClientInfo{IP: "100.64.0.67"}}); err != nil {
 		t.Fatalf("other address: %v", err)
 	}
-	// The window passes.
 	f.now += app.AuthPerIPWindow.Milliseconds()
 	_, err = f.app.SignIn(f.ctx, "victim-next@example.com", "Summer2026!", spray)
 	authWant(t, err, domain.CodeNotAuthenticated, "Invalid email or password")
@@ -824,7 +778,6 @@ func TestAuthPerIPLimits(t *testing.T) {
 	_, err = f.app.StartDeviceLogin(f.ctx, "keel-cli", spray)
 	authWant(t, err, domain.CodeRateLimited, "Too many requests. Please try again later.")
 
-	// A 1 MiB address is refused before it reaches the regex or a limiter key.
 	_, err = f.app.SignIn(f.ctx, strings.Repeat("a", 1<<20)+"@example.com", "x", app.ClientInfo{IP: "100.64.0.68"})
 	authWant(t, err, domain.CodeInvalidInput, domain.MsgInvalidEmail)
 }

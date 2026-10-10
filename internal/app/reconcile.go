@@ -11,11 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Settling deployments against what Swarm reports, the per-deployment timeout, and the deploy
-// part of the start-up recovery (convex/reconcile.ts; docs/go/spec/swarm-worker.md §10, §18).
-
-// settleStep is reconcile.ts settle: a running (or orphaned pending) node step against its node
-// (nil when deleted). Returns the next step and the log text ("" for none).
 func settleStep(step domain.DeployStep, node *domain.Node, now int64) (domain.DeployStep, string) {
 	name := step.Label
 	if node == nil {
@@ -57,9 +52,6 @@ func settleStep(step domain.DeployStep, node *domain.Node, now int64) (domain.De
 	return step, ""
 }
 
-// settleDeployment is one iteration of reconcile.ts run over deployment d, given its nodes
-// (nil = deleted). It returns d's next state and the lines to append; changed=false when it is
-// exactly as it was.
 func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now int64) (next domain.Deployment, appended []domain.LogLine, changed bool) {
 	next = d
 	next.Steps = append([]domain.DeployStep(nil), d.Steps...)
@@ -68,8 +60,6 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 			continue
 		}
 		node := nodes[step.NodeID]
-		// A pending step waits for apply, which backs out silently when the node is gone; only a
-		// deleted node settles it here. Running steps settle against observed state.
 		if step.Status == domain.StepPending && node != nil {
 			continue
 		}
@@ -130,8 +120,6 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 	return next, appended, changed
 }
 
-// reconcile settles the running deployments of environmentID ("" = every environment) inside tx
-// (reconcile.run). Only deployments that changed are written and published.
 func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
 	running, err := tx.RunningDeployments(environmentID)
 	if err != nil {
@@ -172,7 +160,6 @@ func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) err
 	return nil
 }
 
-// reconcileRunning is reconcile in its own transaction.
 func (a *App) reconcileRunning(ctx context.Context, environmentID string) {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		return a.reconcile(tx, ch, environmentID, a.Now())
@@ -182,9 +169,6 @@ func (a *App) reconcileRunning(ctx context.Context, environmentID string) {
 	}
 }
 
-// timeoutDeployment fails a deployment still running 5 minutes after it started: every
-// unfinished step fails, and each node still there turns red with the last observed error until
-// its next ship (reconcile.timeoutDeployment).
 func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		d, err := tx.Deployment(deploymentID)
@@ -239,11 +223,6 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 	}
 }
 
-// recoverDeploy is the deploy part of the start-up pass that replaces Convex's durable
-// scheduler (swarm-worker.md §18): a full sweep; every running deployment's timeout re-armed at
-// max(now, startedAt + 5 min); applies that never reached Swarm re-queued (the in-memory jobs
-// died with the previous process); the Quick Tunnel era's cloudflared services removed
-// (migrations.run step 4); and, when KEEL_AGENT_IMAGE is set, the keel-agent service.
 func (a *App) recoverDeploy(ctx context.Context) {
 	a.Jobs.After("observe:all", 0, a.observeAll)
 	a.Jobs.After("swarm:legacy-tunnels", 0, a.removeLegacyTunnels)
@@ -309,8 +288,6 @@ func (a *App) removeLegacyTunnels(ctx context.Context) {
 	}
 }
 
-// noSwarm reports (and logs) a serve started without a Swarm driver: jobs that need Docker
-// skip instead of crashing the process.
 func (a *App) noSwarm(what string) bool {
 	if a.Swarm != nil {
 		return false
@@ -319,8 +296,6 @@ func (a *App) noSwarm(what string) bool {
 	return true
 }
 
-// ensureAgent creates or updates the keel-agent global service (replaces
-// scripts/deploy-worker.sh). Agents reach serve at KEEL_AGENT_CONTROL_URL, else KEEL_SITE_URL.
 func (a *App) ensureAgent(ctx context.Context) {
 	if a.noSwarm("keel-agent") {
 		return

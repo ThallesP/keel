@@ -9,13 +9,8 @@ import (
 	"tailscale.com/tsnet"
 )
 
-// upTimeout bounds joining the tailnet: a bad or expired auth key fails the agent visibly (Swarm
-// restarts it) instead of leaving it waiting forever.
 const upTimeout = 2 * time.Minute
 
-// openTailnet brings up an ephemeral tsnet node, keel-agent-<hostname>, with its state in a
-// temporary directory (ephemeral: the node leaves the tailnet when it goes offline, and a restart
-// joins as a fresh node with the same auth key).
 func openTailnet(ctx context.Context, opts Options) (*Mesh, error) {
 	host := opts.Hostname
 	if host == "" {
@@ -34,7 +29,7 @@ func openTailnet(ctx context.Context, opts Options) (*Mesh, error) {
 		AuthKey:   opts.AuthKey,
 		Ephemeral: true,
 		Dir:       dir,
-		Logf:      func(string, ...any) {}, // tailscaled's backend chatter
+		Logf:      func(string, ...any) {},
 		UserLogf:  userLogf,
 	}
 	upCtx, cancel := context.WithTimeout(ctx, upTimeout)

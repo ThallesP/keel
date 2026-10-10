@@ -17,13 +17,12 @@ const (
 	StepFailed  StepStatus = "failed"
 )
 
-// DeployStep: one per shipped node, plus the final "health checks" step (NodeID "").
 type DeployStep struct {
 	NodeID     string     `json:"nodeId,omitempty"`
 	Label      string     `json:"label"`
 	Status     StepStatus `json:"status"`
 	StartedAt  *int64     `json:"startedAt,omitempty"`
-	AppliedAt  *int64     `json:"appliedAt,omitempty"` // set once apply created/updated the service
+	AppliedAt  *int64     `json:"appliedAt,omitempty"`
 	FinishedAt *int64     `json:"finishedAt,omitempty"`
 }
 
@@ -45,7 +44,6 @@ type Deployment struct {
 	Log           []LogLine        `json:"log"`
 }
 
-// Variable: Value may reference other nodes' variables: ${{ postgres.DATABASE_URL }}.
 type Variable struct {
 	ID     string `json:"id"`
 	NodeID string `json:"nodeId"`

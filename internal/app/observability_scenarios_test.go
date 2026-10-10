@@ -1,12 +1,5 @@
 package app_test
 
-// The Axiom read side against the TypeScript it replaces. testdata/axiom_scenarios.json holds
-// canned Axiom answers (matched on the APL they receive); axiom_scenarios.golden.json is what the
-// TypeScript providers (logProviders/axiom.ts, traceProviders/axiom.ts, convex/traces.ts get)
-// returned for them, and the requests they sent, with Date.now pinned. Here the Go use cases run
-// on a real SQLite store and the real Axiom adapter against an httptest server serving the same
-// answers; results and requests must be identical.
-
 import (
 	"context"
 	"encoding/json"
@@ -77,8 +70,6 @@ func obsReadJSON(t *testing.T, path string, v any) {
 	}
 }
 
-// obsAPLServer answers APL queries by the first rule whose `contains` is in the APL, and records
-// every request.
 type obsAPLServer struct {
 	mu       sync.Mutex
 	rules    []obsScenarioRule
@@ -112,7 +103,6 @@ func (f *obsAPLServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"tables":[]}`))
 }
 
-// table builds Axiom's tabular answer (column-major) by hand, keeping the fixture's key order.
 func (f *obsAPLServer) table(rule obsScenarioRule) []byte {
 	if rule.NoTables {
 		return []byte(`{"tables":[]}`)
@@ -177,10 +167,9 @@ func (f *obsAPLServer) table(rule obsScenarioRule) []byte {
 	return []byte(b.String())
 }
 
-// obsAppendKeys adds the object's keys, in document order, that fields lacks.
 func obsAppendKeys(fields []string, raw json.RawMessage) []string {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	_, _ = dec.Token() // {
+	_, _ = dec.Token()
 	for dec.More() {
 		tok, _ := dec.Token()
 		k := tok.(string)
@@ -223,7 +212,6 @@ func obsArgString(args map[string]any, k string) string {
 	return s
 }
 
-// obsAsJSON normalizes v to what encoding/json decodes it to (numbers as float64).
 func obsAsJSON(t *testing.T, v any) any {
 	t.Helper()
 	b, err := json.Marshal(v)

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// axiomServer records ingest requests and answers with the given statuses in order (the last
-// repeats).
 type axiomServer struct {
 	mu       sync.Mutex
 	statuses []int
@@ -93,7 +91,6 @@ func TestAxiomSendNDJSON(t *testing.T) {
 	}
 }
 
-// A 4xx other than 429 is malformed: retrying cannot help, the batch is dropped (true).
 func TestAxiomRejectDrops(t *testing.T) {
 	as := &axiomServer{statuses: []int{400}, reply: `{"message":"bad"}`}
 	srv := httptest.NewServer(as)

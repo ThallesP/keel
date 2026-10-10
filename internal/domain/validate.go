@@ -13,7 +13,6 @@ var (
 	imageRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9._\-/:@]{0,199}$`)
 )
 
-// ValidName: node names (convex/access.ts validName).
 func ValidName(name string) error {
 	if !nameRE.MatchString(name) {
 		return Invalid("Name: 1–40 chars, a-z 0-9 and - only")
@@ -21,7 +20,6 @@ func ValidName(name string) error {
 	return nil
 }
 
-// ValidEnvKey: variable keys.
 func ValidEnvKey(key string) error {
 	if !envKeyRE.MatchString(key) {
 		return Invalid("Key: UPPER_SNAKE_CASE only")
@@ -29,7 +27,6 @@ func ValidEnvKey(key string) error {
 	return nil
 }
 
-// ValidImage: image references only; never a command, mount or socket.
 func ValidImage(image string) error {
 	if !imageRE.MatchString(image) {
 		return Invalid("Image must look like repo/name:tag")
@@ -37,7 +34,6 @@ func ValidImage(image string) error {
 	return nil
 }
 
-// ValidPort accepts nil (no port).
 func ValidPort(port *int) error {
 	if port != nil && (*port < 1 || *port > 65535) {
 		return Invalid(MsgPortRange)
@@ -47,11 +43,10 @@ func ValidPort(port *int) error {
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
-// Slug: "My API" → "my-api" (convex/projects.ts slugOf). Empty when nothing usable is left.
 func Slug(name string) string {
 	var b strings.Builder
 	for _, r := range norm.NFKD.String(name) {
-		if r >= 0x300 && r <= 0x36f { // combining diacritics, as the JS slugOf strips them
+		if r >= 0x300 && r <= 0x36f {
 			continue
 		}
 		b.WriteRune(r)

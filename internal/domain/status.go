@@ -1,9 +1,5 @@
 package domain
 
-// NodeStatus is what the canvas shows for a node (convex/status.ts).
-//
-//	done: a one-shot image ran and every task exited 0.
-//	stopping: scaled to 0, Swarm has not yet confirmed every task is gone.
 type NodeStatus string
 
 const (
@@ -16,7 +12,6 @@ const (
 	StatusPending   NodeStatus = "pending"
 )
 
-// Converged: observed matches desired and every replica runs, or every replica ran to completion.
 func Converged(desired *Desired, observed *Observed) bool {
 	if desired == nil || observed == nil {
 		return false
@@ -37,20 +32,17 @@ func Converged(desired *Desired, observed *Observed) bool {
 	return observed.State == ObservedOK && observed.Running >= desired.Replicas
 }
 
-// DeriveStatus mirrors convex/status.ts deriveStatus exactly.
 func DeriveStatus(n Node) NodeStatus {
 	d, o := n.Desired, n.Observed
 	if d == nil || d.Revision == 0 {
-		return StatusPending // never shipped
+		return StatusPending
 	}
 	if n.ApplyError != "" {
-		return StatusError // pull / spec failure; cleared on the next ship
+		return StatusError
 	}
 	if o == nil {
-		return StatusDeploying // shipped, observe has not seen it yet
+		return StatusDeploying
 	}
-	// At 0 replicas the service spec label still carries the revision, so observe catches up even
-	// though Swarm drops the task history. Revision 0 means the service itself is gone.
 	if d.Replicas == 0 {
 		if o.Running > 0 {
 			return StatusStopping

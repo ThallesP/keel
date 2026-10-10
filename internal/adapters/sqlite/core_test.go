@@ -10,7 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// OpenTest opens a fresh database in t's temp dir.
 func OpenTest(t testing.TB) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
@@ -77,7 +76,6 @@ func TestNodeRoundTrip(t *testing.T) {
 		t.Fatalf("round trip:\n got %+v\nwant %+v", got, want)
 	}
 
-	// Update clears desired/observed; a missing node is ErrNoRow.
 	got.Desired, got.Observed, got.Name = nil, nil, "api-2"
 	if err := s.Write(ctx, func(tx app.Tx) error { return tx.UpdateNode(got) }); err != nil {
 		t.Fatal(err)

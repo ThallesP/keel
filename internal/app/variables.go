@@ -7,33 +7,23 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Variables and references (convex/variables.ts, docs/go/spec/projects.md §5, §9.4). Any node type
-// may have variables. References resolve at apply time (computeEnv), so every ship sees current
-// values; changing what a node provides makes every node referencing it a staged change.
-
-// VariableView is a variable as the Variables tab shows it.
 type VariableView struct {
-	Key   string
-	Value string // as typed
-	// Every reference expanded: what the container gets.
-	Resolved string
-	// The row's own flag (mask Value).
-	Secret bool
-	// A referenced value is secret (mask Resolved).
+	Key            string
+	Value          string
+	Resolved       string
+	Secret         bool
 	ResolvedSecret bool
 	Parts          []domain.RefPart
 }
 
-// ReferenceSource is a node the reference picker offers, with the keys it answers to.
 type ReferenceSource struct {
 	NodeID string
 	Name   string
 	Type   domain.NodeType
-	Image  string // "" when none
+	Image  string
 	Keys   []ReferenceKey
 }
 
-// ReferenceKey: Provided keys are computed (DATABASE_URL, HOST, …), the rest are the node's rows.
 type ReferenceKey struct {
 	Key      string
 	As       string
@@ -54,7 +44,6 @@ type Referenceable struct {
 	Suggestions []ReferenceSuggestion
 }
 
-// SetVariableInput is variables.set's arguments. PreviousKey renames that row instead (nil = Key).
 type SetVariableInput struct {
 	Key         string
 	Value       string
@@ -62,10 +51,8 @@ type SetVariableInput struct {
 	PreviousKey *string
 }
 
-// MaxVariableValue is the longest value, in UTF-16 code units (JavaScript length).
 const MaxVariableValue = 4096
 
-// canvasResolver loads what resolving references in the environment needs, in one go.
 func canvasResolver(tx Tx, environmentID string) (*domain.Resolver, []domain.Node, error) {
 	nodes, err := tx.Nodes(environmentID)
 	if err != nil {
@@ -78,8 +65,6 @@ func canvasResolver(tx Tx, environmentID string) (*domain.Resolver, []domain.Nod
 	return domain.NewResolver(nodes, vars), nodes, nil
 }
 
-// ListVariables: the node's variables in row order, references expanded. Empty when the node is
-// missing or not the actor's.
 func (a *App) ListVariables(ctx context.Context, actor domain.Actor, nodeID string) ([]VariableView, error) {
 	out := []VariableView{}
 	err := a.read(ctx, func(tx Tx) error {
@@ -107,9 +92,6 @@ func (a *App) ListVariables(ctx context.Context, actor domain.Actor, nodeID stri
 	return out, err
 }
 
-// ReferenceableVariables is what the reference picker offers: every other deployable node of the
-// environment in creation order, its provided keys not shadowed by its own rows, then its rows.
-// Credentials are never read here (every one at its fallback), so REDIS_URL reads as not secret.
 func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, nodeID string) (Referenceable, error) {
 	out := Referenceable{Sources: []ReferenceSource{}, Suggestions: []ReferenceSuggestion{}}
 	err := a.read(ctx, func(tx Tx) error {
@@ -175,9 +157,6 @@ func connectionSuggestion(n domain.Node, keys []ReferenceKey) (ReferenceSuggesti
 	return ReferenceSuggestion{}, false
 }
 
-// SetVariable upserts a variable by key; PreviousKey renames that row (references to it follow,
-// `${{ node.KEY }}` elsewhere and `${{ KEY }}` on the node itself). An unknown PreviousKey inserts.
-// The node and everything referencing it become staged changes.
 func (a *App) SetVariable(ctx context.Context, actor domain.Actor, nodeID string, in SetVariableInput) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, nodeID)
@@ -247,8 +226,6 @@ func canvasKeyExists(key string) error {
 	return domain.E(domain.CodeNameTaken, "%s already exists", key)
 }
 
-// RemoveVariable deletes a variable; a missing key is a no-op (nothing staged). References to it
-// now resolve to "" and show as missing.
 func (a *App) RemoveVariable(ctx context.Context, actor domain.Actor, nodeID, key string) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, nodeID)
@@ -278,8 +255,6 @@ func (a *App) RemoveVariable(ctx context.Context, actor domain.Actor, nodeID, ke
 	})
 }
 
-// canvasRewriteReferences rewrites every reference to node in its environment (`to` gives the new
-// name and key for a key); rows whose text does not change are not written.
 func canvasRewriteReferences(tx Tx, node domain.Node, to func(oldKey string) (name, key string)) error {
 	vars, err := tx.CanvasEnvironmentVariables(node.EnvironmentID)
 	if err != nil {
@@ -298,8 +273,6 @@ func canvasRewriteReferences(tx Tx, node domain.Node, to func(oldKey string) (na
 	return nil
 }
 
-// computeEnv is the node's container environment: its own variables with every reference
-// expanded (docs/go/spec/projects.md §5.4). Provided keys (DATABASE_URL, HOST, …) are not added.
 func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
 	r, _, err := canvasResolver(tx, node.EnvironmentID)
 	if err != nil {
@@ -313,9 +286,6 @@ func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
 	return env, nil
 }
 
-// markReferrersDirty marks every node whose variables reference node, transitively, dirty
-// (docs/go/spec/projects.md §5.6). node itself is the caller's to mark. Reads the environment's
-// rows as they are now, so call it after writing the change (or, for a delete, before).
 func markReferrersDirty(tx Tx, ch *Changes, org string, node domain.Node) error {
 	nodes, err := tx.Nodes(node.EnvironmentID)
 	if err != nil {

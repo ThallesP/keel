@@ -17,8 +17,6 @@ func compact(t *testing.T, s string) string {
 	return b.String()
 }
 
-// TestToSpecGolden pins the exact JSON Docker receives (docs/go/spec/swarm-worker.md §5).
-// ForceUpdate and MaxFailureRatio are the moby types' non-omitempty zero values (= absent).
 func TestToSpecGolden(t *testing.T) {
 	cases := []struct {
 		name string
@@ -147,7 +145,6 @@ func TestAgentSpec(t *testing.T) {
 	if string(got) != want {
 		t.Errorf("agent spec:\n got %s\nwant %s", got, want)
 	}
-	// The fingerprint moves with anything that matters and only then.
 	same := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "tok"}, "sec1")
 	other := agentSpec("ghcr.io/thallesp/keel:1.0@sha256:abc", app.AgentSpec{ControlURL: "http://100.64.0.1:8080", Token: "rotated"}, "sec2")
 	if same.Labels[agentSpecLabel] != spec.Labels[agentSpecLabel] || other.Labels[agentSpecLabel] == spec.Labels[agentSpecLabel] {

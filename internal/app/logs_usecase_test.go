@@ -39,7 +39,6 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 		t.Fatalf("tail %+v (service %s, tail %d)", tail, logs.service, logs.tail)
 	}
 
-	// Task listing failures only drop the replicas; a missing service is an empty tail.
 	logs.tasksErr = errors.New("boom")
 	tail, _ = e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200)
 	if len(tail.Replicas) != 0 || len(tail.Lines) != 2 {
@@ -50,15 +49,12 @@ func TestTailNodeLogsFromDocker(t *testing.T) {
 	if err != nil || tail.Source != "docker" || tail.Lines == nil || tail.Replicas == nil || len(tail.Lines)+len(tail.Replicas) != 0 {
 		t.Fatalf("missing service: %+v %v", tail, err)
 	}
-	// Docker failures are server errors (not wrapped), as before.
 	logs.err = errors.New("socket gone")
 	if _, err := e.app.TailNodeLogs(ctx, e.member, obsNodeAPI, 200); err == nil || domain.CodeOf(err) != domain.CodeServerError {
 		t.Fatalf("docker error: %v", err)
 	}
 }
 
-// A member of another organization can neither read nor change anything of this one: every id
-// of it reads as missing.
 func TestObservabilityIsScopedToTheOrganization(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
@@ -86,13 +82,10 @@ func TestObservabilityIsScopedToTheOrganization(t *testing.T) {
 	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || n.Dirty {
 		t.Fatal("a foreign member changed the node")
 	}
-	// The foreign organization has no sink of its own: its own environment says so.
 	_, err = e.app.TraceOverview(ctx, f, "env2", domain.Range1h, "", "")
 	obsWantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
-	// Our own nodeId filter cannot reach into another environment.
 	_, err = e.app.TraceOverview(ctx, e.member, "env", domain.Range1h, "", obsNodeForeign)
 	obsWantCode(t, err, domain.CodeServiceNotFound, "Node not found")
-	// Signed out.
 	_, err = e.app.TailNodeLogs(ctx, e.signedOut, obsNodeAPI, 100)
 	obsWantCode(t, err, domain.CodeNotAuthenticated, "Not authenticated")
 	_, err = e.app.EnvironmentLogs(ctx, e.signedOut, "env", "", 300, "")
@@ -109,7 +102,6 @@ func TestLogsAndTracesNeedAStore(t *testing.T) {
 	obsWantCode(t, err, domain.CodeInvalidInput, "Connect Axiom to search all logs")
 	_, err = e.app.TracesAround(ctx, e.member, "env", 5)
 	obsWantCode(t, err, domain.CodeTracesOff, "Connect Axiom to see traces")
-	// "Not a trace id" is checked before anything else.
 	_, err = e.app.GetTrace(ctx, e.signedOut, "missing", "xyz", 0)
 	obsWantCode(t, err, domain.CodeInvalidInput, "Not a trace id")
 

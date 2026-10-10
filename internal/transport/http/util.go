@@ -25,10 +25,6 @@ func jsonEncode(w io.Writer, v any) error {
 
 var jsonFormat = huma.Format{Marshal: jsonEncode, Unmarshal: json.Unmarshal}
 
-// spa serves files from web and falls back to index.html for client routes, with nginx's old
-// rules (docs/go/spec/web-data.md §2.2): /assets/* (content-hashed names) immutable for a year;
-// index.html never cached, since after an upgrade it names assets the old one did not; and no
-// directory listings (a directory is a client route like any other missing file).
 func spa(web fs.FS) http.Handler {
 	files := http.FileServer(http.FS(web))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +32,7 @@ func spa(web fs.FS) http.Handler {
 		if info, err := fs.Stat(web, name); name == "" || name == "index.html" || err != nil || info.IsDir() {
 			w.Header().Set("Cache-Control", "no-cache")
 			r = r.Clone(r.Context())
-			r.URL.Path = "/" // FileServer answers "/" with index.html
+			r.URL.Path = "/"
 		} else if strings.HasPrefix(name, "assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}

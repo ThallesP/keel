@@ -1,7 +1,5 @@
 package swarm
 
-// The Docker log reader against a fake Engine API (no Docker needed).
-
 import (
 	"context"
 	"net/http"

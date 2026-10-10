@@ -1,14 +1,7 @@
 package app
 
-// The agent prompt (convex/tracingPrompt.ts): pasted into a coding agent to set up OpenTelemetry
-// in a service's repo, prove it locally with keel run + keel traces, then turn it on in Keel.
-// One text for the dashboard's Copy agent prompt and `keel tracing prompt`. It names no endpoint
-// and no key: those are the OTEL_* variables Keel sets. Byte-exact with the TypeScript; the text
-// below was extracted from it mechanically ({{WHERE}} and {{SVC}} are the two substitutions).
-
 import "strings"
 
-// agentPrompt names the service and/or the project when given ("" = unknown).
 func agentPrompt(service, project string) string {
 	svc := service
 	if svc == "" {

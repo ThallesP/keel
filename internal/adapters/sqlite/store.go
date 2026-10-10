@@ -1,5 +1,3 @@
-// Package sqlite implements app.Store on SQLite (modernc.org/sqlite, pure Go). Schema in
-// migrations/, queries in queries/ (sqlc → internal/gen/sqlc). See docs/go/ARCHITECTURE.md, "Data".
 package sqlite
 
 import (
@@ -21,8 +19,6 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Store: one write connection (SQLite has one writer; BEGIN IMMEDIATE takes the lock up front)
-// and a pool of readers (WAL lets them run beside the writer).
 type Store struct {
 	w *sql.DB
 	r *sql.DB
@@ -30,8 +26,6 @@ type Store struct {
 
 var _ app.Store = (*Store)(nil)
 
-// Open opens (creating if needed) the database at path and applies pending migrations. ":memory:"
-// is not supported (readers and the writer must share the file); tests use a temp file.
 func Open(ctx context.Context, path string) (*Store, error) {
 	dsn := func(lock string) string {
 		return "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)" +
@@ -60,7 +54,6 @@ func (s *Store) Close() error {
 	return errors.Join(s.w.Close(), s.r.Close())
 }
 
-// DB is the writer, for tooling (import, tests).
 func (s *Store) DB() *sql.DB { return s.w }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -118,8 +111,7 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 	if err != nil {
 		return err
 	}
-	// Also when fn panics: a job recovers and goes on, and the one write connection must come back.
-	defer sqlTx.Rollback() // after Commit: ErrTxDone, ignored
+	defer sqlTx.Rollback()
 	t := &tx{ctx: ctx, q: sqlc.New(sqlTx), sql: sqlTx}
 	if err := fn(t); err != nil {
 		return err
@@ -127,7 +119,6 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 	return sqlTx.Commit()
 }
 
-// tx implements app.Tx. Area methods live in <area>.go next to this file.
 type tx struct {
 	ctx context.Context
 	q   *sqlc.Queries
@@ -136,15 +127,12 @@ type tx struct {
 
 var _ app.Tx = (*tx)(nil)
 
-// noRow maps sql.ErrNoRows to app.ErrNoRow and passes anything else through.
 func noRow(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return app.ErrNoRow
 	}
 	return err
 }
-
-// Small conversions shared by the area files.
 
 func b2i(b bool) int64 {
 	if b {

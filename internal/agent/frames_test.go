@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// frame builds one multiplexed frame.
 func frame(typ byte, payload string) []byte {
 	b := make([]byte, 8, 8+len(payload))
 	b[0] = typ
@@ -23,7 +22,7 @@ func TestFrameParser(t *testing.T) {
 	tests := []struct {
 		name   string
 		chunks [][]byte
-		want   [][]Frame // per Push
+		want   [][]Frame
 	}{
 		{"stdout", [][]byte{frame(1, "hello\n")}, [][]Frame{{{"stdout", "hello\n"}}}},
 		{"stderr", [][]byte{frame(2, "oops\n")}, [][]Frame{{{"stderr", "oops\n"}}}},
@@ -51,7 +50,7 @@ func TestFrameParser(t *testing.T) {
 
 func TestFrameParserDoesNotAliasInput(t *testing.T) {
 	var p FrameParser
-	buf := append(frame(1, "abc"), frame(1, "de")[:9]...) // second frame incomplete
+	buf := append(frame(1, "abc"), frame(1, "de")[:9]...)
 	got := p.Push(buf)
 	for i := range buf {
 		buf[i] = 'Z'
@@ -93,12 +92,12 @@ func TestParseLine(t *testing.T) {
 		{"2026-10-08T12:00:00.1Z ", "2026-10-08T12:00:00.1Z", ""},
 		{"2026-10-08T12:00:00.1Z hi\r", "2026-10-08T12:00:00.1Z", "hi"},
 		{"hello world", "", "hello world"},
-		{"2026-10-08Z hi", "", "2026-10-08Z hi"},                                          // under 20 chars
-		{"2026-10-08T12:00:00.123+00:00 hi", "", "2026-10-08T12:00:00.123+00:00 hi"},      // no Z
-		{"20261-10-08T12:00:00.0Z x", "", "20261-10-08T12:00:00.0Z x"},                    // index 4 is not "-"
-		{" 2026-10-08T12:00:00.123456789Z x", "", " 2026-10-08T12:00:00.123456789Z x"},    // space at 0
-		{"2026-10-08T12:00:00.000000000Z", "", "2026-10-08T12:00:00.000000000Z"},          // no space
-		{"2026-10-08T12:00:00.000000000Z a b ", "2026-10-08T12:00:00.000000000Z", "a b "}, // rest kept
+		{"2026-10-08Z hi", "", "2026-10-08Z hi"},
+		{"2026-10-08T12:00:00.123+00:00 hi", "", "2026-10-08T12:00:00.123+00:00 hi"},
+		{"20261-10-08T12:00:00.0Z x", "", "20261-10-08T12:00:00.0Z x"},
+		{" 2026-10-08T12:00:00.123456789Z x", "", " 2026-10-08T12:00:00.123456789Z x"},
+		{"2026-10-08T12:00:00.000000000Z", "", "2026-10-08T12:00:00.000000000Z"},
+		{"2026-10-08T12:00:00.000000000Z a b ", "2026-10-08T12:00:00.000000000Z", "a b "},
 	}
 	for _, tt := range tests {
 		got := parseLine(tt.raw, "stdout")
@@ -108,7 +107,6 @@ func TestParseLine(t *testing.T) {
 	}
 }
 
-// Expected values computed with the worker's TypeScript (node).
 func TestSinceAfter(t *testing.T) {
 	tests := map[string]string{
 		"2024-01-01T00:00:00.123456789Z":  "1704067200.123456790",
@@ -139,8 +137,8 @@ func TestDockerSince(t *testing.T) {
 		{1704067200000, "1704067200.000000000"},
 		{1704067200000.25, "1704067200.000250000"},
 		{1704067200123, "1704067200.123000000"},
-		{1727600000000.123, "1727600000.000123047"}, // float ms, as JavaScript computes it
-		{999.9999999999, "0.999999999"},             // clamped
+		{1727600000000.123, "1727600000.000123047"},
+		{999.9999999999, "0.999999999"},
 		{1759912345678.25, "1759912345.678250000"},
 		{0.5, "0.000500000"},
 		{1.0000005, "0.001000001"},

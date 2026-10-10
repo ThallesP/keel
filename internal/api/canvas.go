@@ -2,16 +2,12 @@ package api
 
 import "github.com/ThallesP/keel/internal/domain"
 
-// Canvas area wire types: projects, environments, nodes, variables (docs/go/spec/web-data.md §5.1,
-// §5.2, §5.4, §5.6; docs/go/spec/projects.md §4.3, §9.1–9.4).
-
 type ProjectEnvironment struct {
 	ID           string `json:"id"`
 	Name         string `json:"name" example:"production"`
 	IsProduction bool   `json:"isProduction"`
 }
 
-// ProjectSummary is a project with its environments, production first.
 type ProjectSummary struct {
 	ID           string               `json:"id"`
 	Name         string               `json:"name" example:"Acme API"`
@@ -31,13 +27,11 @@ type DefaultProject struct {
 	Slug string `json:"slug" example:"acme-support"`
 }
 
-// ProjectEnvironmentRef is the environment a project page opens on.
 type ProjectEnvironmentRef struct {
 	ID   string `json:"id"`
 	Name string `json:"name" example:"production"`
 }
 
-// ProjectHome is a project with the environment its canvas opens on (production, else the first).
 type ProjectHome struct {
 	_           struct{}              `nullable:"true"`
 	ID          string                `json:"id"`
@@ -50,7 +44,6 @@ type ProjectBySlug struct {
 	Project *ProjectHome `json:"project" doc:"null when missing or not in the caller's organization"`
 }
 
-// EnvironmentSummary: the Ship button's and status bar's numbers.
 type EnvironmentSummary struct {
 	_              struct{}       `nullable:"true"`
 	PendingChanges int            `json:"pendingChanges" doc:"Deployable nodes with a staged change"`
@@ -73,14 +66,11 @@ type NodeConfig struct {
 	Height *float64 `json:"height,omitempty" doc:"Groups"`
 }
 
-// NodeDeploy is the progress of a deploying node.
 type NodeDeploy struct {
 	Step      string `json:"step" enum:"pulling image,rolling out,starting"`
 	StartedAt int64  `json:"startedAt" doc:"When the current revision shipped (unix ms)"`
 }
 
-// NodeView is a canvas node as clients see it (docs/go/spec/projects.md §4.3). Status is derived,
-// never stored.
 type NodeView struct {
 	ID               string         `json:"id"`
 	Type             string         `json:"type" enum:"service,database,cache,volume,group"`
@@ -105,7 +95,6 @@ type NodeView struct {
 	FinishedAt       *int64         `json:"finishedAt,omitempty" doc:"When a one-shot run finished (done)"`
 }
 
-// NodeViewOf builds the view; publicIP is KEEL_PUBLIC_IP ("" when unknown).
 func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	status := domain.DeriveStatus(n)
 	v := NodeView{
@@ -203,8 +192,6 @@ type StoppedNode struct {
 	DeploymentID *string `json:"deploymentId" doc:"null when it already was at 0 replicas"`
 }
 
-// VariableRef is a reference inside a value. node absent = the variable's own node; nodeId absent
-// = the name resolves to nothing.
 type VariableRef struct {
 	Node    string `json:"node,omitempty"`
 	NodeID  string `json:"nodeId,omitempty"`
@@ -212,13 +199,11 @@ type VariableRef struct {
 	Missing bool   `json:"missing"`
 }
 
-// VariablePart is literal text or a reference: exactly one of text / ref is present.
 type VariablePart struct {
 	Text *string      `json:"text,omitempty"`
 	Ref  *VariableRef `json:"ref,omitempty"`
 }
 
-// VariablePartOf converts a domain part.
 func VariablePartOf(p domain.RefPart) VariablePart {
 	if p.Ref == nil {
 		return VariablePart{Text: &p.Text}

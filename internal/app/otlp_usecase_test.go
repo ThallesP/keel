@@ -42,7 +42,6 @@ func TestRelayTraces(t *testing.T) {
 		t.Fatal("forwarded a rejected request")
 	}
 
-	// Forwarded unchanged to the traces dataset with the sink's token.
 	body := "\x00\x01binary"
 	check(relay("Bearer  "+key+" ", "Application/X-Protobuf; charset=x", int64(len(body)), body), 200, "application/x-protobuf", "\x01\x02")
 	want := app.OTLPForward{Domain: "api.axiom.co", Token: obsTracesOn.Token, Dataset: "keel-traces", ContentType: "application/x-protobuf", ContentEncoding: "gzip", Body: []byte(body)}
@@ -52,7 +51,6 @@ func TestRelayTraces(t *testing.T) {
 	ax.forwardRes = app.HTTPReply{Status: 202, Body: []byte(`{"partialSuccess":{}}`)}
 	check(relay("Bearer "+key, "application/json", -1, "{}"), 200, "application/json", `{"partialSuccess":{}}`)
 
-	// Axiom's answers mapped to OTLP/HTTP statuses.
 	for _, c := range []struct {
 		status   int
 		body     string
@@ -76,7 +74,6 @@ func TestRelayTraces(t *testing.T) {
 	check(relay("Bearer "+key, "application/json", -1, "{}"), 503, "", "sink unreachable")
 	ax.forwardErr = nil
 
-	// No traces dataset (or no sink): accepted and dropped.
 	n := len(ax.forwarded)
 	old := obsTracesOn
 	old.Traces = ""
@@ -90,12 +87,10 @@ func TestRelayTraces(t *testing.T) {
 	if len(ax.forwarded) != n {
 		t.Fatal("forwarded without a traces dataset")
 	}
-	// A new sink takes effect on the next request (looked up per request).
 	e.setSink(t, "org", obsTracesOn)
 	ax.forwardRes = app.HTTPReply{Status: 401}
 	check(relay("Bearer "+key, "application/json", -1, "{}"), 400, "", "rejected")
 
-	// The environment is gone: its key no longer routes.
 	e.exec(t, `DELETE FROM environments WHERE id = 'env'`)
 	check(relay("Bearer "+key, "application/json", -1, "{}"), 401, "", "unauthorized")
 }

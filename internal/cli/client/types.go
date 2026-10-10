@@ -7,21 +7,16 @@ import (
 	"github.com/ThallesP/keel/internal/api"
 )
 
-// The CLI's types are what it prints, so their JSON names are the CLI's contract (docs/cli.md),
-// not the API's. Where the API's wire type already has the same JSON, it is used as is.
 type (
 	User         = api.User
 	Organization = api.Organization
 	Project      = api.ProjectSummary
 	Environment  = api.ProjectEnvironment
-	// Summary is an environment's staged changes, status counts and servers.
-	Summary  = api.EnvironmentSummary
-	Variable = api.VariableView
-	// TracingVar is one OTEL_* variable a service's tracing sets.
-	TracingVar = api.TracingEnvVar
+	Summary      = api.EnvironmentSummary
+	Variable     = api.VariableView
+	TracingVar   = api.TracingEnvVar
 )
 
-// Service is any canvas node but a group: services, databases, caches, volumes.
 type Service struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -59,7 +54,6 @@ type LogLine struct {
 	Text   string `json:"text"`
 }
 
-// TraceSummary is one request: a trace's root span, with counts over the whole trace.
 type TraceSummary struct {
 	TraceID    string  `json:"traceId"`
 	Name       string  `json:"name"`
@@ -70,11 +64,9 @@ type TraceSummary struct {
 	Spans      int     `json:"spans"`
 	Errors     int     `json:"errors"`
 	Error      bool    `json:"error"`
-	// From a `keel run` on someone's machine, not a deploy.
-	Local bool `json:"local"`
+	Local      bool    `json:"local"`
 }
 
-// TraceStats counts requests (root spans) over a range; percentiles are null with none.
 type TraceStats struct {
 	Requests int      `json:"requests"`
 	Errors   int      `json:"errors"`
@@ -84,22 +76,19 @@ type TraceStats struct {
 }
 
 type Traces struct {
-	Stats TraceStats `json:"stats"`
-	// Newest first, at most 100.
+	Stats  TraceStats     `json:"stats"`
 	Traces []TraceSummary `json:"traces"`
 }
 
-// Tracing is a service's tracing switch and the OTEL_* variables it gives the service.
 type Tracing struct {
-	Enabled bool `json:"enabled"`
-	// off: no Axiom sink; old: a sink from before traces; on: spans have somewhere to go.
-	Store string       `json:"store"`
-	Env   []TracingVar `json:"env"`
+	Enabled bool         `json:"enabled"`
+	Store   string       `json:"store"`
+	Env     []TracingVar `json:"env"`
 }
 
 type Deployment struct {
 	ID         string     `json:"id"`
-	Status     string     `json:"status"` // running | success | failed
+	Status     string     `json:"status"`
 	Message    string     `json:"message"`
 	StartedAt  Time       `json:"startedAt"`
 	FinishedAt *Time      `json:"finishedAt,omitempty"`
@@ -109,8 +98,8 @@ type Deployment struct {
 
 type Step struct {
 	ServiceID string `json:"serviceId,omitempty"`
-	Label     string `json:"label"`  // service name, or "health checks"
-	Status    string `json:"status"` // pending | running | done | failed
+	Label     string `json:"label"`
+	Status    string `json:"status"`
 }
 
 type LogEntry struct {
@@ -119,7 +108,6 @@ type LogEntry struct {
 	Text      string `json:"text"`
 }
 
-// deploymentOf is the CLI's view of a deployment: nodes are services, times RFC 3339.
 func deploymentOf(d *api.Deployment) *Deployment {
 	if d == nil {
 		return nil
@@ -141,14 +129,10 @@ func deploymentOf(d *api.Deployment) *Deployment {
 	return out
 }
 
-// Time is an API timestamp (milliseconds since the epoch), printed as RFC 3339 in UTC with
-// milliseconds.
 type Time struct{ time.Time }
 
-// Millis is the time of an epoch-milliseconds value, as the API sends them (possibly fractional).
 func Millis(ms float64) Time { return Time{time.UnixMilli(int64(ms)).UTC()} }
 
-// UnmarshalJSON takes epoch milliseconds or an RFC 3339 string.
 func (t *Time) UnmarshalJSON(b []byte) error {
 	var ms float64
 	if err := json.Unmarshal(b, &ms); err == nil {

@@ -6,7 +6,6 @@ import (
 	"github.com/ThallesP/keel/internal/agent"
 )
 
-// keel agent: the per-node process of the `keel-agent` global Swarm service (was apps/worker).
 func init() {
 	Extra = append(Extra, func() *cobra.Command {
 		return &cobra.Command{

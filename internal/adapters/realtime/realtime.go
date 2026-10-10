@@ -1,21 +1,3 @@
-// Package realtime is the dashboard's WebSocket (GET /api/ws) on a centrifuge server, and the
-// app.Publisher that pushes invalidations through it. See docs/go/ARCHITECTURE.md, "Realtime",
-// and docs/go/spec/web-data.md §9–§10.
-//
-// Protocol, as the dashboard's centrifuge JS client sees it:
-//
-//   - Connect auth is the session (cookie or bearer), resolved by Config.Authenticate on the
-//     upgrade request. The client sends no token and picks no channels.
-//   - Signed out: the connection is closed with code 4501 "signed out" (terminal, the client does
-//     not reconnect). Same code when the session is signed out later (DisconnectSession).
-//   - Signed in without an organization: connected, no subscriptions.
-//   - Member: a server-side subscription to "org:<organizationId>".
-//   - Publications on that channel: {"type":"invalidate","topics":["/api/environments/<id>", …]}.
-//     Topics are API path prefixes; the client refetches every query whose key starts with one.
-//     Publishes are coalesced per organization for Config.Window (100 ms) with topics deduped.
-//   - Code 4001 "membership changed" (DisconnectUser) asks the client to reconnect: the new
-//     connection gets the user's current organization channel, and the client's reconnect
-//     handler invalidates everything.
 package realtime
 
 import (
@@ -41,43 +23,27 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Disconnect codes Keel sends (centrifuge: 4000–4499 reconnect, 4500–4999 terminal).
 var (
-	// DisconnectSignedOut: no (or no longer a) valid session. Terminal.
-	DisconnectSignedOut = centrifuge.Disconnect{Code: 4501, Reason: "signed out"}
-	// DisconnectMembershipChanged: reconnect to be subscribed to the user's current organization.
+	DisconnectSignedOut         = centrifuge.Disconnect{Code: 4501, Reason: "signed out"}
 	DisconnectMembershipChanged = centrifuge.Disconnect{Code: 4001, Reason: "membership changed"}
 )
 
-// DefaultWindow is how long publishes to one organization are collected before one message goes
-// out (web-data.md §10.4: "coalesce per channel for about 100 ms and dedupe topics").
 const DefaultWindow = 100 * time.Millisecond
 
-// Config configures the server.
 type Config struct {
-	// Authenticate resolves the caller of the upgrade request. The zero Actor is signed out; an
-	// error is a server failure (the client is told to retry). Required. serve wires it to
-	// app.ResolveSession(transport.SessionToken(r)).
 	Authenticate func(r *http.Request) (domain.Actor, error)
-	// SiteURL is the dashboard URL as users open it (KEEL_SITE_URL). Its host is accepted as an
-	// Origin besides the request's own Host.
-	SiteURL string
-	// Window is the per-organization coalescing window. 0 = DefaultWindow; negative = publish
-	// immediately.
-	Window time.Duration
-	Log    *slog.Logger
+	SiteURL      string
+	Window       time.Duration
+	Log          *slog.Logger
 }
 
-// Invalidation is the only message published.
 type Invalidation struct {
-	Type   string   `json:"type"` // "invalidate"
+	Type   string   `json:"type"`
 	Topics []string `json:"topics"`
 }
 
-// Channel is an organization's channel name.
 func Channel(organizationID string) string { return "org:" + organizationID }
 
-// Server is the centrifuge node, its WebSocket handler and the publisher.
 type Server struct {
 	node     *centrifuge.Node
 	auth     func(r *http.Request) (domain.Actor, error)
@@ -87,8 +53,8 @@ type Server struct {
 
 	mu       sync.Mutex
 	closed   bool
-	pending  map[string]*batch                          // organization → topics waiting for the window
-	sessions map[string]map[*centrifuge.Client]struct{} // Keel session id → its connections
+	pending  map[string]*batch
+	sessions map[string]map[*centrifuge.Client]struct{}
 }
 
 type batch struct {
@@ -100,13 +66,11 @@ var _ app.Publisher = (*Server)(nil)
 
 type connKey struct{}
 
-// conn is what the upgrade request resolved, carried to OnConnecting in the request context.
 type conn struct {
 	actor domain.Actor
 	err   error
 }
 
-// New starts a centrifuge node. Call Shutdown to stop it.
 func New(cfg Config) (*Server, error) {
 	if cfg.Authenticate == nil {
 		return nil, errors.New("realtime: Config.Authenticate is required")
@@ -130,8 +94,7 @@ func New(cfg Config) (*Server, error) {
 		Name:       "keel",
 		LogLevel:   centrifuge.LogLevelWarn,
 		LogHandler: s.logEntry,
-		// A private registry: the node's metrics are not exported, and tests can build several.
-		Metrics: centrifuge.MetricsConfig{RegistererGatherer: prometheus.NewRegistry()},
+		Metrics:    centrifuge.MetricsConfig{RegistererGatherer: prometheus.NewRegistry()},
 	})
 	if err != nil {
 		return nil, err
@@ -145,11 +108,8 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// Handler is GET /api/ws. It rejects a foreign Origin with 403, resolves the session, then
-// upgrades; the connect step decides what the connection may see.
 func (s *Server) Handler() http.Handler {
 	ws := centrifuge.NewWebsocketHandler(s.node, centrifuge.WebsocketConfig{
-		// Checked below, before the session lookup.
 		CheckOrigin: func(*http.Request) bool { return true },
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,11 +123,6 @@ func (s *Server) Handler() http.Handler {
 	})
 }
 
-// cookieCarrier makes the 101 handshake response carry the Set-Cookie headers set on w before the
-// upgrade. The transport re-sends a session's cookie on whichever request renewed the session,
-// and a WebSocket reconnect is often the first request of the day; but centrifuge writes the
-// handshake itself on the hijacked connection, from its own (empty) header list, so without this
-// the renewed cookie would be dropped and the browser's copy would expire under a live session.
 type cookieCarrier struct{ http.ResponseWriter }
 
 func (c cookieCarrier) Unwrap() http.ResponseWriter { return c.ResponseWriter }
@@ -188,7 +143,7 @@ func (c cookieCarrier) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 			if b := v[i]; b > 31 && b != 127 {
 				extra = append(extra, b)
 			} else {
-				extra = append(extra, ' ') // no response splitting
+				extra = append(extra, ' ')
 			}
 		}
 		extra = append(extra, "\r\n"...)
@@ -196,8 +151,6 @@ func (c cookieCarrier) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return &handshakeConn{Conn: nc, extra: extra}, brw, nil
 }
 
-// handshakeConn inserts extra header lines into the first thing written to it, the handshake
-// response, before the blank line that ends its headers. Later writes pass through.
 type handshakeConn struct {
 	net.Conn
 	extra []byte
@@ -222,9 +175,6 @@ func (c *handshakeConn) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// originAllowed: browsers always send Origin on a WebSocket handshake; it must name the host the
-// request was sent to (same origin) or the configured dashboard host. No Origin = not a browser
-// (no ambient-credential attack), allowed; the session is still required.
 func (s *Server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -259,9 +209,6 @@ func (s *Server) onConnecting(ctx context.Context, _ centrifuge.ConnectEvent) (c
 	return reply, nil
 }
 
-// onConnect tracks the connection under its session so DisconnectSession can find it. Client-side
-// subscribe, publish, RPC, presence and history have no handlers, so centrifuge refuses them: the
-// server alone decides what a connection receives.
 func (s *Server) onConnect(client *centrifuge.Client) {
 	c, _ := client.Context().Value(connKey{}).(conn)
 	sid := c.actor.SessionID
@@ -288,9 +235,6 @@ func (s *Server) onConnect(client *centrifuge.Client) {
 	})
 }
 
-// Publish queues topics for the organization's channel; one message per organization goes out at
-// the end of the window with every topic queued meanwhile, deduped and sorted. Safe to call from
-// any goroutine; a no-op after Shutdown.
 func (s *Server) Publish(organizationID string, topics []string) {
 	if organizationID == "" || len(topics) == 0 {
 		return
@@ -344,9 +288,6 @@ func (s *Server) flush(organizationID string) {
 	}
 }
 
-// DisconnectSession closes every connection opened with the session, with the terminal code
-// 4501 "signed out". The auth area calls it when a session ends (sign-out, deletion); a tab that
-// reconnects anyway is rejected at connect because its session no longer resolves.
 func (s *Server) DisconnectSession(sessionID string) {
 	if sessionID == "" {
 		return
@@ -362,10 +303,6 @@ func (s *Server) DisconnectSession(sessionID string) {
 	}
 }
 
-// DisconnectUser closes every connection of the user with the reconnecting code 4001
-// "membership changed". The auth area calls it when the user's organization membership changes
-// (founding, joining, removal): on reconnect the server subscribes the connection to the
-// organization the user is in now, and the client invalidates every query.
 func (s *Server) DisconnectUser(userID string) {
 	if userID == "" {
 		return
@@ -375,8 +312,6 @@ func (s *Server) DisconnectUser(userID string) {
 	}
 }
 
-// Shutdown drops queued publications and closes every connection (centrifuge's "shutdown" code,
-// which clients reconnect after; reconnecting refetches everything, so nothing queued is lost).
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	s.closed = true

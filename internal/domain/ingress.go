@@ -7,20 +7,12 @@ import (
 	"unicode"
 )
 
-// Public ingress rules (docs/go/spec/proxy-ingress.md §2.5, §3). Pure functions; the ingress use
-// cases (app/ingress.go, app/proxy.go) and the startup migration call them.
-
 const (
-	// MaxEndpoints per node, counting the endpoints other than the one being replaced.
-	MaxEndpoints = 10
-	// FirstSparePort is where tcp/udp endpoints land when their own port is taken.
+	MaxEndpoints   = 10
 	FirstSparePort = 20000
-	// ZeroSSLCA is the second ACME issuer when only KEEL_ACME_EMAIL is set.
-	ZeroSSLCA = "https://acme.zerossl.com/v2/DV90"
+	ZeroSSLCA      = "https://acme.zerossl.com/v2/DV90"
 )
 
-// Messages of the ingress area (proxy-ingress.md §4.5), verbatim from the Convex code: the
-// dashboard shows them and the CLI matches some of them.
 const (
 	MsgOnlyExposable    = "Only services, databases and caches can be exposed"
 	MsgShipRedisFirst   = "Ship this Redis first: its password takes effect on the next Ship"
@@ -36,11 +28,8 @@ const (
 	MsgNameTheEndpoint  = "Name the endpoint: protocol and domain (http) or public port"
 )
 
-// IsHTTPPort: the proxy's HTTP listeners (80, 443); tcp endpoints cannot take them.
 func IsHTTPPort(p int) bool { return p == 80 || p == 443 }
 
-// ShortHash is 6 base-36 characters of the 32-bit FNV-1a of s (byte-wise: node ids are ASCII,
-// so bytes are the UTF-16 code units the TS hashed). Stable, not secret.
 func ShortHash(s string) string {
 	h := uint32(0x811c9dc5)
 	for i := 0; i < len(s); i++ {
@@ -54,18 +43,12 @@ func ShortHash(s string) string {
 	return b[len(b)-6:]
 }
 
-// DefaultDomain is `<name>-<hash>.<ip with dashes>.sslip.io`: sslip.io resolves it to the IP
-// inside, so HTTPS works with no DNS setup. The hash of the node id keeps two projects' `api`
-// apart; renaming the node keeps an existing endpoint's domain (it is stored, never recomputed).
 func DefaultDomain(nodeID, name, ip string) string {
 	return name + "-" + ShortHash(nodeID) + "." + strings.ReplaceAll(ip, ".", "-") + ".sslip.io"
 }
 
 var defaultDomainRE = regexp.MustCompile(`^(.+-([0-9a-z]{6}))\.(\d+-\d+-\d+-\d+)\.sslip\.io$`)
 
-// MovedDefaultDomain: a default-pattern domain of this node on another IP → the same
-// `<name>-<hash>` label on ip. ok=false for custom domains, other nodes' patterns and domains
-// already on ip.
 func MovedDefaultDomain(nodeID, domainName, ip string) (string, bool) {
 	m := defaultDomainRE.FindStringSubmatch(domainName)
 	dashed := strings.ReplaceAll(ip, ".", "-")
@@ -77,9 +60,6 @@ func MovedDefaultDomain(nodeID, domainName, ip string) (string, bool) {
 
 var labelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// ValidDomain normalizes a user-given hostname (trimmed, lower-cased, one trailing dot removed)
-// or fails with "Domain must look like app.example.com". Accepts punycode, `*.localhost` and
-// dotted IPs (proxy-ingress.md Q9); rejects wildcards, single labels and underscores.
 func ValidDomain(raw string) (string, error) {
 	d := strings.ToLower(strings.TrimFunc(raw, isJSTrimSpace))
 	d = strings.TrimSuffix(d, ".")
@@ -94,11 +74,8 @@ func ValidDomain(raw string) (string, error) {
 	return d, nil
 }
 
-// isJSTrimSpace is what JavaScript's String.prototype.trim removes.
 func isJSTrimSpace(r rune) bool { return unicode.IsSpace(r) || r == 0xFEFF }
 
-// AllocatePublicPort: port when nothing holds it on that protocol, else the first free port from
-// 20000. taken includes 80 and 443 for tcp. Only Keel's own endpoints count (Q8).
 func AllocatePublicPort(port int, taken map[int]bool) (int, error) {
 	if !taken[port] {
 		return port, nil
@@ -118,10 +95,6 @@ var (
 	firewallHintRE = regexp.MustCompile(`\s*\(likely firewall problem\)`)
 )
 
-// CertHint turns Caddy's ACME error into the user's next step. The CA's problem type says whose
-// move it is: `connection`/`unauthorized`/`tls` (it could not reach 80/443), `dns` (the name does
-// not resolve here), anything else verbatim (rate limits, CAA). ip is KEEL_PUBLIC_IP, "" when
-// unknown.
 func CertHint(err, ip string) string {
 	if err == "" {
 		return "Could not get a certificate"
@@ -154,7 +127,6 @@ func removeFirstMatch(re *regexp.Regexp, s string) string {
 	return s[:loc[0]] + s[loc[1]:]
 }
 
-// TruncateRunes keeps the first n runes of s (the TS sliced UTF-16 units; Q12).
 func TruncateRunes(s string, n int) string {
 	i := 0
 	for j := range s {
@@ -166,5 +138,4 @@ func TruncateRunes(s string, n int) string {
 	return s
 }
 
-// CollapseSpace turns every whitespace run into one space and trims (the TS errorText).
 func CollapseSpace(s string) string { return strings.Join(strings.Fields(s), " ") }

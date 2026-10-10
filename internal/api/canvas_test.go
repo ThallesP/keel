@@ -114,7 +114,6 @@ func TestNodeViewJSON(t *testing.T) {
 	if string(b) != want {
 		t.Errorf("json\n got %s\nwant %s", b, want)
 	}
-	// Variable parts carry exactly one of text / ref.
 	text := VariablePartOf(domain.RefPart{Text: "a"})
 	ref := VariablePartOf(domain.RefPart{Ref: &domain.Ref{Key: "K", Missing: true}})
 	b, _ = json.Marshal([]VariablePart{text, ref})

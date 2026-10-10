@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Comments are banned in Go and TypeScript (CLAUDE.md, "Code rules"). Existing ones are counted in
-# .comments-baseline and may only go down; files missing from it allow none.
+# Comments are banned in TypeScript (CLAUDE.md, "Code rules"; Go has none at all, tools/nocomments).
+# Existing ones are counted in .comments-baseline and may only go down; files missing from it allow none.
 #   scripts/check-comments.sh            fail if any file has more comments than its baseline
 #   scripts/check-comments.sh --update   lower the baseline to today's counts (never raises it)
 set -euo pipefail
@@ -8,7 +8,7 @@ cd "$(git rev-parse --show-toplevel)"
 baseline=.comments-baseline
 
 count() {
-  git ls-files '*.go' '*.ts' '*.tsx' ':!:**/src/gen/**' ':!:*.d.ts' ':!:apps/fumadocs/**' |
+  git ls-files '*.ts' '*.tsx' ':!:**/src/gen/**' ':!:*.d.ts' ':!:apps/fumadocs/**' |
     while read -r f; do
       [ -f "$f" ] || continue
       head -5 "$f" | grep -qE 'Code generated|@generated' && continue

@@ -30,7 +30,6 @@ func TestLoadStateMissingOrGarbage(t *testing.T) {
 	}
 }
 
-// The Bun worker's state.json is read as is, so an upgrade neither replays nor skips.
 func TestLoadStateFromBunWorker(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	bun := `{"eventsSince":"1727600000.123456790","logsSince":{"f00dbabe0000111122223333444455556666777788889999aaaabbbbccccdddd":"1727600000.123456790"}}`
@@ -55,7 +54,7 @@ func TestStateFlushFormat(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("clean state was written (err %v)", err)
 	}
-	s.Forget("nope") // nothing to forget: still clean
+	s.Forget("nope")
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +96,7 @@ func TestStateWriterLogsFailures(t *testing.T) {
 	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := LoadState(filepath.Join(blocker, "state.json")) // parent is a file: writes fail
+	s := LoadState(filepath.Join(blocker, "state.json"))
 	var buf syncBuffer
 	log := NewLogger(&buf)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,7 +117,6 @@ func TestStateWriterLogsFailures(t *testing.T) {
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe for the logger's concurrent writers and the test's reads.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -136,7 +134,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// waitFor polls cond for up to 5 s.
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

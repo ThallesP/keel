@@ -1,8 +1,5 @@
 package app_test
 
-// Fakes and fixtures of the ingress use-case tests. Names carry an `ig` prefix: every area's
-// tests share package app_test.
-
 import (
 	"context"
 	"path/filepath"
@@ -16,7 +13,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// igJobs is an in-memory Jobs: After coalesces by key until Run drains it.
 type igJobs struct {
 	mu      sync.Mutex
 	pending map[string]func(context.Context)
@@ -49,7 +45,6 @@ func (j *igJobs) Pending(key string) bool {
 	return ok
 }
 
-// RunOne runs the pending job with this key (it may schedule itself again).
 func (j *igJobs) RunOne(t *testing.T, key string) {
 	t.Helper()
 	j.mu.Lock()
@@ -69,7 +64,6 @@ func (j *igJobs) RunOne(t *testing.T, key string) {
 	fn(context.Background())
 }
 
-// Run runs pending jobs (and the ones they schedule) until none is left.
 func (j *igJobs) Run(t *testing.T) {
 	t.Helper()
 	for i := 0; ; i++ {
@@ -90,18 +84,17 @@ func (j *igJobs) Run(t *testing.T) {
 	}
 }
 
-// igProxy is keel-proxy's admin API.
 type igProxy struct {
 	mu        sync.Mutex
 	addrs     []string
 	addrsErr  error
 	loads     []string
-	loadErrs  []error // one per LoadApps call, nil once exhausted
+	loadErrs  []error
 	onLoad    func(call int)
 	certs     map[string]app.ProxyCert
 	certsErr  error
 	certCalls [][]string
-	onCerts   func() // runs after Certs took its answer, before the caller sees it
+	onCerts   func()
 	reportURL string
 }
 
@@ -134,7 +127,6 @@ func (p *igProxy) Certs(_ context.Context, names []string) (map[string]app.Proxy
 	return certs, err
 }
 
-// loadCount is how many configs were pushed so far.
 func (p *igProxy) loadCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -159,7 +151,6 @@ func (p *igPublisher) Publish(org string, topics []string) {
 	p.got = append(p.got, igPublish{org, topics})
 }
 
-// take returns and clears what was published.
 func (p *igPublisher) take() []igPublish {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -178,8 +169,8 @@ type igEnv struct {
 	pub    *igPublisher
 	now    int64
 	seq    int64
-	member domain.Actor // organization "org"
-	other  domain.Actor // organization "org-b"
+	member domain.Actor
+	other  domain.Actor
 }
 
 const (
@@ -229,7 +220,6 @@ func igUndeployed(n *domain.Node) {
 	n.DeployedRevision = nil
 }
 
-// node inserts a shipped, converged node.
 func (e *igEnv) node(id, env string, typ domain.NodeType, name, image string, port int, opts ...igNodeOpt) domain.Node {
 	e.t.Helper()
 	e.seq++
@@ -280,7 +270,6 @@ func igF(v float64) *float64 { return &v }
 func igS(v string) *string   { return &v }
 func igI(v int) *int         { return &v }
 
-// wantErr checks a domain error's code and message.
 func igWantErr(t *testing.T, err error, code, message string) {
 	t.Helper()
 	de, ok := err.(*domain.Error)

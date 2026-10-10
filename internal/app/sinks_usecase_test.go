@@ -54,13 +54,11 @@ func TestLogSinkViewAndDisconnect(t *testing.T) {
 	if v.Traces == nil || *v.Traces != "keel-traces" || v.Org == nil || *v.Org != "Acme Inc" {
 		t.Fatalf("traces/org: %+v", v)
 	}
-	// Another organization sees its own (none), signed out sees nothing.
 	for _, a := range []domain.Actor{e.foreigner, e.signedOut, {UserID: "u3"}} {
 		if v, err := e.app.LogSink(ctx, a); err != nil || v != nil {
 			t.Errorf("LogSink(%+v) = %+v, %v", a, v, err)
 		}
 	}
-	// The foreign member's disconnect only touches their own organization.
 	if err := e.app.DisconnectLogSink(ctx, e.foreigner); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +103,6 @@ func TestConnectAxiom(t *testing.T) {
 		t.Fatal("Axiom was called before validation passed")
 	}
 
-	// A 409 on create is fine; the query proves the token.
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 409, Detail: "dataset exists"}}
 	dataset, traces, err := e.app.ConnectAxiom(ctx, e.member, app.ConnectAxiomInput{Domain: "api.axiom.co", Dataset: "logs", Traces: obsStrp("spans"), Token: "  xaat-12345678  "})
 	if err != nil || dataset != "logs" || traces == nil || *traces != "spans" {
@@ -123,7 +120,6 @@ func TestConnectAxiom(t *testing.T) {
 		t.Fatalf("saved %+v", rec)
 	}
 
-	// 403 on create is the token's fault; 400/500 are left to the query.
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 403, Detail: "forbidden"}}
 	obsWantCode(t, connect("api.axiom.co", "logs", nil, "xaat-12345678"), domain.CodeInvalidInput, "Axiom 403: forbidden")
 	ax.createErr = map[string]error{"logs": &app.AxiomError{Status: 500}}
@@ -132,7 +128,6 @@ func TestConnectAxiom(t *testing.T) {
 	ax.queryErr = nil
 	ax.createErr = nil
 
-	// A full origin needs KEEL_ALLOW_LOCAL_SINKS.
 	e.app.Config.AllowLocalSinks = true
 	if err := connect("http://127.0.0.1:4318", "logs", nil, "xaat-12345678"); err != nil {
 		t.Fatal(err)
@@ -185,7 +180,6 @@ func TestBeginAxiomSignIn(t *testing.T) {
 		t.Fatalf("PKCE: verifier %q org %q challenge %q", verifier, org, q.Get("code_challenge"))
 	}
 
-	// The client is registered once per redirect URI; a newer sign-in replaces the older one.
 	e.app.Config.AllowLocalSinks, e.app.Config.AxiomAuthURL = true, "http://127.0.0.1:9999/"
 	raw2, err := e.app.BeginAxiomSignIn(ctx, e.member, redirect)
 	if err != nil {
@@ -201,7 +195,6 @@ func TestBeginAxiomSignIn(t *testing.T) {
 		t.Fatalf("%d sign-ins in flight", n)
 	}
 
-	// DCR refused.
 	ax.clientID, ax.registerErr = "", &app.OAuthError{Status: 400, Body: obsObj(t, `{"error":"invalid_redirect_uri","error_description":""}`)}
 	_, err = e.app.BeginAxiomSignIn(ctx, e.member, "http://10.0.0.1/axiom/callback")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: invalid_redirect_uri")
@@ -219,12 +212,10 @@ func obsObj(t *testing.T, s string) *app.JSONObject {
 	return v.(*app.JSONObject)
 }
 
-// obsJWT is an unsigned JWT with the given claims.
 func obsJWT(claims string) string {
 	return "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".sig"
 }
 
-// obsStartSignIn begins a sign-in and returns its state.
 func obsStartSignIn(t *testing.T, e *obsEnv, actor domain.Actor) string {
 	t.Helper()
 	raw, err := e.app.BeginAxiomSignIn(context.Background(), actor, "https://keel.example.ts.net/axiom/callback")
@@ -245,7 +236,6 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	state := obsStartSignIn(t, e, e.member)
 	ax.take()
 
-	// Another organization cannot use this state, and its attempt does not burn it.
 	_, err := e.app.CompleteAxiomSignIn(ctx, e.foreigner, state, "code")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
 	if e.count(t, `SELECT COUNT(*) FROM axiom_sign_ins WHERE state = ?`, state) != 1 {
@@ -288,7 +278,6 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	if e.count(t, `SELECT COUNT(*) FROM axiom_sign_ins`) != 0 {
 		t.Fatal("the sign-in was not consumed")
 	}
-	// Replayed callback.
 	_, err = e.app.CompleteAxiomSignIn(ctx, e.member, state, "the-code")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom sign-in expired, try again")
 }
@@ -314,7 +303,6 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 	ax.orgsErr = nil
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "This Axiom account has no organization")
 
-	// Provisioning failures.
 	ax.orgs = []app.AxiomOrgInfo{{ID: "o1", Name: "Free Org", MaxDatasets: obsF64p(3)}}
 	ax.datasetsErr = &app.AxiomError{Status: 403}
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "Listing datasets: Axiom 403")
@@ -350,7 +338,6 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 		t.Fatal("a failed sign-in saved a sink")
 	}
 
-	// Expired: 10 minutes after begin.
 	ax.queryErr = nil
 	state := obsStartSignIn(t, e, e.member)
 	e.now += 10 * 60_000
@@ -368,7 +355,6 @@ func TestAxiomOrgPick(t *testing.T) {
 	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{"axiomDefaultOrg":"nope"}`), orgs: orgs, minted: "xaat-2"}
 	e.app.Axiom = ax
 
-	// Several orgs and no usable claim: the pick waits.
 	e.pub.take("org")
 	res, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 	if err != nil || !res.Choose {
@@ -384,16 +370,13 @@ func TestAxiomOrgPick(t *testing.T) {
 	if c, _ := e.app.PendingAxiomOrgs(ctx, e.foreigner); c != nil {
 		t.Fatalf("foreign sees the pick: %+v", c)
 	}
-	// A foreign member cannot pick for us.
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.foreigner, "o1")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
-	// Unknown org id: the pick is consumed anyway.
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o9")
 	obsWantCode(t, err, domain.CodeNotFound, "Organization not found")
 	_, _, err = e.app.ChooseAxiomOrg(ctx, e.member, "o1")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Sign-in expired, sign in with Axiom again")
 
-	// Again, and pick o2: "" edge deployment is used as is (not the region), so the US host.
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
@@ -409,14 +392,12 @@ func TestAxiomOrgPick(t *testing.T) {
 		t.Fatal("pick not consumed")
 	}
 
-	// The token's axiomDefaultOrg names a listed org: provisioned right away there.
 	ax.token = obsJWT(`{"axiomDefaultOrg":"o1"}`)
 	res, err = e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 	if err != nil || res.Choose || res.Org != "One" {
 		t.Fatalf("claimed org: %+v %v", res, err)
 	}
 
-	// Cancel drops a pending pick; expired picks are gone.
 	ax.token = obsJWT(`{}`)
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
@@ -449,7 +430,6 @@ func TestAxiomAPIOverride(t *testing.T) {
 	e := newObsEnv(t, 50_000)
 	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{}`), orgs: []app.AxiomOrgInfo{{ID: "o1", Name: "Mock", Region: obsStrp("eu-1")}}, minted: "xaat-3"}
 	e.app.Axiom = ax
-	// Without the flag the override is ignored.
 	e.app.Config.AxiomAPIURL = "http://127.0.0.1:4318"
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)

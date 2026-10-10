@@ -22,15 +22,13 @@ type identity struct {
 	Organization *client.Organization `json:"organization"`
 }
 
-// loginResult is what keel login prints once signed in.
 type loginResult struct {
-	Status string `json:"status"` // "loggedIn"
+	Status string `json:"status"`
 	*identity
 }
 
-// pendingResult is what keel login prints while its link waits for an approval.
 type pendingResult struct {
-	Status      string    `json:"status"` // "pending"
+	Status      string    `json:"status"`
 	Instance    string    `json:"instance"`
 	URL         string    `json:"url"`
 	ApprovalURL string    `json:"approvalUrl"`
@@ -84,7 +82,6 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 
 			var token string
 			if inst.Token != "" {
-				// Already logged in, unless the session is gone.
 				s, err := dial(ctx, cfg, name, inst)
 				if output.CodeOf(err) == output.CodeNotAuthenticated {
 					inst.Token = ""
@@ -95,7 +92,6 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 				}
 			}
 			if p := inst.Pending; p != nil && !p.Expired() {
-				// The same link again, unless it was approved or turned down meanwhile.
 				token, _, err = c.PollLogin(ctx, p.DeviceCode)
 				if output.CodeOf(err) == output.CodeNotAuthenticated {
 					inst.Pending = nil
@@ -131,7 +127,6 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 				}
 			}
 
-			// The install hands the token out once: keep it before anything else can fail.
 			inst.Token, inst.Pending = token, nil
 			if err := saveConfig(cfg); err != nil {
 				return err
@@ -147,7 +142,6 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 	f.BoolVar(&wait, "wait", false, "wait for the approval even without a terminal")
 	f.BoolVar(&noWait, "no-wait", false, "print the link and return, even in a terminal")
 	f.StringVar(&name, "name", "", "name for this install in the config (default: its host)")
-	// Convex era: the API had its own URLs. Still accepted (agents may pass them), ignored.
 	f.StringVar(&convexURL, "convex-url", "", "ignored: the API is on the dashboard URL")
 	f.StringVar(&siteURL, "convex-site-url", "", "ignored: the API is on the dashboard URL")
 	_ = f.MarkHidden("convex-url")
@@ -155,16 +149,12 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 	return cmd
 }
 
-// loginTarget is the install keel login signs in to: the dashboard URL given, else the one
-// commands use. A known install keeps its login state. Either way the URL must answer as a Keel
-// install (GET /api/meta).
 func (a *app) loginTarget(cmd *cobra.Command, cfg *config.Config, args []string, name string) (string, *config.Instance, error) {
 	var inst *config.Instance
 	if len(args) == 0 {
 		if os.Getenv("KEEL_URL") != "" || len(cfg.Instances) == 0 {
 			return "", nil, usage(cmd, "pass the dashboard URL: keel login <dashboard-url>")
 		}
-		// Only the name: a.target's instance carries KEEL_TOKEN, which must not reach the file.
 		var err error
 		if name, _, err = a.target(cfg); err != nil {
 			return "", nil, err
@@ -186,8 +176,6 @@ func (a *app) loginTarget(cmd *cobra.Command, cfg *config.Config, args []string,
 	return name, inst, nil
 }
 
-// waitForApproval polls a pending login until it is approved, turned down, expired or
-// interrupted, and returns the session token.
 func waitForApproval(ctx context.Context, c *client.Client, p *config.PendingLogin) (string, error) {
 	interval := time.Duration(p.Interval) * time.Second
 	for {
@@ -200,13 +188,12 @@ func waitForApproval(ctx context.Context, c *client.Client, p *config.PendingLog
 		if err != nil || token != "" {
 			return token, err
 		}
-		if slowDown { // RFC 8628 §3.5
+		if slowDown {
 			interval += 5 * time.Second
 		}
 	}
 }
 
-// loggedIn saves a working session and prints who it is.
 func (a *app) loggedIn(s *session) error {
 	s.inst.Email = s.user.Email
 	if err := saveConfig(s.cfg); err != nil {
@@ -222,12 +209,10 @@ func (a *app) loggedIn(s *session) error {
 	return nil
 }
 
-// identity is who the session is: account, organization, install.
 func (s *session) identity() *identity {
 	return &identity{Instance: s.name, URL: s.inst.URL, User: s.user, Organization: s.org}
 }
 
-// prettyCode is a user code as the dashboard shows it: ABCD-EFGH.
 func prettyCode(c string) string {
 	if len(c) == 8 {
 		return c[:4] + "-" + c[4:]

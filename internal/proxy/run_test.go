@@ -20,9 +20,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// The edge end to end, in process and on loopback only: the admin socket answers the control
-// plane's client, a pushed layer4 config proxies TCP through l4proxy, a refused load keeps the
-// previous config, and a restart resumes the last pushed config.
 func TestRunServesAdminAndResumes(t *testing.T) {
 	dir := t.TempDir()
 	oldAutosave := caddy.ConfigAutosavePath
@@ -51,13 +48,12 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 	}
 	echoThrough(t, port)
 
-	// host-tcp is registered; outside a container it cannot enter the host namespace.
 	err = client.LoadApps(ctx, []byte(`{"layer4":{"servers":{"tcp-1":{"listen":["host-tcp/127.0.0.1:1"],"routes":[]}}}}`))
 	var rejected *app.ProxyRejected
 	if !errors.As(err, &rejected) || !strings.Contains(rejected.Message, "host network namespace") || strings.HasPrefix(rejected.Message, "loading") {
 		t.Fatalf("host-tcp load: %#v", err)
 	}
-	echoThrough(t, port) // the previous config still serves
+	echoThrough(t, port)
 
 	stop()
 	if b, err := os.ReadFile(caddy.ConfigAutosavePath); err != nil || !strings.Contains(string(b), "layer4") {
@@ -65,17 +61,13 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 	}
 
 	stop = startEdge(t, Options{Socket: sock, Resume: true})
-	echoThrough(t, port) // resumed without a push
+	echoThrough(t, port)
 	if err := client.LoadApps(ctx, []byte(`{}`)); err != nil {
 		t.Fatal(err)
 	}
 	stop()
 }
 
-// The last pushed config no longer loads after a restart: here its listener names an address
-// this host does not have (192.0.2.1, TEST-NET-1: what a DHCP change does to a real one). The
-// edge comes up with its admin endpoint alone instead of exiting (a crash loop would keep the
-// socket down for good), and the control plane's next push is served.
 func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
 	dir := t.TempDir()
 	oldAutosave := caddy.ConfigAutosavePath
@@ -93,8 +85,6 @@ func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
 	port := freePort(t)
 	apps := fmt.Sprintf(`{"layer4":{"servers":{"tcp-%d":{"listen":["tcp/127.0.0.1:%d"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["%s"]}]}]}]}}}}`,
 		port, port, upstream)
-	// The socket is briefly up during the failed load too; a push landing then fails (the control
-	// plane's next sync retries it), so retry here the same way.
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
 		err := client.LoadApps(context.Background(), []byte(apps))
 		if err == nil {
@@ -175,7 +165,6 @@ func freePort(t *testing.T) int {
 
 func echoThrough(t *testing.T, port int) {
 	t.Helper()
-	// The admin socket comes up before the apps start: give the listener a moment.
 	var conn net.Conn
 	var err error
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {

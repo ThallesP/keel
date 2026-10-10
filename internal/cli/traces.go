@@ -12,7 +12,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/client"
 )
 
-// The ranges GET /api/environments/{id}/traces takes (domain.TimeRange).
 var traceRanges = []string{"15m", "1h", "24h", "7d"}
 
 func (a *app) tracesCmd() *cobra.Command {

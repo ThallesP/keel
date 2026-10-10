@@ -5,23 +5,15 @@ import (
 	"strings"
 )
 
-// Device authorization (RFC 8628) for `keel login`, exactly as better-auth 1.6.17's
-// deviceAuthorization plugin behaves with Keel's options (docs/go/spec/cli-install.md §A8,
-// auth-orgs.md §5.3).
 const (
 	DeviceClientID      = "keel-cli"
 	DeviceGrantType     = "urn:ietf:params:oauth:grant-type:device_code"
-	DeviceCodeTTL       = int64(30 * 60 * 1000) // 30 minutes
-	DeviceIntervalS     = 5                     // seconds between polls
+	DeviceCodeTTL       = int64(30 * 60 * 1000)
+	DeviceIntervalS     = 5
 	DeviceCodeLength    = 40
 	DeviceUserCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	DeviceUserCodeLen   = 8
 
-	// DeviceCodeKeep is how long an expired code is kept before a new login sweeps it. Better
-	// Auth deleted expired codes only when they were polled, so a CLI still polling (keel login
-	// --wait polls every few seconds) or a /device tab left open gets "Device code has expired" /
-	// "User code has expired", not "Invalid device code" / "Invalid user code". Short, because
-	// creating codes needs no session: the sweep is what bounds the table.
 	DeviceCodeKeep = int64(60 * 60 * 1000)
 )
 
@@ -33,26 +25,22 @@ const (
 	DeviceDenied   DeviceStatus = "denied"
 )
 
-// DeviceCode is one `keel login` link. The device code itself (the CLI's secret) is stored only
-// as its hash, so it is not here.
 type DeviceCode struct {
 	ID           string
 	UserCode     string
 	ClientID     string
 	Status       DeviceStatus
-	UserID       string // "" until a signed-in user looks at the code (binding)
+	UserID       string
 	IntervalS    int
 	LastPolledAt *int64
 	ExpiresAt    int64
 	CreatedAt    int64
 }
 
-// Expired: better-auth's `expiresAt < now`.
 func (d DeviceCode) Expired(now int64) bool { return d.ExpiresAt < now }
 
 const deviceAlnum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// NewDeviceCode is 40 random characters from [a-zA-Z0-9] (better-auth deviceCodeLength 40).
 func NewDeviceCode() string {
 	out := make([]byte, 0, DeviceCodeLength)
 	buf := make([]byte, 64)
@@ -61,7 +49,6 @@ func NewDeviceCode() string {
 			panic(err)
 		}
 		for _, b := range buf {
-			// 62 symbols: reject the top of the byte range so every symbol is equally likely.
 			if b >= 248 {
 				continue
 			}
@@ -74,7 +61,6 @@ func NewDeviceCode() string {
 	return string(out)
 }
 
-// NewUserCode is 8 characters, each DeviceUserCodeChars[randomByte % 32], as better-auth makes it.
 func NewUserCode() string {
 	b := make([]byte, DeviceUserCodeLen)
 	if _, err := rand.Read(b); err != nil {
@@ -86,11 +72,8 @@ func NewUserCode() string {
 	return string(b)
 }
 
-// CleanUserCode is how the server looks a user code up: dashes removed, nothing else (case is
-// not normalised; the dashboard upper-cases before calling).
 func CleanUserCode(code string) string { return strings.ReplaceAll(code, "-", "") }
 
-// DeviceRefusal is an RFC 8628 error: HTTP status, `error` and `error_description`.
 type DeviceRefusal struct {
 	Status      int
 	Code        string
@@ -103,7 +86,6 @@ func deviceRefuse(status int, code, description string) *DeviceRefusal {
 	return &DeviceRefusal{Status: status, Code: code, Description: description}
 }
 
-// Device error descriptions (better-auth DEVICE_AUTHORIZATION_ERROR_CODES).
 const (
 	MsgDeviceInvalidClient   = "Invalid client ID"
 	MsgDeviceInvalidCode     = "Invalid device code"
@@ -124,7 +106,6 @@ const (
 	MsgDeviceGrantType       = "Unsupported grant type"
 )
 
-// CheckDeviceClient: POST /device/code accepts only the keel CLI.
 func CheckDeviceClient(clientID string) *DeviceRefusal {
 	if clientID != DeviceClientID {
 		return deviceRefuse(400, "invalid_client", MsgDeviceInvalidClient)
@@ -132,24 +113,20 @@ func CheckDeviceClient(clientID string) *DeviceRefusal {
 	return nil
 }
 
-// PollAction is what one POST /device/token poll does to the stored code.
 type PollAction int
 
 const (
-	PollRefuse      PollAction = iota // answer Refusal; the row is untouched
-	PollTouch                         // set last_polled_at = now, answer Refusal
-	PollTouchDelete                   // delete the row, answer Refusal
-	PollIssue                         // consume the row (single use) and issue a session to UserID
+	PollRefuse PollAction = iota
+	PollTouch
+	PollTouchDelete
+	PollIssue
 )
 
-// PollDecision is the outcome of a poll.
 type PollDecision struct {
 	Action  PollAction
-	Refusal *DeviceRefusal // nil for PollIssue
+	Refusal *DeviceRefusal
 }
 
-// DecidePoll evaluates POST /device/token in better-auth's order (cli-install.md §A8). dc is nil
-// when no row has the device code. Note: a slow_down does not move last_polled_at.
 func DecidePoll(dc *DeviceCode, clientID string, now int64) PollDecision {
 	reject := func(a PollAction, status int, code, desc string) PollDecision {
 		return PollDecision{Action: a, Refusal: deviceRefuse(status, code, desc)}
@@ -180,8 +157,6 @@ func DecidePoll(dc *DeviceCode, clientID string, now int64) PollDecision {
 	return reject(PollTouch, 500, "server_error", MsgDeviceBadStatus)
 }
 
-// CheckUserCode is GET /device: the code must exist and not be expired. Binding happens when it
-// returns nil, the caller is signed in, the code is pending and nobody claimed it yet.
 func CheckUserCode(dc *DeviceCode, now int64) *DeviceRefusal {
 	if dc == nil {
 		return deviceRefuse(400, "invalid_request", MsgDeviceInvalidUserCode)
@@ -192,13 +167,10 @@ func CheckUserCode(dc *DeviceCode, now int64) *DeviceRefusal {
 	return nil
 }
 
-// ShouldBind: GET /device by a signed-in user claims an unclaimed pending code for them.
 func (d DeviceCode) ShouldBind(userID string) bool {
 	return userID != "" && d.UserID == "" && d.Status == DevicePending
 }
 
-// DecideDevice is POST /device/approve and /device/deny: only the user the code is bound to may
-// decide, once.
 func DecideDevice(dc *DeviceCode, userID string, approve bool, now int64) *DeviceRefusal {
 	if userID == "" {
 		return deviceRefuse(401, "unauthorized", MsgDeviceAuthRequired)

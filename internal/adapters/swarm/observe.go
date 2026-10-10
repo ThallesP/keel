@@ -10,11 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// Observation-side Docker calls (docs/go/spec/swarm-worker.md §4.1, D8–D9). The use cases
-// summarize; this file only reads and converts.
-
-// ObserveService reads svc-<id> (404 → nil) and the tasks labelled keel.service=<id>, in
-// parallel.
 func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (*app.SwarmService, []app.SwarmTask, error) {
 	type inspected struct {
 		svc *app.SwarmService
@@ -46,7 +41,6 @@ func (s *Swarm) ObserveService(ctx context.Context, nodeID string) (*app.SwarmSe
 	return in.svc, tasksOf(list.Items), nil
 }
 
-// ObserveServices lists every service and every task labelled keel.service, in parallel.
 func (s *Swarm) ObserveServices(ctx context.Context) ([]app.SwarmService, []app.SwarmTask, error) {
 	filter := func() client.Filters { return make(client.Filters).Add("label", labelService) }
 	type listed struct {

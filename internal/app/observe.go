@@ -11,18 +11,11 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Observation: Swarm → nodes.observed (convex/swarm.ts observeNode/observe/observeSwarmNodes,
-// nodesInternal.ts setObserved/scheduleObserve; docs/go/spec/swarm-worker.md §8).
-
-// transientTaskStates: between "scheduled" and "running"; a container event follows within
-// seconds. `pending` (nothing can schedule it) is deliberately absent: that is the timeout's job.
 var transientTaskStates = map[string]bool{
 	"new": true, "allocated": true, "assigned": true, "accepted": true,
 	"preparing": true, "ready": true, "starting": true,
 }
 
-// taskRevision is JavaScript's Number(labels["keel.revision"]): ok=false when the label is
-// missing or not a number (NaN never equals a revision). An empty label is 0, as in JS.
 func taskRevision(labels map[string]string) (int, bool) {
 	v, present := labels["keel.revision"]
 	if !present {
@@ -39,8 +32,6 @@ func taskRevision(labels map[string]string) (int, bool) {
 	return int(n), true
 }
 
-// summarizeTasks is swarm.ts summarize, exactly: the observed state of a node from its tasks (in
-// Docker's order) and its service (nil when there is none).
 func summarizeTasks(tasks []SwarmTask, svc *SwarmService, now int64) domain.Observed {
 	update := ""
 	if svc != nil {
@@ -48,9 +39,6 @@ func summarizeTasks(tasks []SwarmTask, svc *SwarmService, now int64) domain.Obse
 	}
 	rolledBack := update == "paused" || strings.HasPrefix(update, "rollback")
 
-	// Old revisions linger in task history; only the newest says anything about health. After a
-	// rollback the spec reverts but the failed revision's tasks are still newest, so `revision`
-	// names what failed and state "failed" says it is not running.
 	revision := 0
 	if svc != nil {
 		if r, ok := taskRevision(svc.Labels); ok {
@@ -115,8 +103,6 @@ func summarizeTasks(tasks []SwarmTask, svc *SwarmService, now int64) domain.Obse
 		o.State = domain.ObservedCrashloop
 	case pending:
 		o.State = domain.ObservedPending
-	// `updating` until Swarm reports `completed`: a task that dies inside the Monitor window must
-	// not count as converged, Swarm is about to roll it back.
 	case update == "updating" || len(running) < len(live):
 		o.State = domain.ObservedUpdating
 	case oneShot:
@@ -133,7 +119,6 @@ func summarizeTasks(tasks []SwarmTask, svc *SwarmService, now int64) domain.Obse
 	return o
 }
 
-// settlingTasks: some task of revision is mid-transition (swarm.ts settling).
 func settlingTasks(tasks []SwarmTask, revision int) bool {
 	for _, t := range tasks {
 		if r, ok := taskRevision(t.Labels); ok && r == revision && t.DesiredState != "shutdown" && transientTaskStates[t.State] {
@@ -143,19 +128,12 @@ func settlingTasks(tasks []SwarmTask, revision int) bool {
 	return false
 }
 
-// ScheduleObserve observes one node's Swarm service soon, debounced per node (500 ms). For a
-// node that no longer exists it settles running deployments instead, so a deleted node's steps
-// fail with "node deleted". Called by: canvas (node delete), deploy.
 func (a *App) ScheduleObserve(nodeID string) {
 	if _, exists := a.scheduleObserve(context.Background(), nodeID, observeDebounce, 0); !exists {
 		a.Jobs.After("reconcile", 0, func(ctx context.Context) { a.reconcileRunning(ctx, "") })
 	}
 }
 
-// scheduleObserve schedules observeNode(id, settle) after delay unless a scan of the node is
-// already due no later; a pending scan due later (a settle re-check) is replaced. Ids that are
-// not a node with desired (orphan services, a user's own containers) are ignored: exists is false
-// for them.
 func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duration, settle int) (scheduled, exists bool) {
 	err := a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(id)
@@ -185,16 +163,12 @@ func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duratio
 	gen := rt.next()
 	rt.observe[id] = pendingScan{due: due, settle: settle, gen: gen}
 	rt.mu.Unlock()
-	// The generation makes every scan its own job, so a sooner scan is never dropped behind a
-	// pending later one; the later one finds the slot taken and does nothing.
 	a.Jobs.After(fmt.Sprintf("observe:%s:%d", id, gen), delay, func(ctx context.Context) {
 		a.runScheduledObserve(ctx, id, gen)
 	})
 	return true, true
 }
 
-// runScheduledObserve frees the node's slot first (events from now on get their own scan, since
-// this scan's Docker read may predate them), then scans.
 func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
 	rt := a.deployRuntime()
 	rt.mu.Lock()
@@ -208,8 +182,6 @@ func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
 	a.observeNode(ctx, id, p.settle)
 }
 
-// observeNode scans one node, records what Swarm reports, settles its environment's running
-// deployment, and re-checks (at most twice, 2 s apart) while a task is mid-transition.
 func (a *App) observeNode(ctx context.Context, id string, settle int) {
 	if a.noSwarm("observeNode") {
 		return
@@ -234,7 +206,7 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 		if err != nil {
 			return err
 		}
-		return a.reconcile(tx, ch, envID, now) // "" (node gone): every running deployment
+		return a.reconcile(tx, ch, envID, now)
 	})
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
@@ -244,16 +216,10 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 	case settle < observeSettleMax && settlingTasks(tasks, observed.Revision):
 		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
 	case svc != nil && updateInProgress(svc.UpdateState) && settle < observeUpdatingMax:
-		// A rolling update (start-first, then the UpdateConfig monitor window) outlasts the two
-		// settle re-checks. keel agent's "service update ... completed" event normally triggers
-		// the next scan; polling until Swarm says it is done means a deployment settles without
-		// an agent too (a fresh install before keel-agent runs, a dev serve).
 		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
 	}
 }
 
-// observeAll is the full sweep (swarm.ts observe): every shipped node from one listing of
-// services and tasks, one reconcile, then the server count. Run at start and on agent resync.
 func (a *App) observeAll(ctx context.Context) {
 	if a.noSwarm("observe (full sweep)") {
 		return
@@ -311,8 +277,6 @@ func (a *App) observeAll(ctx context.Context) {
 	a.observeServers(ctx)
 }
 
-// observeServers counts ready Swarm nodes into the cluster row (environments.setServers). Every
-// organization's summaries refetch only when the count changed.
 func (a *App) observeServers(ctx context.Context) {
 	if a.noSwarm("observeServers") {
 		return
@@ -350,10 +314,6 @@ func (a *App) observeServers(ctx context.Context) {
 	}
 }
 
-// setObserved records a scan (nodesInternal.setObserved): observed, deployedRevision when
-// converged, oneShot learned from the run. Returns the node's environment, "" when the node is
-// gone (a no-op). The canvas refetches only when something it shows changed: observed.at moves
-// on every scan.
 func (a *App) setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, error) {
 	n, err := tx.Node(id)
 	if errors.Is(err, ErrNoRow) {
@@ -386,8 +346,6 @@ func (a *App) setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (str
 	return n.EnvironmentID, nil
 }
 
-// nodeFace is what the node view (nodes.list) derives from observed, deployedRevision and
-// applyError: comparing two of them tells whether a scan changed anything a client shows.
 type nodeFace struct {
 	status           domain.NodeStatus
 	running          int
@@ -426,7 +384,6 @@ func observedFace(n domain.Node) nodeFace {
 	return f
 }
 
-// updateInProgress: Swarm is still rolling the service forward or back.
 func updateInProgress(state string) bool {
 	return state == "updating" || state == "rollback_started"
 }

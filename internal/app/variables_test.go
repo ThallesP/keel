@@ -56,7 +56,6 @@ func TestCanvasListVariables(t *testing.T) {
 		t.Errorf("plain parts %+v", v)
 	}
 
-	// Signed out, unknown node: nothing.
 	if vars, _ := k.app.ListVariables(k.ctx, domain.Actor{}, api); len(vars) != 0 {
 		t.Error("signed out lists variables")
 	}
@@ -150,7 +149,6 @@ func TestCanvasSetVariable(t *testing.T) {
 	k.clean(env)
 	k.pub.take(canvasOrg)
 
-	// Rename OLD → NEW: the row keeps its place; references follow (normalized), others stay.
 	err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "NEW", Value: "v2", Secret: true, PreviousKey: canvasPtr("OLD")})
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +163,6 @@ func TestCanvasSetVariable(t *testing.T) {
 	if v := k.vars(web)[0].Value; v != "${{ api.NEW }} ${{ api.FIRST }}" {
 		t.Errorf("web reference %q", v)
 	}
-	// The node and its referrers (transitively) are staged.
 	if !k.node(api).Dirty || !k.node(web).Dirty || !k.node(worker).Dirty {
 		t.Errorf("dirty api %v web %v worker %v", k.node(api).Dirty, k.node(web).Dirty, k.node(worker).Dirty)
 	}
@@ -173,24 +170,20 @@ func TestCanvasSetVariable(t *testing.T) {
 		t.Errorf("topics %v", topics)
 	}
 
-	// Upsert in place.
 	k.setVar(api, "FIRST", "one")
 	if vs := k.vars(api); canvasKeys(vs) != "FIRST,NEW,LAST" || vs[0].Value != "one" {
 		t.Errorf("upsert %+v", vs)
 	}
-	// Unknown previousKey inserts.
 	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "ADDED", Value: "x", PreviousKey: canvasPtr("GHOST")}); err != nil {
 		t.Fatal(err)
 	}
 	if canvasKeys(k.vars(api)) != "FIRST,NEW,LAST,ADDED" {
 		t.Errorf("unknown previousKey: %s", canvasKeys(k.vars(api)))
 	}
-	// Any node type, groups included.
 	if err := k.app.SetVariable(k.ctx, m, group, app.SetVariableInput{Key: "MORE", Value: "x"}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Limits and errors.
 	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "BIG", Value: strings.Repeat("a", 4096)}); err != nil {
 		t.Errorf("4096 chars: %v", err)
 	}
@@ -202,7 +195,7 @@ func TestCanvasSetVariable(t *testing.T) {
 		{app.SetVariableInput{Key: "1ABC", Value: "x"}, domain.CodeInvalidInput, "Key: UPPER_SNAKE_CASE only"},
 		{app.SetVariableInput{Key: "A/B", Value: "x"}, domain.CodeInvalidInput, "Key: UPPER_SNAKE_CASE only"},
 		{app.SetVariableInput{Key: "BIG", Value: strings.Repeat("a", 4097)}, domain.CodeInvalidInput, "Value too long"},
-		{app.SetVariableInput{Key: "BIG", Value: strings.Repeat("😀", 2049)}, domain.CodeInvalidInput, "Value too long"}, // 4098 UTF-16 units
+		{app.SetVariableInput{Key: "BIG", Value: strings.Repeat("😀", 2049)}, domain.CodeInvalidInput, "Value too long"},
 		{app.SetVariableInput{Key: "FIRST", Value: "x", PreviousKey: canvasPtr("NEW")}, domain.CodeNameTaken, "FIRST already exists"},
 	}
 	for _, c := range cases {
@@ -221,7 +214,6 @@ func TestCanvasRemoveVariable(t *testing.T) {
 	k.clean(env)
 	k.pub.take(canvasOrg)
 
-	// Missing key: nothing staged, nothing published.
 	if err := k.app.RemoveVariable(k.ctx, m, pg, "NOPE"); err != nil {
 		t.Fatal(err)
 	}
@@ -254,12 +246,10 @@ func TestCanvasComputeEnvSeam(t *testing.T) {
 	if !reflect.DeepEqual(envMap, map[string]string{"Z_LAST_KEY_FIRST": url, "A": url + "!"}) {
 		t.Errorf("env map %v", envMap)
 	}
-	// A database's container gets its own rows only, not DATABASE_URL.
 	if pgEnv, _ := k.app.CanvasComputeEnv(k.ctx, pg); len(pgEnv) != 3 || pgEnv["DATABASE_URL"] != "" {
 		t.Errorf("pg env %v", pgEnv)
 	}
 
-	// markReferrersDirty as other areas call it (tracing switch, migrations).
 	k.clean(env)
 	if err := k.app.CanvasMarkReferrersDirty(k.ctx, pg); err != nil {
 		t.Fatal(err)

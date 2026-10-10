@@ -8,31 +8,19 @@ import (
 	"time"
 )
 
-// Forwarder sends `docker events` to the control plane, which turns each one into a targeted
-// Swarm observation. Only what the control plane can act on leaves the node: container and
-// service events of `svc-*` services, and node events; exec_* and health_status chatter never
-// does (docs/go/spec/swarm-worker.md §13.4).
-//
-// After every (re)connect an empty batch carries X-Keel-Resync: 1 so the control plane sweeps
-// once: Docker replays only a small buffer, so a gap may have been missed. The stream resumes with
-// `since` so nothing in the buffer is skipped either. Each relevant event is its own POST (body =
-// the event JSON), in order: the stream is not read while a POST retries.
 type Forwarder struct {
 	Docker Docker
 	Poster interface {
 		PostEvents(ctx context.Context, body []byte, resync bool) bool
 	}
-	State *State
-	Log   *Logger
-	// OnContainer sees every container event (before the relevance filter); the log shipper
-	// uses it to start and forget followers.
+	State       *State
+	Log         *Logger
 	OnContainer func(action, containerID string, attrs map[string]string)
 
-	reconnect time.Duration // 2 s
+	reconnect time.Duration
 	sleep     func(context.Context, time.Duration) error
 }
 
-// Run forwards until ctx is done.
 func (f *Forwarder) Run(ctx context.Context) {
 	reconnect := f.reconnect
 	if reconnect == 0 {
@@ -53,7 +41,6 @@ func (f *Forwarder) Run(ctx context.Context) {
 	}
 }
 
-// stream runs one connection to the Docker event stream, until it ends.
 func (f *Forwarder) stream(ctx context.Context) {
 	since := f.State.EventsSince()
 	s, err := f.Docker.Events(ctx, since)
@@ -69,7 +56,6 @@ func (f *Forwarder) stream(ctx context.Context) {
 	} else {
 		f.Log.Log("events", "streaming docker events")
 	}
-	// (Re)connect: ask for a full sweep before streaming anything.
 	resync := !f.Poster.PostEvents(ctx, []byte("[]"), true)
 	for {
 		e, err := s.Next()
@@ -89,8 +75,6 @@ func (f *Forwarder) stream(ctx context.Context) {
 		if relevant(e) {
 			resync = !f.Poster.PostEvents(ctx, e.Raw, resync)
 			if ctx.Err() != nil {
-				// Shutting down mid-POST: the event was not delivered, so the resume point stays
-				// before it and the next start replays it (the worker exited before moving it).
 				return
 			}
 		}
@@ -100,7 +84,6 @@ func (f *Forwarder) stream(ctx context.Context) {
 	}
 }
 
-// relevant: what the control plane can act on.
 func relevant(e Event) bool {
 	if strings.HasPrefix(e.Action, "exec_") || strings.HasPrefix(e.Action, "health_status") {
 		return false

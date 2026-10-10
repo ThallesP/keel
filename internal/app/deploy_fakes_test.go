@@ -29,9 +29,7 @@ type fakeJobs struct {
 	clock   *int64
 	pending []*fakeJob
 	seq     int
-	// ctx is what jobs run with (context.Background() when nil); a cancelled one is serve
-	// stopping its scheduler.
-	ctx context.Context
+	ctx     context.Context
 }
 
 func (j *fakeJobs) jobCtx() context.Context {
@@ -44,7 +42,7 @@ func (j *fakeJobs) jobCtx() context.Context {
 func (j *fakeJobs) After(key string, delay time.Duration, fn func(context.Context)) {
 	for _, p := range j.pending {
 		if p.key == key {
-			return // a pending job with the same key wins
+			return
 		}
 	}
 	j.seq++
@@ -53,7 +51,6 @@ func (j *fakeJobs) After(key string, delay time.Duration, fn func(context.Contex
 
 func (j *fakeJobs) Every(string, time.Duration, func(context.Context)) {}
 
-// next pops the earliest job due by `by` (ties: scheduling order).
 func (j *fakeJobs) next(by int64) *fakeJob {
 	idx := -1
 	for i, p := range j.pending {
@@ -72,10 +69,8 @@ func (j *fakeJobs) next(by int64) *fakeJob {
 	return p
 }
 
-// run runs every job due now, including the ones they schedule for now.
 func (j *fakeJobs) run() { j.advance(0) }
 
-// advance moves the clock forward by d, running each job at its due time.
 func (j *fakeJobs) advance(d time.Duration) {
 	target := *j.clock + d.Milliseconds()
 	for {
@@ -91,7 +86,6 @@ func (j *fakeJobs) advance(d time.Duration) {
 	}
 }
 
-// runOne runs the first due job whose key starts with prefix.
 func (j *fakeJobs) runOne(t *testing.T, prefix string) {
 	t.Helper()
 	for i, p := range j.pending {
@@ -128,29 +122,25 @@ type fakeService struct {
 }
 
 type fakeSwarm struct {
-	cached  map[string]bool
-	pullErr map[string]error
-	onPull  func(image string)
-	// pullBlocksUntilCancelled makes the next pull hang until its context ends (a stalled pull).
+	cached                   map[string]bool
+	pullErr                  map[string]error
+	onPull                   func(image string)
 	pullBlocksUntilCancelled bool
 	onCreate                 func(spec app.ServiceSpec)
 	services                 map[string]*fakeService
-	// tasks overrides what observation sees for a node; by default every replica of the current
-	// spec runs.
-	tasks          map[string][]app.SwarmTask
-	updateState    map[string]string
-	updateFailures int
-	creates        []app.ServiceSpec
-	updates        []app.ServiceSpec
-	removed        []string
-	pulls          []string
-	observed       []string
-	ready, total   int
-	agents         []app.AgentSpec
-	tunnelSweeps   int
-	versions       uint64
-	// undated: Docker calls made without a context deadline.
-	undated []string
+	tasks                    map[string][]app.SwarmTask
+	updateState              map[string]string
+	updateFailures           int
+	creates                  []app.ServiceSpec
+	updates                  []app.ServiceSpec
+	removed                  []string
+	pulls                    []string
+	observed                 []string
+	ready, total             int
+	agents                   []app.AgentSpec
+	tunnelSweeps             int
+	versions                 uint64
+	undated                  []string
 }
 
 func (f *fakeSwarm) call(ctx context.Context, name string) {
@@ -332,11 +322,11 @@ type world struct {
 	swarm    *fakeSwarm
 	pub      *recorder
 	clock    *int64
-	member   domain.Actor // in org "org", which owns environment "env"
-	outsider domain.Actor // in org "org2", which owns environment "env2"
+	member   domain.Actor
+	outsider domain.Actor
 	follows  []int
 	syncs    int
-	envVars  map[string]map[string]string // node id → container env
+	envVars  map[string]map[string]string
 }
 
 func newWorld(t *testing.T) *world {
@@ -392,8 +382,6 @@ func (w *world) newApp(cfg app.Config) *app.App {
 	})
 }
 
-// restart is a new serve process on the same database and Swarm: every in-memory job and queue
-// is gone.
 func (w *world) restart(cfg app.Config) {
 	w.jobs.pending = nil
 	w.jobs.ctx = nil
@@ -414,7 +402,6 @@ func noDesired(n *domain.Node)       { n.Desired = nil }
 
 var nodeSeq int64
 
-// addNode inserts a dirty, never-shipped service (nginx:alpine, 1 replica) in "env".
 func (w *world) addNode(name string, opts ...nodeOpt) domain.Node {
 	w.t.Helper()
 	nodeSeq++
@@ -506,7 +493,6 @@ func codeAndMessage(err error) string {
 	return "untyped: " + err.Error()
 }
 
-// failRunning marks a running deployment failed, as its timeout would, so a new ship is allowed.
 func (w *world) failRunning(id string) {
 	w.t.Helper()
 	if _, err := w.store.DB().Exec(`UPDATE deployments SET status = 'failed', finished_at = ? WHERE id = ?`, *w.clock, id); err != nil {

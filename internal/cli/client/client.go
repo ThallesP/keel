@@ -1,7 +1,3 @@
-// Package client is a Keel install as the CLI sees it: find it from its dashboard URL
-// (GET /api/meta), sign in through the device login (RFC 8628), and call Keel's HTTP API
-// (openapi.json) with the session token as a bearer. Dashboard and API share one origin, so the
-// dashboard URL is the API's base. Every error it returns is an *output.Error.
 package client
 
 import (
@@ -21,32 +17,24 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// UserAgent is set by the CLI to keel-cli/<version>.
 var UserAgent = "keel-cli"
 
 var sharedHTTP = &http.Client{Timeout: 60 * time.Second}
 
-// Client is one install's API, as one account when Token is set.
 type Client struct {
-	// Dashboard URL (scheme://host[:port]), which is also the API's origin.
-	URL string
-	// Session token, sent as `Authorization: Bearer`.
+	URL   string
 	Token string
-	// nil: a shared client with a 60-second timeout.
-	HTTP *http.Client
+	HTTP  *http.Client
 }
 
-// New is a client for the install at url, signed in with token ("" for none).
 func New(url, token string) *Client { return &Client{URL: url, Token: token} }
 
-// reply is one HTTP response, read whole.
 type reply struct {
 	status int
 	header http.Header
 	body   []byte
 }
 
-// send makes one request to the install. A nil in sends no body.
 func (c *Client) send(ctx context.Context, method, path string, query url.Values, in any) (*reply, error) {
 	var body io.Reader
 	if in != nil {
@@ -66,8 +54,6 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	}
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
-	// The dashboard's origin, as a browser would send it. Bearer requests need no CSRF check, but
-	// an install behind a proxy that wants one gets it.
 	req.Header.Set("Origin", c.URL)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -87,8 +73,6 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	return &reply{status: resp.StatusCode, header: resp.Header, body: raw}, nil
 }
 
-// call is one API operation: in as the JSON body (nil: none), a 2xx JSON answer decoded into out
-// (nil: ignored). Anything else is the error the server described, as the CLI reports it.
 func (c *Client) call(ctx context.Context, method, path string, query url.Values, in, out any) error {
 	r, err := c.send(ctx, method, path, query, in)
 	if err != nil {
@@ -106,8 +90,6 @@ func (c *Client) call(ctx context.Context, method, path string, query url.Values
 	return nil
 }
 
-// problem is an error body: RFC 9457 problem details with Keel's `code` (api.Problem), plus the
-// members a problem may add (`slug` on a taken project name).
 type problem struct {
 	Status int    `json:"status"`
 	Title  string `json:"title"`
@@ -120,9 +102,6 @@ type problem struct {
 	} `json:"errors"`
 }
 
-// failure turns a non-2xx response into the CLI's error. The code is the server's, as is (the
-// API's codes are the CLI's vocabulary); the CLI adds the fix. A body without a code (a proxy in
-// front of the install, an older server) falls back on the status and the message text.
 func (c *Client) failure(what string, r *reply) *output.Error {
 	var p problem
 	_ = json.Unmarshal(r.body, &p)
@@ -153,13 +132,10 @@ func (c *Client) failure(what string, r *reply) *output.Error {
 	return withFix(code, msg, p.Slug, c.URL, r.header)
 }
 
-// withFix is a server error as the CLI reports it: the server's code and message, and the next
-// command to run (docs/cli.md, "Contract").
 func withFix(code, msg, slug, webURL string, h http.Header) *output.Error {
 	fix := ""
 	switch code {
 	case output.CodeNotAuthenticated:
-		// Every signed-in call carries a token: refused, it is dead.
 		return notAuthenticated(webURL, "Session expired or signed out")
 	case output.CodeNoOrganization:
 		fix = "Ask a member for an invite link (account menu → Invite people), then keel login " + webURL
@@ -191,7 +167,6 @@ func withFix(code, msg, slug, webURL string, h http.Header) *output.Error {
 	return &output.Error{Code: code, Message: msg, Fix: fix}
 }
 
-// takenProject is the slug in `Project "<slug>" already exists`, "" for other messages.
 func takenProject(msg string) string {
 	if s, ok := strings.CutPrefix(msg, `Project "`); ok {
 		if s, ok := strings.CutSuffix(s, `" already exists`); ok {
@@ -201,7 +176,6 @@ func takenProject(msg string) string {
 	return ""
 }
 
-// codeOfMessage is the code of a Convex-era message, for an error body without a code.
 func codeOfMessage(msg string) string {
 	switch {
 	case msg == "Not authenticated":
@@ -224,8 +198,6 @@ func codeOfMessage(msg string) string {
 	return ""
 }
 
-// translate turns a transport error into the CLI's: CANCELLED, TIMEOUT, NETWORK_ERROR, or
-// SERVER_ERROR for anything else.
 func translate(err error, webURL string) error {
 	var oe *output.Error
 	if errors.As(err, &oe) {
@@ -234,7 +206,7 @@ func translate(err error, webURL string) error {
 	if errors.Is(err, context.Canceled) {
 		return output.Errorf(output.CodeCancelled, "", "Cancelled")
 	}
-	var ne net.Error // *url.Error, from every failed request, is one
+	var ne net.Error
 	if errors.As(err, &ne) {
 		host := webURL
 		if u, perr := url.Parse(webURL); perr == nil && u.Host != "" {
@@ -277,7 +249,6 @@ func snippet(b []byte) string {
 	return s
 }
 
-// apiPath fills the %s of an API path with ids, escaped: they may come from the user.
 func apiPath(format string, ids ...string) string {
 	args := make([]any, len(ids))
 	for i, id := range ids {

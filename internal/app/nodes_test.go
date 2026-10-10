@@ -60,11 +60,9 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 			t.Errorf("%s: variables %s, want %s", c.name, got, c.vars)
 		}
 	}
-	// Generated passwords differ between nodes.
 	if k.vars(ids[5])[0].Value == k.vars(ids[6])[0].Value {
 		t.Error("two redis nodes share a password")
 	}
-	// The list is in creation order and every view field derives from the row.
 	nodes, err := k.app.ListNodes(k.ctx, canvasMember(canvasOrg), env)
 	if err != nil || len(nodes) != len(ids) {
 		t.Fatalf("list: %d %v", len(nodes), err)
@@ -128,17 +126,14 @@ func TestCanvasCreateNodeDeploy(t *testing.T) {
 	if len(k.ships) != 1 || !reflect.DeepEqual(k.ships[0].Opts, app.ShipOptions{Only: []string{out.ID}}) {
 		t.Fatalf("ship call %+v", k.ships)
 	}
-	// Volumes and groups never ship.
 	if out, _ := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, app.CreateNodeInput{Type: domain.NodeVolume, Deploy: true}); out.DeploymentID != "" || len(k.ships) != 1 {
 		t.Fatalf("volume shipped: %+v", out)
 	}
-	// A refused ship (a deployment is running) is swallowed: the node stays dirty.
 	k.shipErr = domain.E(domain.CodeDeploymentRunning, "A deployment is already running")
 	out, err = k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, app.CreateNodeInput{Type: domain.NodeService, Deploy: true})
 	if err != nil || out.DeploymentID != "" || !k.node(out.ID).Dirty {
 		t.Fatalf("refused ship: %+v %v", out, err)
 	}
-	// Any other failure rolls the create back.
 	k.shipErr = errors.New("disk on fire")
 	if _, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, app.CreateNodeInput{Type: domain.NodeService, Name: "boom", Deploy: true}); err == nil {
 		t.Fatal("no error")
@@ -183,7 +178,6 @@ func TestCanvasRenameNode(t *testing.T) {
 		}
 	}
 
-	// Same name: no-op even though it would not validate otherwise; nothing published.
 	k.exec(`UPDATE nodes SET name = 'Legacy_Name' WHERE id = ?`, api)
 	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("Legacy_Name")}); err != nil {
 		t.Fatal(err)
@@ -229,11 +223,9 @@ func TestCanvasSetDesired(t *testing.T) {
 	if !n.Dirty || *n.Desired.Port != 6380 || n.Desired.Replicas != 2 || n.Desired.Image != "redis:7" || n.Desired.Revision != 3 || !n.Desired.Tracing {
 		t.Fatalf("desired %+v dirty %v", n.Desired, n.Dirty)
 	}
-	// Referrers are dirty transitively; unrelated nodes are not.
 	if !k.node(worker).Dirty || !k.node(api).Dirty || k.node(other).Dirty {
 		t.Errorf("dirty: worker %v api %v other %v", k.node(worker).Dirty, k.node(api).Dirty, k.node(other).Dirty)
 	}
-	// Unchanged values still stage a change (dirty is sticky, no diff).
 	k.clean(env)
 	if err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), other, app.NodeUpdate{Image: canvasPtr("nginx:alpine")}); err != nil || !k.node(other).Dirty {
 		t.Fatalf("same image: dirty %v %v", k.node(other).Dirty, err)
@@ -245,7 +237,6 @@ func TestCanvasSetDesired(t *testing.T) {
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Image must look like repo/name:tag")
 	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Port: canvasPtr(70000.0), Replicas: canvasPtr(99.0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Port must be 1–65535")
-	// A failed update writes nothing, also not the rename that came before it.
 	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: canvasPtr("api-2"), Replicas: canvasPtr(99.0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Replicas must be 0–20")
 	if k.node(api).Name != "api" {
@@ -280,28 +271,24 @@ func TestCanvasConfigAndParent(t *testing.T) {
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{Config: &domain.NodeConfig{SizeGb: canvasPtr(0.0)}}), domain.CodeInvalidInput, "Size must be more than 0 GB")
 	canvasWantErr(t, k.app.UpdateNode(k.ctx, m, group, app.NodeUpdate{Config: &domain.NodeConfig{Height: canvasPtr(-1.0)}}), domain.CodeInvalidInput, "Width and height must be more than 0")
 
-	// Into a group: the position becomes relative, the place on the canvas stays.
 	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &group}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(vol); n.ParentID != group || n.Position != (domain.Position{X: 30, Y: 40}) {
 		t.Fatalf("in group: parent %q at %+v", n.ParentID, n.Position)
 	}
-	// From one group to another.
 	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &group2}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(vol); n.ParentID != group2 || n.Position != (domain.Position{X: -870, Y: 90}) {
 		t.Fatalf("in group 2: parent %q at %+v", n.ParentID, n.Position)
 	}
-	// With an explicit position.
 	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: &group, Position: &domain.Position{X: 1, Y: 2}}); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(vol); n.ParentID != group || n.Position != (domain.Position{X: 1, Y: 2}) {
 		t.Fatalf("explicit: parent %q at %+v", n.ParentID, n.Position)
 	}
-	// Out to the top level.
 	if err := k.app.UpdateNode(k.ctx, m, vol, app.NodeUpdate{ParentID: canvasPtr("")}); err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +364,6 @@ func TestCanvasDuplicateNode(t *testing.T) {
 	if orig.Name != "postgres" || len(orig.Endpoints) != 1 {
 		t.Errorf("original changed: %+v", orig)
 	}
-	// Second copy, volume copy (not dirty), groups refused.
 	if id, _ := k.app.DuplicateNode(k.ctx, canvasMember(canvasOrg), pg); k.node(id).Name != "postgres-copy-2" {
 		t.Errorf("second copy %q", k.node(id).Name)
 	}
@@ -386,7 +372,6 @@ func TestCanvasDuplicateNode(t *testing.T) {
 	}
 	_, err = k.app.DuplicateNode(k.ctx, canvasMember(canvasOrg), group)
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Groups cannot be duplicated")
-	// Long names are cut to 32 before -copy.
 	k.exec(`UPDATE nodes SET name = ? WHERE id = ?`, strings.Repeat("n", 40), api)
 	if id, _ := k.app.DuplicateNode(k.ctx, canvasMember(canvasOrg), api); k.node(id).Name != strings.Repeat("n", 32)+"-copy" {
 		t.Errorf("long copy %q", k.node(id).Name)
@@ -400,7 +385,6 @@ func TestCanvasStartStop(t *testing.T) {
 	vol := k.create(env, app.CreateNodeInput{Type: domain.NodeVolume})
 	m := canvasMember(canvasOrg)
 
-	// Never shipped: Start is Deploy.
 	id, err := k.app.StartNode(k.ctx, m, api)
 	if err != nil || id != "dep-"+env {
 		t.Fatalf("start: %q %v", id, err)
@@ -413,7 +397,6 @@ func TestCanvasStartStop(t *testing.T) {
 	}
 	k.exec(`UPDATE nodes SET desired_revision = 1, dirty = 0 WHERE id = ?`, api)
 
-	// Stop: 0 replicas, shipped as "stop".
 	did, ok, err := k.app.StopNode(k.ctx, m, api)
 	if err != nil || !ok || did != "dep-"+env {
 		t.Fatalf("stop: %q %v %v", did, ok, err)
@@ -424,18 +407,15 @@ func TestCanvasStartStop(t *testing.T) {
 	if n := k.node(api); n.Desired.Replicas != 0 || !n.Dirty {
 		t.Errorf("after stop %+v", n.Desired)
 	}
-	// Already stopped: nothing, no deployment.
 	if did, ok, err := k.app.StopNode(k.ctx, m, api); err != nil || ok || did != "" || len(k.ships) != 2 {
 		t.Fatalf("stop again: %q %v %v", did, ok, err)
 	}
-	// Start after stop: back to 1 replica (not 3), verb start.
 	if _, err := k.app.StartNode(k.ctx, m, api); err != nil {
 		t.Fatal(err)
 	}
 	if n := k.node(api); n.Desired.Replicas != 1 || k.ships[2].Opts.Verb != "start" {
 		t.Errorf("restart: replicas %d verb %q", n.Desired.Replicas, k.ships[2].Opts.Verb)
 	}
-	// A refused ship rolls the patch back.
 	k.exec(`UPDATE nodes SET dirty = 0 WHERE id = ?`, api)
 	k.shipErr = domain.E(domain.CodeDeploymentRunning, "A deployment is already running")
 	_, _, err = k.app.StopNode(k.ctx, m, api)
@@ -484,13 +464,11 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if topics := k.pub.take(canvasOrg); !canvasHas(topics, "/api/nodes/"+pg) || !canvasHas(topics, "/api/environments/"+env) || !canvasHas(topics, "/api/nodes/"+web) {
 		t.Errorf("topics %v", topics)
 	}
-	// The reference now resolves to nothing and shows as missing.
 	vars, _ := k.app.ListVariables(k.ctx, m, api)
 	if vars[0].Resolved != "" || !vars[0].Parts[0].Ref.Missing {
 		t.Errorf("dangling reference %+v", vars[0])
 	}
 
-	// A group: children move to the top level and keep their place; no Swarm work.
 	if err := k.app.RemoveNode(k.ctx, m, group); err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +478,6 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if k.proxy != 1 || len(k.removed) != 1 {
 		t.Errorf("group delete scheduled work: %d %v", k.proxy, k.removed)
 	}
-	// Missing, already gone, foreign: no error, nothing happens.
 	for _, id := range []string{"nope", pg} {
 		if err := k.app.RemoveNode(k.ctx, m, id); err != nil {
 			t.Errorf("remove %s: %v", id, err)
@@ -517,7 +494,7 @@ func TestCanvasSummary(t *testing.T) {
 	k.create(env, app.CreateNodeInput{Type: domain.NodeDatabase})
 	k.create(env, app.CreateNodeInput{Type: domain.NodeVolume})
 	group := k.create(env, app.CreateNodeInput{Type: domain.NodeGroup})
-	k.exec(`UPDATE nodes SET dirty = 1 WHERE id = ?`, group) // never counted
+	k.exec(`UPDATE nodes SET dirty = 1 WHERE id = ?`, group)
 	k.exec(`UPDATE nodes SET desired_revision = 1, dirty = 0, observed_at = 1, observed_revision = 1, observed_running = 1,
 		observed_state = 'ok', observed_node_ids = '[]' WHERE id = ?`, api)
 
@@ -543,8 +520,6 @@ func TestCanvasSummary(t *testing.T) {
 	}
 }
 
-// A member of another organization can neither read nor change this organization's canvas:
-// reads come back empty (as if missing), writes fail as "not found", deletes do nothing.
 func TestCanvasOtherOrganization(t *testing.T) {
 	k := canvasSetup(t)
 	env := k.project(canvasOrg, "Acme")
@@ -588,7 +563,6 @@ func TestCanvasOtherOrganization(t *testing.T) {
 	if n.Name != "api" || n.Position != (domain.Position{}) || n.Dirty || k.vars(api)[0].Value != "v" || len(k.ships) != 0 || len(k.removed) != 0 {
 		t.Errorf("foreign writes landed: %+v %+v", n, k.vars(api))
 	}
-	// A signed-in user without an organization is the same.
 	if nodes, _ := k.app.ListNodes(k.ctx, domain.Actor{UserID: "u"}, env); len(nodes) != 0 {
 		t.Error("no-org user lists nodes")
 	}

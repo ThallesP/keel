@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-// Error codes. They are the CLI's code vocabulary (docs/cli.md, "Contract"): fields and codes are
-// only ever added. The transport maps each to an HTTP status (docs/go/ARCHITECTURE.md, "Errors").
 const (
 	CodeNotAuthenticated     = "NOT_AUTHENTICATED"
 	CodeNoOrganization       = "NO_ORGANIZATION"
@@ -27,8 +25,6 @@ const (
 	CodeServerError          = "SERVER_ERROR"
 )
 
-// Error is a failure the caller should see: a code to branch on and a sentence to show. Messages
-// are kept identical to the Convex ConvexError messages they replace.
 type Error struct {
 	Code    string
 	Message string
@@ -36,7 +32,6 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
-// E builds an *Error. Use the helpers below for the common codes.
 func E(code, format string, args ...any) *Error {
 	if len(args) == 0 {
 		return &Error{Code: code, Message: format}
@@ -48,7 +43,6 @@ func Invalid(format string, args ...any) *Error  { return E(CodeInvalidInput, fo
 func NotFound(format string, args ...any) *Error { return E(CodeNotFound, format, args...) }
 func Conflict(format string, args ...any) *Error { return E(CodeConflict, format, args...) }
 
-// Messages the dashboard and CLI already know, from convex/access.ts.
 const (
 	MsgNotAuthenticated    = "Not authenticated"
 	MsgNoOrganization      = "You're not in an organization yet. Ask a member for an invite link."
@@ -61,7 +55,6 @@ var (
 	ErrNoOrganization   = &Error{Code: CodeNoOrganization, Message: MsgNoOrganization}
 )
 
-// CodeOf is err's code, or SERVER_ERROR for anything that is not a *Error.
 func CodeOf(err error) string {
 	var e *Error
 	if errors.As(err, &e) {

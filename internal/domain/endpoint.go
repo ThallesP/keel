@@ -2,8 +2,6 @@ package domain
 
 import "strconv"
 
-// EndpointProtocol: http = https://<domain> on the control plane's 80/443; tcp/udp =
-// <public IP>:<publicPort>. Both → svc-<id>:<port>. See docs/networking.md.
 type EndpointProtocol string
 
 const (
@@ -26,22 +24,17 @@ type EndpointStatus struct {
 	At    int64         `json:"at"`
 }
 
-// Endpoint is one way in from the internet, served by keel-proxy.
 type Endpoint struct {
-	ID       string           `json:"id"`
-	NodeID   string           `json:"nodeId"`
-	Protocol EndpointProtocol `json:"protocol"`
-	// The container port the proxy dials.
-	Port int `json:"port"`
-	// Expose was given a container port other than the node's; otherwise Port follows the
-	// node's port each time a change to it ships.
-	PinnedPort bool           `json:"pinnedPort,omitempty"`
-	Domain     string         `json:"domain,omitempty"`     // http only; unique per install
-	PublicPort *int           `json:"publicPort,omitempty"` // tcp/udp only; unique per protocol
-	Status     EndpointStatus `json:"status"`
+	ID         string           `json:"id"`
+	NodeID     string           `json:"nodeId"`
+	Protocol   EndpointProtocol `json:"protocol"`
+	Port       int              `json:"port"`
+	PinnedPort bool             `json:"pinnedPort,omitempty"`
+	Domain     string           `json:"domain,omitempty"`
+	PublicPort *int             `json:"publicPort,omitempty"`
+	Status     EndpointStatus   `json:"status"`
 }
 
-// Key is the endpoint's identity across the install: http:<domain>, tcp:<publicPort>, udp:<…>.
 func (e Endpoint) Key() string {
 	if e.Protocol == ProtocolHTTP {
 		return "http:" + e.Domain
@@ -53,8 +46,6 @@ func (e Endpoint) Key() string {
 	return string(e.Protocol) + ":" + strconv.Itoa(port)
 }
 
-// Address is how the endpoint is reached: https://<domain>, or <ip>:<publicPort> (the literal
-// text "<public IP>" when KEEL_PUBLIC_IP is unknown). docs/go/spec/proxy-ingress.md §3.6.
 func (e Endpoint) Address(publicIP string) string {
 	if e.Protocol == ProtocolHTTP {
 		return "https://" + e.Domain

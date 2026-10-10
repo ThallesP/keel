@@ -17,8 +17,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// A fake Docker Engine API on httptest: what the adapter sends and how it reads the answers.
-
 type dockerCall struct {
 	method, path, query, body string
 }
@@ -26,7 +24,7 @@ type dockerCall struct {
 type fakeDocker struct {
 	mu       sync.Mutex
 	calls    []dockerCall
-	handlers map[string]func(w http.ResponseWriter, r *http.Request) // "METHOD /path" without the version prefix
+	handlers map[string]func(w http.ResponseWriter, r *http.Request)
 }
 
 var versionPrefix = regexp.MustCompile(`^/v[0-9.]+`)
@@ -203,7 +201,7 @@ func TestDockerRemoveLegacyTunnels(t *testing.T) {
 			deleted = append(deleted, c.path)
 		}
 	}
-	if strings.Join(deleted, " ") != "/services/t1 /services/t2" { // t2 is already gone: 404 is fine
+	if strings.Join(deleted, " ") != "/services/t1 /services/t2" {
 		t.Fatalf("deleted: %v", deleted)
 	}
 }
@@ -243,7 +241,7 @@ func TestDockerEnsureAgent(t *testing.T) {
 	if err := s.EnsureAgent(ctx, spec); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.EnsureAgent(ctx, spec); err != nil { // unchanged: no update
+	if err := s.EnsureAgent(ctx, spec); err != nil {
 		t.Fatal(err)
 	}
 	spec.Token = "rotated"

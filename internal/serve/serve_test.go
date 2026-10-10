@@ -37,7 +37,6 @@ func TestConfigJS(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("ConfigJS(%+v) =\n%s\nwant\n%s", tc.cfg, got, tc.want)
 		}
-		// What the CLI's discovery does: the JSON between the first "{" and the last "}".
 		var v map[string]string
 		if err := json.Unmarshal([]byte(got[strings.Index(got, "{"):strings.LastIndex(got, "}")+1]), &v); err != nil {
 			t.Fatalf("CLI cannot parse %q: %v", got, err)
@@ -48,7 +47,6 @@ func TestConfigJS(t *testing.T) {
 	}
 }
 
-// fakeAdapter records what serve handed it and when it was released.
 type fakeAdapter struct {
 	mu     sync.Mutex
 	app    *app.App
@@ -109,8 +107,6 @@ func TestServeOn(t *testing.T) {
 	if resp, body = get("/api/meta"); resp.StatusCode != 200 || !strings.Contains(body, `"version":"1.2.3"`) {
 		t.Fatalf("/api/meta: %d %s", resp.StatusCode, body)
 	}
-	// SPA fallback, never cached (an upgrade changes the assets index.html names); directories
-	// are client routes too, never listings.
 	for _, path := range []string{"/", "/index.html", "/p/acme", "/assets", "/assets/"} {
 		resp, body = get(path)
 		if resp.StatusCode != 200 || !strings.Contains(body, "<title>Keel</title>") || resp.Header.Get("Cache-Control") != "no-cache" {
@@ -124,7 +120,6 @@ func TestServeOn(t *testing.T) {
 		t.Fatalf("/version: %d %v %q", resp.StatusCode, resp.Header, body)
 	}
 
-	// The adapter ran with the jobs scheduler and the realtime publisher already in place.
 	fake.mu.Lock()
 	a := fake.app
 	fake.mu.Unlock()
@@ -145,7 +140,6 @@ func TestServeOn(t *testing.T) {
 		t.Fatal("job did not run")
 	}
 
-	// /api/ws is mounted: a session that does not resolve is told it is signed out.
 	wsctx, wscancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer wscancel()
 	ws, _, err := websocket.Dial(wsctx, "ws://"+ln.Addr().String()+"/api/ws", &websocket.DialOptions{
@@ -166,7 +160,6 @@ func TestServeOn(t *testing.T) {
 		t.Fatalf("ws close %d (%v), want 4501", got, err)
 	}
 
-	// Graceful shutdown: returns cleanly, releases the adapter, leaves a reopenable database.
 	cancel()
 	select {
 	case err := <-done:
@@ -192,9 +185,6 @@ func TestServeOn(t *testing.T) {
 	store.Close()
 }
 
-// A job still running at shutdown (an apply pulling an image) is cancelled before the deadline
-// and can still write its outcome: the database closes only after it returned. The whole
-// shutdown stays inside the budget, which fits `docker stop`'s default 10 s.
 func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	if ShutdownTimeout+realtimeCloseTimeout >= 10*time.Second {
 		t.Fatalf("shutdown budget %v + %v does not fit docker stop's default 10 s", ShutdownTimeout, realtimeCloseTimeout)
@@ -229,7 +219,7 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	started, wrote := make(chan struct{}), make(chan error, 1)
 	a.Jobs.After("apply", 0, func(ctx context.Context) {
 		close(started)
-		<-ctx.Done() // a long Docker call, cancelled by the shutdown
+		<-ctx.Done()
 		time.Sleep(50 * time.Millisecond)
 		wrote <- a.Store.Write(context.WithoutCancel(ctx), func(app.Tx) error { return nil })
 	})

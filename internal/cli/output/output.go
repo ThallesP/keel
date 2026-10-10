@@ -1,10 +1,3 @@
-// Package output is the CLI's one contract with whoever reads it, a person or an agent.
-//
-// stdout carries results only: text or a table for people, exactly one JSON object with --json
-// (or KEEL_JSON=1, the same switch install.sh reads). Streams (logs --follow) are one JSON object
-// per line. Progress and warnings always go to stderr. Errors are {"ok":false,"code","error","fix"}
-// on stdout in JSON mode, `error:` / `fix:` lines on stderr otherwise, and set the exit code.
-// Fields are only ever added, never renamed or removed.
 package output
 
 import (
@@ -18,11 +11,9 @@ import (
 	"golang.org/x/term"
 )
 
-// Error codes. Stable: agents branch on them.
 const (
-	CodeUsage            = "USAGE"
-	CodeNotAuthenticated = "NOT_AUTHENTICATED"
-	// keel login is waiting for someone to approve its link in the dashboard.
+	CodeUsage                = "USAGE"
+	CodeNotAuthenticated     = "NOT_AUTHENTICATED"
 	CodeAuthorizationPending = "AUTHORIZATION_PENDING"
 	CodeNoOrganization       = "NO_ORGANIZATION"
 	CodeNoProjects           = "NO_PROJECTS"
@@ -34,8 +25,8 @@ const (
 	CodeDeploymentRunning    = "DEPLOYMENT_RUNNING"
 	CodeDeploymentFailed     = "DEPLOYMENT_FAILED"
 	CodeNothingToShip        = "NOTHING_TO_SHIP"
-	CodeNameTaken            = "NAME_TAKEN" // a project slug or service name already in use
-	CodeTracesOff            = "TRACES_OFF" // no Axiom sink, or one from before traces
+	CodeNameTaken            = "NAME_TAKEN"
+	CodeTracesOff            = "TRACES_OFF"
 	CodeInvalidInput         = "INVALID_INPUT"
 	CodeDiscoveryFailed      = "DISCOVERY_FAILED"
 	CodeNetwork              = "NETWORK_ERROR"
@@ -43,14 +34,13 @@ const (
 	CodeConfig               = "CONFIG_ERROR"
 	CodeTimeout              = "TIMEOUT"
 	CodeCancelled            = "CANCELLED"
-	CodeConflict             = "CONFLICT"     // e.g. a domain or public port another service uses
-	CodeUnavailable          = "UNAVAILABLE"  // the server can't do it yet (e.g. public IP unknown)
-	CodeForbidden            = "FORBIDDEN"    // signed in, but not allowed (role, origin)
-	CodeNotFound             = "NOT_FOUND"    // something other than a project, service, variable or deployment
-	CodeRateLimited          = "RATE_LIMITED" // too many attempts: retry later (fix says when)
+	CodeConflict             = "CONFLICT"
+	CodeUnavailable          = "UNAVAILABLE"
+	CodeForbidden            = "FORBIDDEN"
+	CodeNotFound             = "NOT_FOUND"
+	CodeRateLimited          = "RATE_LIMITED"
 )
 
-// Exit codes: 0 ok, 1 error, 2 usage, 4 needs login (as gh), 130 interrupted.
 const (
 	ExitError     = 1
 	ExitUsage     = 2
@@ -58,13 +48,11 @@ const (
 	ExitCancelled = 130
 )
 
-// Error is every failure the CLI reports. Message says what happened, Fix the next command to run.
 type Error struct {
 	Code    string
 	Message string
 	Fix     string
-	// Extra fields for the JSON error object, e.g. the failed deployment.
-	Extra map[string]any
+	Extra   map[string]any
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -81,7 +69,6 @@ func (e *Error) ExitCode() int {
 	return ExitError
 }
 
-// CodeOf is the code of err if it is (or wraps) an *Error, "" otherwise.
 func CodeOf(err error) string {
 	var e *Error
 	if errors.As(err, &e) {
@@ -104,8 +91,6 @@ func New(json bool) *Printer {
 	return &Printer{JSON: json, Out: os.Stdout, Err: os.Stderr}
 }
 
-// Result prints a command's result: v as {"ok":true,...} in JSON mode (v must encode to an
-// object), human(stdout) otherwise.
 func (p *Printer) Result(v any, human func(w io.Writer)) {
 	if p.JSON {
 		p.Out.Write(withOK(true, encode(v)))
@@ -114,7 +99,6 @@ func (p *Printer) Result(v any, human func(w io.Writer)) {
 	human(p.Out)
 }
 
-// Event prints one item of a stream: a JSON line, or the human line as is.
 func (p *Printer) Event(v any, human string) {
 	if p.JSON {
 		p.Out.Write(encode(v))
@@ -123,7 +107,6 @@ func (p *Printer) Event(v any, human string) {
 	fmt.Fprintln(p.Out, human)
 }
 
-// Progress is for people watching; it never reaches stdout.
 func (p *Printer) Progress(format string, args ...any) {
 	fmt.Fprintf(p.Err, format+"\n", args...)
 }
@@ -132,7 +115,6 @@ func (p *Printer) Warn(format string, args ...any) {
 	fmt.Fprintf(p.Err, "warning: "+format+"\n", args...)
 }
 
-// Fail reports err and returns the exit code.
 func (p *Printer) Fail(e *Error) int {
 	fmt.Fprintf(p.Err, "error: %s\n", e.Message)
 	if e.Fix != "" {
@@ -148,10 +130,8 @@ func (p *Printer) Fail(e *Error) int {
 	return e.ExitCode()
 }
 
-// IsTerminal reports whether f is an interactive terminal. Nothing prompts unless stdin is one.
 func IsTerminal(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
 
-// encode is json.Marshal plus a newline, without HTML escaping: log lines keep their `<` and `&`.
 func encode(v any) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -162,10 +142,9 @@ func encode(v any) []byte {
 	return buf.Bytes()
 }
 
-// withOK puts "ok" first in an encoded object, so results stay plain structs.
 func withOK(ok bool, obj []byte) []byte {
 	head := []byte(fmt.Sprintf(`{"ok":%t`, ok))
-	rest := bytes.TrimSpace(obj)[1:] // drop "{"
+	rest := bytes.TrimSpace(obj)[1:]
 	if rest[0] != '}' {
 		head = append(head, ',')
 	}

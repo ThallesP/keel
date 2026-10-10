@@ -16,37 +16,23 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// The keel-agent global service: `keel agent` on every Swarm node, forwarding Docker events and
-// shipping container logs to serve. Replaces scripts/deploy-worker.sh (docs/go/spec/swarm-worker.md
-// §14.2) and keeps its settings: global mode, host network, the Docker socket mounted read-only,
-// the keel-worker-state volume at /var/lib/keel-worker (the agent's state file survives the switch
-// from the Bun worker), restart on any exit after 2 s, 10 s stop grace period, the image pinned by
-// digest when Docker knows one and never resolved against a registry by Swarm.
-
 const (
-	agentServiceName = "keel-agent"
-	agentSpecLabel   = "keel.agent.spec" // fingerprint of the spec below: unchanged → no update
-	agentStateVolume = "keel-worker-state"
-	agentStateDir    = "/var/lib/keel-worker"
-	// The worker token reaches the agent as a Swarm secret, never as service env (which anyone
-	// with `docker service inspect` reads). Named after a hash of the token so a rotation is a new
-	// secret and a spec change; not keel-worker-token-*, which removeLegacyAgents deletes.
+	agentServiceName  = "keel-agent"
+	agentSpecLabel    = "keel.agent.spec"
+	agentStateVolume  = "keel-worker-state"
+	agentStateDir     = "/var/lib/keel-worker"
 	agentSecretPrefix = "keel-agent-token-"
-	agentSecretTarget = "keel_worker_token" // the agent reads /run/secrets/keel_worker_token
+	agentSecretTarget = "keel_worker_token"
 	dockerSocketPath  = "/var/run/docker.sock"
 )
 
-// legacyAgentServices are what keel-agent replaces: the Bun worker (deploy-worker.sh) and the
-// shell forwarder before it. Running both would ship every log line twice.
 var legacyAgentServices = []string{"keel-worker", "keel-events"}
 
-// agentSecretName is the secret holding token.
 func agentSecretName(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return agentSecretPrefix + hex.EncodeToString(sum[:6])
 }
 
-// agentSpec is the service spec for image (already pinned); secretID is the token's secret.
 func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec {
 	restartDelay := 2 * time.Second
 	grace := 10 * time.Second
@@ -67,10 +53,8 @@ func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec
 					{Type: mount.TypeVolume, Source: agentStateVolume, Target: agentStateDir},
 				},
 				StopGracePeriod: &grace,
-				// The agent reads the socket (uid 0 owns it) and writes its own state volume: it
-				// needs no capability and must not gain any.
-				CapabilityDrop: []string{"ALL"},
-				Privileges:     &swarm.Privileges{NoNewPrivileges: true},
+				CapabilityDrop:  []string{"ALL"},
+				Privileges:      &swarm.Privileges{NoNewPrivileges: true},
 			},
 			RestartPolicy: &swarm.RestartPolicy{Condition: swarm.RestartPolicyConditionAny, Delay: &restartDelay},
 			Networks:      []swarm.NetworkAttachmentConfig{{Target: "host"}},
@@ -83,8 +67,6 @@ func agentSpec(image string, a app.AgentSpec, secretID string) swarm.ServiceSpec
 	return spec
 }
 
-// EnsureAgent creates keel-agent, or updates it when its spec changed, then removes the legacy
-// services it replaces.
 func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
 	secretID, err := s.ensureAgentSecret(ctx, a.Token)
 	if err != nil {
@@ -111,7 +93,6 @@ func (s *Swarm) EnsureAgent(ctx context.Context, a app.AgentSpec) error {
 	return nil
 }
 
-// ensureAgentSecret is the id of the secret holding token, created when missing.
 func (s *Swarm) ensureAgentSecret(ctx context.Context, token string) (string, error) {
 	name := agentSecretName(token)
 	res, err := s.cli.SecretList(ctx, client.SecretListOptions{Filters: make(client.Filters).Add("name", name)})
@@ -133,8 +114,6 @@ func (s *Swarm) ensureAgentSecret(ctx context.Context, token string) (string, er
 	return created.ID, nil
 }
 
-// removeStaleAgentSecrets removes the secrets of earlier tokens, best effort: one still held by a
-// task that is shutting down goes on the next start.
 func (s *Swarm) removeStaleAgentSecrets(ctx context.Context, keep string) {
 	res, err := s.cli.SecretList(ctx, client.SecretListOptions{Filters: make(client.Filters).Add("name", agentSecretPrefix)})
 	if err != nil {
@@ -147,9 +126,6 @@ func (s *Swarm) removeStaleAgentSecrets(ctx context.Context, keep string) {
 	}
 }
 
-// pinnedImage is image@<digest> when the local image has a repo digest (pulled or pushed), so
-// every node runs the same bytes and a moved tag still counts as a change; image as given
-// otherwise (a local build on a single node). An image missing locally is pulled first.
 func (s *Swarm) pinnedImage(ctx context.Context, image string) string {
 	if strings.Contains(image, "@") {
 		return image
@@ -171,8 +147,6 @@ func (s *Swarm) pinnedImage(ctx context.Context, image string) string {
 	return image + "@" + digest
 }
 
-// removeLegacyAgents removes the services keel-agent replaces and, best effort, their secrets and
-// configs (a secret still held by a task that is shutting down goes on the next start).
 func (s *Swarm) removeLegacyAgents(ctx context.Context) {
 	for _, name := range legacyAgentServices {
 		_ = s.removeService(ctx, name)

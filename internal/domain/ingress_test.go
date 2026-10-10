@@ -6,7 +6,6 @@ import (
 )
 
 func TestShortHash(t *testing.T) {
-	// Vectors computed with the TS shortHash (proxy-ingress.md §3.1).
 	cases := map[string]string{
 		"":                                 "ztntfp",
 		"a":                                "r9wi7g",
@@ -51,7 +50,7 @@ func TestMovedDefaultDomain(t *testing.T) {
 
 func TestValidDomain(t *testing.T) {
 	l63 := strings.Repeat("a", 63)
-	max := l63 + "." + l63 + "." + l63 + "." + strings.Repeat("b", 61) // 253 chars
+	max := l63 + "." + l63 + "." + l63 + "." + strings.Repeat("b", 61)
 	ok := map[string]string{
 		"app.example.com":       "app.example.com",
 		"  App.Example.COM.  ":  "app.example.com",

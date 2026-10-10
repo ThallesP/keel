@@ -6,17 +6,12 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// EnvironmentSummary is the Ship button's and status bar's numbers (convex/environments.ts summary).
 type EnvironmentSummary struct {
-	// Deployable nodes with a staged change: "Ship · N changes".
 	PendingChanges int
-	// Derived status per node, groups excluded (volumes count as pending). Zero counts are absent.
-	Counts map[domain.NodeStatus]int
-	// Ready Swarm nodes, install-wide.
-	Servers int
+	Counts         map[domain.NodeStatus]int
+	Servers        int
 }
 
-// EnvironmentSummaryOf is nil when the environment is missing or not the actor's.
 func (a *App) EnvironmentSummaryOf(ctx context.Context, actor domain.Actor, environmentID string) (*EnvironmentSummary, error) {
 	var out *EnvironmentSummary
 	err := a.read(ctx, func(tx Tx) error {

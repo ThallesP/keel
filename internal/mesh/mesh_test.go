@@ -27,7 +27,6 @@ func TestTailnetHostname(t *testing.T) {
 	}
 }
 
-// Without an auth key the agent uses the host network: no tsnet node is started.
 func TestOpenWithoutAuthKey(t *testing.T) {
 	m, err := Open(context.Background(), Options{})
 	if err != nil {

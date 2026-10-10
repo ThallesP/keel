@@ -10,7 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// The full example of proxy-ingress.md §6.3, base config included.
 const golden63 = `{
   "admin": { "listen": "unix//run/keel-proxy/admin.sock|0600" },
   "apps": {
@@ -81,7 +80,6 @@ var (
 	reporter63 = proxyReporter{URL: "http://100.64.0.1:3211/proxy/events", Token: "<KEEL_WORKER_TOKEN>"}
 )
 
-// sameJSON compares two JSON documents structurally (key order does not matter, array order does).
 func sameJSON(t *testing.T, got any, want string) {
 	t.Helper()
 	b, err := json.Marshal(got)

@@ -8,20 +8,14 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// DockerEvent is what POST /worker/events keeps of a Docker event: enough to name the node it
-// concerns (convex/events.ts dockerEvent).
 type DockerEvent struct {
-	Type        string   // container | service | node | ...
-	Action      string   // create | start | die | update | ...
-	Name        string   // Actor.Attributes.name ("" when absent)
-	ServiceName string   // Actor.Attributes["com.docker.swarm.service.name"] ("" when absent)
-	Time        *float64 // time, when a number
+	Type        string
+	Action      string
+	Name        string
+	ServiceName string
+	Time        *float64
 }
 
-// IngestWorkerEvents maps agent-forwarded Docker events to scans (events.ingest): resync → one
-// full sweep; a `node` event → one server count per batch; a container or service event naming
-// svc-<id> → a debounced scan of that node, once per node per batch. Ids that are not ours are
-// ignored. Called by the bearer-protected agent route; it does no Docker call itself.
 func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resync bool) {
 	if resync {
 		a.Jobs.After("observe:all", 0, a.observeAll)

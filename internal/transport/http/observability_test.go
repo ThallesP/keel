@@ -1,8 +1,5 @@
 package http
 
-// Observability routes end to end over HTTP: real SQLite, fake Axiom and Docker, the caller set
-// by a test header (the auth area resolves sessions; not under test here).
-
 import (
 	"context"
 	"encoding/json"
@@ -171,7 +168,6 @@ func TestObservabilityRoutes(t *testing.T) {
 		t.Fatalf("pending: %s", r.body)
 	}
 
-	// Tracing: foreign → null; a sink without traces → TRACES_OFF problem.
 	if r := h.do(t, "foreigner", "GET", "/api/nodes/api/tracing", ""); r.status != 200 || r.body != `{"tracing":null}` {
 		t.Fatalf("foreign tracing: %d %s", r.status, r.body)
 	}
@@ -199,7 +195,6 @@ func TestObservabilityRoutes(t *testing.T) {
 		t.Fatalf("local env on: %s", r.body)
 	}
 
-	// Traces: validation is a 422 problem; a missing environment is PROJECT_NOT_FOUND.
 	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces?range=2d", ""), 422, domain.CodeInvalidInput, "")
 	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces", ""), 422, domain.CodeInvalidInput, "")
 	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/traces/xyz", ""), 422, domain.CodeInvalidInput, "Not a trace id")
@@ -216,7 +211,6 @@ func TestObservabilityRoutes(t *testing.T) {
 		t.Fatalf("trace: %d %s", r.status, r.body)
 	}
 
-	// Logs.
 	if r := h.do(t, "member", "GET", "/api/environments/env/logs?range=1h", ""); r.status != 200 || r.body != `{"source":"axiom","lines":[]}` {
 		t.Fatalf("env logs: %d %s", r.status, r.body)
 	}
@@ -226,7 +220,6 @@ func TestObservabilityRoutes(t *testing.T) {
 	obsWantProblem(t, h.do(t, "member", "GET", "/api/environments/env/logs/around", ""), 422, domain.CodeInvalidInput, "")
 	obsWantProblem(t, h.do(t, "foreigner", "GET", "/api/nodes/api/logs", ""), 404, domain.CodeServiceNotFound, "Node not found")
 
-	// The prompt.
 	r = h.do(t, "member", "GET", "/api/tracing/prompt?nodeId=api", "")
 	var prompt struct{ Prompt string }
 	_ = json.Unmarshal([]byte(r.body), &prompt)
@@ -234,7 +227,6 @@ func TestObservabilityRoutes(t *testing.T) {
 		t.Fatalf("prompt: %s", r.body[:200])
 	}
 
-	// Disconnect.
 	if r := h.do(t, "member", "DELETE", "/api/organization/log-sink", ""); r.status != 204 {
 		t.Fatalf("disconnect: %d %s", r.status, r.body)
 	}
@@ -303,7 +295,6 @@ func TestWorkerConfigRoute(t *testing.T) {
 			t.Fatalf("%s: %s", path, r.body)
 		}
 	}
-	// No token configured: everything is refused.
 	h.app.Config.WorkerToken = ""
 	if r := h.do(t, "", "GET", "/worker/config", "", "Authorization", "Bearer "); r.status != 401 {
 		t.Fatalf("unset token: %d", r.status)

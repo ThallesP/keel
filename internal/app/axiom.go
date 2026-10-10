@@ -1,9 +1,5 @@
 package app
 
-// The Axiom provider, read side and Sign in with Axiom helpers (logProviders/axiom.ts). Ingest
-// is done by the per-node agent; this file builds APL, maps rows and computes the OAuth bits.
-// HTTP is the Axiom port (adapters/axiom).
-
 import (
 	"context"
 	"crypto/rand"
@@ -18,7 +14,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// axiomCfg is the TS AxiomConfig: a host, a dataset and the API token for both.
 type axiomCfg struct {
 	Domain  string
 	Dataset string
@@ -31,8 +26,6 @@ func axiomLogsCfg(s domain.LogSink) axiomCfg {
 	return axiomCfg{Domain: s.Domain, Dataset: s.Dataset, Token: s.Token}
 }
 
-// AxiomBaseURL: api.axiom.co → https://api.axiom.co; a full origin (local mock) passes through.
-// Trailing slashes are stripped.
 func AxiomBaseURL(domain string) string {
 	if !strings.Contains(domain, "://") {
 		domain = "https://" + domain
@@ -41,19 +34,16 @@ func AxiomBaseURL(domain string) string {
 }
 
 const (
-	axiomQueryWindowMs = 30 * 24 * 60 * 60_000 // tail queries look back 30 days
-	axiomUntilSlackMs  = 60_000                // end of a query window: now + 60s
+	axiomQueryWindowMs = 30 * 24 * 60 * 60_000
+	axiomUntilSlackMs  = 60_000
 )
 
-// aplLit is an APL string literal.
 func aplLit(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
-// aplDataset is ['<dataset>'] (dataset names are validated; inlined as the TS did).
 func aplDataset(dataset string) string { return "['" + dataset + "']" }
 
-// axiomQuery runs APL over [since, until ?? now+60s].
 func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, since float64, until *float64) ([]*JSONObject, error) {
 	end := float64(a.Now() + axiomUntilSlackMs)
 	if until != nil {
@@ -64,8 +54,6 @@ func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, since fl
 
 var axiomInvalidFieldRE = regexp.MustCompile(`Axiom 400.*invalid field`)
 
-// axiomRows is tailQuery / spans: a dataset nothing reached yet has no fields and APL rejects
-// them with 400 "invalid field"; that is "no rows", not an error. since nil = now - 30 days.
 func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, since, until *float64) ([]*JSONObject, error) {
 	from := float64(a.Now() - axiomQueryWindowMs)
 	if since != nil {
@@ -88,21 +76,17 @@ var (
 	axiomAuthErrRE = regexp.MustCompile(`40[13]`)
 )
 
-// axiomVerify is the connect-time check: the token can create/see the dataset and query it.
 func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
 	if !domain.ValidDataset(cfg.Dataset) {
 		return errors.New("Dataset name: letters, digits, - _ . only")
 	}
 	err := a.Axiom.CreateDataset(ctx, cfg.target(), "", cfg.Dataset, "Keel container logs")
-	// 409 / "already exists" is the normal case on reconnect. Anything else but 401/403 is left
-	// to the query below, which proves access.
 	if err != nil && !axiomExistsRE.MatchString(err.Error()) && axiomAuthErrRE.MatchString(err.Error()) {
 		return err
 	}
 	return a.axiomCanQuery(ctx, cfg)
 }
 
-// axiomCanQuery: the token can query the dataset.
 func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
 	_, err := a.axiomQuery(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), nil)
 	return err
@@ -115,7 +99,6 @@ func logStreamOf(v any) string {
 	return "stdout"
 }
 
-// axiomTail is the last n lines of one service, oldest first, plus the replicas seen.
 func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n int) (domain.LogTail, error) {
 	apl := aplDataset(cfg.Dataset) + " | where service_id == " + aplLit(serviceID) +
 		" | sort by _time desc | limit " + strconv.Itoa(n) + " | project _time, message, stream, task, replica"
@@ -126,7 +109,7 @@ func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n i
 	lines := make([]domain.ServiceLogLine, len(rows))
 	for i, r := range rows {
 		t, _ := r.Get("_time")
-		ms, _ := jsDateParse(jsString(t)) // Date.parse(...) || 0: integer ms, no sub-ms
+		ms, _ := jsDateParse(jsString(t))
 		msg, _ := r.Get("message")
 		stream, _ := r.Get("stream")
 		task, _ := r.Get("task")
@@ -148,7 +131,6 @@ func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n i
 	return domain.LogTail{Source: domain.LogSourceAxiom, Lines: lines, Replicas: replicas}, nil
 }
 
-// sortLogReplicas: by slot, then task (localeCompare); stable.
 func sortLogReplicas(rs []domain.LogReplica) {
 	sort.SliceStable(rs, func(i, j int) bool {
 		if rs[i].Slot != rs[j].Slot {
@@ -158,7 +140,6 @@ func sortLogReplicas(rs []domain.LogReplica) {
 	})
 }
 
-// linesQuery is axiomLines' options. From nil = now - 30 days, To nil = now + 60s.
 type linesQuery struct {
 	N           int
 	Search      string
@@ -166,8 +147,6 @@ type linesQuery struct {
 	OldestFirst bool
 }
 
-// axiomLines is up to n lines of the given services in [from, to), oldest first: the newest
-// ones, or with OldestFirst the earliest. Search is a case-insensitive substring of the line.
 func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string, q linesQuery) ([]domain.EnvironmentLogLine, error) {
 	if len(serviceIDs) == 0 {
 		return []domain.EnvironmentLogLine{}, nil
@@ -209,8 +188,6 @@ func (a *App) axiomLines(ctx context.Context, cfg axiomCfg, serviceIDs []string,
 	return lines, nil
 }
 
-// axiomAuthURL is Axiom's OAuth server; KEEL_AXIOM_AUTH_URL applies only with
-// KEEL_ALLOW_LOCAL_SINKS=1. Trailing slashes are stripped.
 func (a *App) axiomAuthURL() string {
 	u := "https://authorization.axiom.co"
 	if a.Config.AllowLocalSinks && a.Config.AxiomAuthURL != "" {
@@ -219,7 +196,6 @@ func (a *App) axiomAuthURL() string {
 	return strings.TrimRight(u, "/")
 }
 
-// axiomAPIOverride is KEEL_AXIOM_API_URL when KEEL_ALLOW_LOCAL_SINKS=1, else "".
 func (a *App) axiomAPIOverride() string {
 	if a.Config.AllowLocalSinks {
 		return a.Config.AxiomAPIURL
@@ -232,18 +208,16 @@ func obsBase64URL(b []byte) string { return base64.RawURLEncoding.EncodeToString
 func obsRandom(n int) []byte {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		panic(err) // crypto/rand never fails on supported platforms
+		panic(err)
 	}
 	return b
 }
 
-// axiomPKCEChallenge is base64url(SHA-256(verifier)).
 func axiomPKCEChallenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return obsBase64URL(sum[:])
 }
 
-// axiomAuthorizeURL is a fresh PKCE verifier + state and the authorize URL (S256 challenge).
 func (a *App) axiomAuthorizeURL(clientID, redirectURI string) (state, verifier, url string) {
 	verifier = obsBase64URL(obsRandom(32))
 	state = obsBase64URL(obsRandom(16))
@@ -259,8 +233,6 @@ func (a *App) axiomAuthorizeURL(clientID, redirectURI string) (state, verifier, 
 	return state, verifier, url
 }
 
-// axiomJWTClaims are a JWT's claims, unverified (the token came straight from Axiom's token
-// endpoint); nil when it is not a JWT.
 func axiomJWTClaims(token string) *JSONObject {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
@@ -281,7 +253,6 @@ func axiomJWTClaims(token string) *JSONObject {
 	return obj
 }
 
-// axiomJWTAudience is JSON.stringify(aud ?? null) of the token, for error messages. Never the token.
 func axiomJWTAudience(token string) string {
 	c := axiomJWTClaims(token)
 	if c == nil {
@@ -291,15 +262,12 @@ func axiomJWTAudience(token string) string {
 	return jsStringify(aud)
 }
 
-// axiomChosenOrg is the org picked on Axiom's consent page: the token's axiomDefaultOrg claim
-// (undocumented; an org id like ramp-vcrw), "" when absent.
 func axiomChosenOrg(token string) string {
 	v, _ := axiomJWTClaims(token).Get("axiomDefaultOrg")
 	s, _ := v.(string)
 	return s
 }
 
-// axiomOrgs is the orgs the personal token can see, each with the API host its data lives on.
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
 	override := a.axiomAPIOverride()
 	host := domain.AxiomDomains[0]
@@ -308,8 +276,6 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 	}
 	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: host, Token: token})
 	if err != nil {
-		// The sign-in token is issued for Axiom's MCP server; if its API ever stops taking it,
-		// say so plainly instead of a bare 401.
 		return nil, errors.New(err.Error() + " (Axiom API rejected the sign-in token, aud " + axiomJWTAudience(token) + ")")
 	}
 	orgs := make([]domain.AxiomOrg, len(infos))
@@ -332,8 +298,6 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 	return orgs, nil
 }
 
-// axiomProvision, with the personal token: create keel-logs and keel-traces if missing and mint
-// one API token named label that can only ingest into and query those two.
 func (a *App) axiomProvision(ctx context.Context, token string, org domain.AxiomOrg, label string) (domain.LogSink, error) {
 	t := AxiomTarget{Domain: org.Domain, Token: token}
 	existing, err := a.Axiom.Datasets(ctx, t, org.ID)
@@ -379,9 +343,6 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 
 var axiom400RE = regexp.MustCompile(`^Axiom 400\b`)
 
-// datasetCapMessage explains a refused dataset create: past its plan's dataset cap Axiom answers
-// a bare 400, so a 400 while the org's own datasets reach the cap names the cap; anything else
-// is "Creating <name>: <msg>". There is no up-front cap check, by design.
 func datasetCapMessage(org domain.AxiomOrg, own []string, missing [][2]string, have map[string]bool, name string, err error) string {
 	var left []string
 	for _, d := range missing {

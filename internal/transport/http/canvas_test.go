@@ -18,8 +18,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// canvasHTTP serves the canvas routes over a temp database. The actor is injected directly (the
-// auth area resolves real sessions).
 type canvasHTTP struct {
 	t     *testing.T
 	srv   *httptest.Server
@@ -55,7 +53,6 @@ func canvasServe(t *testing.T) *canvasHTTP {
 	return c
 }
 
-// do sends body (JSON-encoded unless it is a string) and returns status, content type, raw body.
 func (c *canvasHTTP) do(method, path string, body any) (int, string, string) {
 	c.t.Helper()
 	var r io.Reader
@@ -93,7 +90,6 @@ func (c *canvasHTTP) json(method, path string, body any, wantStatus int, out any
 	}
 }
 
-// problem checks an error response: status, problem+json, code and the sentence.
 func (c *canvasHTTP) problem(method, path string, body any, status int, code, detail string) {
 	c.t.Helper()
 	got, ct, raw := c.do(method, path, body)
@@ -156,16 +152,13 @@ func TestCanvasHTTPNodes(t *testing.T) {
 		t.Fatalf("duplicate %+v", dup)
 	}
 
-	// Summary: two dirty services.
 	if _, _, raw := c.do("GET", "/api/environments/env/summary", nil); raw != `{"summary":{"pendingChanges":2,"counts":{"pending":2},"servers":0}}` {
 		t.Errorf("summary %s", raw)
 	}
 
-	// Volumes have no runtime: delete needs no Swarm work. Missing ids are a 204 too.
 	var vol struct{ ID string }
 	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "volume"}, 201, &vol)
 	c.problem("POST", "/api/nodes/"+vol.ID+"/stop", nil, 422, "INVALID_INPUT", "This node type cannot be stopped")
-	// Already at 0 replicas: nothing ships, and the field is null rather than absent (web-data M9).
 	var idle struct{ ID string }
 	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "idle", "replicas": 0}, 201, &idle)
 	if status, _, raw := c.do("POST", "/api/nodes/"+idle.ID+"/stop", nil); status != 200 || raw != `{"deploymentId":null}` {
@@ -213,7 +206,7 @@ func TestCanvasHTTPVariables(t *testing.T) {
 		t.Errorf("sources %+v", sources)
 	}
 
-	for _, key := range []string{"DB", "DB", "NEVER"} { // no-op when missing
+	for _, key := range []string{"DB", "DB", "NEVER"} {
 		if status, _, raw := c.do("POST", base+"/delete", map[string]any{"key": key}); status != 204 {
 			t.Errorf("delete %s: %d %s", key, status, raw)
 		}
@@ -237,7 +230,6 @@ func TestCanvasHTTPProjectsAndAccess(t *testing.T) {
 	var node struct{ ID string }
 	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "service"}, 201, &node)
 
-	// Another organization's member: null / empty reads, not-found writes.
 	c.actor = domain.Actor{UserID: "v", OrganizationID: "org-b", Role: "member"}
 	for path, want := range map[string]string{
 		"/api/environments/env/summary":                      `{"summary":null}`,
@@ -262,7 +254,6 @@ func TestCanvasHTTPProjectsAndAccess(t *testing.T) {
 		t.Errorf("foreign delete removed the node: %s", raw)
 	}
 
-	// Signed out.
 	c.actor = domain.Actor{}
 	c.problem("GET", "/api/projects", nil, 401, "NOT_AUTHENTICATED", "Not authenticated")
 	c.problem("DELETE", "/api/nodes/"+node.ID, nil, 401, "NOT_AUTHENTICATED", "Not authenticated")

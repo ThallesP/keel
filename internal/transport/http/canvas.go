@@ -11,9 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Canvas area: projects, environments, nodes, variables (docs/go/ARCHITECTURE.md "Resolved API
-// decisions", docs/go/spec/web-data.md §4).
-
 type canvasIDInput struct {
 	ID string `path:"id"`
 }

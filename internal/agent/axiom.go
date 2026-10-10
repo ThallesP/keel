@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// AxiomSink POSTs NDJSON to the dataset's ingest endpoint. Field names are kept as they are;
-// `_time` is the timestamp Axiom indexes on. Basic (ingest-only) API tokens are enough for this
-// side (docs/go/spec/observability.md §11.8).
 type AxiomSink struct {
 	key   string
 	url   string
@@ -20,13 +17,12 @@ type AxiomSink struct {
 	http  *http.Client
 	log   *Logger
 
-	attempts int           // 5
-	timeout  time.Duration // 15 s per attempt
-	backoff  time.Duration // 1 s, doubled per attempt (1+2+4+8+16 = 31 s)
+	attempts int
+	timeout  time.Duration
+	backoff  time.Duration
 	sleep    func(context.Context, time.Duration) error
 }
 
-// NewAxiomSink builds the sink of an Axiom config.
 func NewAxiomSink(cfg SinkConfig, hc *http.Client, log *Logger) *AxiomSink {
 	return &AxiomSink{
 		key: sinkKey(cfg), url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token,
@@ -35,9 +31,6 @@ func NewAxiomSink(cfg SinkConfig, hc *http.Client, log *Logger) *AxiomSink {
 	}
 }
 
-// axiomIngestURL depends on the host, as in axiom-go: api.axiom.co / api.eu.axiom.co take
-// /v1/datasets/<dataset>/ingest (/v1/ingest/<dataset> is 404 there); regional edge hosts
-// (*.edge.axiom.co) take /v1/ingest/<dataset>.
 func axiomIngestURL(domain, dataset string) string {
 	base := domain
 	if !strings.Contains(base, "://") {
@@ -52,9 +45,6 @@ func axiomIngestURL(domain, dataset string) string {
 
 func (s *AxiomSink) Key() string { return s.key }
 
-// Send delivers a batch: up to 5 attempts, 15 s each, sleeping 1, 2, 4, 8, 16 s after each failed
-// one (also after the last). 2xx → true; 4xx other than 429 → dropped as malformed, true; still
-// failing after 5 attempts → false (the caller keeps the batch). Also false when ctx ends.
 func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
 	lines := make([][]byte, len(events))
 	for i, e := range events {
@@ -84,7 +74,6 @@ func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
 	return false
 }
 
-// post is one attempt; text is the first 200 characters of the response.
 func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
@@ -107,8 +96,6 @@ func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) 
 	return res.StatusCode, truncate(string(raw), 200), nil
 }
 
-// encodeURIComponent is JavaScript's: everything but A-Z a-z 0-9 - _ . ! ~ * ' ( ) is
-// percent-encoded as UTF-8.
 func encodeURIComponent(s string) string {
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder

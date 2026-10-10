@@ -22,7 +22,6 @@ func igStatus(eps []domain.Endpoint) []string {
 	return out
 }
 
-// igExposeAll: an http and a tcp endpoint on igAPI / igPG, synced once.
 func igExposeAll(t *testing.T, e *igEnv) {
 	t.Helper()
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
@@ -81,7 +80,6 @@ func TestProxySyncLoadsAndRecordsStatuses(t *testing.T) {
 		t.Fatalf("published %v", got)
 	}
 
-	// Nothing changed: the resync loads the same bytes and writes nothing.
 	e.now = 9_000
 	e.app.ResyncProxy(e.ctx)
 	e.jobs.Run(t)
@@ -128,7 +126,6 @@ func TestProxySyncCertStates(t *testing.T) {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
 
-	// /keel/certs failing only means "not known yet".
 	e.proxy.certsErr = errors.New("keel-proxy did not answer within 30s")
 	e.app.ScheduleProxySync()
 	e.jobs.Run(t)
@@ -156,7 +153,6 @@ func TestProxySyncBlamesTheListener(t *testing.T) {
 		t.Fatalf("api: %q", got)
 	}
 
-	// 443 taken: every http endpoint fails, tcp still loads.
 	e.proxy.loadErrs = []error{&app.ProxyRejected{Message: "http app module: start: listening on host-tcp/[2001:db8::1]:443: listen tcp [2001:db8::1]:443: bind: address already in use"}}
 	e.app.ScheduleProxySync()
 	e.jobs.Run(t)
@@ -203,8 +199,6 @@ func TestProxySyncWholeFailure(t *testing.T) {
 	}
 }
 
-// After the last unexpose, a sync loads `{}`; when that fails, the resync keeps trying even
-// though nothing is exposed any more.
 func TestProxyResync(t *testing.T) {
 	e := newIngressEnv(t)
 	e.app.ResyncProxy(e.ctx)
@@ -240,7 +234,6 @@ func TestProxyResync(t *testing.T) {
 	}
 }
 
-// Endpoints changed while the config loaded: the sync goes again with the new set.
 func TestProxySyncGoesAgainWhenEndpointsMove(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
@@ -257,7 +250,7 @@ func TestProxySyncGoesAgainWhenEndpointsMove(t *testing.T) {
 		t.Fatalf("loads: %q", e.proxy.loads)
 	}
 	if got := e.endpoints("extra"); got[0].Status.State != domain.EndpointStarting {
-		t.Fatalf("extra: %+v", got) // http, cert pending
+		t.Fatalf("extra: %+v", got)
 	}
 	if got := e.endpoints(igPG); got[0].Status.State != domain.EndpointLive {
 		t.Fatalf("pg: %+v", got)
@@ -307,7 +300,6 @@ func TestProxyCertReport(t *testing.T) {
 	if got := e.endpoints(igAPI)[0].Status; got != (domain.EndpointStatus{State: domain.EndpointLive, At: 50_000}) {
 		t.Fatalf("got %+v", got)
 	}
-	// Unknown names are ignored; no sync is scheduled when no sync is running.
 	e.pub.take()
 	if err := e.app.ReportCert(e.ctx, app.CertObtained, "nobody.example.com", ""); err != nil {
 		t.Fatal(err)
@@ -320,9 +312,6 @@ func TestProxyCertReport(t *testing.T) {
 	}
 }
 
-// The race of proxy-ingress.md §8 / Q5: the certificate arrives (and is reported live) right
-// after a sync read /keel/certs as pending, so that sync writes `starting` over the report. The
-// sync then goes once more and the endpoint ends live, with no 2-minute wait.
 func TestProxyCertReportDuringSync(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
@@ -349,7 +338,6 @@ func TestProxyCertReportDuringSync(t *testing.T) {
 		t.Fatalf("certs read %d times, want 2 (the sync, then once more)", len(e.proxy.certCalls))
 	}
 
-	// With no sync running, a report schedules nothing.
 	if err := e.app.ReportCert(e.ctx, app.CertObtained, name, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -358,9 +346,6 @@ func TestProxyCertReportDuringSync(t *testing.T) {
 	}
 }
 
-// Jobs coalesces only syncs that have not started: each one asked for while a sync runs is fired
-// in its own goroutine. They must neither wait for the running sync nor each run a full sync
-// after it: they collapse into one more pass (the coalescing trigger of §5.1).
 func TestProxySyncCoalescesWhileRunning(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
@@ -397,21 +382,19 @@ func TestProxySyncCoalescesWhileRunning(t *testing.T) {
 		t.Fatalf("4 syncs asked for during one load pushed %d configs, want 2", got)
 	}
 
-	// The loop is free again: the next sync runs.
 	e.app.SyncProxy(e.ctx)
 	if got := e.proxy.loadCount() - before; got != 3 {
 		t.Fatalf("after the burst: %d loads, want 3", got)
 	}
 }
 
-// A sync whose context is cancelled frees the loop for the next one.
 func TestProxySyncCancelledFreesTheLoop(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
 	ctx, cancel := context.WithCancel(e.ctx)
 	e.proxy.onLoad = func(int) {
 		cancel()
-		e.app.SyncProxy(e.ctx) // asked for meanwhile: dropped with the cancelled loop
+		e.app.SyncProxy(e.ctx)
 	}
 	e.app.SyncProxy(ctx)
 	e.proxy.onLoad = nil
@@ -449,7 +432,6 @@ func TestProxyRecover(t *testing.T) {
 		t.Fatalf("resync: %v", e.jobs.every)
 	}
 
-	// Run again: nothing left to move, nothing written.
 	e.pub.take()
 	e.app.RecoverIngressForTest(e.ctx)
 	if got := e.pub.take(); len(got) != 0 {
@@ -457,8 +439,6 @@ func TestProxyRecover(t *testing.T) {
 	}
 }
 
-// The IP flipped back after the node was exposed again on the other IP: the old endpoint cannot
-// take a name its sibling already serves, and the rest of the migration still runs.
 func TestProxyRecoverKeepsDomainsUnique(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
@@ -481,8 +461,6 @@ func TestProxyRecoverKeepsDomainsUnique(t *testing.T) {
 	}
 }
 
-// After a reboot keel-proxy comes up after serve: the start-up sync waits for its admin socket
-// instead of marking every endpoint failed until the 2-minute resync.
 func TestProxyStartupWaitsForTheProxy(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
@@ -490,14 +468,12 @@ func TestProxyStartupWaitsForTheProxy(t *testing.T) {
 	e.setEndpoints(igAPI, domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api-16w41g.203-0-113-7.sslip.io", Status: live})
 	e.proxy.addrsErr = errors.New("keel-proxy is not running (no admin socket at /run/keel-proxy/admin.sock)")
 	e.app.RecoverIngressForTest(e.ctx)
-	// The first few looks find no proxy: nothing is synced, nothing marked failed.
 	for i := 0; i < 3; i++ {
 		e.jobs.RunOne(t, "proxy:startup")
 	}
 	if e.jobs.Pending("proxy:sync") || e.endpoints(igAPI)[0].Status.State != domain.EndpointLive {
 		t.Fatalf("synced while the proxy was down: %+v", e.endpoints(igAPI))
 	}
-	// The proxy answers: the next look syncs.
 	e.proxy.addrsErr = nil
 	e.jobs.RunOne(t, "proxy:startup")
 	if !e.jobs.Pending("proxy:sync") {

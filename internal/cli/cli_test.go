@@ -18,7 +18,7 @@ func TestPickProject(t *testing.T) {
 		name     string
 		projects []client.Project
 		slug     string
-		want     string // slug, or error code
+		want     string
 	}{
 		{"none", nil, "", output.CodeNoProjects},
 		{"only one, nothing asked", one, "", "api"},
@@ -38,8 +38,6 @@ func TestPickProject(t *testing.T) {
 	}
 }
 
-// Missing or bad input fails as USAGE before keel connects anywhere; no install is configured
-// here, so getting past the checks is NOT_AUTHENTICATED.
 func TestUsageBeforeConnecting(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	t.Setenv("KEEL_URL", "")
@@ -47,15 +45,15 @@ func TestUsageBeforeConnecting(t *testing.T) {
 	for args, want := range map[string]string{
 		"project create --json":                                            output.CodeUsage,
 		"project create acme-api --link --json":                            output.CodeNotAuthenticated,
-		"service create api --json":                                        output.CodeUsage, // no --image
+		"service create api --json":                                        output.CodeUsage,
 		"service create api --image nginx --port x --json":                 output.CodeUsage,
 		"service create api --image nginx --port 3000 --replicas 2 --json": output.CodeNotAuthenticated,
-		"service delete api --json":                                        output.CodeUsage, // no terminal to ask, no --yes
+		"service delete api --json":                                        output.CodeUsage,
 		"service delete api --yes --json":                                  output.CodeNotAuthenticated,
 		"service rm api -y --json":                                         output.CodeNotAuthenticated,
-		"run api --json":                                                   output.CodeUsage, // no -- <command>
+		"run api --json":                                                   output.CodeUsage,
 		"run api npm start --json":                                         output.CodeUsage,
-		"run --json -- npm start":                                          output.CodeUsage, // no service
+		"run --json -- npm start":                                          output.CodeUsage,
 		"run api --json -- npm start":                                      output.CodeNotAuthenticated,
 		"traces --since 2h --json":                                         output.CodeUsage,
 		"traces api --since 1h --json":                                     output.CodeNotAuthenticated,
@@ -78,11 +76,8 @@ func TestRunEnv(t *testing.T) {
 	vars := []client.Variable{
 		{Key: "LOG_LEVEL", Resolved: "debug"},
 		{Key: "STRIPE_KEY", Resolved: "sk_test"},
-		// A service imported from a Convex-era install keeps its 32-character id.
 		{Key: "DATABASE_URL", Resolved: "postgres://app:pw@svc-jn7ezbwt9755e1g1s3e7ped1zs8ededv:5432/app"},
-		// A service created since: 20 characters (domain.NewID).
 		{Key: "REDIS_URL", Resolved: "redis://:pw@svc-k3b7q2mx9wd4tz8hn5ra:6379"},
-		// Not an overlay host: too short to be an id.
 		{Key: "UPSTREAM", Resolved: "http://svc-api:8080"},
 		{Key: "OTEL_SERVICE_NAME", Resolved: "api-custom"},
 	}
@@ -94,9 +89,9 @@ func TestRunEnv(t *testing.T) {
 		got[k] = v
 	}
 	for k, want := range map[string]string{
-		"LOG_LEVEL":                   "warn",       // the shell wins
-		"STRIPE_KEY":                  "sk_test",    // the service's variable
-		"OTEL_SERVICE_NAME":           "api-custom", // the service's own wins over tracing, as deployed
+		"LOG_LEVEL":                   "warn",
+		"STRIPE_KEY":                  "sk_test",
+		"OTEL_SERVICE_NAME":           "api-custom",
 		"OTEL_TRACES_EXPORTER":        "otlp",
 		"OTEL_EXPORTER_OTLP_ENDPOINT": "https://keel.test/otlp",
 		"UPSTREAM":                    "http://svc-api:8080",
@@ -113,7 +108,6 @@ func TestRunEnv(t *testing.T) {
 	if env, _ := runEnv(shell, nil, nil, "x"); len(env) != len(shell) {
 		t.Errorf("no tracing: %v", env)
 	}
-	// An endpoint of the app's own: the ingest key does not go there.
 	tracing["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer%20keel_otlp_x"
 	for _, own := range []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"} {
 		env, _ := runEnv(append(slices.Clone(shell), own+"=https://collector.test"), nil, tracing, "x")
@@ -163,8 +157,8 @@ func TestLineSetSkipsWhatWasPrinted(t *testing.T) {
 	var printed []string
 	for _, poll := range [][]client.LogLine{
 		{at(1, "a"), at(2, "b")},
-		{at(1, "a"), at(2, "b"), at(2, "c"), at(3, "d")}, // overlapping tail, a new line at 2s
-		{at(3, "d"), at(3, "d")},                         // nothing new
+		{at(1, "a"), at(2, "b"), at(2, "c"), at(3, "d")},
+		{at(3, "d"), at(3, "d")},
 	} {
 		for _, l := range poll {
 			if s.add(l) {

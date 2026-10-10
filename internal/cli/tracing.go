@@ -42,7 +42,6 @@ dashboard.`,
 			if err != nil {
 				return err
 			}
-			// Without a service the project only names itself in the text, so no project is fine.
 			_, env, err := a.project(ctx, s)
 			if err != nil && len(args) == 1 {
 				return err
@@ -168,7 +167,6 @@ with traces (TRACES_OFF otherwise).`,
 	}
 }
 
-// tracingOf resolves a service and reads its tracing.
 func (a *app) tracingOf(cmd *cobra.Command, name string) (*client.Service, *client.Tracing, error) {
 	ctx := cmd.Context()
 	s, err := a.connect(ctx)

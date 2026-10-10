@@ -1,7 +1,3 @@
-// Package axiom implements app.Axiom: Axiom's REST API (APL queries, datasets, tokens, orgs),
-// its OAuth server (Dynamic Client Registration, authorization code + PKCE) and the OTLP traces
-// endpoint the relay forwards to. Plain net/http; the app builds every message from the errors
-// returned here (*app.AxiomError, *app.OAuthError). See docs/go/spec/observability.md §3.2, §4.7.
 package axiom
 
 import (
@@ -19,18 +15,13 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// Client talks to Axiom. The zero value is not usable; use New.
 type Client struct {
-	// HTTP is used for every call; tests point it at httptest servers.
-	HTTP *http.Client
-	// Timeout bounds REST and OAuth calls (the TS had none; Convex's action limit stood in).
-	// The OTLP forward is bounded by the caller's context instead.
+	HTTP    *http.Client
 	Timeout time.Duration
 }
 
 var _ app.Axiom = (*Client)(nil)
 
-// New is a client with a 60 s timeout per REST call.
 func New() *Client {
 	return &Client{HTTP: &http.Client{}, Timeout: 60 * time.Second}
 }
@@ -42,8 +33,6 @@ func (c *Client) withTimeout(ctx context.Context) (context.Context, context.Canc
 	return context.WithCancel(ctx)
 }
 
-// call is the TS call()/personal(): bearer + JSON headers (+ x-axiom-org-id), non-2xx →
-// *app.AxiomError. Returns the response body.
 func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, path string, body any) ([]byte, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -85,7 +74,6 @@ type aplBody struct {
 	EndTime   string `json:"endTime"`
 }
 
-// Query runs APL and returns the first table's rows (column-major → objects keyed by field).
 func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]*app.JSONObject, error) {
 	data, err := c.call(ctx, t, "", http.MethodPost, "/v1/datasets/_apl?format=tabular",
 		aplBody{APL: q.APL, StartTime: q.StartTime, EndTime: q.EndTime})
@@ -95,8 +83,6 @@ func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery)
 	return tabularRows(data)
 }
 
-// tabularRows: {tables: [{fields: [{name}], columns: [[...], ...]}]} → rows of the first table.
-// No table → no rows.
 func tabularRows(data []byte) ([]*app.JSONObject, error) {
 	v, err := app.DecodeJSON(data)
 	if err != nil {
@@ -145,7 +131,6 @@ func field(o *app.JSONObject, k string) any {
 	return v
 }
 
-// jsKey: a non-string field name used as a JS property key.
 func jsKey(v any) string {
 	if v == nil {
 		return "undefined"
@@ -183,7 +168,6 @@ func (c *Client) Datasets(ctx context.Context, t app.AxiomTarget, orgID string) 
 	return out, nil
 }
 
-// truthy is JS truthiness of a JSON value.
 func truthy(v any) bool {
 	switch x := v.(type) {
 	case nil:
@@ -261,7 +245,6 @@ func (c *Client) Orgs(ctx context.Context, t app.AxiomTarget) ([]app.AxiomOrgInf
 	return out, nil
 }
 
-// oauthPost posts to the OAuth server and decodes the JSON answer (anything else → nil body).
 func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, body []byte) (int, *app.JSONObject, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
@@ -329,7 +312,6 @@ func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCo
 	return token, nil
 }
 
-// ForwardTraces posts the OTLP body unchanged to <base>/v1/traces.
 func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTPReply, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, app.AxiomBaseURL(f.Domain)+"/v1/traces", bytes.NewReader(f.Body))
 	if err != nil {

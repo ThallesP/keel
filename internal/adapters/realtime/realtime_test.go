@@ -19,13 +19,12 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Actors by bearer token. "boom" makes Authenticate fail.
 var actors = map[string]domain.Actor{
 	"alice":   {UserID: "u-alice", OrganizationID: "org-a", SessionID: "s-alice-1"},
 	"alice2":  {UserID: "u-alice", OrganizationID: "org-a", SessionID: "s-alice-2"},
 	"bob":     {UserID: "u-bob", OrganizationID: "org-b", SessionID: "s-bob"},
-	"newbie":  {UserID: "u-newbie", SessionID: "s-newbie"}, // signed in, no organization yet
-	"expired": {},                                          // token that resolves to signed out
+	"newbie":  {UserID: "u-newbie", SessionID: "s-newbie"},
+	"expired": {},
 }
 
 func authenticate(r *http.Request) (domain.Actor, error) {
@@ -65,7 +64,6 @@ func newHarness(t *testing.T, window time.Duration) *harness {
 	return &harness{t: t, rt: rt, srv: srv}
 }
 
-// message is one centrifuge protocol v2 JSON message (a reply or a push).
 type message struct {
 	ID    uint32 `json:"id"`
 	Error *struct {
@@ -85,12 +83,11 @@ type message struct {
 	} `json:"push"`
 }
 
-// client is a raw WebSocket speaking centrifuge's JSON protocol, as the dashboard's JS client does.
 type client struct {
 	t      *testing.T
 	ws     *websocket.Conn
 	msgs   chan message
-	closed chan error // the read error that ended the connection
+	closed chan error
 	nextID uint32
 }
 
@@ -124,7 +121,6 @@ func (c *client) readLoop() {
 			close(c.msgs)
 			return
 		}
-		// One frame may carry several newline-separated messages; "{}" is a ping.
 		dec := json.NewDecoder(bytes.NewReader(data))
 		for {
 			var m message
@@ -132,7 +128,7 @@ func (c *client) readLoop() {
 				break
 			}
 			if m.ID == 0 && m.Push == nil {
-				continue // ping
+				continue
 			}
 			c.msgs <- m
 		}
@@ -150,7 +146,6 @@ func (c *client) send(cmd map[string]any) uint32 {
 	return c.nextID
 }
 
-// next is the next message, failing after 2 s.
 func (c *client) next() message {
 	c.t.Helper()
 	select {
@@ -165,7 +160,6 @@ func (c *client) next() message {
 	return message{}
 }
 
-// quiet asserts nothing arrives for d.
 func (c *client) quiet(d time.Duration) {
 	c.t.Helper()
 	select {
@@ -177,7 +171,6 @@ func (c *client) quiet(d time.Duration) {
 	}
 }
 
-// closeStatus waits for the server to close the connection and returns the close code.
 func (c *client) closeStatus() websocket.StatusCode {
 	c.t.Helper()
 	for {
@@ -250,7 +243,7 @@ func TestAuthenticateErrorAsksToRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.send(map[string]any{"connect": map[string]any{}})
-	if got := c.closeStatus(); got != 3004 { // centrifuge "internal server error": reconnect
+	if got := c.closeStatus(); got != 3004 {
 		t.Fatalf("close %d, want 3004", got)
 	}
 }
@@ -269,7 +262,6 @@ func TestMemberReceivesOrganizationPublications(t *testing.T) {
 		t.Fatalf("server-side subscriptions = %v, want exactly org:org-a", m.Connect.Subs)
 	}
 
-	// Two writes inside the window: one message, topics deduped and sorted.
 	h.rt.Publish("org-a", []string{"/api/projects", "/api/environments/e1"})
 	h.rt.Publish("org-a", []string{"/api/projects", "/api/nodes/n1"})
 	got := invalidation(t, c.next(), "org:org-a")
@@ -279,7 +271,6 @@ func TestMemberReceivesOrganizationPublications(t *testing.T) {
 	}
 	c.quiet(80 * time.Millisecond)
 
-	// The next window is a new message.
 	h.rt.Publish("org-a", []string{"/api/organization"})
 	if got := invalidation(t, c.next(), "org:org-a"); !reflect.DeepEqual(got.Topics, []string{"/api/organization"}) {
 		t.Fatalf("second invalidation = %+v", got)
@@ -307,7 +298,6 @@ func TestNoCrossOrganizationLeakage(t *testing.T) {
 	}
 	alice.quiet(50 * time.Millisecond)
 
-	// A client cannot subscribe itself to another organization's channel (or any channel).
 	id := alice.send(map[string]any{"subscribe": map[string]any{"channel": "org:org-b"}})
 	reply := alice.next()
 	if reply.ID != id || reply.Error == nil || reply.Subscribe != nil {
@@ -315,7 +305,6 @@ func TestNoCrossOrganizationLeakage(t *testing.T) {
 	}
 	h.rt.Publish("org-b", []string{"/api/projects"})
 	h.rt.Publish("org-a", []string{"/api/nodes/alice-node"})
-	// Alice's next publication is her own: Bob's never reached her.
 	if got := invalidation(t, alice.next(), "org:org-a"); got.Topics[0] != "/api/nodes/alice-node" {
 		t.Fatalf("alice got %+v", got)
 	}
@@ -347,11 +336,11 @@ func TestOrigin(t *testing.T) {
 		origin string
 		ok     bool
 	}{
-		{"", true},                          // not a browser
-		{"http://" + host, true},            // same host as the request
-		{"https://keel.example.com", true},  // KEEL_SITE_URL's host
-		{"https://KEEL.example.com", true},  // hosts compare case-insensitively
-		{"https://evil.example.com", false}, // anything else
+		{"", true},
+		{"http://" + host, true},
+		{"https://keel.example.com", true},
+		{"https://KEEL.example.com", true},
+		{"https://evil.example.com", false},
 		{"https://keel.example.com.evil.io", false},
 		{"null", false},
 	} {
@@ -378,7 +367,7 @@ func TestDisconnectSession(t *testing.T) {
 	h := newHarness(t, -1)
 	tab1 := h.connected("alice")
 	tab2 := h.connected("alice")
-	other := h.connected("alice2") // same user, another session (e.g. the CLI's)
+	other := h.connected("alice2")
 
 	h.rt.DisconnectSession("s-alice-1")
 	for _, c := range []*client{tab1, tab2} {
@@ -389,8 +378,8 @@ func TestDisconnectSession(t *testing.T) {
 	h.rt.Publish("org-a", []string{"/api/projects"})
 	invalidation(t, other.next(), "org:org-a")
 
-	h.rt.DisconnectSession("")        // no-op
-	h.rt.DisconnectSession("missing") // no-op
+	h.rt.DisconnectSession("")
+	h.rt.DisconnectSession("missing")
 	h.rt.Publish("org-a", []string{"/api/projects"})
 	invalidation(t, other.next(), "org:org-a")
 }
@@ -414,20 +403,18 @@ func TestDisconnectUserReconnects(t *testing.T) {
 func TestShutdown(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	c := h.connected("alice")
-	h.rt.Publish("org-a", []string{"/api/projects"}) // queued for an hour
+	h.rt.Publish("org-a", []string{"/api/projects"})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := h.rt.Shutdown(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := c.closeStatus(); got != 3001 { // centrifuge "shutdown": clients reconnect
+	if got := c.closeStatus(); got != 3001 {
 		t.Fatalf("close %d, want 3001", got)
 	}
-	h.rt.Publish("org-a", []string{"/api/projects"}) // no-op, no panic
+	h.rt.Publish("org-a", []string{"/api/projects"})
 }
 
-// The transport re-sends a renewed session's cookie on whatever request renewed it; when that is
-// the WebSocket upgrade, the 101 response must carry it (centrifuge writes the handshake itself).
 func TestHandshakeCarriesRenewedCookie(t *testing.T) {
 	rt, err := New(Config{Authenticate: authenticate, Window: -1, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
@@ -462,14 +449,12 @@ func TestHandshakeCarriesRenewedCookie(t *testing.T) {
 	if resp.Header.Get("X-Injected") != "" {
 		t.Fatal("a header value split the handshake response")
 	}
-	// The connection works as usual after the rewritten handshake.
 	if m := c.connect(); m.Connect == nil || len(m.Connect.Subs) != 1 {
 		t.Fatalf("connect: %+v", m)
 	}
 	rt.Publish("org-a", []string{"/api/projects"})
 	invalidation(t, c.next(), "org:org-a")
 
-	// No cookie set: the handshake is centrifuge's own.
 	_, resp, err = h.dial("bob", "")
 	if err != nil {
 		t.Fatal(err)

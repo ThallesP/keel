@@ -11,10 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// TestApplyInterruptedByShutdown: serve stopping cancels the jobs' context mid-pull. That is not
-// the apply's failure: the deployment stays running with the step unapplied (no "error:" line,
-// no applyError), the rest of the node's queue is dropped, and the next start's recovery pass
-// applies it.
 func TestApplyInterruptedByShutdown(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", image("big:1"))
@@ -46,7 +42,6 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 		}
 	}
 
-	// Next start: the recovery pass applies both.
 	w.restart(app.Config{})
 	delete(w.swarm.pullErr, "big:1")
 	w.swarm.onPull = nil
@@ -57,14 +52,11 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 	}
 }
 
-// TestRecoverDoesNotApplyTwice: serve answers requests while its recovery pass runs, so the pass
-// can read a deployment shipped a moment earlier whose applies are still queued. Re-queuing them
-// must not reach Swarm twice for the same deployment and node.
 func TestRecoverDoesNotApplyTwice(t *testing.T) {
 	w := newWorld(t)
 	w.addNode("api")
-	id := w.ship(app.ShipOptions{}) // its apply is queued, not run yet
-	w.app.Recover(ctx)              // reads the deployment as running with a pending step
+	id := w.ship(app.ShipOptions{})
+	w.app.Recover(ctx)
 	w.jobs.advance(time.Second)
 	d := w.deployment(id)
 	if len(w.swarm.creates) != 1 || len(w.swarm.updates) != 0 {
@@ -81,15 +73,13 @@ func TestRecoverDoesNotApplyTwice(t *testing.T) {
 	}
 }
 
-// TestDockerCallsHaveDeadlines: every Docker call a job makes is bounded (apply by its own
-// deadline, scans and removals by a shorter one), so a hung daemon cannot pile up scans.
 func TestDockerCallsHaveDeadlines(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
 	w.ship(app.ShipOptions{})
-	w.jobs.advance(time.Second) // apply, then its scan
+	w.jobs.advance(time.Second)
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, true)
-	w.jobs.run() // full sweep + server count
+	w.jobs.run()
 	w.deleteNode(a.ID)
 	w.app.ScheduleRemoveService(a.ID)
 	w.app.Recover(ctx)
@@ -102,8 +92,6 @@ func TestDockerCallsHaveDeadlines(t *testing.T) {
 	}
 }
 
-// TestDeploymentLogKeepsLast500: a deployment keeps its last 500 log lines (MAX_LOG), oldest
-// first.
 func TestDeploymentLogKeepsLast500(t *testing.T) {
 	w := newWorld(t)
 	w.addNode("api")

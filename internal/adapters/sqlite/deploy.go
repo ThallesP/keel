@@ -9,9 +9,6 @@ import (
 	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-// Implements app.DeployTx.
-
-// deployLogCap: a deployment keeps its last 500 log lines (convex/deployments.ts MAX_LOG).
 const deployLogCap = 500
 
 func deploymentOf(r sqlc.Deployment) domain.Deployment {
@@ -49,7 +46,6 @@ func (t *tx) deploySteps(id string) ([]domain.DeployStep, error) {
 	return steps, nil
 }
 
-// deployFill attaches steps and, when withLog, the log.
 func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, error) {
 	d := deploymentOf(r)
 	steps, err := t.deploySteps(d.ID)

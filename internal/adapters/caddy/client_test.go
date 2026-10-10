@@ -14,7 +14,6 @@ import (
 	"github.com/ThallesP/keel/internal/app"
 )
 
-// serveAdmin serves handler on a unix socket like keel-proxy's admin endpoint.
 func serveAdmin(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "admin.sock")
@@ -92,7 +91,6 @@ func TestClientErrors(t *testing.T) {
 		t.Fatalf("missing socket: %v", err)
 	}
 
-	// A socket file nobody listens on (the proxy died without cleaning up).
 	stale := filepath.Join(t.TempDir(), "admin.sock")
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: stale, Net: "unix"})
 	if err != nil {

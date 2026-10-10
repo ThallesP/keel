@@ -2,15 +2,11 @@ package app
 
 import "sort"
 
-// Changes collects what a write touched, as URL path prefixes of the API (docs/go/ARCHITECTURE.md,
-// "Realtime"). The dashboard refetches every query whose path starts with one of them.
 type Changes struct {
 	byOrg map[string]map[string]struct{}
 	after []func()
 }
 
-// AfterCommit runs fn once the transaction has committed (and only then): schedule jobs, start
-// applies, kick a proxy sync. Convex's scheduler.runAfter(0, ...) inside a mutation is this.
 func (c *Changes) AfterCommit(fn func()) { c.after = append(c.after, fn) }
 
 func (c *Changes) Add(organizationID string, topics ...string) {
@@ -30,28 +26,20 @@ func (c *Changes) Add(organizationID string, topics ...string) {
 	}
 }
 
-// Projects: the project list.
 func (c *Changes) Projects(org string) { c.Add(org, "/api/projects") }
 
-// Environment: the canvas, summary, deployments and anything else under /api/environments/<id>,
-// plus every node-scoped query (/api/nodes/...): a change to the environment can show in any of
-// its nodes' views (web-data.md §10.2). Changes carry no node list, so this covers the
-// organization's node views; only the few mounted ones refetch.
 func (c *Changes) Environment(org, environmentID string) {
 	c.Add(org, "/api/environments/"+environmentID, "/api/nodes/")
 }
 
-// Node: the node's own endpoints (/api/nodes/<id>/...) and its environment's canvas.
 func (c *Changes) Node(org, environmentID, nodeID string) {
 	c.Add(org, "/api/nodes/"+nodeID, "/api/environments/"+environmentID)
 }
 
-// Deployment: one deployment and its environment's lists.
 func (c *Changes) Deployment(org, environmentID, deploymentID string) {
 	c.Add(org, "/api/deployments/"+deploymentID, "/api/environments/"+environmentID)
 }
 
-// Organization: members, invitations, the log sink, the current organization.
 func (c *Changes) Organization(org string) { c.Add(org, "/api/organization") }
 
 func (c *Changes) publish(p Publisher) {

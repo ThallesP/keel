@@ -23,10 +23,8 @@ ${{ service.KEY }}. Changes are staged, as in the dashboard: keel ship deploys t
 }
 
 type varView struct {
-	Key string `json:"key"`
-	// As written, null when hidden.
-	Value *string `json:"value"`
-	// After ${{ }} references are expanded, null when hidden.
+	Key      string  `json:"key"`
+	Value    *string `json:"value"`
 	Resolved *string `json:"resolved"`
 	Secret   bool    `json:"secret"`
 }
@@ -225,7 +223,6 @@ func (a *app) varDeleteCmd() *cobra.Command {
 	}
 }
 
-// withDone notes which keys a multi-key change got through before it failed.
 func withDone(err error, done []string) error {
 	oe, ok := err.(*output.Error)
 	if !ok || len(done) == 0 {

@@ -1,15 +1,3 @@
-// Package convexexport imports a Convex snapshot export (`npx convex export`, or a dashboard
-// backup) of a Keel install into a fresh SQLite database, so an install upgraded from the Convex
-// control plane keeps its accounts, projects, canvas, variables, deployments and log sink.
-//
-// Layout: every table is a `<table>/documents.jsonl` (one JSON document per line). App tables sit
-// at the root; Better Auth's tables live in the betterAuth component's folder. The importer finds
-// each table by its folder name anywhere in the archive, so the component path does not matter.
-//
-// Ids are kept verbatim: node ids appear in Swarm service names (svc-<id>), labels, default
-// domains and OTel attributes. Not imported: Better Auth's verification/jwks/deviceCode rows,
-// Sign in with Axiom's transient rows, and Convex's scheduled functions (serve's start-up pass
-// re-observes everything).
 package convexexport
 
 import (
@@ -29,7 +17,6 @@ import (
 	"strings"
 )
 
-// Report is what Import did, per table.
 type Report struct {
 	Imported map[string]int `json:"imported"`
 	Skipped  map[string]int `json:"skipped"`
@@ -40,19 +27,16 @@ func (r *Report) warn(format string, args ...any) {
 	r.Warnings = append(r.Warnings, fmt.Sprintf(format, args...))
 }
 
-// HashToken turns a Better Auth session token into what the sessions table stores. serve sets it
-// to the auth area's hash so imported CLI sessions keep working.
 var HashToken func(token string) string
 
 type doc = map[string]any
 
-// tables reads every <table>/documents.jsonl under root (a directory or a .zip).
 func tables(src string) (map[string][]doc, error) {
 	out := map[string][]doc{}
 	add := func(name string, r io.Reader) error {
 		table := path.Base(path.Dir(name))
 		if _, ok := out[table]; !ok {
-			out[table] = []doc{} // an empty table still says what the export is
+			out[table] = []doc{}
 		}
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 1<<20), 64<<20)
@@ -112,8 +96,6 @@ func tables(src string) (map[string][]doc, error) {
 	return out, nil
 }
 
-// sortByCreation orders every table by _creationTime: Keel orders variables (the container's
-// env order), projects and environments by insertion, as Convex did by creation.
 func sortByCreation(t map[string][]doc) {
 	for _, docs := range t {
 		sort.SliceStable(docs, func(i, j int) bool {
@@ -124,14 +106,12 @@ func sortByCreation(t map[string][]doc) {
 	}
 }
 
-// Value helpers: Convex numbers are JSON numbers (float64); optional fields may be absent or null.
-
 func s(d doc, k string) string {
 	v, _ := d[k].(string)
 	return v
 }
 
-func ns(d doc, k string) any { // nullable string
+func ns(d doc, k string) any {
 	if v, ok := d[k].(string); ok && v != "" {
 		return v
 	}
@@ -139,7 +119,7 @@ func ns(d doc, k string) any { // nullable string
 }
 
 func num(d doc, k string) (float64, bool) {
-	v, ok := d[k].(float64) // {"$integer": "..."} would be an Int64; Keel never stores one
+	v, ok := d[k].(float64)
 	return v, ok
 }
 
@@ -148,14 +128,14 @@ func i64(d doc, k string) int64 {
 	return int64(math.Round(v))
 }
 
-func ni64(d doc, k string) any { // nullable integer
+func ni64(d doc, k string) any {
 	if v, ok := num(d, k); ok {
 		return int64(math.Round(v))
 	}
 	return nil
 }
 
-func nf(d doc, k string) any { // nullable float
+func nf(d doc, k string) any {
 	if v, ok := num(d, k); ok {
 		return v
 	}
@@ -181,8 +161,6 @@ func arr(d doc, k string) []any {
 
 func created(d doc) int64 { return i64(d, "_creationTime") }
 
-// Import loads src into the database behind db, in one transaction. The database must hold no
-// organization yet (a fresh `keel serve` data dir, or one where nobody signed up).
 func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 	t, err := tables(src)
 	if err != nil {
@@ -193,8 +171,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 	if !hasProjects && !hasUsers {
 		return nil, fmt.Errorf("%s has no Keel tables (projects, user): is it a Convex export of a Keel install?", src)
 	}
-	// An install nobody signed up on exports its tables empty: that imports as nothing, so the
-	// upgrade goes through and the first sign-up founds the organization as on a fresh install.
 	var orgs int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations`).Scan(&orgs); err != nil {
 		return nil, err
@@ -218,7 +194,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 		return true
 	}
 
-	// Accounts. Passwords are on Better Auth's credential account rows.
 	passwords := map[string]string{}
 	for _, a := range t["account"] {
 		if s(a, "providerId") == "credential" && s(a, "password") != "" {
@@ -292,8 +267,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 		ex("invitations", `INSERT INTO invitations (id, organization_id, email, role, status, inviter_id, expires_at, created_at) VALUES (?,?,?,?,?,?,?,?)`,
 			s(inv, "_id"), s(inv, "organizationId"), strings.ToLower(s(inv, "email")), role, status, s(inv, "inviterId"), i64(inv, "expiresAt"), at)
 	}
-	// Sessions: the CLI keeps working (it sends the raw token as a bearer). Browsers sign in again:
-	// their cookie was Better Auth's.
 	if HashToken != nil {
 		for _, ss := range t["session"] {
 			if !users[s(ss, "userId")] || s(ss, "token") == "" {
@@ -313,7 +286,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 		r.warn("sessions not imported (no token hash configured): everyone signs in again")
 	}
 
-	// Projects. Rows from before organizations had none; the install's organization adopts them.
 	defaultOrg := ""
 	if len(orgIDs) == 1 {
 		defaultOrg = orgIDs[0]
@@ -339,7 +311,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 			s(e, "_id"), s(e, "projectId"), s(e, "name"), b(e, "isProduction"), created(e))
 	}
 
-	// Nodes: parents after children would violate the foreign key, so insert without parents first.
 	parents := map[string]string{}
 	var traced []string
 	for _, n := range t["nodes"] {
@@ -351,8 +322,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 		}
 		dirty := b(n, "dirty")
 		if dTrace == 1 && i64(des, "revision") > 0 {
-			// Deployed with OTEL_EXPORTER_OTLP_ENDPOINT=<CONVEX_SITE_URL>/otlp (port 3211), which no
-			// longer listens: stage it so "Ship · N changes" re-applies the new endpoint.
 			dirty = 1
 			traced = append(traced, s(n, "name"))
 		}
@@ -429,9 +398,6 @@ func Import(ctx context.Context, db *sql.DB, src string) (*Report, error) {
 		ex("cluster", `INSERT OR REPLACE INTO cluster (id, servers, at) VALUES (1, ?, ?)`, i64(c, "servers"), i64(c, "at"))
 	}
 
-	// Log sinks: one per organization; legacy rows name a project instead, and the newest stands
-	// in for its organization (convex/logSinks.ts sinkOf). created_at = _creationTime matters: the
-	// agent replays nothing older than when the sink was connected.
 	sinkOf := map[string]doc{}
 	for _, row := range t["logSinks"] {
 		org := s(row, "organizationId")

@@ -7,26 +7,18 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Projects (convex/projects.ts, docs/go/spec/projects.md §9.1). A project always has its
-// production environment; there is no API to rename or delete either.
-
-// ProjectSummary is a project with its environments, production first.
 type ProjectSummary struct {
 	Project      domain.Project
 	Environments []domain.Environment
 }
 
-// ProjectHome is a project with the environment its canvas opens on (production, else the first).
 type ProjectHome struct {
 	Project     domain.Project
 	Environment domain.Environment
 }
 
-// canvasDefaultProject is what a fresh install's first visit gets.
 var canvasDefaultProject = struct{ Name, Slug string }{"acme-support", "acme-support"}
 
-// canvasMembership is joinOrFound plus whether it founded the organization just now (the caller's
-// session then gains an organization: /api/me and the organization views change).
 func canvasMembership(tx Tx, ch *Changes, actor domain.Actor, now int64) (domain.Actor, error) {
 	if err := actor.RequireUser(); err != nil {
 		return actor, err
@@ -44,7 +36,6 @@ func canvasMembership(tx Tx, ch *Changes, actor domain.Actor, now int64) (domain
 	return m, nil
 }
 
-// canvasInsertProject inserts the project and its production environment.
 func canvasInsertProject(tx Tx, org, name, slug string, now int64) (ProjectSummary, error) {
 	p := domain.Project{ID: domain.NewID(), OrganizationID: org, Name: name, Slug: slug, CreatedAt: now}
 	if err := tx.CanvasInsertProject(p); err != nil {
@@ -64,12 +55,6 @@ func canvasProjectExists(slug string) error {
 	return domain.E(domain.CodeNameTaken, "Project \"%s\" already exists", slug)
 }
 
-// EnsureDefaultProject is the first-use bootstrap of the dashboard's home route: the install's
-// organization (founded by the first account), then the organization's first project, or a new
-// `acme-support` one. Returns the slug to open.
-//
-// Convex also adopted projects from before organizations existed (no organizationId). The SQLite
-// schema makes organization_id NOT NULL, so such rows cannot exist here: the importer assigns them.
 func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (string, error) {
 	var slug string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -95,9 +80,6 @@ func (a *App) EnsureDefaultProject(ctx context.Context, actor domain.Actor) (str
 	return slug, err
 }
 
-// CreateProject creates a project and its production environment, the slug derived from the name.
-// A taken slug is an error, not a suffix: whoever asked (often an agent) is told. Founds the
-// organization like EnsureDefaultProject, so `keel project create` works on a fresh install.
 func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string) (ProjectSummary, error) {
 	var out ProjectSummary
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -128,8 +110,6 @@ func (a *App) CreateProject(ctx context.Context, actor domain.Actor, name string
 	return out, err
 }
 
-// ProjectBySlug is the project route's lookup: nil when signed out, without a membership, unknown
-// slug, or no environment.
 func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string) (*ProjectHome, error) {
 	var out *ProjectHome
 	err := a.read(ctx, func(tx Tx) error {
@@ -153,10 +133,6 @@ func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string
 	return out, err
 }
 
-// ListProjects: every project of the actor's organization in creation order, environments
-// production first. Without a membership it fails instead of returning nothing, so the CLI can tell
-// "no projects" from "not in an organization": signed out → NOT_AUTHENTICATED, an organization
-// exists → NO_ORGANIZATION. Before any organization exists there is nothing to be left out of: [].
 func (a *App) ListProjects(ctx context.Context, actor domain.Actor) ([]ProjectSummary, error) {
 	out := []ProjectSummary{}
 	err := a.read(ctx, func(tx Tx) error {
@@ -189,7 +165,6 @@ func (a *App) ListProjects(ctx context.Context, actor domain.Actor) ([]ProjectSu
 	return out, err
 }
 
-// canvasProductionFirst is a stable sort putting production environments first.
 func canvasProductionFirst(envs []domain.Environment) []domain.Environment {
 	out := make([]domain.Environment, 0, len(envs))
 	for _, e := range envs {

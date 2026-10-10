@@ -1,7 +1,5 @@
 package sqlite
 
-// Implements app.AuthTx.
-
 import (
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"

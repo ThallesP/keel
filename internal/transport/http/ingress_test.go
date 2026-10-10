@@ -23,7 +23,6 @@ type ingressNoJobs struct{}
 func (ingressNoJobs) After(string, time.Duration, func(context.Context)) {}
 func (ingressNoJobs) Every(string, time.Duration, func(context.Context)) {}
 
-// ingressHarness: the ingress routes over a real SQLite app, with the caller fixed per request.
 type ingressHarness struct {
 	t     *testing.T
 	app   *app.App
@@ -127,7 +126,6 @@ func TestIngressHTTPExpose(t *testing.T) {
 		t.Fatalf("bad protocol: %d %s", status, body)
 	}
 
-	// Another organization's member: the node does not exist for them.
 	h.actor = ingressForeign
 	status, body, _ = h.do("POST", "/api/nodes/pg/expose", `{}`)
 	h.problem(status, body, 404, domain.CodeServiceNotFound, "Node not found")
@@ -160,7 +158,7 @@ func TestIngressHTTPControlPlane(t *testing.T) {
 	status, body, _ := h.do("GET", "/api/control-plane", "")
 	h.problem(status, body, 401, domain.CodeNotAuthenticated, "Not authenticated")
 
-	h.actor = domain.Actor{UserID: "u3"} // signed in, no organization yet
+	h.actor = domain.Actor{UserID: "u3"}
 	status, body, _ = h.do("GET", "/api/control-plane", "")
 	if status != 200 || strings.TrimSpace(body) != `{"publicIp":"203.0.113.7"}` {
 		t.Fatalf("got %d %s", status, body)
@@ -178,7 +176,7 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 	if status, body, _ := h.do("POST", "/api/nodes/j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4/expose", ""); status != 200 {
 		t.Fatalf("expose: %d %s", status, body)
 	}
-	h.actor = domain.Actor{} // the proxy has no session, only the bearer
+	h.actor = domain.Actor{}
 	const domainName = "api-16w41g.203-0-113-7.sslip.io"
 	good := `{"event":"cert_failed","name":"` + domainName + `","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - too many"}`
 	auth := []string{"Authorization", "Bearer s3cret"}
@@ -223,7 +221,6 @@ func TestIngressHTTPProxyEvents(t *testing.T) {
 		t.Fatalf("status %+v", s)
 	}
 
-	// No KEEL_WORKER_TOKEN: every report is refused.
 	h.app.Config.WorkerToken = ""
 	if status, body, _ := h.do("POST", "/proxy/events", good, "Authorization", "Bearer "); status != 401 || body != "unauthorized" {
 		t.Fatalf("unset token: %d %q", status, body)

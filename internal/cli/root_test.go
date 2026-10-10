@@ -11,7 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// withExtra registers server commands for one test, as proxy_cmd.go and agent_cmd.go do.
 func withExtra(t *testing.T, cmds ...*cobra.Command) {
 	t.Helper()
 	saved := slices.Clone(Extra)
@@ -21,8 +20,6 @@ func withExtra(t *testing.T, cmds ...*cobra.Command) {
 	t.Cleanup(func() { Extra = saved })
 }
 
-// Server commands share the root with the CLI verbs but none of their pre-run (printer, config,
-// discovery, login), and fail as plain `error:` lines with exit 1, not as the CLI's envelope.
 func TestServerCommands(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	ran := false
@@ -56,7 +53,6 @@ func TestServerCommands(t *testing.T) {
 	}
 }
 
-// CLI verbs keep the contract: a cobra error is USAGE (exit 2), and an unknown command too.
 func TestCLIErrorsKeepTheContract(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	if code := (&app{}).execute(context.Background(), []string{"project", "create", "--json"}); code != output.ExitUsage {

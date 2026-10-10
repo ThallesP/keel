@@ -13,11 +13,10 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// fakeAPI answers "METHOD /path?query" with a status and body, and records what it was sent.
 type fakeAPI struct {
 	t      *testing.T
 	routes map[string]route
-	sent   map[string]string // "METHOD /path" → request body
+	sent   map[string]string
 }
 
 type route struct {
@@ -63,7 +62,6 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(rt.body))
 }
 
-// jsonOf is v as the CLI prints it (no HTML escaping).
 func jsonOf(t *testing.T, v any) string {
 	t.Helper()
 	var b strings.Builder
@@ -162,8 +160,6 @@ func TestDeployments(t *testing.T) {
 	if d, err := c.Deployment(ctx, "nope/.."); d != nil || err != nil {
 		t.Errorf("unknown id: %+v, %v", d, err)
 	}
-	// Not a path segment: /api/deployments/.. is another route (NOT_FOUND), not "no such
-	// deployment". Unknown without asking (the fake fails any request it has no route for).
 	for _, id := range []string{"", ".", ".."} {
 		if d, err := c.Deployment(ctx, id); d != nil || err != nil {
 			t.Errorf("id %q: %+v, %v", id, d, err)

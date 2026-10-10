@@ -7,33 +7,25 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// `keel login`: RFC 8628 device authorization, exactly as better-auth's deviceAuthorization
-// plugin answered it (docs/go/spec/cli-install.md §A8). Refusals are *domain.DeviceRefusal errors
-// (the transport writes them as {error, error_description}, not as problems).
-
-// DeviceStart is POST /api/auth/device/code's answer.
 type DeviceStart struct {
 	DeviceCode              string
 	UserCode                string
 	VerificationURI         string
 	VerificationURIComplete string
-	ExpiresIn               int // seconds
-	Interval                int // seconds
+	ExpiresIn               int
+	Interval                int
 }
 
-// DeviceToken is a successful POST /api/auth/device/token: a session for the approving account.
 type DeviceToken struct {
 	AccessToken string
-	ExpiresIn   int64 // seconds until the session expires
+	ExpiresIn   int64
 }
 
-// DeviceView is GET /api/auth/device: the code as the caller gave it and its status.
 type DeviceView struct {
 	UserCode string
 	Status   domain.DeviceStatus
 }
 
-// StartDeviceLogin makes a login link for the keel CLI.
 func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client ClientInfo) (DeviceStart, error) {
 	if r := domain.CheckDeviceClient(clientID); r != nil {
 		return DeviceStart{}, r
@@ -45,8 +37,6 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client Clie
 	var userCode string
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
 		now := a.Now()
-		// Codes are only deleted when polled; sweep the long-expired ones so the table does not
-		// grow. Recently expired ones stay so their poller still hears "expired".
 		if err := tx.AuthDeleteExpiredDeviceCodes(now - domain.DeviceCodeKeep); err != nil {
 			return err
 		}
@@ -76,8 +66,6 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client Clie
 	}, nil
 }
 
-// PollDeviceLogin is one CLI poll. Once the code is approved it is consumed and the answer
-// carries a new session token: the token is handed out once.
 func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, clientID string, client ClientInfo) (DeviceToken, error) {
 	if grantType != domain.DeviceGrantType {
 		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "unsupported_grant_type", Description: domain.MsgDeviceGrantType}
@@ -89,7 +77,6 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 		out     DeviceToken
 		refusal *domain.DeviceRefusal
 	)
-	// Refusals commit too: a poll records last_polled_at and deletes spent codes.
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
 		now := a.Now()
 		var dc *domain.DeviceCode
@@ -142,8 +129,6 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 	return out, nil
 }
 
-// ClaimDeviceCode is the dashboard's /device page looking a code up. While signed in it also
-// binds an unclaimed pending code to the caller: only that account can approve or deny it.
 func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode string) (DeviceView, error) {
 	clean := domain.CleanUserCode(userCode)
 	var out DeviceView
@@ -178,10 +163,9 @@ func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode 
 	return out, err
 }
 
-// DecideDeviceLogin approves or denies a code; only the account it is bound to may.
 func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCode string, approve bool) error {
 	if !actor.SignedIn() {
-		return domain.DecideDevice(nil, "", approve, 0) // 401 unauthorized, before any lookup
+		return domain.DecideDevice(nil, "", approve, 0)
 	}
 	clean := domain.CleanUserCode(userCode)
 	return a.write(ctx, func(tx Tx, _ *Changes) error {

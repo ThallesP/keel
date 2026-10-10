@@ -57,12 +57,10 @@ func TestValidPassword(t *testing.T) {
 		{"12345678", ""},
 		{strings.Repeat("a", 128), ""},
 		{strings.Repeat("a", 129), MsgPasswordTooLong},
-		// JavaScript counts UTF-16 units: 4 emoji are 8 units, long enough.
 		{"😀😀😀😀", ""},
 		{"😀😀😀", MsgPasswordTooShort},
 		{strings.Repeat("😀", 64), ""},
 		{strings.Repeat("😀", 65), MsgPasswordTooLong},
-		// 8 runes of 2 bytes each: 8 units.
 		{"éééééééé", ""},
 	}
 	for _, c := range cases {
@@ -88,7 +86,6 @@ func TestHashSessionToken(t *testing.T) {
 	if a != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
 		t.Fatalf("sha256(abc) = %s", a)
 	}
-	// A legacy Better Auth signed value hashes like its token.
 	if HashSessionToken("abc.c2lnbmF0dXJl") != a {
 		t.Fatal("signature suffix not stripped")
 	}
@@ -127,7 +124,7 @@ func TestInvitationStanding(t *testing.T) {
 		want    bool
 	}{
 		{InvitationPending, 10, true},
-		{InvitationPending, 9, true}, // expiresAt == now still stands
+		{InvitationPending, 9, true},
 		{InvitationPending, 8, false},
 		{InvitationAccepted, 100, false},
 		{InvitationCanceled, 100, false},

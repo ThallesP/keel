@@ -35,7 +35,7 @@ no organization yet. Stop keel serve first.`,
 					return err
 				}
 				defer store.Close()
-				convexexport.HashToken = domain.HashSessionToken // CLI logins survive the move
+				convexexport.HashToken = domain.HashSessionToken
 				rep, err := convexexport.Import(cmd.Context(), store.DB(), args[0])
 				if err != nil {
 					return err

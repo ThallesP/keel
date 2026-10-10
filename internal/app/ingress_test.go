@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	igAPI = "j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4" // shortHash 16w41g
+	igAPI = "j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4"
 	igPG  = "k17cs4z0mn2mr6yr7gx8tjqe1n7rw9qj"
 	igUDP = "jd7f9g6h5k4m3n2p1q0r9s8t7v6w5x4y"
 )
@@ -40,7 +40,6 @@ func TestIngressExposeServiceDefaults(t *testing.T) {
 		t.Fatal("no proxy sync scheduled")
 	}
 
-	// Exposing what is already exposed returns it: no write, no publication, no sync.
 	e.jobs.Run(t)
 	e.pub.take()
 	e.now = 2_000
@@ -63,29 +62,24 @@ func TestIngressExposeTCPAllocation(t *testing.T) {
 	if err != nil || ep.Protocol != domain.ProtocolTCP || *ep.PublicPort != 5432 || ep.Domain != "" {
 		t.Fatalf("first: %+v %v", ep, err)
 	}
-	// Same container port, taken public port: the first spare one.
 	ep2, err := e.expose(e.member, "pg2", app.ExposeInput{})
 	if err != nil || *ep2.PublicPort != 20000 {
 		t.Fatalf("second: %+v %v", ep2, err)
 	}
-	// Idempotent shortcut: same protocol and container port.
 	ep2b, err := e.expose(e.member, "pg2", app.ExposeInput{})
 	if err != nil || *ep2b.PublicPort != 20000 {
 		t.Fatalf("again: %+v %v", ep2b, err)
 	}
-	// Uniqueness is install-wide: another organization's node names the holder.
 	_, err = e.expose(e.other, "pg3", app.ExposeInput{PublicPort: igF(5432)})
 	igWantErr(t, err, domain.CodeConflict, "Port 5432/tcp is already used by postgres")
 	ep3, err := e.expose(e.other, "pg3", app.ExposeInput{})
 	if err != nil || *ep3.PublicPort != 20001 {
 		t.Fatalf("third: %+v %v", ep3, err)
 	}
-	// udp ports are their own space, and may use 443.
 	ep4, err := e.expose(e.member, igPG, app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: igF(443)})
 	if err != nil || *ep4.PublicPort != 443 || ep4.Protocol != domain.ProtocolUDP {
 		t.Fatalf("udp: %+v %v", ep4, err)
 	}
-	// A tcp endpoint asking for the container port 443 is moved off the HTTP ports.
 	e.node("web", igEnvA, domain.NodeService, "web", "nginx:1", 443)
 	ep5, err := e.expose(e.member, "web", app.ExposeInput{Protocol: domain.ProtocolTCP})
 	if err != nil || *ep5.PublicPort != 20002 {
@@ -142,17 +136,17 @@ func TestIngressExposeRedisGuard(t *testing.T) {
 	const msg = "Ship this Redis first: its password takes effect on the next Ship"
 	e.node("r1", igEnvA, domain.NodeCache, "redis", "redis:7", 6379)
 	_, err := e.expose(e.member, "r1", app.ExposeInput{})
-	igWantErr(t, err, domain.CodeInvalidInput, msg) // no password
+	igWantErr(t, err, domain.CodeInvalidInput, msg)
 
 	e.node("r2", igEnvA, domain.NodeCache, "redis-2", "redis:7", 6379, igDirty)
 	e.variable("r2", "REDIS_PASSWORD", "x")
 	_, err = e.expose(e.member, "r2", app.ExposeInput{})
-	igWantErr(t, err, domain.CodeInvalidInput, msg) // password staged, not shipped
+	igWantErr(t, err, domain.CodeInvalidInput, msg)
 
 	e.node("r3", igEnvA, domain.NodeService, "redis-svc", "docker.io/library/redis:7-alpine", 6379, igUndeployed)
 	e.variable("r3", "REDIS_PASSWORD", "x")
 	_, err = e.expose(e.member, "r3", app.ExposeInput{})
-	igWantErr(t, err, domain.CodeInvalidInput, msg) // any node type, never converged
+	igWantErr(t, err, domain.CodeInvalidInput, msg)
 
 	e.node("r4", igEnvA, domain.NodeCache, "redis-4", "redis:7", 6379)
 	e.variable("r4", "REDIS_PASSWORD", "x")
@@ -166,7 +160,6 @@ func TestIngressExposeReplaceAndPin(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
 
-	// A different container port pins the endpoint; the same key replaces it and moves it last.
 	if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: igS("a.example.com")}); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +174,6 @@ func TestIngressExposeReplaceAndPin(t *testing.T) {
 	if len(eps) != 2 || eps[0].Domain != "b.example.com" || eps[1].Domain != "a.example.com" || !eps[1].PinnedPort {
 		t.Fatalf("after replace: %+v", eps)
 	}
-	// Re-exposing with the node's own port un-pins.
 	ep, err = e.expose(e.member, igAPI, app.ExposeInput{Domain: igS("a.example.com"), Port: igF(8080)})
 	if err != nil || ep.PinnedPort {
 		t.Fatalf("unpinned: %+v %v", ep, err)
@@ -198,7 +190,6 @@ func TestIngressExposeLimit(t *testing.T) {
 	}
 	_, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: igF(27025)})
 	igWantErr(t, err, domain.CodeInvalidInput, "At most 10 endpoints per node")
-	// Replacing one of the 10 is allowed.
 	ep, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: igF(27015), Port: igF(27016)})
 	if err != nil || ep.Port != 27016 || len(e.endpoints("game")) != 10 {
 		t.Fatalf("replace at the limit: %+v %v", ep, err)
@@ -231,11 +222,9 @@ func TestIngressUnexpose(t *testing.T) {
 		igWantErr(t, e.app.Unexpose(e.ctx, e.member, igAPI, in), domain.CodeInvalidInput,
 			"Name the endpoint: protocol and domain (http) or public port")
 	}
-	// The domain is validated whenever a protocol is named, even for tcp.
 	igWantErr(t, e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, Domain: igS("bad_domain"), PublicPort: igF(1)}),
 		domain.CodeInvalidInput, "Domain must look like app.example.com")
 
-	// Unknown endpoints and non-integer ports are no-ops.
 	for _, in := range []app.UnexposeInput{
 		{Protocol: domain.ProtocolHTTP, Domain: igS("nope.example.com")},
 		{Protocol: domain.ProtocolHTTP, Domain: igS("")},
@@ -250,7 +239,6 @@ func TestIngressUnexpose(t *testing.T) {
 		t.Fatalf("no-op unexpose wrote: %v", got)
 	}
 
-	// By domain (normalized), then by public port.
 	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolHTTP, Domain: igS(" APP.example.com. ")}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +255,6 @@ func TestIngressUnexpose(t *testing.T) {
 	if eps := e.endpoints(igAPI); len(eps) != 1 {
 		t.Fatalf("after port unexpose: %+v", eps)
 	}
-	// No selector: Make private.
 	if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: igS("b.example.com")}); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +264,6 @@ func TestIngressUnexpose(t *testing.T) {
 	if eps := e.endpoints(igAPI); len(eps) != 0 {
 		t.Fatalf("after make private: %+v", eps)
 	}
-	// Nothing exposed: a no-op, even for a named endpoint.
 	e.pub.take()
 	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, PublicPort: igF(1)}); err != nil {
 		t.Fatal(err)
@@ -287,8 +273,6 @@ func TestIngressUnexpose(t *testing.T) {
 	}
 }
 
-// A member of another organization can neither read nor change this organization's endpoints:
-// its node is "Node not found", exactly like a missing one.
 func TestIngressForeignOrganization(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
@@ -317,7 +301,7 @@ func TestIngressControlPlane(t *testing.T) {
 	if _, err := e.app.ControlPlanePublicIP(domain.Actor{}); err == nil {
 		t.Fatal("signed out read the public IP")
 	}
-	ip, err := e.app.ControlPlanePublicIP(domain.Actor{UserID: "u3"}) // no organization needed
+	ip, err := e.app.ControlPlanePublicIP(domain.Actor{UserID: "u3"})
 	if err != nil || ip != igIP {
 		t.Fatalf("got %q %v", ip, err)
 	}
@@ -356,7 +340,6 @@ func TestIngressFollowPort(t *testing.T) {
 	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
-	// Nothing to move: no write.
 	moved, err = e.app.FollowPortForTest(e.ctx, igAPI, 3000)
 	if err != nil || moved || len(e.pub.take()) != 0 {
 		t.Fatalf("second follow: moved=%v err=%v", moved, err)

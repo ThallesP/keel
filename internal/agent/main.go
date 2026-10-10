@@ -9,8 +9,6 @@ import (
 	"github.com/ThallesP/keel/internal/mesh"
 )
 
-// Main is `keel agent`: the environment, Docker over the node's socket, the control plane over the
-// mesh client, sinks over the default transport.
 func Main(ctx context.Context) error {
 	cfg, err := ConfigFromEnv()
 	if err != nil {

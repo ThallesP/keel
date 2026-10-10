@@ -1,10 +1,5 @@
 package app
 
-// JavaScript semantics the observability read side depends on. The TypeScript providers parsed
-// Axiom rows with JS rules (Number(), String(), Date.parse, JSON key order, localeCompare, \s);
-// the Go port reproduces them here so the same rows give the same JSON
-// (docs/go/spec/observability.md §3, §7).
-
 import (
 	"bytes"
 	"encoding/json"
@@ -25,19 +20,13 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// JSONObject is a decoded JSON object that keeps JavaScript's property order: array-index keys
-// ascending, then the others in insertion order. A duplicate key keeps its first position and
-// its last value (JSON.parse). Values are nil (null), bool, float64, string, []any or
-// *JSONObject.
 type JSONObject struct {
 	keys []string
 	vals map[string]any
 }
 
-// NewJSONObject is an empty object.
 func NewJSONObject() *JSONObject { return &JSONObject{vals: map[string]any{}} }
 
-// Set adds or replaces a property.
 func (o *JSONObject) Set(key string, v any) {
 	if o.vals == nil {
 		o.vals = map[string]any{}
@@ -48,7 +37,6 @@ func (o *JSONObject) Set(key string, v any) {
 	o.vals[key] = v
 }
 
-// Get is the property's value; ok=false when absent (JS undefined).
 func (o *JSONObject) Get(key string) (any, bool) {
 	if o == nil {
 		return nil, false
@@ -57,7 +45,6 @@ func (o *JSONObject) Get(key string) (any, bool) {
 	return v, ok
 }
 
-// Keys in JavaScript property order (Object.keys / Object.entries).
 func (o *JSONObject) Keys() []string {
 	if o == nil {
 		return nil
@@ -81,7 +68,6 @@ func (o *JSONObject) Keys() []string {
 	return append(index, other...)
 }
 
-// jsArrayIndex: k is a canonical array index ("0", "17"; not "01", not ≥ 2^32-1).
 func jsArrayIndex(k string) (int, bool) {
 	if k == "" || len(k) > 10 || (len(k) > 1 && k[0] == '0') {
 		return 0, false
@@ -99,7 +85,6 @@ func jsArrayIndex(k string) (int, bool) {
 	return n, true
 }
 
-// DecodeJSON decodes one JSON value into nil, bool, float64, string, []any and *JSONObject.
 func DecodeJSON(data []byte) (any, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -160,12 +145,11 @@ func decodeJSONValue(dec *json.Decoder) (any, error) {
 			return nil, err
 		}
 		return f, nil
-	default: // string, bool, nil
+	default:
 		return t, nil
 	}
 }
 
-// jsGet is JS property access obj[key] on a decoded value; ok=false is undefined.
 func jsGet(obj any, key string) (any, bool) {
 	switch o := obj.(type) {
 	case *JSONObject:
@@ -181,7 +165,6 @@ func jsGet(obj any, key string) (any, bool) {
 	return nil, false
 }
 
-// jsTruthy is JS truthiness.
 func jsTruthy(v any) bool {
 	switch x := v.(type) {
 	case nil:
@@ -196,7 +179,6 @@ func jsTruthy(v any) bool {
 	return true
 }
 
-// jsString is the providers' str(): a string as is, null/undefined → "", else String(x).
 func jsString(v any) string {
 	switch x := v.(type) {
 	case nil:
@@ -213,7 +195,7 @@ func jsString(v any) string {
 	case []any:
 		parts := make([]string, len(x))
 		for i, e := range x {
-			parts[i] = jsString(e) // Array.prototype.join: null/undefined → ""
+			parts[i] = jsString(e)
 		}
 		return strings.Join(parts, ",")
 	case *JSONObject:
@@ -222,7 +204,6 @@ func jsString(v any) string {
 	return ""
 }
 
-// jsNumberString is Number.prototype.toString().
 func jsNumberString(x float64) string {
 	switch {
 	case math.IsNaN(x):
@@ -236,7 +217,7 @@ func jsNumberString(x float64) string {
 	}
 	abs := math.Abs(x)
 	if abs >= 1e21 || abs < 1e-6 {
-		s := strconv.FormatFloat(x, 'e', -1, 64) // 1.5e-07 → 1.5e-7, 1e+21 stays
+		s := strconv.FormatFloat(x, 'e', -1, 64)
 		mant, exp, _ := strings.Cut(s, "e")
 		sign := exp[:1]
 		exp = strings.TrimLeft(exp[1:], "0")
@@ -250,7 +231,6 @@ func jsNumberString(x float64) string {
 
 var jsDecimalRE = regexp.MustCompile(`^[+-]?(?:[0-9]+\.?[0-9]*(?:[eE][+-]?[0-9]+)?|\.[0-9]+(?:[eE][+-]?[0-9]+)?)$`)
 
-// jsNumber is Number(x). nil (null and undefined alike) → 0.
 func jsNumber(v any) float64 {
 	switch x := v.(type) {
 	case nil:
@@ -319,7 +299,6 @@ func toLowerASCII(c rune) rune {
 	return c
 }
 
-// jsNum is the providers' num(): a number as is, else Number(x) || 0.
 func jsNum(v any) float64 {
 	if f, ok := v.(float64); ok {
 		return f
@@ -331,7 +310,6 @@ func jsNum(v any) float64 {
 	return f
 }
 
-// jsStringify is JSON.stringify for decoded values.
 func jsStringify(v any) string {
 	var b strings.Builder
 	writeJSValue(&b, v)
@@ -378,7 +356,6 @@ func writeJSValue(b *strings.Builder, v any) {
 	}
 }
 
-// writeJSQuoted is JSON.stringify of a string: only ", \ and control characters are escaped.
 func writeJSQuoted(b *strings.Builder, s string) {
 	const hex = "0123456789abcdef"
 	b.WriteByte('"')
@@ -411,12 +388,10 @@ func writeJSQuoted(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
-// jsSpaceClass is JS \s (WhiteSpace and LineTerminator).
 const jsSpaceClass = `[\t\n\v\f\r \x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]`
 
 var jsSpaceRunRE = regexp.MustCompile(jsSpaceClass + `+`)
 
-// jsSlice is s.slice(0, n): at most n UTF-16 code units (a split surrogate pair is dropped).
 func jsSlice(s string, n int) string {
 	units := 0
 	for i, r := range s {
@@ -432,8 +407,6 @@ func jsSlice(s string, n int) string {
 	return s
 }
 
-// CompactDetail is how an upstream error body is quoted: every whitespace run collapsed to one
-// space, trimmed, at most 200 characters (UTF-16 units, like JS).
 func CompactDetail(body string) string {
 	if !utf8.ValidString(body) {
 		body = strings.ToValidUTF8(body, "�")
@@ -441,7 +414,6 @@ func CompactDetail(body string) string {
 	return jsSlice(domain.TrimJS(jsSpaceRunRE.ReplaceAllString(body, " ")), 200)
 }
 
-// jsEncodeURIComponent is encodeURIComponent.
 func jsEncodeURIComponent(s string) string {
 	const hex = "0123456789ABCDEF"
 	var b strings.Builder
@@ -459,7 +431,6 @@ func jsEncodeURIComponent(s string) string {
 	return b.String()
 }
 
-// jsFormEncode is URLSearchParams.toString(): application/x-www-form-urlencoded, keys in order.
 func jsFormEncode(pairs [][2]string) string {
 	const hex = "0123456789ABCDEF"
 	enc := func(b *strings.Builder, s string) {
@@ -494,21 +465,16 @@ var (
 	jsCollator   = collate.New(language.English)
 )
 
-// localeCompare is a.localeCompare(b) (ICU root/English collation).
 func localeCompare(a, b string) int {
 	jsCollatorMu.Lock()
 	defer jsCollatorMu.Unlock()
 	return jsCollator.CompareString(a, b)
 }
 
-// jsDateRE is the date-time strings Date.parse accepts that Axiom and Docker produce: ISO 8601
-// date or date-time (T, t or a space), seconds and any number of fraction digits optional, Z or
-// an offset (±HH:mm or ±HHmm). A date-time without an offset is UTC (Convex ran in UTC).
 var jsDateRE = regexp.MustCompile(`^([+-][0-9]{6}|[0-9]{4})(?:-([0-9]{2})(?:-([0-9]{2}))?)?` +
 	`(?:[Tt ]([0-9]{2}):([0-9]{2})(?::([0-9]{2})(?:\.([0-9]+))?)?)?` +
 	`([Zz]|[+-][0-9]{2}:?[0-9]{2})?$`)
 
-// jsDateParse is Date.parse for those formats (ms since the epoch); ok=false is NaN.
 func jsDateParse(s string) (float64, bool) {
 	m := jsDateRE.FindStringSubmatch(s)
 	if m == nil {
@@ -557,7 +523,6 @@ func jsDateParse(s string) (float64, bool) {
 
 var jsSubMsRE = regexp.MustCompile(`\.[0-9]{3}([0-9]+)`)
 
-// axiomPreciseTime is Date.parse plus the sub-millisecond digits of the stamp; unparseable → 0.
 func axiomPreciseTime(v any) float64 {
 	iso := jsString(v)
 	ms, ok := jsDateParse(iso)
@@ -571,7 +536,6 @@ func axiomPreciseTime(v any) float64 {
 	return ms
 }
 
-// jsISOTime is new Date(ms).toISOString() (the time value truncated toward zero).
 func jsISOTime(ms float64) string {
 	return time.UnixMilli(int64(math.Trunc(ms))).UTC().Format("2006-01-02T15:04:05.000Z")
 }

@@ -1,8 +1,5 @@
 package app_test
 
-// Test bed for the observability use cases: a real SQLite store with two organizations (the
-// caller's "org" and a foreign "org2"), and hand-written fakes for Axiom and Docker logs.
-
 import (
 	"context"
 	"io"
@@ -42,7 +39,6 @@ func (p *obsPublisher) Publish(org string, topics []string) {
 	p.got = append(p.got, obsPublished{org, append([]string(nil), topics...)})
 }
 
-// topics is every topic published to org since the last call, sorted, deduplicated.
 func (p *obsPublisher) take(org string) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -1,11 +1,5 @@
 package app
 
-// OpenTelemetry traces of an environment (convex/traces.ts, traceProviders/axiom.ts), read from
-// the traces dataset of its organization's sink and joined with the log lines that name them.
-// Spans get there through the OTLP relay (otlp.go) tagged with the Keel service id (tracing.go),
-// which scopes requests to the environment. A trace opened by id is not scoped: the id is the
-// key. Traces need a store, so there is no Docker fallback. A request is a root span.
-
 import (
 	"context"
 	"math"
@@ -19,14 +13,14 @@ import (
 )
 
 const (
-	traceList       = 100                // requests per overview (the dashboard's REQUESTS)
-	traceMaxSpans   = 2000               // spans per trace
-	traceWindowMs   = 7 * 24 * 3_600_000 // a trace opened without `at` is looked for this far back
-	traceHourMs     = 3_600_000          // with `at`, spans are looked for from the hour before it
-	traceLogSlackMs = 5_000              // slack around a trace's spans when looking for its lines
-	traceLogWindow  = 15 * 60_000        // without spans, how far either side of `at`
-	traceLogLines   = 500                // lines per trace
-	traceSearchMax  = 200                // search is cut to this many characters
+	traceList       = 100
+	traceMaxSpans   = 2000
+	traceWindowMs   = 7 * 24 * 3_600_000
+	traceHourMs     = 3_600_000
+	traceLogSlackMs = 5_000
+	traceLogWindow  = 15 * 60_000
+	traceLogLines   = 500
+	traceSearchMax  = 200
 	traceRoot       = `where isempty(ensure_field("parent_span_id", typeof(string)))`
 	traceFailed     = `ensure_field("error", typeof(bool)) == true or ensure_field("status.code", typeof(string)) contains "error"`
 	traceServiceID  = `tostring(ensure_field("resource.custom", typeof(dynamic))["keel.service_id"])`
@@ -35,8 +29,6 @@ const (
 
 var traceIDRE = regexp.MustCompile(`(?i)^[0-9a-f]{16,32}$`)
 
-// traceScope is axiomScope: the environment's sink (logs side), its traces dataset (nil on a
-// sink from before traces) and the services its requests are scoped to.
 type traceScope struct {
 	logs       axiomCfg
 	traces     *axiomCfg
@@ -60,8 +52,6 @@ func (a *App) traceScope(ctx context.Context, actor domain.Actor, environmentID 
 	return out, nil
 }
 
-// aplRoots is the root spans of these services (at least one id), optionally only those whose
-// name or service.name contains search.
 func aplRoots(dataset string, serviceIDs []string, search string) string {
 	match := ""
 	if term := domain.TrimJS(search); term != "" {
@@ -74,8 +64,6 @@ func aplRoots(dataset string, serviceIDs []string, search string) string {
 	return aplDataset(dataset) + " | " + traceRoot + " | where " + traceServiceID + " in (" + strings.Join(ids, ", ") + ")" + match
 }
 
-// traceRequests is the latest limit requests in [from, to ?? now+60s], newest first, each with
-// the span and error counts of its whole trace.
 func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []string, search string, from float64, to *float64, limit int) ([]domain.TraceSummary, error) {
 	if len(serviceIDs) == 0 {
 		return []domain.TraceSummary{}, nil
@@ -97,7 +85,6 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 	type counts struct{ spans, errors float64 }
 	perTrace := map[string]counts{}
 	if len(ids) > 0 {
-		// A trace's other spans start after its root, so `from` holds them; `to` might not.
 		apl := aplDataset(cfg.Dataset) + " | where trace_id in (" + strings.Join(ids, ", ") + ") | extend failed = " + traceFailed +
 			" | summarize spans = count(), errors = countif(failed) by trace_id"
 		rows, err := a.axiomRows(ctx, cfg, apl, &from, nil)
@@ -139,8 +126,6 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 	return out, nil
 }
 
-// TraceOverview is request rate, errors and latency over rng, and the latest requests, of the
-// environment's services or of one of them (nodeID, for `keel traces <service>`).
 func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environmentID string, rng domain.TimeRange, search, nodeID string) (domain.TraceOverview, error) {
 	spec, ok := rng.Spec()
 	if !ok {
@@ -168,7 +153,6 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 
 	totals, series := []*JSONObject{}, []*JSONObject{}
 	traces := []domain.TraceSummary{}
-	// An environment with no services has no requests; `in ()` is not valid APL.
 	if len(ids) > 0 {
 		var wg sync.WaitGroup
 		var errs [3]error
@@ -220,9 +204,6 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	}, nil
 }
 
-// GetTrace is every span of one trace and the environment's log lines that name its id. at: a
-// moment inside the trace if known (its root's start, or the time of the line it was opened
-// from); 0 = unknown.
 func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, traceID string, at float64) (domain.Trace, error) {
 	if !traceIDRE.MatchString(traceID) {
 		return domain.Trace{}, domain.Invalid(msgNotATraceID)
@@ -251,9 +232,6 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 			spans = append(spans, axiomSpanOf(r))
 		}
 	}
-	// The lines can only have been written while the trace ran: look there when its spans say
-	// when that was (stretched to at, so the line it was opened from is always found), else
-	// around at, else over the last week like the spans.
 	var from float64
 	var to *float64
 	switch {
@@ -279,8 +257,6 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 	return domain.Trace{Source: domain.LogSourceAxiom, TraceID: id, Spans: spans, Logs: lines}, nil
 }
 
-// TracesAround is the requests that started within 30 s either side of at, newest first: the
-// traces near a log line. Empty without a traces dataset.
 func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentID string, at float64) ([]domain.TraceSummary, error) {
 	if err := validLogMoment(at); err != nil {
 		return nil, err

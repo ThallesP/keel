@@ -11,9 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Observability routes (docs/go/spec/observability.md; web-data.md §4; ARCHITECTURE "Resolved
-// API decisions").
-
 var obsTags = []string{"observability"}
 
 type (

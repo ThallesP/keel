@@ -30,6 +30,8 @@ jobs:
             exit 1
           fi
       - run: go vet ./...
+      - name: No comments in Go
+        run: go run ./tools/nocomments $(go list -f '{{.Dir}}' ./...)
       - run: go test ./...
       - name: openapi.json is current
         run: |

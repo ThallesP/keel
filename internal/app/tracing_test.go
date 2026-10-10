@@ -8,8 +8,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// The prompt text is byte-exact with convex/tracingPrompt.ts (testdata/*.txt were printed by
-// running the TypeScript agentPrompt).
 func TestAgentPromptMatchesTypeScript(t *testing.T) {
 	for file, args := range map[string][2]string{
 		"testdata/tracing_prompt_none.txt":    {"", ""},
@@ -82,7 +80,6 @@ func TestTracingOverridden(t *testing.T) {
 	}
 }
 
-// tracingTx serves the two reads withTracing makes; any other Tx method panics (nil embedded).
 type tracingTx struct {
 	Tx
 	env domain.Environment
@@ -132,13 +129,11 @@ func TestWithTracing(t *testing.T) {
 		t.Fatal("withTracing modified its input")
 	}
 
-	// The service's own endpoint: no ingest key is sent there.
 	got, _ = a.withTracing(tx, node, map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://mine"})
 	if _, ok := got["OTEL_EXPORTER_OTLP_HEADERS"]; ok || got["OTEL_EXPORTER_OTLP_ENDPOINT"] != "http://mine" {
 		t.Fatalf("own endpoint: %v", got)
 	}
 
-	// Off, no desired, no key, environment gone: unchanged.
 	for name, c := range map[string]struct {
 		tx   Tx
 		node domain.Node

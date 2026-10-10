@@ -8,17 +8,15 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// migrations.run step 2 (projects.md §9.9): a Redis cache without REDIS_PASSWORD gets a generated
-// one on start-up, and it and its referrers become staged changes.
 func TestCanvasRecoverRedisPasswords(t *testing.T) {
 	k := canvasSetup(t)
 	env := k.project(canvasOrg, "Acme")
 	otherEnv := k.project(canvasOther, "Theirs")
 	m := canvasMember(canvasOrg)
-	bare := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})                                    // seeded, then lost below
-	seeded := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})                                  // keeps its password
-	valkey := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})                                  // not Redis by image
-	svcRedis := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Image: canvasPtr("redis:7")}) // a service, not a cache
+	bare := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})
+	seeded := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})
+	valkey := k.create(env, app.CreateNodeInput{Type: domain.NodeCache})
+	svcRedis := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Image: canvasPtr("redis:7")})
 	worker := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "worker"})
 	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api"})
 	lone := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "lone"})
@@ -55,11 +53,9 @@ func TestCanvasRecoverRedisPasswords(t *testing.T) {
 			t.Errorf("%s touched: %+v dirty %v", k.node(id).Name, k.vars(id), k.node(id).Dirty)
 		}
 	}
-	// Referrers of the cache that got one, transitively.
 	if !k.node(worker).Dirty || !k.node(api).Dirty {
 		t.Errorf("referrers: worker %v api %v", k.node(worker).Dirty, k.node(api).Dirty)
 	}
-	// Its consumers now get a REDIS_URL with the password.
 	vars, _ := k.app.ListVariables(k.ctx, m, worker)
 	if want := "redis://default:" + k.vars(bare)[0].Value + "@svc-" + bare + ":6379"; vars[0].Resolved != want || !vars[0].ResolvedSecret {
 		t.Errorf("worker QUEUE_URL %q secret %v, want %q", vars[0].Resolved, vars[0].ResolvedSecret, want)
@@ -71,7 +67,6 @@ func TestCanvasRecoverRedisPasswords(t *testing.T) {
 		t.Errorf("other organization's topics %v", topics)
 	}
 
-	// Idempotent: a second start finds nothing to do and publishes nothing.
 	password := k.vars(bare)[0].Value
 	k.exec(`UPDATE nodes SET dirty = 0`)
 	k.app.RecoverCanvas(k.ctx)

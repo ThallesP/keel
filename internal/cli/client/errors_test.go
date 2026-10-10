@@ -12,7 +12,6 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// The server's problem code is the CLI's code, as is; the CLI adds the fix (docs/cli.md).
 func TestProblemCodes(t *testing.T) {
 	const url = "https://keel.test"
 	for _, tc := range []struct {
@@ -61,10 +60,8 @@ func TestProblemCodes(t *testing.T) {
 			output.CodeRateLimited, "Too many requests. Please try again later.", "Wait a moment, then retry", "", ""},
 		{500, `{"status":500,"title":"Internal Server Error","detail":"Something went wrong on the server","code":"SERVER_ERROR"}`,
 			output.CodeServer, "Something went wrong on the server", "", "", ""},
-		// A code this CLI does not know yet: passed through (codes are only ever added).
 		{409, `{"status":409,"detail":"Brand new","code":"SOMETHING_NEW"}`, "SOMETHING_NEW", "Brand new", "", "", ""},
 
-		// No code (a proxy in front, an older server): the status, then the Convex-era message.
 		{400, `{"detail":"Node not found"}`, output.CodeServiceNotFound, "Node not found", "keel service list", "", ""},
 		{400, `{"detail":"Project \"web\" already exists"}`, output.CodeNameTaken, `Project "web" already exists`, "Pick another name, or use it: keel link web", "", ""},
 		{401, ``, output.CodeNotAuthenticated, "Session expired or signed out", "keel login " + url, "", ""},
@@ -83,7 +80,6 @@ func TestProblemCodes(t *testing.T) {
 	}
 }
 
-// Every API call goes through the same mapping, including the request that never got an answer.
 func TestTransportErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)

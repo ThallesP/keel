@@ -10,12 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Raw (non-Huma) routes.
-//
-//	POST /otlp/v1/traces  OTLP/HTTP spans; bearer = the environment's ingest key (app.RelayTraces)
-//	GET  /worker/config   log sinks + the services each covers, for the per-node agents (bearer
-//	                      KEEL_WORKER_TOKEN). Shape unchanged from convex/worker.ts: deployed
-//	                      agents and install.sh call it. GET /agent/config is the same route.
 func (s *Server) registerObservabilityRaw(mux *http.ServeMux) {
 	mux.HandleFunc("POST /otlp/v1/traces", s.obsOTLPTraces)
 	mux.HandleFunc("GET /worker/config", s.obsWorkerConfig)
@@ -39,8 +33,6 @@ func (s *Server) obsOTLPTraces(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(res.Body)
 }
 
-// obsWorkerAuthorized: `Authorization: Bearer <KEEL_WORKER_TOKEN>` (case-sensitive "Bearer ",
-// constant-time compare). An unset token rejects everything.
 func (s *Server) obsWorkerAuthorized(r *http.Request) bool {
 	expected := s.app.Config.WorkerToken
 	header := r.Header.Get("Authorization")
@@ -51,7 +43,6 @@ func (s *Server) obsWorkerAuthorized(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
 }
 
-// obsWorkerConfigBody is GET /worker/config, exactly as convex/worker.ts returned it.
 type obsWorkerConfigBody struct {
 	Sinks []obsWorkerConfigSink `json:"sinks"`
 }

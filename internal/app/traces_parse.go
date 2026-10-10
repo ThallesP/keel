@@ -1,11 +1,5 @@
 package app
 
-// Axiom span rows → spans (traceProviders/axiom.ts, "Parsing"). Rows come back with every field
-// of the dataset as a column, dotted names flat (attributes.http.method), maps as objects
-// (attributes.custom). These helpers also take nested objects and string-typed numbers, so a
-// change in how Axiom serialises does not blank the page. Must match the TS exactly
-// (docs/go/spec/observability.md §7).
-
 import (
 	"math"
 	"regexp"
@@ -16,8 +10,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// rowPick is path from a row: a flat dotted key, or the same path through nested objects/maps.
-// ok=false is undefined; a present null is (nil, true) and ends the search.
 func rowPick(obj any, path string) (any, bool) {
 	switch obj.(type) {
 	case *JSONObject, []any:
@@ -44,13 +36,11 @@ func rowPick(obj any, path string) (any, bool) {
 	return nil, false
 }
 
-// rowPickValue is pick without the undefined/null distinction.
 func rowPickValue(obj any, path string) any {
 	v, _ := rowPick(obj, path)
 	return v
 }
 
-// spanAttr is a span attribute, whether Axiom filed it under its semantic conventions or custom.
 func spanAttr(row *JSONObject, name string) any {
 	if v := rowPickValue(row, "attributes."+name); v != nil {
 		return v
@@ -60,7 +50,6 @@ func spanAttr(row *JSONObject, name string) any {
 
 var timeDigitsRE = regexp.MustCompile(`^[0-9]+$`)
 
-// axiomTimeOf: RFC 3339 with up to nanoseconds, or epoch ns / µs / ms → epoch ms (fractional).
 func axiomTimeOf(v any) float64 {
 	switch x := v.(type) {
 	case float64:
@@ -91,8 +80,6 @@ var (
 	durationFloat     = func(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }
 )
 
-// durationOf: nanoseconds (Axiom's OTel duration), a Go duration string (1m30.5s, 5ms) or .NET
-// [d.]hh:mm:ss[.f] → ms; anything else 0.
 func durationOf(v any) float64 {
 	switch x := v.(type) {
 	case float64:
@@ -122,7 +109,6 @@ func durationOf(v any) float64 {
 	return 0
 }
 
-// durationOrNull: null or "" → null, else durationOf.
 func durationOrNull(v any) *float64 {
 	if v == nil || v == "" {
 		return nil
@@ -142,7 +128,6 @@ func traceStatsOf(r *JSONObject) domain.TraceStats {
 	}
 }
 
-// spanKindOf: SPAN_KIND_SERVER, Server, server → server; unspecified → "".
 func spanKindOf(v any) string {
 	k := strings.TrimPrefix(strings.ToLower(jsString(v)), "span_kind_")
 	if k == "unspecified" {
@@ -151,7 +136,6 @@ func spanKindOf(v any) string {
 	return k
 }
 
-// spanStatusOf is error (Axiom's error flag, or a status code containing "error"), ok or unset.
 func spanStatusOf(row *JSONObject) string {
 	code := strings.ToLower(jsString(rowPickValue(row, "status.code")))
 	if e, ok := rowPickValue(row, "error").(bool); (ok && e) || strings.Contains(code, "error") {
@@ -163,7 +147,6 @@ func spanStatusOf(row *JSONObject) string {
 	return "unset"
 }
 
-// attrMap is a JS Map<string, string>: insertion order, a set on an existing key keeps its place.
 type attrMap struct {
 	keys []string
 	vals map[string]string
@@ -178,7 +161,6 @@ func (m *attrMap) set(k, v string) {
 	m.vals[k] = v
 }
 
-// spanAttrText: a string as is, an object or array as JSON, anything else String(x).
 func spanAttrText(v any) string {
 	switch v.(type) {
 	case *JSONObject, []any:
@@ -187,8 +169,6 @@ func spanAttrText(v any) string {
 	return jsString(v)
 }
 
-// flattenAttrs: the leaves of a value as key.path → text; objects recurse, arrays and scalars are
-// leaves; null and "" are skipped.
 func flattenAttrs(out *attrMap, key string, v any) {
 	if v == nil || v == "" {
 		return
@@ -209,7 +189,6 @@ func flattenAttrs(out *attrMap, key string, v any) {
 	}
 }
 
-// sortedSpanAttributes is the map's entries sorted by key (localeCompare).
 func sortedSpanAttributes(m *attrMap) []domain.Attribute {
 	out := make([]domain.Attribute, len(m.keys))
 	for i, k := range m.keys {
@@ -219,7 +198,6 @@ func sortedSpanAttributes(m *attrMap) []domain.Attribute {
 	return out
 }
 
-// collectAttrs is everything under attributes or resource, with Axiom's custom map folded back in.
 func collectAttrs(row *JSONObject, root string) []domain.Attribute {
 	out := newAttrMap()
 	for _, k := range row.Keys() {
@@ -237,7 +215,6 @@ func collectAttrs(row *JSONObject, root string) []domain.Attribute {
 	return sortedSpanAttributes(unwrapped)
 }
 
-// spanEventsOf is a span's events (exceptions with their stack traces, …).
 func spanEventsOf(v any) []domain.SpanEvent {
 	arr, ok := v.([]any)
 	if !ok {
@@ -265,7 +242,6 @@ func spanEventsOf(v any) []domain.SpanEvent {
 	return out
 }
 
-// axiomSpanOf maps one span row.
 func axiomSpanOf(r *JSONObject) domain.Span {
 	get := func(k string) any { v, _ := r.Get(k); return v }
 	return domain.Span{
@@ -285,7 +261,6 @@ func axiomSpanOf(r *JSONObject) domain.Span {
 	}
 }
 
-// spanHTTPStatus: http.response.status_code ?? http.status_code, kept if a finite number > 0.
 func spanHTTPStatus(r *JSONObject) *float64 {
 	v := spanAttr(r, "http.response.status_code")
 	if v == nil {

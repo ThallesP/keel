@@ -1,7 +1,3 @@
-// Package cli is the keel command: the CLI verbs, one file per noun (docs/cli.md is their
-// contract), and the server subcommands (serve, openapi, and proxy, agent, import-convex through
-// Extra). CLI verbs are thin: resolve the target (instance, project, service), call the API
-// through package client, print through package output.
 package cli
 
 import (
@@ -22,15 +18,10 @@ import (
 	transport "github.com/ThallesP/keel/internal/transport/http"
 )
 
-// Version is set at build time (-ldflags "-X github.com/ThallesP/keel/internal/cli.Version=…").
 var Version = "dev"
 
-// Extra registers more server-side top-level commands (keel proxy, keel agent, keel
-// import-convex). Areas add to it from init() in their own file. Commands registered here are
-// server commands: no CLI pre-run, plain `error:` failures (exit 1). CLI verbs go in root().
 var Extra []func() *cobra.Command
 
-// serverAnnotation marks a command (and everything under it) as a server command.
 const serverAnnotation = "keel.server"
 
 type app struct {
@@ -64,7 +55,6 @@ Environment:
 The same binary runs Keel itself: keel serve (the control plane), keel proxy (its public edge),
 keel agent (on every Swarm node).`
 
-// Execute runs the command line and returns the process exit code.
 func Execute(ctx context.Context) int {
 	client.UserAgent = "keel-cli/" + Version
 	return (&app{}).execute(ctx, os.Args[1:])
@@ -77,24 +67,23 @@ func (a *app) execute(ctx context.Context, args []string) int {
 	if err == nil {
 		return 0
 	}
-	var exit *childExit // keel run: the command's own exit code, it already said why
+	var exit *childExit
 	if errors.As(err, &exit) {
 		return exit.code
 	}
 	var oe *output.Error
 	if isServer(cmd) && !errors.As(err, &oe) {
-		// keel serve, proxy, agent: daemons and admin one-shots, not the agents' contract.
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return output.ExitError
 	}
-	if a.out == nil { // failed before PersistentPreRun: bad flag or unknown command
+	if a.out == nil {
 		a.out = output.New(a.jsonMode() || jsonArg(args))
 	}
 	switch {
 	case oe != nil, errors.As(err, &oe):
 	case ctx.Err() != nil:
 		oe = output.Errorf(output.CodeCancelled, "", "Cancelled")
-	default: // cobra's own errors: unknown command, wrong number of arguments
+	default:
 		oe = usage(cmd, "%v", err)
 	}
 	return a.out.Fail(oe)
@@ -110,7 +99,7 @@ func (a *app) root() *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if isServer(cmd) {
-				return // no printer, config, discovery or login: not a CLI verb
+				return
 			}
 			a.out = output.New(a.jsonMode())
 		},
@@ -153,7 +142,6 @@ func (a *app) root() *cobra.Command {
 	return root
 }
 
-// serverCommands: the control plane and the API document.
 func serverCommands() []*cobra.Command {
 	serveCmd := &cobra.Command{
 		Use:   "serve",
@@ -176,7 +164,6 @@ func serverCommands() []*cobra.Command {
 	return []*cobra.Command{serveCmd, openapiCmd}
 }
 
-// isServer: cmd is a server command or under one.
 func isServer(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
 		if c.Annotations[serverAnnotation] != "" {
@@ -191,12 +178,10 @@ func (a *app) jsonMode() bool {
 	return a.json || v == "1" || v == "true"
 }
 
-// interactive is whether keel may ask: a person at a terminal, and no JSON for a program.
 func (a *app) interactive() bool {
 	return !a.out.JSON && output.IsTerminal(os.Stdin)
 }
 
-// confirm asks a yes/no question on stderr; only y or yes is yes.
 func (a *app) confirm(question string) bool {
 	fmt.Fprintf(a.out.Err, "%s [y/N] ", question)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -204,8 +189,6 @@ func (a *app) confirm(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-// jsonArg finds --json in arguments cobra could not parse, in every form pflag accepts
-// (--json, --json=true, --json=1, ...); the last one wins, as in pflag.
 func jsonArg(args []string) bool {
 	on := false
 	for _, s := range args {
@@ -225,7 +208,6 @@ func usage(cmd *cobra.Command, format string, args ...any) *output.Error {
 	return output.Errorf(output.CodeUsage, cmd.CommandPath()+" --help", format, args...)
 }
 
-// args checks the positional argument count with a usage error that shows the expected form.
 func args(min, max int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) < min || max >= 0 && len(args) > max {

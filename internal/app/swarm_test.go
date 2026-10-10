@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// countingStore fails every transaction and records how many reads overlap.
 type countingStore struct {
 	mu                 sync.Mutex
 	active, peak, read int
@@ -33,7 +32,6 @@ func (s *countingStore) Write(context.Context, func(Tx) error) error {
 	return errors.New("database down")
 }
 
-// goJobs runs every job in its own goroutine, like the real scheduler.
 type goJobs struct{ wg sync.WaitGroup }
 
 func (j *goJobs) After(_ string, delay time.Duration, fn func(context.Context)) {
@@ -49,8 +47,6 @@ func (j *goJobs) Every(string, time.Duration, func(context.Context)) {}
 
 type stubSwarm struct{ Swarm }
 
-// TestApplyQueueSerializesPerNode: however applies of one node are scheduled, they run one at a
-// time and none is lost.
 func TestApplyQueueSerializesPerNode(t *testing.T) {
 	store, jobs := &countingStore{}, &goJobs{}
 	a := New(App{Store: store, Jobs: jobs, Swarm: stubSwarm{}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -64,8 +60,6 @@ func TestApplyQueueSerializesPerNode(t *testing.T) {
 	}
 	callers.Wait()
 	jobs.wg.Wait()
-	// At least one read per apply (none lost); an apply a newer revision cancels re-reads the
-	// revision for its log line, so there can be more.
 	if store.peak != 1 || store.read < 50 {
 		t.Fatalf("peak %d reads %d", store.peak, store.read)
 	}

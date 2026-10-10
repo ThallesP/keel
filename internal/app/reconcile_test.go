@@ -127,7 +127,6 @@ func TestSettleDeployment(t *testing.T) {
 			t.Errorf("%s: finishedAt %v with status %s", c.name, next.FinishedAt, next.Status)
 		}
 	}
-	// The health step keeps the start it already had.
 	d := dep("ship a", step("a", domain.StepRunning, true), domain.DeployStep{Label: healthStepLabel, Status: domain.StepRunning, StartedAt: i64(7)})
 	next, _, _ := settleDeployment(d, map[string]*domain.Node{"a": healthy}, now)
 	if h := next.Steps[1]; *h.StartedAt != 7 || *h.FinishedAt != now {
@@ -139,7 +138,7 @@ func TestDeployErrorText(t *testing.T) {
 	if got := deployErrorText(errors.New("  Error response\n\tfrom daemon:  no such image \u00a0")); got != "Error response from daemon: no such image" {
 		t.Errorf("collapse: %q", got)
 	}
-	long := strings.Repeat("é", 299) + "😀" // 299 units + a pair that does not fit
+	long := strings.Repeat("é", 299) + "😀"
 	if got := deployErrorText(errors.New(long)); got != strings.Repeat("é", 299) {
 		t.Errorf("cut: %d", len(got))
 	}
@@ -152,10 +151,10 @@ func TestDeployToFixed1(t *testing.T) {
 	for in, want := range map[float64]string{
 		0:      "0.0",
 		3.4:    "3.4",
-		1.25:   "1.3", // exact tie: JS takes the larger
+		1.25:   "1.3",
 		0.25:   "0.3",
-		1.15:   "1.1", // 1.149999…
-		1.05:   "1.1", // 1.0500000…04
+		1.15:   "1.1",
+		1.05:   "1.1",
 		9.96:   "10.0",
 		224.04: "224.0",
 		0.04:   "0.0",

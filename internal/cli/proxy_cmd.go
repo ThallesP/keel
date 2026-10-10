@@ -11,13 +11,6 @@ import (
 	"github.com/ThallesP/keel/internal/proxy"
 )
 
-// `keel proxy`: the public edge (embedded Caddy + caddy-l4 + Keel's modules), in its own
-// container.
-//
-// Caddy roughly quadruples the binary; a CLI-only build (laptops, agents) can leave the edge out
-// with `-tags keel_noproxy`. Linux only: its listeners live in the host's network namespace
-// (setns), and leaving it out elsewhere keeps `go build ./cmd/keel` working on macOS and Windows,
-// where the CLI runs.
 func init() {
 	Extra = append(Extra, proxyCommand)
 }

@@ -1,7 +1,5 @@
 package app
 
-// Docker's service log body → lines (logProviders/docker.ts demux and parseLine).
-
 import (
 	"encoding/binary"
 	"regexp"
@@ -16,9 +14,6 @@ const dockerTaskKey = "com.docker.swarm.task.id="
 
 var dockerStampMsRE = regexp.MustCompile(`(\.[0-9]{3})[0-9]+Z$`)
 
-// parseDockerLine: `2026-09-14T04:05:06.123456789Z com.docker.swarm.node.id=…,com.docker.swarm.
-// task.id=… text` → time, task, text. The details block exists only with details=1, the stamp
-// only with timestamps=1. Lines without a stamp keep time 0.
 func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 	rest := raw
 	t := 0.0
@@ -55,7 +50,6 @@ func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 	return domain.ServiceLogLine{Time: t, Text: rest, Stream: stream, Task: task}
 }
 
-// splitDockerLines drops empty lines, then strips one trailing \r (in that order, as the TS did).
 func splitDockerLines(text, stream string) []domain.ServiceLogLine {
 	out := []domain.ServiceLogLine{}
 	for _, l := range strings.Split(text, "\n") {
@@ -67,7 +61,6 @@ func splitDockerLines(text, stream string) []domain.ServiceLogLine {
 	return out
 }
 
-// dockerUTF8 is Buffer.toString("utf8"): invalid bytes become U+FFFD.
 func dockerUTF8(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)
@@ -81,9 +74,6 @@ func dockerUTF8(b []byte) string {
 	return sb.String()
 }
 
-// demuxDockerLogs: non-TTY Docker logs are 8-byte frame headers [type,0,0,0,len u32 BE] followed
-// by the payload. A body with no frame is a TTY service's plain text (all stdout). Lines are
-// stdout's then stderr's, stable-sorted by time.
 func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 	var stdout, stderr strings.Builder
 	off := 0
@@ -91,7 +81,7 @@ func demuxDockerLogs(buf []byte) []domain.ServiceLogLine {
 		typ := buf[off]
 		n := int(binary.BigEndian.Uint32(buf[off+4 : off+8]))
 		if typ > 2 || off+8+n > len(buf) || off+8+n < off {
-			break // not multiplexed (TTY) or truncated
+			break
 		}
 		payload := dockerUTF8(buf[off+8 : off+8+n])
 		if typ == 2 {

@@ -15,56 +15,36 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// keel-proxy sync: make the edge serve exactly the endpoints in the database
-// (docs/go/spec/proxy-ingress.md §5). Whole-config and idempotent: the builder (proxy_config.go)
-// turns every endpoint into Caddy's `apps` object, the Proxy port loads it, and each endpoint's
-// status records the outcome.
-
 const (
-	proxySyncKey    = "proxy:sync"
-	proxyResyncName = "proxy:resync"
-	proxyStartupKey = "proxy:startup"
-	// proxyStartupAttempts: how often the start-up pass looks for keel-proxy's admin socket
-	// (1, 2, 4, 8, then 10 s apart: about a minute) before syncing anyway.
+	proxySyncKey         = "proxy:sync"
+	proxyResyncName      = "proxy:resync"
+	proxyStartupKey      = "proxy:startup"
 	proxyStartupAttempts = 8
-	// ProxyResyncInterval: retry what failed for a passing reason (proxy restarting, a port
-	// freed), pick up a changed host address, correct a status that lost a race.
-	ProxyResyncInterval = 2 * time.Minute
-	proxySyncPasses     = 3
-	// MsgNoHostAddress: /keel/host-addrs found nothing to bind (Q2: also when it answers null).
-	MsgNoHostAddress = "keel-proxy found no public network address on the control plane"
+	ProxyResyncInterval  = 2 * time.Minute
+	proxySyncPasses      = 3
+	MsgNoHostAddress     = "keel-proxy found no public network address on the control plane"
 )
 
-// Certificate events keel-proxy reports (POST /proxy/events).
 const (
 	CertObtained = "cert_obtained"
 	CertFailed   = "cert_failed"
 )
 
-// ingressState is the per-App state of the sync loop. App's fields belong to the foundation, so
-// it lives beside it, keyed by the App.
 type ingressState struct {
-	// mu guards running and again: the coalescing trigger of proxy-ingress.md §5.1. One sync runs
-	// at a time; however many are asked for while it runs (Jobs only coalesces syncs that have not
-	// started), they collapse into one more pass after it, and none of them waits for it.
-	mu      sync.Mutex
-	running bool
-	again   bool
-	// failed: the last sync could not load any config (proxy down, an error no endpoint owns).
-	// The resync keeps retrying then even with nothing exposed (Q6).
-	failed atomic.Bool
-	// resyncArmed: the 2-minute resync is registered (once per App).
+	mu          sync.Mutex
+	running     bool
+	again       bool
+	failed      atomic.Bool
 	resyncArmed atomic.Bool
 }
 
-var ingressStates sync.Map // *App → *ingressState
+var ingressStates sync.Map
 
 func (a *App) ingress() *ingressState {
 	v, _ := ingressStates.LoadOrStore(a, &ingressState{})
 	return v.(*ingressState)
 }
 
-// begin claims the sync loop. false: a sync is running, and it will go again for this caller.
 func (st *ingressState) begin() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -76,8 +56,6 @@ func (st *ingressState) begin() bool {
 	return true
 }
 
-// next says whether the running sync must go again (someone asked meanwhile), and otherwise
-// frees the loop in the same critical section, so no request can fall in between.
 func (st *ingressState) next() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -89,15 +67,12 @@ func (st *ingressState) next() bool {
 	return false
 }
 
-// release frees the loop after a sync that did not finish (cancelled, or panicked): the next
-// request runs instead of finding the loop taken forever.
 func (st *ingressState) release() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.running, st.again = false, false
 }
 
-// againIfRunning makes a sync that is running now go once more when it is done.
 func (st *ingressState) againIfRunning() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -106,8 +81,6 @@ func (st *ingressState) againIfRunning() {
 	}
 }
 
-// ScheduleProxySync rebuilds and loads keel-proxy's config soon (coalesced by Jobs). Safe to call
-// often; call it after the triggering write commits (ch.AfterCommit).
 func (a *App) ScheduleProxySync() {
 	if a.Jobs == nil {
 		return
@@ -119,7 +92,6 @@ type proxyReporter struct{ URL, Token string }
 
 type proxyACME struct{ CA, Email string }
 
-// routeStatus is one endpoint's outcome of a sync pass.
 type routeStatus struct {
 	NodeID string
 	Key    string
@@ -127,10 +99,6 @@ type routeStatus struct {
 	Status domain.EndpointStatus
 }
 
-// SyncProxy loads the config for every endpoint and records each endpoint's status. When the
-// endpoints changed while it loaded, it goes again (at most 3 passes), so the latest set wins.
-// Called while another sync runs, it returns at once and that sync runs once more when it is
-// done (however many calls came meanwhile), so syncs never overlap and never queue up.
 func (a *App) SyncProxy(ctx context.Context) {
 	if a.Proxy == nil {
 		a.Log.Warn("keel-proxy sync skipped: no proxy configured")
@@ -155,7 +123,6 @@ func (a *App) SyncProxy(ctx context.Context) {
 	}
 }
 
-// syncProxy is one sync: up to 3 passes, until the endpoints did not move during a load.
 func (a *App) syncProxy(ctx context.Context, st *ingressState) {
 	reporter := proxyReporter{URL: a.Proxy.ReportURL(), Token: a.Config.WorkerToken}
 	if reporter.URL == "" {
@@ -194,8 +161,6 @@ func (a *App) proxyRoutes(ctx context.Context) ([]ProxyRoute, error) {
 	return routes, err
 }
 
-// applyProxy loads the config for routes and says how each endpoint stands (§5.1.1). loaded is
-// false when no config could be loaded at all (the proxy keeps serving its previous one).
 func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyReporter, acme proxyACME) ([]routeStatus, bool) {
 	at := a.Now()
 	statusOf := func(r ProxyRoute, s domain.EndpointStatus) routeStatus {
@@ -221,7 +186,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 			return fail(errors.New(MsgNoHostAddress))
 		}
 	}
-	for { // each refused load takes at least one endpoint out, so this ends
+	for {
 		live := make([]ProxyRoute, 0, len(routes))
 		for _, r := range routes {
 			if _, out := failed[r.Key()]; !out {
@@ -256,7 +221,6 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 	}
 	certs := map[string]ProxyCert{}
 	if len(names) > 0 {
-		// Any failure here only means "not known yet": the cert event reports it later.
 		if got, err := a.Proxy.Certs(ctx, names); err == nil {
 			certs = got
 		}
@@ -276,7 +240,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointLive, At: at}))
 		case "failed":
 			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointFailed, Error: domain.CertHint(cert.Error, a.Config.PublicIP), At: at}))
-		default: // pending or unknown: the cert event reports the outcome
+		default:
 			out = append(out, statusOf(r, domain.EndpointStatus{State: domain.EndpointStarting, At: at}))
 		}
 	}
@@ -285,9 +249,6 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 
 var blameRE = regexp.MustCompile(`listen (tcp|udp) \S*?:(\d+): (.+?)(?:$|\n)`)
 
-// blameListener: the endpoints a refused load is about. Caddy loads all or nothing and names the
-// listener that would not bind; that endpoint fails alone and the rest load without it. TCP 80
-// and 443 belong to every http endpoint. Empty when the error names no live endpoint. §5.1.3.
 func blameListener(message string, routes []ProxyRoute) map[string]string {
 	m := blameRE.FindStringSubmatch(message)
 	if m == nil {
@@ -313,15 +274,10 @@ func blameListener(message string, routes []ProxyRoute) map[string]string {
 	return blamed
 }
 
-// proxyErrorText: whitespace runs collapsed, trimmed, at most 300 characters.
 func proxyErrorText(err error) string {
 	return domain.TruncateRunes(domain.CollapseSpace(err.Error()), 300)
 }
 
-// setEndpointStatuses writes a sync's outcome (§5.3). Only statuses that changed (state or error;
-// `at` is ignored) are written, so a resync while all is well costs no write and no
-// invalidation. Matching is by key and container port, so an endpoint replaced since the sync
-// read it keeps its own status (Q4).
 func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) error {
 	if len(statuses) == 0 {
 		return nil
@@ -385,9 +341,6 @@ func (a *App) environmentChanged(tx Tx, ch *Changes, environmentID string) error
 	return nil
 }
 
-// ReportCert records keel-proxy's certificate report for name on every http endpoint with that
-// domain: cert_obtained → live, cert_failed → failed with the next step for the user. A failure is
-// final only for this attempt: Caddy keeps retrying and the next cert_obtained flips it. §5.5.
 func (a *App) ReportCert(ctx context.Context, event, name, certError string) error {
 	var status domain.EndpointStatus
 	switch event {
@@ -425,17 +378,12 @@ func (a *App) ReportCert(ctx context.Context, event, name, certError string) err
 			}
 		}
 		if len(ids) > 0 {
-			// A sync running now may have read /keel/certs before this certificate existed and would
-			// write `starting` over it (Q5): it goes once more when done, and reads it as ok.
 			ch.AfterCommit(a.ingress().againIfRunning)
 		}
 		return nil
 	})
 }
 
-// recoverIngress is the ingress part of the start-up pass (migrations.run + cron): default
-// domains follow a changed public IP, then a sync makes a fresh or restarted proxy serve what the
-// database holds, then the resync every 2 minutes.
 func (a *App) recoverIngress(ctx context.Context) {
 	if ip := a.Config.PublicIP; ip != "" {
 		moved, err := a.moveDefaultDomains(ctx, ip)
@@ -454,10 +402,6 @@ func (a *App) recoverIngress(ctx context.Context) {
 	}
 }
 
-// moveDefaultDomains: every http endpoint on this node's default sslip.io pattern for another IP
-// moves to ip, keeping its name, and starts over (migrations.run step 3). One whose new domain an
-// endpoint already holds (the same node exposed again on the current IP, then the IP flipped back)
-// stays where it is: domains are unique, and the holder already serves that name.
 func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 	moved := 0
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
@@ -505,8 +449,6 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 	return moved, err
 }
 
-// ResyncProxy is the 2-minute resync: sync while anything is exposed, or while the last sync
-// could not load (so a failed sync after the last unexpose is retried too).
 func (a *App) ResyncProxy(ctx context.Context) {
 	var exposed bool
 	err := a.read(ctx, func(tx Tx) (err error) {
@@ -522,11 +464,6 @@ func (a *App) ResyncProxy(ctx context.Context) {
 	}
 }
 
-// startupProxySync is the start-up sync. After a host reboot or an install.sh re-run, serve and
-// keel-proxy restart together and the edge keeps serving its autosaved config while it comes up.
-// A sync that found no admin socket would mark every endpoint failed until the 2-minute resync,
-// so while something is exposed it first waits (with backoff, about a minute) for the proxy to
-// answer, then syncs; still down by then, the sync reports it, which is the truth.
 func (a *App) startupProxySync(attempt int) func(context.Context) {
 	return func(ctx context.Context) {
 		if a.Proxy != nil && attempt < proxyStartupAttempts && a.anyEndpoint(ctx) {

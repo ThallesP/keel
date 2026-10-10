@@ -3,7 +3,7 @@ package domain
 import "testing"
 
 func TestRangeWindow(t *testing.T) {
-	const now = 1_791_460_812_345 // 2026-10-08T12:00:12.345Z
+	const now = 1_791_460_812_345
 	cases := []struct {
 		r        TimeRange
 		from, to int64
@@ -24,7 +24,6 @@ func TestRangeWindow(t *testing.T) {
 			t.Errorf("%s: the last bucket does not hold now", c.r)
 		}
 	}
-	// On a bucket boundary, now opens the last bucket.
 	from, to, _ := RangeWindow(Range1h, 1_791_460_800_000)
 	if to != 1_791_460_920_000 || from != 1_791_457_320_000 {
 		t.Errorf("boundary: %d %d", from, to)

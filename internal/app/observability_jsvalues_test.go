@@ -1,8 +1,5 @@
 package app
 
-// JS semantics the providers rely on, against what Node printed for the same inputs
-// (testdata/js_semantics.golden.json).
-
 import (
 	"encoding/json"
 	"math"
@@ -142,7 +139,6 @@ func TestJSONOrderAndStringify(t *testing.T) {
 	if _, err := DecodeJSON([]byte(`{"a":1} x`)); err == nil {
 		t.Error("trailing data accepted")
 	}
-	// Duplicate keys: first position, last value (JSON.parse).
 	v, _ := DecodeJSON([]byte(`{"a":1,"b":2,"a":3}`))
 	if got := jsStringify(v); got != `{"a":3,"b":2}` {
 		t.Errorf("duplicate keys: %s", got)

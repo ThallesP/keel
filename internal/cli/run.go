@@ -17,12 +17,8 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// A variable resolved to a service's overlay hostname (`svc-<id>`, variables.serviceHost) only
-// resolves inside the cluster. Ids are 20 characters (domain.NewID), or 32 for services imported
-// from a Convex-era install (ids are kept verbatim).
 var overlayHost = regexp.MustCompile(`\bsvc-[0-9a-z]{20,32}\b`)
 
-// childExit carries a `keel run` command's own exit code out through Execute, unprinted.
 type childExit struct{ code int }
 
 func (e *childExit) Error() string { return "exit status" }
@@ -72,7 +68,6 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 			if err != nil {
 				return err
 			}
-			// The OTLP relay (POST /otlp/v1/traces; SDKs append /v1/traces) is on the dashboard URL.
 			endpoint := strings.TrimRight(s.inst.URL, "/") + "/otlp"
 			environ, skipped := runEnv(os.Environ(), vars, tracing, endpoint)
 
@@ -90,11 +85,6 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 	}
 }
 
-// runEnv layers the environment of a local run: this shell, then the service's variables, then
-// its tracing variables, each only where the layer before left the key unset (a service's own
-// variables win over the tracing ones when it is deployed, too). The ingest key only goes to
-// Keel's endpoint: with an endpoint of its own set, the run gets no Keel headers (as tracing.ts
-// does when deployed). Variables that only resolve in the cluster are skipped and returned by key.
 func runEnv(shell []string, vars []client.Variable, tracing map[string]string, endpoint string) ([]string, []string) {
 	out := slices.Clone(shell)
 	set := map[string]bool{}
@@ -131,11 +121,6 @@ func runEnv(shell []string, vars []client.Variable, tracing map[string]string, e
 	return out, skipped
 }
 
-// run starts the command and waits for it. At a terminal the command shares keel's foreground
-// process group, so Ctrl-C already reaches everything it started and is not sent again; other
-// signals keel gets are passed on to it. Without a terminal (an agent, a script) the command
-// gets a process group of its own and every signal keel gets goes to the whole group, so stopping
-// keel stops `npm run dev` and the node under it alike.
 func run(argv []string, environ []string) error {
 	path, err := exec.LookPath(argv[0])
 	if err != nil {

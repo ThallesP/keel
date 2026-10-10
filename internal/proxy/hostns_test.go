@@ -18,7 +18,7 @@ func TestPublic(t *testing.T) {
 		{"eth0", "fe80::1", false},
 		{"lo", "127.0.0.1", false},
 		{"tailscale0", "100.123.155.61", false},
-		{"eth0", "100.100.1.1", false}, // a tailnet address on any interface
+		{"eth0", "100.100.1.1", false},
 		{"eth0", "fd7a:115c:a1e0::1", false},
 		{"docker_gwbridge", "172.19.0.1", false},
 		{"br-7f74391f29c5", "172.22.0.1", false},

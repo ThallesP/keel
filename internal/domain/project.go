@@ -1,6 +1,5 @@
 package domain
 
-// Project belongs to one organization and always has a production environment.
 type Project struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organizationId"`

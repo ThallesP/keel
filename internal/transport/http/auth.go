@@ -12,12 +12,8 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Auth area routes (docs/go/ARCHITECTURE.md "Resolved API decisions": Session, Accounts, Device
-// login, Organization).
-
 var authTags = []string{"auth"}
 
-// authPublic: no session needed (the operation still sees one when sent).
 var authPublic = []map[string][]string{}
 
 type (
@@ -68,7 +64,6 @@ func authOrganizationView(o app.MyOrganization) api.Organization {
 	return api.Organization{ID: o.ID, Name: o.Name, Slug: o.Slug, Role: o.Role}
 }
 
-// authDeviceResponses documents RFC 8628 error bodies for the given statuses.
 func authDeviceResponses(h huma.API, statuses ...string) map[string]*huma.Response {
 	schema := h.OpenAPI().Components.Schemas.Schema(reflect.TypeOf(api.DeviceError{}), true, "DeviceError")
 	out := map[string]*huma.Response{}
@@ -301,9 +296,6 @@ func (s *Server) registerAuth(h huma.API) {
 	authNullable(h, reflect.TypeOf(api.InvitationLookup{}), "invitation")
 }
 
-// authNullable documents object fields that may be null (Huma cannot tag a struct pointer
-// nullable): each becomes oneOf [the object, null], so generated clients type them `T | null`.
-// Fields stay required: the key is always present.
 func authNullable(h huma.API, t reflect.Type, fields ...string) {
 	reg := h.OpenAPI().Components.Schemas
 	s := reg.Schema(t, true, "")
@@ -324,7 +316,6 @@ func authNullable(h huma.API, t reflect.Type, fields ...string) {
 	}
 }
 
-// authSignedIn answers sign-up and sign-in: the cookie, and the same session as token.
 func (s *Server) authSignedIn(out app.SignedIn) *authSignedInOutput {
 	return &authSignedInOutput{
 		SetCookie: s.authSessionCookie(out.Token, out.Session.ExpiresAt),

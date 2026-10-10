@@ -55,7 +55,6 @@ func (s *Shipper) lastRead(id string) string {
 	return s.readSince[id]
 }
 
-// queued is the number of entries per sink key, and whether a drain runs.
 func (s *Shipper) queued() map[string]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,9 +128,9 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 
 func TestShipperResumePointPrecedence(t *testing.T) {
 	d := newFakeDocker()
-	persisted := task('p', "n1", "1", "running") // has a delivered resume point
-	fresh := task('f', "n2", "1", "running")     // no resume point, no connect time
-	flaky := task('r', "n1", "1", "running")     // its tail breaks after one line
+	persisted := task('p', "n1", "1", "running")
+	fresh := task('f', "n2", "1", "running")
+	flaky := task('r', "n1", "1", "running")
 	d.setContainers(persisted, fresh, flaky)
 	d.script(flaky.ID,
 		logScript{data: stamped("2024-01-01T00:00:05.000000007Z one"), end: errors.New("unexpected EOF")},
@@ -178,12 +177,12 @@ func TestShipperRetryKeepsBatchAndResumePoint(t *testing.T) {
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067202.000000001" })
 	waitFor(t, func() bool { return s.queued()[sinkKey(sinkA)+" draining"] == 1 })
 
-	gate <- struct{}{} // first attempt: the sink is unreachable
+	gate <- struct{}{}
 	waitFor(t, func() bool { return len(ss.get(sinkA).sent()) == 1 })
 	if _, ok := state.LogsSince(c.ID); ok {
 		t.Fatal("a failed batch moved the resume point")
 	}
-	close(gate) // retry after retryEvery
+	close(gate)
 	waitFor(t, func() bool { v, _ := state.LogsSince(c.ID); return v == "1704067202.000000001" })
 	msgs := ss.get(sinkA).messages()
 	n := len(ss.get(sinkA).sent()[0])
@@ -205,8 +204,8 @@ func TestShipperBatchesOf500(t *testing.T) {
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, state, _ := newTestShipper(t, d, ss)
-	s.flushEvery = time.Hour                                        // only the 500-line threshold and Flush send
-	state.Checkpoint([]resumePoint{{c.ID, "1704067200.000000001"}}) // exited, undelivered: pending
+	s.flushEvery = time.Hour
+	state.Checkpoint([]resumePoint{{c.ID, "1704067200.000000001"}})
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { return s.isFinished(c.ID) })
@@ -227,7 +226,6 @@ func TestShipperBatchesOf500(t *testing.T) {
 	waitFor(t, func() bool { v, _ := state.LogsSince(c.ID); return v == "1704067201.100001200" })
 }
 
-// At maxQueue the follower stops reading until a delivered batch brings the queue under half.
 func TestShipperBackPressure(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
@@ -244,7 +242,7 @@ func TestShipperBackPressure(t *testing.T) {
 	s.maxQueue = 4
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
-	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" }) // line 3: queue full
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" })
 	time.Sleep(30 * time.Millisecond)
 	if got := s.lastRead(c.ID); got != "1704067203.000000001" {
 		t.Fatalf("the follower read on past a full queue: %s", got)
@@ -267,7 +265,7 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	d.setContainers(c)
 	d.script(c.ID, logScript{data: stamped("2024-01-01T00:00:01Z a", "2024-01-01T00:00:02Z b", "2024-01-01T00:00:03Z c")})
 	ss := newSinkSet()
-	ss.setup = func(f *fakeSink) { f.results = []bool{false} } // unreachable
+	ss.setup = func(f *fakeSink) { f.results = []bool{false} }
 	s, _, logs := newTestShipper(t, d, ss)
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
@@ -290,9 +288,6 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	}
 }
 
-// A follower waiting for room in a queue that is then dropped (token rotation while the sink was
-// down) is released, and the line it holds goes to the service's new sink: only what was queued
-// for the removed sink is dropped.
 func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
@@ -307,10 +302,10 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	ss := newSinkSet()
 	s, state, logs := newTestShipper(t, d, ss)
 	s.maxQueue = 2
-	s.flushEvery = time.Hour // nothing is sent but by Flush: the old sink never drains
+	s.flushEvery = time.Hour
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
-	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067201.000000001" }) // lines 0, 1 queued
+	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067201.000000001" })
 	time.Sleep(20 * time.Millisecond)
 	if s.lastRead(c.ID) != "1704067201.000000001" {
 		t.Fatal("read past a full queue")
@@ -336,7 +331,6 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	waitFor(t, func() bool { v, _ := state.LogsSince(c.ID); return v == "1704067204.000000001" })
 }
 
-// Room comes back below half of maxQueue, not as soon as one batch went out.
 func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
@@ -351,10 +345,9 @@ func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 	ss.setup = func(f *fakeSink) { f.gate = gate }
 	s, _, _ := newTestShipper(t, d, ss)
 	s.maxQueue = 4
-	s.flushEvery = time.Hour // no drain until the queue is full
+	s.flushEvery = time.Hour
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
-	// Lines 0-3 fill the queue; line 4 waits.
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067203.000000001" })
 	sink := ss.get(sinkA)
 	held := func() bool {
@@ -365,20 +358,20 @@ func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 		t.Fatal("read past a full queue")
 	}
 	s.mu.Lock()
-	s.flushLines = 1 // one line per send from here on
+	s.flushLines = 1
 	s.mu.Unlock()
 	go s.Flush(context.Background())
-	gate <- struct{}{} // line 0 delivered: 3 queued
+	gate <- struct{}{}
 	waitFor(t, func() bool { return len(sink.messages()) == 1 })
 	if !held() {
 		t.Fatal("room came back at 3 of 4 queued")
 	}
-	gate <- struct{}{} // line 1 delivered: 2 queued, not under half
+	gate <- struct{}{}
 	waitFor(t, func() bool { return len(sink.messages()) == 2 })
 	if !held() {
 		t.Fatal("room came back at 2 of 4 queued")
 	}
-	gate <- struct{}{} // line 2 delivered: 1 queued, under half
+	gate <- struct{}{}
 	waitFor(t, func() bool { return s.lastRead(c.ID) == "1704067205.000000001" })
 	close(gate)
 	waitFor(t, func() bool { return len(sink.messages()) == 6 })
@@ -387,8 +380,8 @@ func TestShipperBackPressureReleasesBelowHalf(t *testing.T) {
 func TestShipperReconcileFollowers(t *testing.T) {
 	d := newFakeDocker()
 	running := task('1', "n1", "1", "running")
-	pending := task('2', "n1", "2", "exited") // exited with undelivered lines after a restart
-	done := task('3', "n1", "3", "exited")    // exited, nothing pending
+	pending := task('2', "n1", "2", "exited")
+	done := task('3', "n1", "3", "exited")
 	foreign := task('4', "n9", "1", "running")
 	other := Container{ID: containerID('5'), State: "running", Labels: map[string]string{labelServiceName: "keel-agent"}}
 	d.setContainers(running, pending, done, foreign, other)
@@ -412,12 +405,12 @@ func TestShipperReconcileFollowers(t *testing.T) {
 	}
 	waitFor(t, func() bool { v, _ := state.LogsSince(pending.ID); return v == "1704067209.000000001" })
 
-	reconcile(t, s) // finished: not read again
+	reconcile(t, s)
 	if got := d.callsFor(pending.ID); len(got) != 1 {
 		t.Errorf("a finished container was read again: %v", got)
 	}
 
-	d.setContainers(running) // pending's container was removed
+	d.setContainers(running)
 	reconcile(t, s)
 	if s.isFinished(pending.ID) {
 		t.Error("finished kept for a removed container")
@@ -427,7 +420,7 @@ func TestShipperReconcileFollowers(t *testing.T) {
 	}
 
 	state.Checkpoint([]resumePoint{{running.ID, "5.000000001"}})
-	s.ApplyConfig(nil) // the project lost its sink
+	s.ApplyConfig(nil)
 	reconcile(t, s)
 	if f := s.following(); len(f) != 0 {
 		t.Errorf("following %v without a sink", f)
@@ -437,10 +430,6 @@ func TestShipperReconcileFollowers(t *testing.T) {
 	}
 }
 
-// A container that starts while the reconcile's container list is in flight is not in that list.
-// Its follower (started by the `start` event) must survive the reconcile with its resume points:
-// stopping it and forgetting them meant no reading until the next poll, then re-reading the whole
-// log from the sink's connect time (duplicates).
 func TestShipperReconcileKeepsContainersStartedDuringTheList(t *testing.T) {
 	d := newFakeDocker()
 	old := task('o', "n1", "1", "running")
@@ -474,13 +463,11 @@ func TestShipperReconcileKeepsContainersStartedDuringTheList(t *testing.T) {
 		t.Fatal("a container that was gone before the list kept its resume point")
 	}
 
-	// Next poll: it is listed now, nothing is read twice.
 	d.setContainers(old, young)
 	reconcile(t, s)
 	if got := d.callsFor(young.ID); len(got) != 1 {
 		t.Fatalf("re-read %v", got)
 	}
-	// And once it is really gone, it is forgotten as usual.
 	d.setContainers(old)
 	reconcile(t, s)
 	if _, ok := state.LogsSince(young.ID); ok || slices.Contains(s.following(), young.ID) {
@@ -531,9 +518,6 @@ func TestShipperContainerEvents(t *testing.T) {
 	}
 }
 
-// The organization rule for the agent: a container's lines go to the sink of its own project's
-// organization and nowhere else; a service no organization routes (another install's, or one the
-// control plane does not list) is never read at all.
 func TestShipperOrganizationIsolation(t *testing.T) {
 	d := newFakeDocker()
 	a := task('a', "n1", "1", "running")
@@ -565,7 +549,6 @@ func TestShipperOrganizationIsolation(t *testing.T) {
 		t.Fatalf("an unrouted service was read: %v", got)
 	}
 
-	// Organization B disconnects: its containers stop being read; nothing moves to A.
 	s.ApplyConfig([]SinkRoute{{ProjectID: "p1", ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	s.OnContainerEvent("start", b.ID, b.Labels)
@@ -579,7 +562,6 @@ func TestShipperOrganizationIsolation(t *testing.T) {
 	}
 }
 
-// Equal sinks (several projects of one organization) share one Sink and one queue.
 func TestShipperSharedSinkQueue(t *testing.T) {
 	d := newFakeDocker()
 	a := task('a', "n1", "1", "running")
@@ -639,7 +621,6 @@ func TestApplyConfigChanged(t *testing.T) {
 	}
 }
 
-// A line without a Docker stamp (TTY raw text) is stamped now and moves no resume point.
 func TestShipperUnstampedLine(t *testing.T) {
 	d := newFakeDocker()
 	c := task('a', "n1", "1", "running")
@@ -679,7 +660,7 @@ func TestShipperFlushAndClose(t *testing.T) {
 	if v, _ := state.LogsSince(c.ID); v != "1704067201.000000001" {
 		t.Fatalf("resume point after flush = %q", v)
 	}
-	s.Close(time.Second) // waits for the followers, which remove themselves when they return
+	s.Close(time.Second)
 	if f := s.following(); len(f) != 0 {
 		t.Fatalf("still following %v after Close", f)
 	}

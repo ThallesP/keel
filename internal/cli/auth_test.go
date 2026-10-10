@@ -16,15 +16,12 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// fakeInstall is an install's API for the login tests: /api/meta answers, the device token poll n
-// gets polls[n] (the last one after that), /api/me answers me (500 when empty), and every other
-// route is down.
 type fakeInstall struct {
 	*httptest.Server
 	polls     []string
 	me        string
 	pollCount atomic.Int32
-	codes     atomic.Int32 // device codes started
+	codes     atomic.Int32
 }
 
 func newFakeInstall(t *testing.T, polls ...string) *fakeInstall {
@@ -56,15 +53,13 @@ func newFakeInstall(t *testing.T, polls ...string) *fakeInstall {
 			}
 			w.Write([]byte(f.me))
 		default:
-			http.Error(w, "unavailable", http.StatusInternalServerError) // the rest is down
+			http.Error(w, "unavailable", http.StatusInternalServerError)
 		}
 	}))
 	t.Cleanup(f.Close)
 	return f
 }
 
-// pendingInstance saves an instance with a pending login in a fresh config dir, pointing at an
-// install whose device token polls answer polls in turn, and returns the loaded config.
 func pendingInstance(t *testing.T, expiresIn time.Duration, polls ...string) (*config.Config, *fakeInstall) {
 	t.Helper()
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
@@ -80,7 +75,7 @@ func pendingInstance(t *testing.T, expiresIn time.Duration, polls ...string) (*c
 		URL: f.URL,
 		Pending: &config.PendingLogin{
 			DeviceCode: "dev", UserCode: "ABCDEFGH", URL: f.URL + "/device?user_code=ABCDEFGH",
-			ExpiresAt: time.Now().Add(expiresIn), Interval: 0, // no waiting in tests
+			ExpiresAt: time.Now().Add(expiresIn), Interval: 0,
 		},
 	})
 	if err := cfg.Save(); err != nil {
@@ -117,7 +112,6 @@ func TestFinishLoginApprovedSavesToken(t *testing.T) {
 	}
 }
 
-// Polled moments ago by another run: wait the interval and ask again rather than report pending.
 func TestFinishLoginSlowDownAsksAgain(t *testing.T) {
 	cfg, f := pendingInstance(t, time.Minute, `{"error":"slow_down"}`, `{"access_token":"tok"}`)
 	inst := cfg.Instances["keel.test"]
@@ -137,8 +131,6 @@ func TestFinishLoginExpiredDoesNotPoll(t *testing.T) {
 	}
 }
 
-// Two runs right after the approval: the token goes to the first poll, the other one is told
-// the code is used up and picks the token up from the config instead.
 func TestFinishLoginTokenTakenByAnotherRun(t *testing.T) {
 	cfg, _ := pendingInstance(t, time.Minute, `{"error":"invalid_grant"}`)
 	other, _ := config.Load()
@@ -162,8 +154,6 @@ func TestFinishLoginNothingPending(t *testing.T) {
 	}
 }
 
-// The install has dropped a turned-down code: say so once, then forget it rather than poll a code
-// that is gone ("used up") on every later run.
 func TestFinishLoginDeniedForgetsTheLink(t *testing.T) {
 	cfg, f := pendingInstance(t, time.Minute, `{"error":"access_denied"}`)
 	err := quietApp().finishLogin(context.Background(), cfg, "keel.test", cfg.Instances["keel.test"])
@@ -179,7 +169,6 @@ func TestFinishLoginDeniedForgetsTheLink(t *testing.T) {
 	}
 }
 
-// login runs keel login with args (and --json) and returns the JSON it printed and the error.
 func login(t *testing.T, args ...string) (map[string]any, error) {
 	t.Helper()
 	out := &bytes.Buffer{}
@@ -198,9 +187,8 @@ func login(t *testing.T, args ...string) (map[string]any, error) {
 	return got, err
 }
 
-// The token is handed out once, so keel login saves it before anything after the poll can fail.
 func TestLoginKeepsTokenWhenConnectFails(t *testing.T) {
-	pendingInstance(t, time.Minute, `{"access_token":"tok"}`) // /api/me is down
+	pendingInstance(t, time.Minute, `{"access_token":"tok"}`)
 	if _, err := login(t); output.CodeOf(err) != output.CodeServer {
 		t.Fatalf("err = %v, want the /api/me SERVER_ERROR", err)
 	}
@@ -210,8 +198,6 @@ func TestLoginKeepsTokenWhenConnectFails(t *testing.T) {
 	}
 }
 
-// The device flow end to end against the API: a new install prints the link and returns without a
-// terminal; once approved, keel login says loggedIn with the account.
 func TestLoginDeviceFlow(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	t.Setenv("KEEL_URL", "")
@@ -232,8 +218,6 @@ func TestLoginDeviceFlow(t *testing.T) {
 		t.Fatalf("saved %+v", saved)
 	}
 
-	// Approved meanwhile: keel login again polls the link and finishes. (The fake answers the
-	// device code "dev".)
 	saved.Instances[host].Pending.DeviceCode = "dev"
 	saved.Save()
 	f.me = `{"user":{"id":"u1","email":"ci@example.com","name":"CI"},"organization":null}`
@@ -249,12 +233,10 @@ func TestLoginDeviceFlow(t *testing.T) {
 		t.Errorf("saved %+v", s)
 	}
 
-	// Logged in: keel login only says so, without starting a new link.
 	got, err = login(t)
 	if err != nil || got["status"] != "loggedIn" || f.codes.Load() != 1 {
 		t.Errorf("again: %v, %v (%d codes)", got, err, f.codes.Load())
 	}
-	// The session is gone: a new link.
 	f.me = `{"user":null,"organization":null}`
 	got, err = login(t)
 	if err != nil || got["status"] != "pending" || f.codes.Load() != 2 {
@@ -262,7 +244,6 @@ func TestLoginDeviceFlow(t *testing.T) {
 	}
 }
 
-// keel login accepts the Convex-era flags (agents may still pass them) and ignores them.
 func TestLoginIgnoresConvexFlags(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	t.Setenv("KEEL_URL", "")
@@ -273,7 +254,6 @@ func TestLoginIgnoresConvexFlags(t *testing.T) {
 	}
 }
 
-// keel login without a URL works on the saved install, never on a copy carrying KEEL_TOKEN.
 func TestLoginTargetIgnoresKeelToken(t *testing.T) {
 	cfg, _ := pendingInstance(t, time.Minute, `{"error":"authorization_pending"}`)
 	t.Setenv("KEEL_TOKEN", "from-env")
@@ -288,8 +268,6 @@ func TestLoginTargetIgnoresKeelToken(t *testing.T) {
 	}
 }
 
-// A signed-in command checks the session first: a dead one is NOT_AUTHENTICATED with the login
-// fix, whatever the command would have called.
 func TestConnectChecksTheSession(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	f := newFakeInstall(t)

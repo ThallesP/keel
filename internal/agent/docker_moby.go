@@ -11,14 +11,10 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// MobyDocker is Docker over the moby client.
 type MobyDocker struct {
 	cli *client.Client
 }
 
-// NewMobyDocker connects to the unix socket at socket (DOCKER_SOCKET), or, when socket is "",
-// to DOCKER_HOST / the default unix:///var/run/docker.sock. Any request that is not a GET (or the
-// HEAD /_ping of API version negotiation) is refused before it reaches the daemon.
 func NewMobyDocker(socket string) (*MobyDocker, error) {
 	opts := []client.Opt{client.FromEnv, client.WithHTTPRequestHook(readOnly)}
 	if socket != "" {
@@ -35,7 +31,6 @@ func newMobyDocker(opts ...client.Opt) (*MobyDocker, error) {
 	return &MobyDocker{cli: cli}, nil
 }
 
-// readOnly is the agent's GET-only invariant, enforced on every request the client makes.
 func readOnly(r *http.Request) error {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return nil
@@ -43,7 +38,6 @@ func readOnly(r *http.Request) error {
 	return fmt.Errorf("keel agent is read-only on Docker: refusing %s %s", r.Method, r.URL.Path)
 }
 
-// Close releases the client's connections.
 func (d *MobyDocker) Close() error { return d.cli.Close() }
 
 func (d *MobyDocker) Info(ctx context.Context) (NodeInfo, error) {
@@ -56,7 +50,7 @@ func (d *MobyDocker) Info(ctx context.Context) (NodeInfo, error) {
 
 func (d *MobyDocker) ListSwarmContainers(ctx context.Context) ([]Container, error) {
 	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{
-		All: true, // a status filter implies all; say it explicitly
+		All: true,
 		Filters: make(client.Filters).
 			Add("label", labelServiceName).
 			Add("status", "running", "exited"),
@@ -77,8 +71,6 @@ func (d *MobyDocker) Events(ctx context.Context, since string) (EventStream, err
 		Since:   since,
 		Filters: make(client.Filters).Add("type", "container", "service", "node"),
 	})
-	// Events returns once the GET was answered. A failed GET is reported on Err right after; in
-	// the rare interleaving where it is not there yet, the first Next returns it instead.
 	select {
 	case err := <-res.Err:
 		cancel()
@@ -131,7 +123,7 @@ func (d *MobyDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 		ShowStderr: true,
 		Timestamps: true,
 		Follow:     true,
-		Since:      since, // "seconds.nanoseconds" passes through unchanged
+		Since:      since,
 	}
 	if since == "" {
 		opts.Tail = "0"

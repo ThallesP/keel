@@ -9,20 +9,15 @@ import (
 	"sync"
 )
 
-// fakeDocker is an in-memory Docker: containers, scripted log streams, scripted event streams.
 type fakeDocker struct {
-	mu         sync.Mutex
-	info       NodeInfo
-	infoErr    error
-	containers []Container
-	listErr    error
-	// afterList runs inside ListSwarmContainers after the answer was taken: what happens on the
-	// node while the list is in flight.
-	afterList func()
-	// logs scripts each ContainerLogs call of a container, in order (the last repeats).
-	logs     map[string][]logScript
-	logCalls []logCall
-	// streams scripts each Events call, in order; when exhausted, Events blocks until ctx ends.
+	mu          sync.Mutex
+	info        NodeInfo
+	infoErr     error
+	containers  []Container
+	listErr     error
+	afterList   func()
+	logs        map[string][]logScript
+	logCalls    []logCall
 	streams     []eventScript
 	eventsSince []string
 	openStreams int
@@ -30,21 +25,17 @@ type fakeDocker struct {
 
 type logCall struct{ id, since string }
 
-// logScript is one answer to ContainerLogs: data, then EOF (exited) or an error, or hold the
-// stream open until the follower is stopped.
 type logScript struct {
-	err  error  // returned by ContainerLogs itself
-	data []byte // read before the end
-	end  error  // io.EOF = container exited; nil = stay open until ctx ends
-	// chunk is the read size (default 7, to exercise frame reassembly). A TTY stream needs one
-	// read: under 8 buffered bytes the parser waits for more, as the worker's did.
+	err   error
+	data  []byte
+	end   error
 	chunk int
 }
 
 type eventScript struct {
-	err    error // returned by Events itself
+	err    error
 	events []Event
-	end    error // io.EOF or a stream error; nil = stay open until ctx ends
+	end    error
 }
 
 func newFakeDocker() *fakeDocker {
@@ -58,7 +49,7 @@ func (d *fakeDocker) ListSwarmContainers(context.Context) ([]Container, error) {
 	out, err, hook := slices.Clone(d.containers), d.listErr, d.afterList
 	d.mu.Unlock()
 	if hook != nil {
-		hook() // the daemon answered; the list is on its way back
+		hook()
 	}
 	return out, err
 }
@@ -158,8 +149,6 @@ func (s *fakeEvents) Next() (Event, error) {
 
 func (s *fakeEvents) Close() error { return nil }
 
-// scriptedReader returns data in small reads (to exercise frame reassembly), then end; with a
-// nil end it blocks until ctx is done or it is closed.
 type scriptedReader struct {
 	ctx    context.Context
 	data   []byte
@@ -196,8 +185,6 @@ func (r *scriptedReader) Close() error {
 	return nil
 }
 
-// fakeSink records batches. results scripts Send's answers in order (the last repeats; empty =
-// always true). gate, when set, blocks every Send until a value is received.
 type fakeSink struct {
 	key     string
 	mu      sync.Mutex
@@ -235,7 +222,6 @@ func (s *fakeSink) sent() [][]LogEvent {
 	return slices.Clone(s.batches)
 }
 
-// delivered is every event of every batch the sink accepted or was offered, in order.
 func (s *fakeSink) messages() []string {
 	var out []string
 	for _, b := range s.sent() {
@@ -246,7 +232,6 @@ func (s *fakeSink) messages() []string {
 	return out
 }
 
-// sinkSet is a SinkFactory over fake sinks, one per key, counting builds.
 type sinkSet struct {
 	mu     sync.Mutex
 	sinks  map[string]*fakeSink
@@ -281,7 +266,6 @@ func (ss *sinkSet) get(cfg SinkConfig) *fakeSink {
 	return ss.sinks[sinkKey(cfg)]
 }
 
-// stamped builds stdout frames of "<stamp> <text>\n" lines.
 func stamped(lines ...string) []byte {
 	var out []byte
 	for _, l := range lines {

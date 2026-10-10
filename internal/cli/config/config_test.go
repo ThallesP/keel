@@ -50,8 +50,6 @@ func TestSaveIsPrivateAndRoundTrips(t *testing.T) {
 	}
 }
 
-// A config file written by the Convex-era CLI keeps working: its instances, tokens, pending
-// logins and links load; the Convex URLs are ignored and dropped on the next save.
 func TestConvexEraFileLoads(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("KEEL_CONFIG_DIR", dir)

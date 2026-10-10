@@ -8,10 +8,9 @@ import (
 
 func TestCanvasEncodeURIComponent(t *testing.T) {
 	cases := map[string]string{
-		"":         "",
-		"app":      "app",
-		"A-z_0.9!": "A-z_0.9!",
-		// Expected values are node's encodeURIComponent output.
+		"":                              "",
+		"app":                           "app",
+		"A-z_0.9!":                      "A-z_0.9!",
 		"a b!~*'()$&+,/:;=?@#%é€😀_-.\t": "a%20b!~*'()%24%26%2B%2C%2F%3A%3B%3D%3F%40%23%25%C3%A9%E2%82%AC%F0%9F%98%80_-.%09",
 		"p@ss/w#rd":                     "p%40ss%2Fw%23rd",
 	}
@@ -30,16 +29,15 @@ func TestCanvasFindRefs(t *testing.T) {
 	}{
 		{"${{ pg.URL }}", []ref{{"${{ pg.URL }}", "pg", "URL"}}},
 		{"x${{A}}y${{ b.B }}", []ref{{"${{A}}", "", "A"}, {"${{ b.B }}", "b", "B"}}},
-		// ECMAScript \s: vertical tab, no-break space, BOM, ideographic space count; NEL does not.
 		{"${{\vA\u00a0}}", []ref{{"${{\vA\u00a0}}", "", "A"}}},
 		{"${{\ufeffA\u3000}}", []ref{{"${{\ufeffA\u3000}}", "", "A"}}},
 		{"${{\u0085A}}", nil},
-		{"${{ pg.url }}", nil}, // lowercase key: literal text
+		{"${{ pg.url }}", nil},
 		{"${{ a.b.C }}", nil},
 		{"${{ ${{ A }} }}", []ref{{"${{ A }}", "", "A"}}},
 		{"${{  A  }}${{B}}", []ref{{"${{  A  }}", "", "A"}, {"${{B}}", "", "B"}}},
 		{"$${{ A }}}", []ref{{"${{ A }}", "", "A"}}},
-		{"${{ " + strings.Repeat("a", 41) + ".A }}", nil}, // names are at most 40 chars
+		{"${{ " + strings.Repeat("a", 41) + ".A }}", nil},
 	}
 	for _, c := range cases {
 		var got []ref
@@ -56,9 +54,7 @@ func TestCanvasRewriteRefs(t *testing.T) {
 	pg := Node{ID: "pg1", Name: "pg"}
 	to := func(key string) (string, string) { return "db", key }
 	cases := []struct{ in, row, want string }{
-		// Qualified references to pg are renamed and normalized; others kept byte for byte.
 		{"a ${{  pg.URL}} b ${{ other.X }} c ${{ URL }}", "api", "a ${{ db.URL }} b ${{ other.X }} c ${{ URL }}"},
-		// Unqualified references on pg's own rows keep their form.
 		{"${{USER}}:${{ pg.PASS }}", "pg1", "${{ USER }}:${{ db.PASS }}"},
 		{"nothing here", "api", "nothing here"},
 	}
@@ -67,7 +63,6 @@ func TestCanvasRewriteRefs(t *testing.T) {
 			t.Errorf("RewriteRefs(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
-	// A key rename: only the renamed key changes, every reference to the node is normalized.
 	rename := func(k string) (string, string) {
 		if k == "OLD" {
 			return "pg", "NEW"
@@ -84,9 +79,9 @@ func TestCanvasReferrers(t *testing.T) {
 	vars := []Variable{
 		{NodeID: "api", Key: "Q", Value: "${{ worker.QUEUE_URL }}"},
 		{NodeID: "worker", Key: "QUEUE_URL", Value: "${{ redis.REDIS_URL }}"},
-		{NodeID: "redis", Key: "SELF", Value: "${{ redis.REDIS_PASSWORD }} ${{ REDIS_PASSWORD }}"}, // self: never counts
+		{NodeID: "redis", Key: "SELF", Value: "${{ redis.REDIS_PASSWORD }} ${{ REDIS_PASSWORD }}"},
 		{NodeID: "web", Key: "API", Value: "${{ api.URL }} ${{ ghost.URL }}"},
-		{NodeID: "redis", Key: "BACK", Value: "${{ web.X }}"}, // a cycle back to redis
+		{NodeID: "redis", Key: "BACK", Value: "${{ web.X }}"},
 	}
 	if got, want := Referrers(nodes, vars, "redis"), []string{"worker", "api", "web"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Referrers(redis) = %v, want %v", got, want)
@@ -128,14 +123,12 @@ func TestCanvasResolver(t *testing.T) {
 		{"${{ redis.REDIS_URL }}", "redis://default:s3cret@svc-rd1:6379", true},
 		{"${{ bare.REDIS_URL }}", "redis://svc-rd2:6379", false},
 		{"${{ api.URL }} ${{ api.PORT }}", "http://svc-api1:8080 8080", false},
-		{"${{ api.HOST }}", "override", false}, // an own row wins over a provided key
+		{"${{ api.HOST }}", "override", false},
 		{"${{ pg.HOST }}:${{ pg.PORT }}", "svc-pg1:5432", false},
 		{"[${{ noport.URL }}][${{ noport.PORT }}][${{ noport.HOST }}]", "[][][svc-np1]", false},
-		{"${{ data.HOST }}", "", false}, // volumes provide nothing
+		{"${{ data.HOST }}", "", false},
 		{"${{ pg.POSTGRES_PASSWORD }}", "p@ss/w#rd 8080", true},
 		{"${{ ghost.URL }}", "", false},
-		// The lookup at depth 0 expands SELF at depths 1–5: five x. (The row's own value, expanded
-		// from depth 0, has six: see Env below.)
 		{"${{ api.SELF }}", "xxxxx", false},
 		{"${{ api.LOOP }}", "", false},
 	}
@@ -146,8 +139,6 @@ func TestCanvasResolver(t *testing.T) {
 		}
 	}
 
-	// Parts: text only when non-empty; missing for unknown nodes, keys and exhausted depth; a
-	// self cycle's top-level part is not missing (the depth-0 lookup hit).
 	e := r.Expand(api, "a${{ PLAIN }}${{ ghost.X }}${{ pg.NOPE }}${{ LOOP }}b")
 	want := []RefPart{
 		{Text: "a"},
@@ -164,7 +155,6 @@ func TestCanvasResolver(t *testing.T) {
 		t.Errorf("empty value parts = %+v", got)
 	}
 
-	// Env: own rows in row order, expanded; provided keys not added.
 	if got, want := r.Env(api), []string{"SELF=xxxxxx", "LOOP=", "HOST=override", "PLAIN=plain"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Env(api) = %q, want %q", got, want)
 	}
@@ -174,7 +164,6 @@ func TestCanvasResolver(t *testing.T) {
 }
 
 func TestCanvasResolverDepth(t *testing.T) {
-	// a → b → c → d → e → f → g: the chain is cut after depth 5.
 	names := []string{"a", "b", "c", "d", "e", "f", "g"}
 	var nodes []Node
 	var vars []Variable
@@ -216,7 +205,6 @@ func TestCanvasProvidedKeysOrder(t *testing.T) {
 			t.Errorf("ProvidedKeys(%s) = %v, want %v", c.n.ID, got, c.want)
 		}
 	}
-	// With every credential at its fallback a Redis URL carries no password: not secret.
 	if p := ProvidedKeys(cases[1].n, get)[0]; p.Secret || p.Value != "redis://svc-2:6379" {
 		t.Errorf("REDIS_URL at fallback = %+v", p)
 	}

@@ -13,22 +13,13 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// apply: desired → Swarm (convex/swarm.ts apply; docs/go/spec/swarm-worker.md §6). Runs as a job,
-// outside any transaction: read, release, call Docker, write the outcome.
-//
-// Applies of one node run one at a time, in the order they were scheduled, and each re-reads
-// desired.revision right before createOrUpdate: an apply whose revision has been superseded by a
-// newer ship skips (the newer apply, queued behind it, does the work). That fixes the Convex race
-// where two applies of one node could leave the older revision applied last (projects.md §7.2).
-
 type applyRequest struct {
 	nodeID       string
-	deploymentID string // "" = no deployment to report to
-	revision     int    // desired.revision this apply ships
-	pull         bool   // refresh the image from the registry
+	deploymentID string
+	revision     int
+	pull         bool
 }
 
-// scheduleApply queues req behind the node's other applies and starts a drain job when none runs.
 func (a *App) scheduleApply(req applyRequest) {
 	rt := a.deployRuntime()
 	rt.mu.Lock()
@@ -49,9 +40,6 @@ func (a *App) scheduleApply(req applyRequest) {
 	}
 }
 
-// drainApplies runs the node's queued applies one after the other until none is left. When the
-// job's context ends (serve is stopping) the rest of the queue is dropped: their steps are still
-// pending, so the next start's recovery pass queues them again.
 func (a *App) drainApplies(ctx context.Context, nodeID string) {
 	rt := a.deployRuntime()
 	for {
@@ -81,7 +69,6 @@ func (a *App) safeApply(ctx context.Context, req applyRequest) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.Log.Error("apply panicked", "node", req.nodeID, "panic", r, "stack", string(debug.Stack()))
-			// Fail the step now rather than leave it pending until the 5-minute timeout.
 			record := context.WithoutCancel(ctx)
 			a.setApplyError(record, req.nodeID, "internal error")
 			a.writeStep(record, req.deploymentID, req.nodeID, stepFailed, "error: internal error")
@@ -90,15 +77,10 @@ func (a *App) safeApply(ctx context.Context, req applyRequest) {
 	a.apply(ctx, req)
 }
 
-// applyInput is what apply ships (nodesInternal.applyInput), or nil when the node is gone or
-// has no desired.
 type applyInput struct {
 	desired domain.Desired
 	env     []string
 	oneShot bool
-	// applied: the deployment's step for this node already has appliedAt, i.e. another apply of
-	// the same (deployment, node) reached Swarm. Only a duplicate can see that: the start-up
-	// recovery pass re-queuing a step that a deployment shipped while it was reading.
 	applied bool
 }
 
@@ -143,8 +125,6 @@ func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*applyInput
 	return in, err
 }
 
-// wantedRevision is the node's desired.revision, or ok=false when the node is gone or has no
-// desired (apply's stillWanted).
 func (a *App) wantedRevision(ctx context.Context, nodeID string) (revision int, ok bool, err error) {
 	err = a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(nodeID)
@@ -162,8 +142,6 @@ func (a *App) wantedRevision(ctx context.Context, nodeID string) (revision int, 
 	return revision, ok, err
 }
 
-// deployEnvList turns the container environment into Swarm's KEY=value list. The seams return a map,
-// so the order is by key (the Convex worker kept variable creation order; Docker does not care).
 func deployEnvList(env map[string]string) []string {
 	keys := make([]string, 0, len(env))
 	for k := range env {
@@ -178,8 +156,6 @@ func deployEnvList(env map[string]string) []string {
 }
 
 func (a *App) apply(parent context.Context, req applyRequest) {
-	// Docker calls get a deadline (a pull can take minutes); the outcome is recorded even when
-	// the deadline is what ended them.
 	ctx, cancel := context.WithTimeout(parent, applyDeadline)
 	defer cancel()
 	record := context.WithoutCancel(parent)
@@ -187,7 +163,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
 	fail := func(err error) {
 		if errors.Is(context.Cause(parent), errApplySuperseded) {
-			// A newer revision was queued behind this apply: it does the work. No applyError.
 			rev, _, rerr := a.wantedRevision(record, id)
 			if rerr != nil || rev <= req.revision {
 				rev = req.revision + 1
@@ -196,9 +171,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			return
 		}
 		if parent.Err() != nil {
-			// serve is stopping and the scheduler cancelled its jobs: this is not the apply's
-			// failure. Leave the step pending/running without appliedAt; the next start's
-			// recovery pass queues the apply again (swarm-worker.md §18 (c)).
 			a.Log.Warn("apply interrupted by shutdown", "node", id, "deployment", req.deploymentID, "err", err)
 			return
 		}
@@ -217,10 +189,10 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 	if in == nil {
-		return // deleted before we ran; the node delete's reconcile fails the step
+		return
 	}
 	if in.applied {
-		return // a duplicate of an apply that already reached Swarm for this deployment
+		return
 	}
 	if in.desired.Revision > req.revision {
 		a.applySuperseded(record, req, in.desired.Revision)
@@ -239,7 +211,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		step(stepRunning, "pulling "+image)
 		t0 := a.Now()
 		if err := a.Swarm.PullImage(ctx, image); err != nil {
-			// Registry unreachable but the image is cached: fine. A missing image is not.
 			if !cached {
 				fail(err)
 				return
@@ -250,8 +221,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		}
 	}
 
-	// A pull can take minutes: the node may have been deleted (the delete removes the row before
-	// it removes the service, so this read is authoritative) or shipped again meanwhile.
 	rev, wanted, err := a.wantedRevision(ctx, id)
 	if err != nil {
 		fail(err)
@@ -279,8 +248,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return
 	}
 	if created {
-		// Deleted between the check and the create: the delete's remove already ran against
-		// nothing, so take back the service we just made.
 		_, wanted, err = a.wantedRevision(ctx, id)
 		if err != nil {
 			fail(err)
@@ -322,7 +289,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			}
 			ch.Environment(org, n.EnvironmentID)
 		}
-		// A shipped port change moves the endpoints that follow the node's port.
 		if in.desired.Port != nil {
 			scope, ok, err := ownedNode(tx, domain.SystemActor, id)
 			if err != nil || !ok {
@@ -341,21 +307,13 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	if moved {
 		deployProxySync(a)
 	}
-	// Docker events drive observation from here; this scan lands after stepApplied even if the
-	// event burst of the create already went by. It coalesces with any scan they scheduled.
 	a.scheduleObserve(record, id, observeDebounce, 0)
 }
 
-// applySuperseded: the node was shipped again since this apply was scheduled; the apply queued
-// for the newer revision does the work. Only a finished deployment can be in this state (a new
-// ship needs the environment's previous deployment to be over), so failing its step is cosmetic.
 func (a *App) applySuperseded(ctx context.Context, req applyRequest, revision int) {
 	a.writeStep(ctx, req.deploymentID, req.nodeID, stepFailed, "superseded by revision "+strconv.Itoa(revision))
 }
 
-// createOrUpdate creates svc-<id> if missing, else updates it; true when created. Two applies
-// racing on one service make the loser's update fail ("update out of sequence"): re-read the
-// version and try again, 3 attempts in all. Inspect errors are not retried.
 func (a *App) createOrUpdate(ctx context.Context, spec ServiceSpec) (bool, error) {
 	for attempt := 0; ; attempt++ {
 		version, found, err := a.Swarm.ServiceVersion(ctx, spec.NodeID)
@@ -376,7 +334,6 @@ func (a *App) createOrUpdate(ctx context.Context, spec ServiceSpec) (bool, error
 	}
 }
 
-// setApplyError sets (or with "" clears) the node's applyError (nodesInternal.setApplyError).
 func (a *App) setApplyError(ctx context.Context, nodeID, text string) {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		n, err := tx.Node(nodeID)
@@ -402,10 +359,6 @@ func (a *App) setApplyError(ctx context.Context, nodeID, text string) {
 	}
 }
 
-// ScheduleRemoveService removes the node's Swarm service (svc-<id>) soon; a missing service is
-// fine. It also drops the node's pending scan and, once the service is gone, settles running
-// deployments (a deleted node fails its steps with "node deleted" instead of waiting for the
-// timeout). Called by: canvas (node delete).
 func (a *App) ScheduleRemoveService(nodeID string) {
 	rt := a.deployRuntime()
 	rt.mu.Lock()
@@ -423,19 +376,15 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 	})
 }
 
-// deployErrorText is an error as the deploy log and applyError show it: whitespace runs
-// collapsed to one space, trimmed, at most 300 UTF-16 units (swarm.ts errorText).
 func deployErrorText(err error) string {
 	fields := strings.FieldsFunc(err.Error(), domain.IsJSSpace)
 	return jsSlice(strings.Join(fields, " "), 300)
 }
 
-// deployToFixed1 is JavaScript's x.toFixed(1) for 0 ≤ x < 1e21: the nearest one-decimal value, the
-// larger one on an exact tie (Go's strconv rounds exact ties to even).
 func deployToFixed1(x float64) string {
 	exact := new(big.Float).SetPrec(200).SetFloat64(x)
 	exact.Mul(exact, big.NewFloat(10).SetPrec(200))
-	floor, _ := exact.Int(nil) // truncates toward zero; x ≥ 0
+	floor, _ := exact.Int(nil)
 	frac := new(big.Float).SetPrec(200).Sub(exact, new(big.Float).SetPrec(200).SetInt(floor))
 	if frac.Cmp(big.NewFloat(0.5)) >= 0 {
 		floor.Add(floor, big.NewInt(1))

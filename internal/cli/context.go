@@ -15,13 +15,11 @@ import (
 	"github.com/ThallesP/keel/internal/cli/output"
 )
 
-// session is a signed-in command's target: which install, as whom, and the API to it.
 type session struct {
 	cfg  *config.Config
 	name string
 	inst *config.Instance
 	api  *client.Client
-	// Who the session is, from GET /api/me when connecting.
 	user *client.User
 	org  *client.Organization
 }
@@ -43,10 +41,6 @@ func saveConfig(cfg *config.Config) error {
 	return nil
 }
 
-// target picks the install: KEEL_URL, else --instance / KEEL_INSTANCE, else the directory's link,
-// else the current instance, else the only one. KEEL_TOKEN overrides the stored token.
-// KEEL_CONVEX_URL and KEEL_CONVEX_SITE_URL, which went with KEEL_URL in the Convex era, are
-// ignored: the dashboard URL is the API's.
 func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 	token := os.Getenv("KEEL_TOKEN")
 	if raw := os.Getenv("KEEL_URL"); raw != "" {
@@ -91,8 +85,6 @@ func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 	return name, inst, nil
 }
 
-// connect is a signed-in command's start: the install, a pending login finished, and the
-// session checked (GET /api/me), so a dead one fails as NOT_AUTHENTICATED before anything else.
 func (a *app) connect(ctx context.Context) (*session, error) {
 	cfg, err := a.loadConfig()
 	if err != nil {
@@ -108,7 +100,6 @@ func (a *app) connect(ctx context.Context) (*session, error) {
 	return dial(ctx, cfg, name, inst)
 }
 
-// dial checks inst's session and returns the session to it.
 func dial(ctx context.Context, cfg *config.Config, name string, inst *config.Instance) (*session, error) {
 	c := client.New(inst.URL, inst.Token)
 	user, org, err := c.Me(ctx)
@@ -118,9 +109,6 @@ func dial(ctx context.Context, cfg *config.Config, name string, inst *config.Ins
 	return &session{cfg: cfg, name: name, inst: inst, api: c, user: user, org: org}, nil
 }
 
-// finishLogin completes the login keel login left pending, once someone approved it in the
-// dashboard: the token is saved and the command runs as usual. Not approved yet is
-// AUTHORIZATION_PENDING. An instance with a token (or KEEL_TOKEN) has nothing to finish.
 func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, inst *config.Instance) error {
 	p := inst.Pending
 	if inst.Token != "" || p == nil {
@@ -133,7 +121,6 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 	c := client.New(inst.URL, "")
 	token, slowDown, err := c.PollLogin(ctx, p.DeviceCode)
 	if slowDown {
-		// An earlier run polled moments ago; wait out the interval for a real answer.
 		select {
 		case <-ctx.Done():
 			return output.Errorf(output.CodeCancelled, "", "Cancelled")
@@ -150,13 +137,10 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 		if f == nil || f.URL != inst.URL {
 			return err
 		}
-		// A keel run alongside this one may have taken the token: it is handed out only once.
 		if f.Token != "" {
 			*inst = *f
 			return nil
 		}
-		// Turned down, expired or used up: the install has dropped the code, so forget it and
-		// later runs say "Not logged in" instead of polling a code that is gone.
 		if output.CodeOf(err) == output.CodeNotAuthenticated && f.Pending != nil && f.Pending.DeviceCode == p.DeviceCode {
 			f.Pending = nil
 			fresh.Save()
@@ -176,8 +160,6 @@ func (a *app) finishLogin(ctx context.Context, cfg *config.Config, name string, 
 	return nil
 }
 
-// projectSlug is the project asked for: --project, KEEL_PROJECT, then the directory's link; ""
-// when nothing picks one.
 func (a *app) projectSlug(s *session) string {
 	if a.projectFlag != "" {
 		return a.projectFlag
@@ -191,8 +173,6 @@ func (a *app) projectSlug(s *session) string {
 	return ""
 }
 
-// project resolves the target project and its environment (production for now; environments
-// beyond production arrive with a flag).
 func (a *app) project(ctx context.Context, s *session) (*client.Project, *client.Environment, error) {
 	projects, err := s.api.Projects(ctx)
 	if err != nil {
@@ -232,7 +212,6 @@ func pickProject(projects []client.Project, slug string) (*client.Project, error
 	return nil, output.Errorf(output.CodeProjectNotFound, "Projects: "+list, "No project %q", slug)
 }
 
-// service finds a service of the environment by name (or id) and returns the full list with it.
 func (s *session) service(ctx context.Context, environmentID, name string) (*client.Service, []client.Service, error) {
 	services, err := s.api.Services(ctx, environmentID)
 	if err != nil {
@@ -257,7 +236,6 @@ func findService(services []client.Service, name string) (*client.Service, error
 	return nil, output.Errorf(output.CodeServiceNotFound, fix, "No service %q", name)
 }
 
-// normalizeURL keeps scheme and host: the dashboard origin, which is also the API's.
 func normalizeURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {

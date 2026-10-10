@@ -1,9 +1,5 @@
 package app
 
-// Observability: shared pieces of the log sinks, logs, traces, OTLP relay and tracing switch
-// (docs/go/spec/observability.md). Use cases live in sinks.go, logs.go, traces.go, tracing.go
-// and otlp.go; the Axiom read side in axiom.go.
-
 import (
 	"context"
 	"errors"
@@ -12,7 +8,6 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-// Messages (verbatim from the Convex functions; the CLI and the dashboard show them as is).
 const (
 	msgNoSink            = "Connect Axiom to see traces"
 	msgNoTraces          = "Sign in with Axiom again to turn on traces"
@@ -29,26 +24,20 @@ const (
 	msgOrgNotFound       = "Organization not found"
 )
 
-// axiomPendingTTL: how long a started sign-in or a pending org pick lives (logSinks PENDING_MS).
 const axiomPendingTTL = 10 * time.Minute
 
-// obsInvalid wraps a provider failure as the user-facing error (the TS wrapped them in
-// ConvexError(err.message), which the CLI maps to INVALID_INPUT). Domain errors pass through.
 func obsInvalid(err error) error {
 	var de *domain.Error
 	if errors.As(err, &de) || errors.Is(err, context.Canceled) {
-		return err // a gone caller stays a cancellation
+		return err
 	}
 	return obsErr(domain.CodeInvalidInput, err.Error())
 }
 
-// obsErr is a domain error with a message used verbatim (never a format string).
 func obsErr(code, msg string) error { return &domain.Error{Code: code, Message: msg} }
 
 func errTracesOff(msg string) error { return obsErr(domain.CodeTracesOff, msg) }
 
-// obsEnvironment is the environment when the actor may see it. Missing or foreign →
-// "Environment not found" with PROJECT_NOT_FOUND, the code the CLI gives that message.
 func obsEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
 	if err := actor.RequireUser(); err != nil {
 		return EnvScope{}, err
@@ -63,7 +52,6 @@ func obsEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
 	return scope, nil
 }
 
-// orgSinkOf is the organization's sink, nil when it has none.
 func orgSinkOf(tx Tx, org string) (*SinkRecord, error) {
 	if org == "" {
 		return nil, nil
@@ -78,8 +66,6 @@ func orgSinkOf(tx Tx, org string) (*SinkRecord, error) {
 	return &r, nil
 }
 
-// envSinkScope is logSinks.forEnvironment: the environment's sink and the ids of every node that
-// runs on Swarm (anything but volumes and groups, whatever its desired state).
 type envSinkScope struct {
 	EnvScope
 	Sink       *domain.LogSink
@@ -116,16 +102,11 @@ func (a *App) envSinkScope(ctx context.Context, actor domain.Actor, environmentI
 	return s, err
 }
 
-// sinkChanged: the organization's sink changed. Its Observability page and settings refetch, and
-// so does every service's tracing view (it shows whether the organization can store traces).
 func sinkChanged(ch *Changes, org string) {
 	ch.Organization(org)
 	ch.Add(org, "/api/nodes")
 }
 
-// recoverObservability purges started sign-ins and pending org picks older than 10 minutes, now
-// and every minute after (they replace Convex's scheduled dropSignIn / dropPending). Reads also
-// treat such rows as absent, so the expiry is exact even between sweeps.
 func (a *App) recoverObservability(ctx context.Context) {
 	a.purgeAxiomState(ctx)
 	if a.Jobs != nil {
@@ -144,7 +125,7 @@ func (a *App) purgeAxiomState(ctx context.Context) {
 			return err
 		}
 		for _, org := range orgs {
-			ch.Organization(org) // the org picker disappears
+			ch.Organization(org)
 		}
 		return nil
 	})

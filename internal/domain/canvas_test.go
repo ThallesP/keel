@@ -16,7 +16,7 @@ func TestCanvasEngineOf(t *testing.T) {
 		"localhost:5000/redis":        EngineRedis,
 		"nginx":                       "",
 		"":                            "",
-		"a/constructor:1":             "", // JS `in` would see Object.prototype here; it meant "none" anyway
+		"a/constructor:1":             "",
 	}
 	for in, want := range cases {
 		if got := EngineOf(in); got != want {
@@ -35,7 +35,7 @@ func TestCanvasNameFromImage(t *testing.T) {
 		{"__x__", "x"},
 		{"___", "service"},
 		{long, long[:40]},
-		{strings.Repeat("a", 39) + "_b", strings.Repeat("a", 39) + "-"}, // cut after the trim: may end in -
+		{strings.Repeat("a", 39) + "_b", strings.Repeat("a", 39) + "-"},
 	}
 	for _, c := range cases {
 		if got := NameFromImage(c.image, "service"); got != c.want {
@@ -56,13 +56,11 @@ func TestCanvasUniqueName(t *testing.T) {
 			t.Errorf("UniqueName(%q) = %q, want %q", c.base, got, c.want)
 		}
 	}
-	// A 40-char base is clamped so the suffixed name still fits (TS gave 42 chars here).
 	base := strings.Repeat("x", 40)
 	got := UniqueName(base, map[string]bool{base: true})
 	if got != strings.Repeat("x", 38)+"-2" || ValidName(got) != nil {
 		t.Errorf("UniqueName(40 chars) = %q", got)
 	}
-	// Duplicate names: name[:32] + "-copy", then -2, -3.
 	copyBase := strings.Repeat("y", 32) + "-copy"
 	if got := UniqueName(copyBase, map[string]bool{copyBase: true}); got != copyBase+"-2" {
 		t.Errorf("copy name = %q", got)
@@ -171,7 +169,7 @@ func TestCanvasRandomSecret(t *testing.T) {
 			t.Errorf("ambiguous %q drawn", r)
 		}
 	}
-	if len(seen) < 50 { // 4000 draws over 56 symbols: every one is all but certain to show up
+	if len(seen) < 50 {
 		t.Errorf("only %d distinct symbols", len(seen))
 	}
 }
@@ -186,7 +184,7 @@ func TestCanvasUTF16LenAndTrimJS(t *testing.T) {
 	trims := map[string]string{
 		"  My API \t\n":       "My API",
 		"\ufeffx\u3000":       "x",
-		"\u0085x":             "\u0085x", // NEL is not JS whitespace
+		"\u0085x":             "\u0085x",
 		"\u00a0\u2028y\u200a": "y",
 	}
 	for in, want := range trims {

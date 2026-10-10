@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// syncBuffer is a log sink safe for concurrent writes.
 type syncBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -42,7 +41,6 @@ func newTest(t *testing.T) (*Scheduler, *syncBuffer) {
 	return s, buf
 }
 
-// waitFor polls cond for up to 2 s.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -58,7 +56,7 @@ func TestAfterCoalescesPendingKey(t *testing.T) {
 	s, _ := newTest(t)
 	var a, b atomic.Int32
 	s.After("observe:n1", 30*time.Millisecond, func(context.Context) { a.Add(1) })
-	s.After("observe:n1", 0, func(context.Context) { b.Add(1) }) // dropped: same key pending
+	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
 	if !s.Pending("observe:n1") {
 		t.Fatal("first job should be pending")
 	}
@@ -71,7 +69,6 @@ func TestAfterCoalescesPendingKey(t *testing.T) {
 		t.Fatal("key still pending after the job ran")
 	}
 
-	// Once the job has started, the key is free again.
 	s.After("observe:n1", 0, func(context.Context) { b.Add(1) })
 	waitFor(t, "rescheduled job", func() bool { return b.Load() == 1 })
 }
@@ -85,7 +82,6 @@ func TestAfterKeyFreedWhenRunning(t *testing.T) {
 		<-release
 	})
 	<-started
-	// The first job is running, not pending: this one is scheduled.
 	s.After("k", 0, func(context.Context) { second.Add(1) })
 	waitFor(t, "second job while the first runs", func() bool { return second.Load() == 1 })
 	close(release)
@@ -97,7 +93,7 @@ func TestAfterDistinctAndEmptyKeys(t *testing.T) {
 	inc := func(context.Context) { n.Add(1) }
 	s.After("a", 5*time.Millisecond, inc)
 	s.After("b", 5*time.Millisecond, inc)
-	s.After("", 5*time.Millisecond, inc) // empty key: never coalesced
+	s.After("", 5*time.Millisecond, inc)
 	s.After("", 5*time.Millisecond, inc)
 	waitFor(t, "four jobs", func() bool { return n.Load() == 4 })
 }
@@ -113,12 +109,12 @@ func TestEveryNoOverlap(t *testing.T) {
 				break
 			}
 		}
-		time.Sleep(25 * time.Millisecond) // much longer than the interval
+		time.Sleep(25 * time.Millisecond)
 		active.Add(-1)
 		runs.Add(1)
 	}
 	s.Every("resync", 2*time.Millisecond, job)
-	s.Every("resync", 2*time.Millisecond, job) // same name registered twice: still one at a time
+	s.Every("resync", 2*time.Millisecond, job)
 	waitFor(t, "three runs", func() bool { return runs.Load() >= 3 })
 	if m := maxActive.Load(); m != 1 {
 		t.Fatalf("runs of the same job overlapped: %d at once", m)
@@ -149,7 +145,6 @@ func TestPanicRecovered(t *testing.T) {
 		}
 	})
 	waitFor(t, "panic logged", func() bool { return strings.Contains(logs.String(), "kaboom") })
-	// The scheduler keeps working: another After runs, and the Every loop survived its panic.
 	s.After("next", 0, func(context.Context) { after.Add(1) })
 	waitFor(t, "job after a panic", func() bool { return after.Load() == 1 })
 	waitFor(t, "Every after its own panic", func() bool { return every.Load() >= 3 })
@@ -188,7 +183,6 @@ func TestStopCancelsPendingAndWaitsForRunning(t *testing.T) {
 		t.Fatal("the running job's context was cancelled although Stop had time to wait")
 	}
 
-	// Nothing is accepted after Stop, and the pending timers never fire.
 	s.After("late", 0, func(context.Context) { lateRan.Add(1) })
 	s.Every("late-every", time.Millisecond, func(context.Context) { everyRan.Add(1) })
 	time.Sleep(80 * time.Millisecond)
@@ -198,7 +192,6 @@ func TestStopCancelsPendingAndWaitsForRunning(t *testing.T) {
 	if s.Pending("later") {
 		t.Fatal("pending job still listed after Stop")
 	}
-	// Stop twice is fine.
 	if err := s.Stop(context.Background()); err != nil {
 		t.Fatalf("second Stop: %v", err)
 	}
@@ -225,8 +218,6 @@ func TestStopDeadlineCancelsJobContext(t *testing.T) {
 	}
 }
 
-// After Stop gives up and cancels, Wait lets the cancelled jobs finish what they do on
-// cancellation (serve closes the database only after that).
 func TestWaitAfterStopDeadline(t *testing.T) {
 	s := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
 	started := make(chan struct{})
@@ -234,7 +225,7 @@ func TestWaitAfterStopDeadline(t *testing.T) {
 	s.After("apply", 0, func(ctx context.Context) {
 		close(started)
 		<-ctx.Done()
-		time.Sleep(30 * time.Millisecond) // writes its outcome
+		time.Sleep(30 * time.Millisecond)
 		recorded.Store(true)
 	})
 	<-started
@@ -255,9 +246,8 @@ func TestWaitAfterStopDeadline(t *testing.T) {
 		t.Fatal("Wait returned before the cancelled job finished")
 	}
 
-	// Wait honours its own deadline too.
 	s2 := New(slog.New(slog.NewTextHandler(&syncBuffer{}, nil)))
-	defer func() { _ = s2.Stop(context.Background()) }() // runs after release is closed
+	defer func() { _ = s2.Stop(context.Background()) }()
 	release := make(chan struct{})
 	defer close(release)
 	running := make(chan struct{})

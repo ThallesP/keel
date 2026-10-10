@@ -1,16 +1,5 @@
 package serve
 
-// End-to-end against a real Docker Swarm: keel serve and keel agent in this process, a real
-// Swarm behind KEEL_IT_DOCKER_HOST. Skipped unless that variable is set; NEVER point it at a Swarm
-// that runs anything you care about (it creates and deletes svc-* services). CI runs it on the
-// runner's own fresh Swarm (ci.yml, job swarm); locally, use a Docker-in-Docker daemon:
-//
-//	docker run -d --privileged --name keel-dind -v /tmp/keel-dind:/var/run/dind docker:28-dind \
-//	  dockerd --host unix:///var/run/dind/docker.sock
-//	DOCKER_HOST=unix:///tmp/keel-dind/docker.sock docker swarm init --advertise-addr 127.0.0.1
-//	DOCKER_HOST=unix:///tmp/keel-dind/docker.sock docker network create -d overlay --attachable keel
-//	KEEL_IT_DOCKER_HOST=unix:///tmp/keel-dind/docker.sock go test ./internal/serve -run SwarmIT -v
-
 import (
 	"bytes"
 	"context"
@@ -72,7 +61,6 @@ func (c *itClient) ok(method, path string, body any) map[string]any {
 	return out
 }
 
-// settle waits for the environment's latest deployment to leave running and returns it.
 func (c *itClient) settle(env string) map[string]any {
 	c.t.Helper()
 	deadline := time.Now().Add(3 * time.Minute)
@@ -120,7 +108,6 @@ func TestSwarmIT(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- serveOn(ctx, ln, cfg, Options{Version: "it"}, log) }()
 
-	// keel agent on the same daemon: Docker events drive observation.
 	t.Setenv("KEEL_URL", base)
 	t.Setenv("KEEL_WORKER_TOKEN", cfg.WorkerToken)
 	t.Setenv("KEEL_STATE", filepath.Join(t.TempDir(), "agent-state.json"))
@@ -136,7 +123,7 @@ func TestSwarmIT(t *testing.T) {
 		cancel()
 		<-served
 		<-agentDone
-		for _, id := range created { // leave the shared daemon clean even on failure
+		for _, id := range created {
 			_, _ = docker.ServiceRemove(context.Background(), "svc-"+id, client.ServiceRemoveOptions{})
 		}
 		docker.Close()
@@ -146,7 +133,7 @@ func TestSwarmIT(t *testing.T) {
 	})
 
 	c := &itClient{t: t, base: base}
-	for i := 0; ; i++ { // the listener is up before serveOn returns from setup
+	for i := 0; ; i++ {
 		if code, _ := c.do("GET", "/api/meta", nil); code == 200 {
 			break
 		}
@@ -161,7 +148,6 @@ func TestSwarmIT(t *testing.T) {
 	project := c.ok("GET", "/api/projects/by-slug/"+slug, nil)["project"].(map[string]any)
 	env := project["environment"].(map[string]any)["id"].(string)
 
-	// Deploy: pull, create, observe through agent events, settle.
 	n := c.ok("POST", "/api/environments/"+env+"/nodes", map[string]any{
 		"type": "service", "name": fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), "image": "nginx:alpine", "port": 80, "deploy": true,
 	})
@@ -174,7 +160,6 @@ func TestSwarmIT(t *testing.T) {
 		t.Fatalf("after deploy: %v", v)
 	}
 
-	// A staged variable ships as an update and lands in the service's env.
 	c.ok("POST", "/api/nodes/"+id+"/variables", map[string]any{"key": "GREETING", "value": "port ${{ " + c.node(env, id)["name"].(string) + ".PORT }}", "secret": false})
 	if s := c.ok("GET", "/api/environments/"+env+"/summary", nil)["summary"].(map[string]any); s["pendingChanges"] != float64(1) {
 		t.Fatalf("summary after a variable: %v", s)
@@ -191,7 +176,6 @@ func TestSwarmIT(t *testing.T) {
 		t.Fatalf("service env: %v", env)
 	}
 
-	// Stop, start, redeploy.
 	c.ok("POST", "/api/nodes/"+id+"/stop", nil)
 	if d := c.settle(env); d["status"] != "success" || c.node(env, id)["status"] != "stopped" {
 		t.Fatalf("stop: %v / %v", d, c.node(env, id))
@@ -205,7 +189,6 @@ func TestSwarmIT(t *testing.T) {
 		t.Fatalf("redeploy: %v", d)
 	}
 
-	// Delete removes the Swarm service.
 	if code, out := c.do("DELETE", "/api/nodes/"+id, nil); code != 204 {
 		t.Fatalf("delete: %d %v", code, out)
 	}

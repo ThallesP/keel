@@ -23,7 +23,6 @@ func TestSetNodeTracing(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 1_000)
 
-	// No sink, then a sink from before traces: turning on is refused, nothing changes.
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true), domain.CodeTracesOff, "Connect Axiom to see traces")
 	old := obsTracesOn
 	old.Traces = ""
@@ -32,7 +31,6 @@ func TestSetNodeTracing(t *testing.T) {
 	if n := e.node(t, obsNodeAPI); n.Desired.Tracing || n.Dirty || obsOTLPKeyOf(t, e, "env") != "" {
 		t.Fatalf("refused switch changed something: %+v key=%q", n, obsOTLPKeyOf(t, e, "env"))
 	}
-	// Turning off needs nothing.
 	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, false); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +58,6 @@ func TestSetNodeTracing(t *testing.T) {
 		}
 	}
 
-	// Enabling again: no-op on the node (dirty untouched), same key.
 	e.exec(t, `UPDATE nodes SET dirty = 0 WHERE id = ?`, obsNodeAPI)
 	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true); err != nil {
 		t.Fatal(err)
@@ -68,14 +65,12 @@ func TestSetNodeTracing(t *testing.T) {
 	if n := e.node(t, obsNodeAPI); n.Dirty || obsOTLPKeyOf(t, e, "env") != key {
 		t.Fatalf("re-enable: dirty=%v key changed=%v", n.Dirty, obsOTLPKeyOf(t, e, "env") != key)
 	}
-	// Another service of the environment shares the key.
 	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeWorker, true); err != nil {
 		t.Fatal(err)
 	}
 	if e.count(t, `SELECT COUNT(*) FROM otlp_keys`) != 1 {
 		t.Fatal("a second key was made")
 	}
-	// Off: the switch goes, dirty again.
 	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, false); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +78,6 @@ func TestSetNodeTracing(t *testing.T) {
 		t.Fatalf("after disable: %+v dirty=%v", n.Desired, n.Dirty)
 	}
 
-	// Only services; foreign and missing nodes are not found.
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeDB, true), domain.CodeInvalidInput, "Only services can be traced")
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, obsNodeVolume, false), domain.CodeInvalidInput, "Only services can be traced")
 	obsWantCode(t, e.app.SetNodeTracing(ctx, e.member, "missing", true), domain.CodeServiceNotFound, "Node not found")
@@ -123,7 +117,6 @@ func TestNodeTracingView(t *testing.T) {
 		t.Fatalf("view\n got %+v\nwant %+v", v, want)
 	}
 
-	// With a key, traces on, tracing on, and the service's own endpoint and service name.
 	e.setSink(t, "org", obsTracesOn)
 	if err := e.app.SetNodeTracing(ctx, e.member, obsNodeAPI, true); err != nil {
 		t.Fatal(err)
@@ -152,7 +145,6 @@ func TestNodeTracingView(t *testing.T) {
 		t.Errorf("overridden %v", over)
 	}
 
-	// Not a service, foreign, missing, signed out: null.
 	for _, c := range []struct {
 		actor domain.Actor
 		id    string

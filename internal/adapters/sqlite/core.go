@@ -39,7 +39,6 @@ func (t *tx) OrganizationOfEnvironment(environmentID string) (string, error) {
 	return org, noRow(err)
 }
 
-// nodeOf maps a row; endpoints are attached by the caller.
 func nodeOf(r sqlc.Node) domain.Node {
 	n := domain.Node{
 		ID:               r.ID,

@@ -29,6 +29,23 @@ func TestDeriveStatus(t *testing.T) {
 	}
 }
 
+func TestDeployingStep(t *testing.T) {
+	cases := []struct {
+		o    *Observed
+		want string
+	}{
+		{nil, "pulling image"},
+		{&Observed{Revision: 1, State: ObservedOK}, "pulling image"},
+		{&Observed{Revision: 2, State: ObservedUpdating}, "rolling out"},
+		{&Observed{Revision: 2, State: ObservedOK}, "starting"},
+	}
+	for _, c := range cases {
+		if got := DeployingStep(Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: c.o}); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.o, got, c.want)
+		}
+	}
+}
+
 func TestSlug(t *testing.T) {
 	for in, want := range map[string]string{"My API": "my-api", "  Ação! ": "acao", "---": "", "Acme_Support 2": "acme-support-2"} {
 		if got := Slug(in); got != want {

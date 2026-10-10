@@ -34,7 +34,7 @@ func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Obser
 		}
 	}
 
-	o := domain.Observed{Revision: revision, NodeIDs: []string{}, At: now}
+	o := domain.Observed{Revision: revision, At: now}
 	var live, failed, completed int
 	var pending bool
 	var finishedAt int64
@@ -325,14 +325,7 @@ func observedFace(n domain.Node) nodeFace {
 		f.err = o.Error
 	}
 	if f.status == domain.StatusDeploying {
-		switch {
-		case o.Revision < n.Desired.Revision:
-			f.step = "pulling image"
-		case o.State == domain.ObservedUpdating:
-			f.step = "rolling out"
-		default:
-			f.step = "starting"
-		}
+		f.step = domain.DeployingStep(n)
 	}
 	if f.status == domain.StatusDone && o.FinishedAt != nil {
 		f.finishedAt = *o.FinishedAt

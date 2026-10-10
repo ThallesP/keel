@@ -59,3 +59,14 @@ func DeriveStatus(n Node) NodeStatus {
 	}
 	return StatusDeploying
 }
+
+func DeployingStep(n Node) string {
+	switch {
+	case n.Observed == nil || n.Observed.Revision < n.Desired.Revision:
+		return "pulling image"
+	case n.Observed.State == ObservedUpdating:
+		return "rolling out"
+	default:
+		return "starting"
+	}
+}

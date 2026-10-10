@@ -14,13 +14,13 @@ import (
 func TestServerCommands(t *testing.T) {
 	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
 	ran := false
-	saved := slices.Clone(Extra)
-	t.Cleanup(func() { Extra = saved })
+	saved := slices.Clone(extra)
+	t.Cleanup(func() { extra = saved })
 	for _, c := range []*cobra.Command{
 		{Use: "fake-daemon", RunE: func(*cobra.Command, []string) error { ran = true; return nil }},
 		{Use: "fake-broken", RunE: func(*cobra.Command, []string) error { return errors.New("boom") }},
 	} {
-		Extra = append(Extra, func() *cobra.Command { return c })
+		extra = append(extra, func() *cobra.Command { return c })
 	}
 
 	a := &app{}

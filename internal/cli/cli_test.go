@@ -136,16 +136,16 @@ func TestFindService(t *testing.T) {
 }
 
 func TestNormalizeURL(t *testing.T) {
-	for in, want := range map[string]string{
-		"https://keel.example.ts.net/":    "https://keel.example.ts.net",
-		"http://100.64.0.1:8080/p/acme":   "http://100.64.0.1:8080",
-		" https://dev.tail8eb3d.ts.net\n": "https://dev.tail8eb3d.ts.net",
-		"keel.example.ts.net":             "",
-		"ftp://keel.example.ts.net":       "",
+	for _, tc := range []struct{ in, url, host string }{
+		{"https://keel.example.ts.net/", "https://keel.example.ts.net", "keel.example.ts.net"},
+		{"http://100.64.0.1:8080/p/acme", "http://100.64.0.1:8080", "100.64.0.1:8080"},
+		{" https://dev.tail8eb3d.ts.net\n", "https://dev.tail8eb3d.ts.net", "dev.tail8eb3d.ts.net"},
+		{"keel.example.ts.net", "", ""},
+		{"ftp://keel.example.ts.net", "", ""},
 	} {
-		got, err := normalizeURL(in)
-		if got != want || (want == "") != (err != nil) {
-			t.Errorf("normalizeURL(%q) = %q, %v; want %q", in, got, err, want)
+		webURL, host, err := normalizeURL(tc.in)
+		if webURL != tc.url || host != tc.host || (tc.url == "") != (err != nil) {
+			t.Errorf("normalizeURL(%q) = %q, %q, %v; want %q, %q", tc.in, webURL, host, err, tc.url, tc.host)
 		}
 	}
 }
@@ -154,7 +154,7 @@ func TestLineSetSkipsWhatWasPrinted(t *testing.T) {
 	at := func(sec int, text string) client.LogLine {
 		return client.LogLine{Time: client.Time{Time: time.Unix(int64(sec), 0)}, Text: text}
 	}
-	s := newLineSet()
+	var s lineSet
 	var printed []string
 	for _, poll := range [][]client.LogLine{
 		{at(1, "a"), at(2, "b")},

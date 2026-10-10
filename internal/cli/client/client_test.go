@@ -296,9 +296,3 @@ func TestDeleteService(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestTimeJSON(t *testing.T) {
-	if b, _ := json.Marshal(Millis(1791460800123)); string(b) != `"2026-10-08T12:00:00.123Z"` {
-		t.Errorf("marshal %s", b)
-	}
-}

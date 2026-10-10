@@ -77,6 +77,9 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 			if err != nil {
 				return err
 			}
+			if err := client.Discover(ctx, inst.URL); err != nil {
+				return err
+			}
 			cfg.Instances[name] = inst
 			cfg.Current = name
 			c := client.New(inst.URL, "")
@@ -148,30 +151,25 @@ KEEL_TOKEN together with KEEL_URL; keel token prints it.`,
 }
 
 func (a *app) loginTarget(cmd *cobra.Command, cfg *config.Config, args []string, name string) (string, *config.Instance, error) {
-	var inst *config.Instance
 	if len(args) == 0 {
 		if os.Getenv("KEEL_URL") != "" || len(cfg.Instances) == 0 {
 			return "", nil, usage(cmd, "pass the dashboard URL: keel login <dashboard-url>")
 		}
-		var err error
-		if name, _, err = a.target(cfg); err != nil {
+		name, _, err := a.target(cfg)
+		if err != nil {
 			return "", nil, err
 		}
-		inst = cfg.Instances[name]
-	} else {
-		webURL, err := normalizeURL(args[0])
-		if err != nil {
-			return "", nil, usage(cmd, "%v", err)
-		}
-		name = cmp.Or(name, hostOf(webURL))
-		if inst = cfg.Instances[name]; inst == nil || inst.URL != webURL {
-			inst = &config.Instance{URL: webURL}
-		}
+		return name, cfg.Instances[name], nil
 	}
-	if _, err := client.Discover(cmd.Context(), inst.URL); err != nil {
-		return "", nil, err
+	webURL, host, err := normalizeURL(args[0])
+	if err != nil {
+		return "", nil, usage(cmd, "%v", err)
 	}
-	return name, inst, nil
+	name = cmp.Or(name, host)
+	if inst := cfg.Instances[name]; inst != nil && inst.URL == webURL {
+		return name, inst, nil
+	}
+	return name, &config.Instance{URL: webURL}, nil
 }
 
 func waitForApproval(ctx context.Context, c *client.Client, p *config.PendingLogin) (string, error) {

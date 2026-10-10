@@ -9,26 +9,25 @@ import (
 	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/cli/config"
 	"github.com/ThallesP/keel/internal/cli/output"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
-func Discover(ctx context.Context, webURL string) (*api.Meta, error) {
+func Discover(ctx context.Context, webURL string) error {
 	r, err := New(webURL, "").send(ctx, http.MethodGet, "/api/meta", nil, nil)
 	if err != nil {
-		return nil, translate(err, webURL)
+		return translate(err, webURL)
 	}
 	var m api.Meta
 	if r.status == http.StatusOK && json.Unmarshal(r.body, &m) == nil && m.Name == "keel" {
-		return &m, nil
+		return nil
 	}
-	return nil, output.Errorf(output.CodeDiscoveryFailed, "keel login <the URL you open the dashboard at>",
+	return output.Errorf(output.CodeDiscoveryFailed, "keel login <the URL you open the dashboard at>",
 		"%s doesn't look like a Keel dashboard (no /api/meta)", webURL)
 }
 
-const ClientID = "keel-cli"
-
 func (c *Client) StartLogin(ctx context.Context) (*config.PendingLogin, error) {
 	const path = "/api/auth/device/code"
-	r, err := c.send(ctx, http.MethodPost, path, nil, api.DeviceCodeRequest{ClientID: ClientID})
+	r, err := c.send(ctx, http.MethodPost, path, nil, api.DeviceCodeRequest{ClientID: domain.DeviceClientID})
 	if err != nil {
 		return nil, translate(err, c.URL)
 	}
@@ -48,9 +47,9 @@ func (c *Client) StartLogin(ctx context.Context) (*config.PendingLogin, error) {
 func (c *Client) PollLogin(ctx context.Context, deviceCode string) (token string, slowDown bool, err error) {
 	const path = "/api/auth/device/token"
 	r, err := c.send(ctx, http.MethodPost, path, nil, api.DeviceTokenRequest{
-		GrantType:  "urn:ietf:params:oauth:grant-type:device_code",
+		GrantType:  domain.DeviceGrantType,
 		DeviceCode: deviceCode,
-		ClientID:   ClientID,
+		ClientID:   domain.DeviceClientID,
 	})
 	if err != nil {
 		return "", false, translate(err, c.URL)
@@ -97,7 +96,7 @@ func (c *Client) Me(ctx context.Context) (*api.User, *api.Organization, error) {
 	var me api.Me
 	err := c.call(ctx, http.MethodGet, "/api/me", nil, nil, &me)
 	if output.CodeOf(err) == output.CodeServer {
-		if _, derr := Discover(ctx, c.URL); output.CodeOf(derr) == output.CodeDiscoveryFailed {
+		if derr := Discover(ctx, c.URL); output.CodeOf(derr) == output.CodeDiscoveryFailed {
 			return nil, nil, derr
 		}
 	}

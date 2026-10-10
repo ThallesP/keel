@@ -46,11 +46,11 @@ func saveConfig(cfg *config.Config) error {
 func (a *app) target(cfg *config.Config) (string, *config.Instance, error) {
 	token := os.Getenv("KEEL_TOKEN")
 	if raw := os.Getenv("KEEL_URL"); raw != "" {
-		webURL, err := normalizeURL(raw)
+		webURL, host, err := normalizeURL(raw)
 		if err != nil {
 			return "", nil, output.Errorf(output.CodeUsage, "KEEL_URL=https://<dashboard-host>", "KEEL_URL: %v", err)
 		}
-		return hostOf(webURL), &config.Instance{URL: webURL, Token: token}, nil
+		return host, &config.Instance{URL: webURL, Token: token}, nil
 	}
 
 	var linked, only string
@@ -243,17 +243,12 @@ func findService(services []client.Service, name string) (*client.Service, error
 	return nil, output.Errorf(output.CodeServiceNotFound, fix, "No service %q", name)
 }
 
-func normalizeURL(raw string) (string, error) {
+func normalizeURL(raw string) (webURL, host string, err error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", fmt.Errorf("%q is not a dashboard URL (http:// or https:// and a host)", raw)
+		return "", "", fmt.Errorf("%q is not a dashboard URL (http:// or https:// and a host)", raw)
 	}
-	return u.Scheme + "://" + u.Host, nil
-}
-
-func hostOf(webURL string) string {
-	u, _ := url.Parse(webURL)
-	return u.Host
+	return u.Scheme + "://" + u.Host, u.Host, nil
 }
 
 func cwd() string {

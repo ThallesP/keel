@@ -20,7 +20,7 @@ import (
 
 var Version = "dev"
 
-var Extra []func() *cobra.Command
+var extra []func() *cobra.Command
 
 type app struct {
 	out          *output.Printer
@@ -28,30 +28,6 @@ type app struct {
 	instanceFlag string
 	projectFlag  string
 }
-
-const rootLong = `Keel from the terminal, built to be driven by agents as much as by people.
-
-Output: results go to stdout, progress and warnings to stderr. With --json (or KEEL_JSON=1)
-stdout is exactly one JSON object: {"ok":true,...} on success, or
-{"ok":false,"code":"SERVICE_NOT_FOUND","error":"...","fix":"..."} on failure. logs --follow
-prints one JSON object per line instead, and keel run leaves stdout to the command it runs.
-
-Exit codes: 0 ok, 1 error, 2 bad usage, 4 not logged in (or the login awaits approval),
-130 interrupted.
-
-Nothing prompts unless stdin is a terminal; missing input fails with a USAGE error naming
-the flag to pass.
-
-Environment:
-  KEEL_JSON=1        same as --json
-  KEEL_URL           dashboard URL; with KEEL_TOKEN, use an install without keel login
-  KEEL_TOKEN         session token (keel token prints yours)
-  KEEL_INSTANCE      same as --instance
-  KEEL_PROJECT       same as --project
-  KEEL_CONFIG_DIR    where config.json lives (default ~/.config/keel)
-
-The same binary runs Keel itself: keel serve (the control plane), keel proxy (its public edge),
-keel agent (on every Swarm node).`
 
 func Execute(ctx context.Context) int {
 	client.UserAgent = "keel-cli/" + Version
@@ -88,9 +64,31 @@ func (a *app) execute(ctx context.Context, args []string) int {
 
 func (a *app) root() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "keel",
-		Short:         "Deploy and operate Keel projects",
-		Long:          rootLong,
+		Use:   "keel",
+		Short: "Deploy and operate Keel projects",
+		Long: `Keel from the terminal, built to be driven by agents as much as by people.
+
+Output: results go to stdout, progress and warnings to stderr. With --json (or KEEL_JSON=1)
+stdout is exactly one JSON object: {"ok":true,...} on success, or
+{"ok":false,"code":"SERVICE_NOT_FOUND","error":"...","fix":"..."} on failure. logs --follow
+prints one JSON object per line instead, and keel run leaves stdout to the command it runs.
+
+Exit codes: 0 ok, 1 error, 2 bad usage, 4 not logged in (or the login awaits approval),
+130 interrupted.
+
+Nothing prompts unless stdin is a terminal; missing input fails with a USAGE error naming
+the flag to pass.
+
+Environment:
+  KEEL_JSON=1        same as --json
+  KEEL_URL           dashboard URL; with KEEL_TOKEN, use an install without keel login
+  KEEL_TOKEN         session token (keel token prints yours)
+  KEEL_INSTANCE      same as --instance
+  KEEL_PROJECT       same as --project
+  KEEL_CONFIG_DIR    where config.json lives (default ~/.config/keel)
+
+The same binary runs Keel itself: keel serve (the control plane), keel proxy (its public edge),
+keel agent (on every Swarm node).`,
 		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -125,7 +123,7 @@ func (a *app) root() *cobra.Command {
 		root.AddCommand(cmd)
 	}
 	server := serverCommands()
-	for _, mk := range Extra {
+	for _, mk := range extra {
 		server = append(server, mk())
 	}
 	for _, cmd := range server {
@@ -167,8 +165,8 @@ func isServer(cmd *cobra.Command) bool {
 }
 
 func (a *app) jsonMode() bool {
-	v := os.Getenv("KEEL_JSON")
-	return a.json || v == "1" || v == "true"
+	on, _ := strconv.ParseBool(os.Getenv("KEEL_JSON"))
+	return a.json || on
 }
 
 func (a *app) interactive() bool {

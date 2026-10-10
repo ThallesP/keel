@@ -3,8 +3,6 @@
 package cli
 
 import (
-	"cmp"
-
 	"github.com/spf13/cobra"
 
 	"github.com/ThallesP/keel/internal/adapters/caddy"
@@ -13,7 +11,7 @@ import (
 )
 
 func init() {
-	Extra = append(Extra, proxyCommand)
+	extra = append(extra, proxyCommand)
 }
 
 func proxyCommand() *cobra.Command {
@@ -26,11 +24,10 @@ func proxyCommand() *cobra.Command {
 			"the admin socket (KEEL_PROXY_SOCKET).",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts.Socket = cmp.Or(opts.Socket, serve.Env("KEEL_PROXY_SOCKET", caddy.DefaultSocket))
 			return proxy.Run(cmd.Context(), opts)
 		},
 	}
-	cmd.Flags().StringVar(&opts.Socket, "socket", "", "admin socket (default $KEEL_PROXY_SOCKET or "+caddy.DefaultSocket+")")
+	cmd.Flags().StringVar(&opts.Socket, "socket", serve.Env("KEEL_PROXY_SOCKET", caddy.DefaultSocket), "admin socket (KEEL_PROXY_SOCKET)")
 	cmd.Flags().StringVar(&opts.ConfigFile, "config", "", "base config file instead of the built-in one")
 	cmd.Flags().BoolVar(&opts.Resume, "resume", true, "serve the last pushed config (Caddy's autosave) when there is one")
 	return cmd

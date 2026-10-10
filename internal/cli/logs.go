@@ -59,7 +59,7 @@ object per line: {"service","time","stream","task","text"}.`,
 				return nil
 			}
 
-			seen := newLineSet()
+			var seen lineSet
 			emit := func(ls []client.LogLine) {
 				for _, l := range ls {
 					if seen.add(l) {
@@ -117,8 +117,6 @@ type lineSet struct {
 	last time.Time
 	at   map[[3]string]bool
 }
-
-func newLineSet() *lineSet { return &lineSet{at: map[[3]string]bool{}} }
 
 func (s *lineSet) add(l client.LogLine) bool {
 	key := [3]string{l.Task, l.Stream, l.Text}

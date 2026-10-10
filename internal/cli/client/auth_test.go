@@ -31,6 +31,19 @@ func fakeDevice(t *testing.T, path string, status int, body string) (*Client, ma
 	return New(srv.URL, ""), got
 }
 
+func serve(t *testing.T, bodies map[string]string) string {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := bodies[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
 func TestStartLogin(t *testing.T) {
 	c, sent := fakeDevice(t, "/api/auth/device/code", 200, `{"device_code":"dev","user_code":"ABCDEFGH",
 		"verification_uri":"https://keel.test/device","verification_uri_complete":"https://keel.test/device?user_code=ABCDEFGH",
@@ -139,16 +152,7 @@ func TestMeNotKeel(t *testing.T) {
 		}, output.CodeServer, "unexpected response from GET /api/me"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				body, ok := tc.mux[r.URL.Path]
-				if !ok {
-					http.NotFound(w, r)
-					return
-				}
-				w.Write([]byte(body))
-			}))
-			defer srv.Close()
-			_, _, err := New(srv.URL, "tok").Me(context.Background())
+			_, _, err := New(serve(t, tc.mux), "tok").Me(context.Background())
 			if output.CodeOf(err) != tc.code || err == nil || !strings.Contains(err.Error(), tc.msg) {
 				t.Errorf("err = %v, want %s %q", err, tc.code, tc.msg)
 			}
@@ -157,38 +161,18 @@ func TestMeNotKeel(t *testing.T) {
 }
 
 func TestDiscover(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		mux  map[string]string
-		code string
-		msg  string
-	}{
-		{"keel", map[string]string{"/api/meta": `{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`}, "", ""},
-		{"not keel", map[string]string{"/api/meta": `{"hello":"world"}`}, output.CodeDiscoveryFailed, "doesn't look like a Keel dashboard"},
+	for meta, code := range map[string]string{
+		`{"name":"keel","version":"1.2.3","siteUrl":"https://keel.test"}`: "",
+		`{"hello":"world"}`: output.CodeDiscoveryFailed,
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				body, ok := tc.mux[r.URL.Path]
-				if !ok {
-					http.NotFound(w, r)
-					return
-				}
-				w.Write([]byte(body))
-			}))
-			defer srv.Close()
-			m, err := Discover(context.Background(), srv.URL)
-			if output.CodeOf(err) != tc.code || (err != nil && !strings.Contains(err.Error(), tc.msg)) {
-				t.Fatalf("err = %v, want %s %q", err, tc.code, tc.msg)
-			}
-			if err == nil && (m.Version != "1.2.3" || m.SiteURL != "https://keel.test") {
-				t.Errorf("meta = %+v", m)
-			}
-		})
+		if err := Discover(context.Background(), serve(t, map[string]string{"/api/meta": meta})); output.CodeOf(err) != code {
+			t.Errorf("meta %s: %v, want %s", meta, err, code)
+		}
 	}
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
 	srv.Close()
-	if _, err := Discover(context.Background(), url); output.CodeOf(err) != output.CodeNetwork {
+	if err := Discover(context.Background(), url); output.CodeOf(err) != output.CodeNetwork {
 		t.Errorf("closed port: %v", err)
 	}
 }

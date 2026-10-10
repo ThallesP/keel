@@ -106,7 +106,7 @@ func (c *Client) Tail(ctx context.Context, serviceID string, lines int) (*Tail, 
 	}
 	out := &Tail{Source: t.Source, Lines: make([]LogLine, len(t.Lines))}
 	for i, l := range t.Lines {
-		out.Lines[i] = LogLine{Time: Millis(int64(l.Time)), Stream: l.Stream, Task: l.Task, Text: l.Text}
+		out.Lines[i] = LogLine{Time: millis(int64(l.Time)), Stream: l.Stream, Task: l.Task, Text: l.Text}
 	}
 	return out, nil
 }
@@ -132,7 +132,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 	}
 	for i, t := range o.Traces {
 		out.Traces[i] = TraceSummary{
-			TraceID: t.TraceID, Name: t.Name, Service: t.Service, Start: Millis(int64(t.Start)), DurationMs: t.Duration,
+			TraceID: t.TraceID, Name: t.Name, Service: t.Service, Start: millis(int64(t.Start)), DurationMs: t.Duration,
 			Spans: int(t.Spans), Errors: int(t.Errors), Error: t.Error, Local: t.Local,
 		}
 		if t.HTTPStatus != nil {

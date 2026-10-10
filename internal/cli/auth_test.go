@@ -38,7 +38,7 @@ func newFakeInstall(t *testing.T, polls ...string) *fakeInstall {
 				t.Errorf("poll sent %v", in)
 			}
 			body := f.polls[min(int(f.pollCount.Add(1)), len(f.polls))-1]
-			if bytes.Contains([]byte(body), []byte(`"error"`)) {
+			if strings.Contains(body, `"error"`) {
 				w.WriteHeader(400)
 			}
 			w.Write([]byte(body))
@@ -247,9 +247,7 @@ func TestLoginDeviceFlow(t *testing.T) {
 func TestLoginTargetIgnoresKeelToken(t *testing.T) {
 	cfg, _ := pendingInstance(t, time.Minute, `{"error":"authorization_pending"}`)
 	t.Setenv("KEEL_TOKEN", "from-env")
-	cmd := quietApp().loginCmd()
-	cmd.SetContext(context.Background())
-	name, inst, err := quietApp().loginTarget(cmd, cfg, nil, "")
+	name, inst, err := quietApp().loginTarget(quietApp().loginCmd(), cfg, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -102,7 +102,7 @@ func (c *Client) failure(what string, r *reply) *output.Error {
 		for i, e := range p.Errors {
 			details[i] = strings.TrimSpace(e.Location + " " + e.Message)
 		}
-		msg = strings.TrimSpace(msg + ": " + strings.Join(details, "; "))
+		msg += ": " + strings.Join(details, "; ")
 	}
 	return withFix(p.Code, cmp.Or(msg, p.Title), c.URL, r.header)
 }

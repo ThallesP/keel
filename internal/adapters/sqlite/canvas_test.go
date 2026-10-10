@@ -16,17 +16,17 @@ func TestCanvasTx(t *testing.T) {
 	ctx := context.Background()
 	err := s.Write(ctx, func(tx app.Tx) error {
 		a := domain.Node{ID: "a", EnvironmentID: env, Type: domain.NodeService, Name: "api", CreatedAt: 1}
-		if err := tx.CanvasInsertNode(a); err != nil {
+		if err := tx.InsertNode(a); err != nil {
 			return err
 		}
-		if err := tx.CanvasInsertNode(domain.Node{ID: "b", EnvironmentID: env, Type: domain.NodeVolume, Name: "api", CreatedAt: 2}); !errors.Is(err, app.ErrCanvasTaken) {
+		if err := tx.InsertNode(domain.Node{ID: "b", EnvironmentID: env, Type: domain.NodeVolume, Name: "api", CreatedAt: 2}); !errors.Is(err, app.ErrCanvasTaken) {
 			t.Errorf("duplicate name: %v", err)
 		}
-		if err := tx.CanvasInsertNode(domain.Node{ID: "b", EnvironmentID: env, Type: domain.NodeVolume, Name: "data", CreatedAt: 2}); err != nil {
+		if err := tx.InsertNode(domain.Node{ID: "b", EnvironmentID: env, Type: domain.NodeVolume, Name: "data", CreatedAt: 2}); err != nil {
 			return err
 		}
 		a.Name = "data"
-		if err := tx.CanvasUpdateNode(a); !errors.Is(err, app.ErrCanvasTaken) {
+		if err := tx.UpdateNode(a); !errors.Is(err, app.ErrCanvasTaken) {
 			t.Errorf("rename onto a taken name: %v", err)
 		}
 
@@ -74,7 +74,7 @@ func TestCanvasTx(t *testing.T) {
 		if n, _ := tx.Node("b"); !n.Dirty || n.Name != "data" {
 			t.Errorf("mark dirty: %+v", n)
 		}
-		if err := tx.CanvasDeleteNodeVariables("a"); err != nil {
+		if err := tx.DeleteNode("a"); err != nil {
 			return err
 		}
 		if vs, _ := tx.CanvasVariables("a"); len(vs) != 0 {

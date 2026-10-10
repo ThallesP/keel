@@ -146,7 +146,6 @@ type Node struct {
 	ObservedCompleted  *int64
 	ObservedFinishedAt *int64
 	ObservedState      *string
-	ObservedNodeIds    *string
 	ObservedError      *string
 	ObservedAt         *int64
 	DeployedRevision   *int64

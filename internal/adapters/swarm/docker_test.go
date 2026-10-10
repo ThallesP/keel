@@ -159,7 +159,7 @@ func TestDockerObserve(t *testing.T) {
 	if svc.Name != "svc-n1" || svc.UpdateState != "rollback_completed" || svc.UpdateMessage != "rolled back" || svc.Labels["keel.revision"] != "2" {
 		t.Fatalf("service: %+v", svc)
 	}
-	if len(tasks) != 2 || tasks[0].NodeID != "sw1" || tasks[0].State != "running" || tasks[0].Timestamp != 1791460800123 ||
+	if len(tasks) != 2 || tasks[0].State != "running" || tasks[0].Timestamp != 1791460800123 ||
 		tasks[0].Labels["keel.revision"] != "2" || tasks[1].Err != "exit 1" || tasks[1].Timestamp != 0 || tasks[1].Labels != nil {
 		t.Fatalf("tasks: %+v", tasks)
 	}

@@ -54,7 +54,6 @@ type Observed struct {
 	Completed  *int
 	FinishedAt *int64
 	State      ObservedState
-	NodeIDs    []string
 	Error      string
 	At         int64
 }

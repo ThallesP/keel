@@ -13,8 +13,6 @@ type CanvasTx interface {
 	CanvasEnvironments(projectID string) ([]domain.Environment, error)
 	CanvasInsertEnvironment(e domain.Environment) error
 
-	CanvasInsertNode(n domain.Node) error
-	CanvasUpdateNode(n domain.Node) error
 	CanvasMarkDirty(nodeID string) error
 
 	CanvasVariables(nodeID string) ([]domain.Variable, error)
@@ -22,7 +20,6 @@ type CanvasTx interface {
 	CanvasInsertVariable(v domain.Variable) error
 	CanvasUpdateVariable(v domain.Variable) error
 	CanvasDeleteVariable(nodeID, key string) (bool, error)
-	CanvasDeleteNodeVariables(nodeID string) error
 }
 
 var ErrCanvasTaken = errors.New("canvas: name taken")

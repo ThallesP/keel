@@ -45,7 +45,7 @@ func (q *Queries) CoreGetEnvironment(ctx context.Context, id string) (Environmen
 }
 
 const coreGetNode = `-- name: CoreGetNode :one
-SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_node_ids, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes WHERE id = ?
+SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes WHERE id = ?
 `
 
 func (q *Queries) CoreGetNode(ctx context.Context, id string) (Node, error) {
@@ -72,7 +72,6 @@ func (q *Queries) CoreGetNode(ctx context.Context, id string) (Node, error) {
 		&i.ObservedCompleted,
 		&i.ObservedFinishedAt,
 		&i.ObservedState,
-		&i.ObservedNodeIds,
 		&i.ObservedError,
 		&i.ObservedAt,
 		&i.DeployedRevision,
@@ -151,14 +150,14 @@ INSERT INTO nodes (
   config_size_gb, config_width, config_height,
   desired_image, desired_revision, desired_replicas, desired_port, desired_tracing,
   observed_revision, observed_running, observed_completed, observed_finished_at, observed_state,
-  observed_node_ids, observed_error, observed_at,
+  observed_error, observed_at,
   deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at
 ) VALUES (
   ?, ?, ?, ?, ?, ?, ?,
   ?, ?, ?,
   ?, ?, ?, ?, ?,
   ?, ?, ?, ?, ?,
-  ?, ?, ?,
+  ?, ?,
   ?, ?, ?, ?, ?, ?
 )
 `
@@ -184,7 +183,6 @@ type CoreInsertNodeParams struct {
 	ObservedCompleted  *int64
 	ObservedFinishedAt *int64
 	ObservedState      *string
-	ObservedNodeIds    *string
 	ObservedError      *string
 	ObservedAt         *int64
 	DeployedRevision   *int64
@@ -217,7 +215,6 @@ func (q *Queries) CoreInsertNode(ctx context.Context, arg CoreInsertNodeParams) 
 		arg.ObservedCompleted,
 		arg.ObservedFinishedAt,
 		arg.ObservedState,
-		arg.ObservedNodeIds,
 		arg.ObservedError,
 		arg.ObservedAt,
 		arg.DeployedRevision,
@@ -270,7 +267,7 @@ func (q *Queries) CoreListAllEndpoints(ctx context.Context) ([]Endpoint, error) 
 }
 
 const coreListAllNodes = `-- name: CoreListAllNodes :many
-SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_node_ids, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes ORDER BY created_at, id
+SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes ORDER BY created_at, id
 `
 
 func (q *Queries) CoreListAllNodes(ctx context.Context) ([]Node, error) {
@@ -303,7 +300,6 @@ func (q *Queries) CoreListAllNodes(ctx context.Context) ([]Node, error) {
 			&i.ObservedCompleted,
 			&i.ObservedFinishedAt,
 			&i.ObservedState,
-			&i.ObservedNodeIds,
 			&i.ObservedError,
 			&i.ObservedAt,
 			&i.DeployedRevision,
@@ -406,7 +402,7 @@ func (q *Queries) CoreListEndpointsByNode(ctx context.Context, nodeID string) ([
 }
 
 const coreListNodesByEnvironment = `-- name: CoreListNodesByEnvironment :many
-SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_node_ids, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes WHERE environment_id = ? ORDER BY created_at, id
+SELECT id, environment_id, type, name, parent_id, position_x, position_y, config_size_gb, config_width, config_height, desired_image, desired_revision, desired_replicas, desired_port, desired_tracing, observed_revision, observed_running, observed_completed, observed_finished_at, observed_state, observed_error, observed_at, deployed_revision, dirty, shipped_at, apply_error, one_shot, created_at FROM nodes WHERE environment_id = ? ORDER BY created_at, id
 `
 
 func (q *Queries) CoreListNodesByEnvironment(ctx context.Context, environmentID string) ([]Node, error) {
@@ -439,7 +435,6 @@ func (q *Queries) CoreListNodesByEnvironment(ctx context.Context, environmentID 
 			&i.ObservedCompleted,
 			&i.ObservedFinishedAt,
 			&i.ObservedState,
-			&i.ObservedNodeIds,
 			&i.ObservedError,
 			&i.ObservedAt,
 			&i.DeployedRevision,
@@ -481,10 +476,9 @@ UPDATE nodes SET
   desired_image = ?11, desired_revision = ?12, desired_replicas = ?13, desired_port = ?14,
   desired_tracing = ?15,
   observed_revision = ?16, observed_running = ?17, observed_completed = ?18,
-  observed_finished_at = ?19, observed_state = ?20, observed_node_ids = ?21, observed_error = ?22,
-  observed_at = ?23,
-  deployed_revision = ?24, dirty = ?25, shipped_at = ?26, apply_error = ?27, one_shot = ?28,
-  created_at = ?29
+  observed_finished_at = ?19, observed_state = ?20, observed_error = ?21, observed_at = ?22,
+  deployed_revision = ?23, dirty = ?24, shipped_at = ?25, apply_error = ?26, one_shot = ?27,
+  created_at = ?28
 WHERE id = ?1
 `
 
@@ -509,7 +503,6 @@ type CoreUpdateNodeParams struct {
 	ObservedCompleted  *int64
 	ObservedFinishedAt *int64
 	ObservedState      *string
-	ObservedNodeIds    *string
 	ObservedError      *string
 	ObservedAt         *int64
 	DeployedRevision   *int64
@@ -542,7 +535,6 @@ func (q *Queries) CoreUpdateNode(ctx context.Context, arg CoreUpdateNodeParams) 
 		arg.ObservedCompleted,
 		arg.ObservedFinishedAt,
 		arg.ObservedState,
-		arg.ObservedNodeIds,
 		arg.ObservedError,
 		arg.ObservedAt,
 		arg.DeployedRevision,

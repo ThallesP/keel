@@ -112,7 +112,6 @@ CREATE TABLE nodes (
   observed_completed   INTEGER,
   observed_finished_at INTEGER,
   observed_state       TEXT,
-  observed_node_ids    TEXT, -- JSON array of Swarm node ids
   observed_error       TEXT,
   observed_at          INTEGER,
   deployed_revision    INTEGER,

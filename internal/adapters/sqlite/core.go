@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"cmp"
-	"encoding/json"
 
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
@@ -72,9 +71,6 @@ func nodeOf(r sqlc.Node) domain.Node {
 			State:      domain.ObservedState(str(r.ObservedState)),
 			Error:      str(r.ObservedError),
 			At:         *r.ObservedAt,
-		}
-		if r.ObservedNodeIds != nil {
-			_ = json.Unmarshal([]byte(*r.ObservedNodeIds), &o.NodeIDs)
 		}
 		n.Observed = o
 	}
@@ -173,24 +169,22 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		p.DesiredTracing = b2i(d.Tracing)
 	}
 	if o := n.Observed; o != nil {
-		b, _ := json.Marshal(o.NodeIDs)
 		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = new(int64(o.Revision)), new(int64(o.Running)), new(o.At), new(string(o.State))
 		p.ObservedCompleted = ptrInt64(o.Completed)
 		p.ObservedFinishedAt = o.FinishedAt
-		p.ObservedNodeIds = new(string(b))
 		p.ObservedError = nullStr(o.Error)
 	}
 	return p
 }
 
 func (t *tx) InsertNode(n domain.Node) error {
-	return t.q.CoreInsertNode(t.ctx, nodeParams(n))
+	return canvasTaken(t.q.CoreInsertNode(t.ctx, nodeParams(n)))
 }
 
 func (t *tx) UpdateNode(n domain.Node) error {
 	res, err := t.q.CoreUpdateNode(t.ctx, sqlc.CoreUpdateNodeParams(nodeParams(n)))
 	if err != nil {
-		return err
+		return canvasTaken(err)
 	}
 	if res == 0 {
 		return app.ErrNoRow

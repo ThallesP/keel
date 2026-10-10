@@ -53,7 +53,7 @@ cmd/keel/        main.go → cli.Execute()
   compares them with `Date.now()`). The CLI prints RFC 3339.
 - Nested Convex objects become columns (`desired_image`, `observed_state`, …) or child tables
   (`endpoints`, `deployment_steps`, `deployment_log`). JSON columns only for small free-form
-  lists (`observed_node_ids`).
+  lists (`axiom_pending.orgs`).
 
 ## Use cases
 

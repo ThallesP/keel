@@ -113,7 +113,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			Dirty:         in.Type.Deployable(),
 			CreatedAt:     canvasCreatedAt(a.Now(), siblings),
 		}
-		if err := tx.CanvasInsertNode(node); err != nil {
+		if err := tx.InsertNode(node); err != nil {
 			return err
 		}
 		if in.Type == domain.NodeDatabase || in.Type == domain.NodeCache {
@@ -189,7 +189,7 @@ func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u N
 		if u.Position != nil {
 			node.Position = *u.Position
 		}
-		err = tx.CanvasUpdateNode(node)
+		err = tx.UpdateNode(node)
 		if errors.Is(err, ErrCanvasTaken) {
 			return canvasNameTaken(node.Name)
 		}
@@ -295,7 +295,7 @@ func (a *App) MoveNode(ctx context.Context, actor domain.Actor, id string, pos d
 			return err
 		}
 		scope.Node.Position = pos
-		if err := tx.CanvasUpdateNode(scope.Node); err != nil {
+		if err := tx.UpdateNode(scope.Node); err != nil {
 			return err
 		}
 		ch.Add(scope.Org, "/api/environments/"+scope.Environment.ID+"/nodes")
@@ -336,7 +336,7 @@ func (a *App) DuplicateNode(ctx context.Context, actor domain.Actor, id string) 
 			d.Revision = 0
 			dup.Desired = &d
 		}
-		if err := tx.CanvasInsertNode(dup); err != nil {
+		if err := tx.InsertNode(dup); err != nil {
 			return err
 		}
 		vars, err := tx.CanvasVariables(n.ID)
@@ -368,7 +368,7 @@ func (a *App) StartNode(ctx context.Context, actor domain.Actor, id string) (str
 			verb = "deploy"
 		}
 		node.Desired.Replicas, node.Dirty = max(node.Desired.Replicas, 1), true
-		if err := tx.CanvasUpdateNode(node); err != nil {
+		if err := tx.UpdateNode(node); err != nil {
 			return err
 		}
 		if err := canvasTouch(tx, ch, scope.Org, node.EnvironmentID); err != nil {
@@ -395,7 +395,7 @@ func (a *App) StopNode(ctx context.Context, actor domain.Actor, id string) (stri
 			return nil
 		}
 		node.Desired.Replicas, node.Dirty = 0, true
-		if err := tx.CanvasUpdateNode(node); err != nil {
+		if err := tx.UpdateNode(node); err != nil {
 			return err
 		}
 		if err := canvasTouch(tx, ch, scope.Org, node.EnvironmentID); err != nil {
@@ -432,7 +432,7 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 				continue
 			}
 			child.ParentID, child.Position = "", node.Position.Add(child.Position)
-			if err := tx.CanvasUpdateNode(child); err != nil {
+			if err := tx.UpdateNode(child); err != nil {
 				return err
 			}
 		}

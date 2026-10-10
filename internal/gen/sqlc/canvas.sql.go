@@ -9,15 +9,6 @@ import (
 	"context"
 )
 
-const canvasDeleteNodeVariables = `-- name: CanvasDeleteNodeVariables :exec
-DELETE FROM variables WHERE node_id = ?
-`
-
-func (q *Queries) CanvasDeleteNodeVariables(ctx context.Context, nodeID string) error {
-	_, err := q.db.ExecContext(ctx, canvasDeleteNodeVariables, nodeID)
-	return err
-}
-
 const canvasDeleteVariable = `-- name: CanvasDeleteVariable :execrows
 DELETE FROM variables WHERE node_id = ? AND key = ?
 `

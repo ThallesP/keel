@@ -51,7 +51,6 @@ type SwarmService struct {
 }
 
 type SwarmTask struct {
-	NodeID       string
 	DesiredState string
 	State        string
 	Err          string

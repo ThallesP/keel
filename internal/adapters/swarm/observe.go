@@ -63,7 +63,6 @@ func tasksOf(items []swarm.Task) []app.SwarmTask {
 	out := make([]app.SwarmTask, 0, len(items))
 	for _, t := range items {
 		task := app.SwarmTask{
-			NodeID:       t.NodeID,
 			DesiredState: string(t.DesiredState),
 			State:        string(t.Status.State),
 			Err:          t.Status.Err,

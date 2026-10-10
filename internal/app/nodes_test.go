@@ -309,7 +309,7 @@ func TestCanvasDuplicateNode(t *testing.T) {
 	vol := k.create(env, app.CreateNodeInput{Type: domain.NodeVolume})
 	k.setVar(pg, "EXTRA", "${{ api.URL }}")
 	k.exec(`UPDATE nodes SET parent_id = ?, desired_revision = 4, desired_tracing = 1, one_shot = 1, observed_at = 5, observed_revision = 4,
-		observed_running = 1, observed_state = 'ok', observed_node_ids = '[]', deployed_revision = 4, apply_error = 'x', shipped_at = 9, dirty = 0 WHERE id = ?`, group, pg)
+		observed_running = 1, observed_state = 'ok', deployed_revision = 4, apply_error = 'x', shipped_at = 9, dirty = 0 WHERE id = ?`, group, pg)
 	k.exec(`INSERT INTO endpoints (id, node_id, ord, protocol, port, public_port, status_state, status_at) VALUES ('ep', ?, 0, 'tcp', 5432, 5432, 'live', 1)`, pg)
 
 	copyID, err := k.app.DuplicateNode(k.ctx, canvasMember(canvasOrg), pg)
@@ -470,7 +470,7 @@ func TestCanvasSummary(t *testing.T) {
 	group := k.create(env, app.CreateNodeInput{Type: domain.NodeGroup})
 	k.exec(`UPDATE nodes SET dirty = 1 WHERE id = ?`, group)
 	k.exec(`UPDATE nodes SET desired_revision = 1, dirty = 0, observed_at = 1, observed_revision = 1, observed_running = 1,
-		observed_state = 'ok', observed_node_ids = '[]' WHERE id = ?`, api)
+		observed_state = 'ok' WHERE id = ?`, api)
 
 	s, err := k.app.EnvironmentSummaryOf(k.ctx, m, env)
 	if err != nil || s == nil {

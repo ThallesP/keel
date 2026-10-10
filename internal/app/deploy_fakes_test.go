@@ -208,7 +208,7 @@ func (f *fakeSwarm) view(id string) (app.SwarmService, []app.SwarmTask) {
 	labels := map[string]string{"keel.service": id, "keel.revision": strconv.Itoa(s.spec.Revision)}
 	if !scripted {
 		for range s.spec.Replicas {
-			tasks = append(tasks, app.SwarmTask{NodeID: "swarm-1", DesiredState: "running", State: "running", Labels: labels})
+			tasks = append(tasks, app.SwarmTask{DesiredState: "running", State: "running", Labels: labels})
 		}
 	}
 	return app.SwarmService{Name: "svc-" + id, Labels: labels, UpdateState: f.updateState[id]}, tasks

@@ -34,6 +34,3 @@ UPDATE variables SET key = ?2, value = ?3, secret = ?4 WHERE id = ?1;
 
 -- name: CanvasDeleteVariable :execrows
 DELETE FROM variables WHERE node_id = ? AND key = ?;
-
--- name: CanvasDeleteNodeVariables :exec
-DELETE FROM variables WHERE node_id = ?;

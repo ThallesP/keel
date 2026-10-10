@@ -48,9 +48,6 @@ func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Obser
 		}
 		if t.DesiredState == "running" && t.State == "running" {
 			o.Running++
-			if t.NodeID != "" && !slices.Contains(o.NodeIDs, t.NodeID) {
-				o.NodeIDs = append(o.NodeIDs, t.NodeID)
-			}
 		}
 		switch t.State {
 		case "failed", "rejected":

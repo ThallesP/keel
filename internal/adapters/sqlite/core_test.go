@@ -43,7 +43,7 @@ func TestNodeRoundTrip(t *testing.T) {
 		Position: domain.Position{X: 1.5, Y: -2},
 		Desired:  &domain.Desired{Image: "nginx:1", Revision: 3, Replicas: 2, Port: new(8080), Tracing: true},
 		Observed: &domain.Observed{Revision: 3, Running: 2, Completed: new(1), FinishedAt: new(int64(99)),
-			State: domain.ObservedOK, NodeIDs: []string{"n1"}, At: 42},
+			State: domain.ObservedOK, At: 42},
 		Dirty: true, ApplyError: "boom", OneShot: true, CreatedAt: 7,
 	}
 	eps := []domain.Endpoint{

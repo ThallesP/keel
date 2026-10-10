@@ -72,10 +72,6 @@ func (t *tx) CanvasInsertEnvironment(e domain.Environment) error {
 	})
 }
 
-func (t *tx) CanvasInsertNode(n domain.Node) error { return canvasTaken(t.InsertNode(n)) }
-
-func (t *tx) CanvasUpdateNode(n domain.Node) error { return canvasTaken(t.UpdateNode(n)) }
-
 func (t *tx) CanvasMarkDirty(nodeID string) error { return t.q.CanvasMarkDirty(t.ctx, nodeID) }
 
 func (t *tx) CanvasVariables(nodeID string) ([]domain.Variable, error) {
@@ -109,8 +105,4 @@ func (t *tx) CanvasUpdateVariable(v domain.Variable) error {
 func (t *tx) CanvasDeleteVariable(nodeID, key string) (bool, error) {
 	n, err := t.q.CanvasDeleteVariable(t.ctx, sqlc.CanvasDeleteVariableParams{NodeID: nodeID, Key: key})
 	return n > 0, err
-}
-
-func (t *tx) CanvasDeleteNodeVariables(nodeID string) error {
-	return t.q.CanvasDeleteNodeVariables(t.ctx, nodeID)
 }

@@ -19,14 +19,10 @@ func canvasTaken(err error) error {
 	return err
 }
 
-func variableOf(v db.Variable) domain.Variable {
-	return domain.Variable{ID: v.ID, NodeID: v.NodeID, Key: v.Key, Value: v.Value, Secret: v.Secret != 0}
-}
-
 func variablesOf(rows []db.Variable) []domain.Variable {
 	out := make([]domain.Variable, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, variableOf(r))
+		out = append(out, domain.Variable{ID: r.ID, NodeID: r.NodeID, Key: r.Key, Value: r.Value, Secret: r.Secret != 0})
 	}
 	return out
 }

@@ -16,14 +16,19 @@ import type { Deployment } from "./types";
  */
 export function useSummary(): EnvironmentSummary | undefined {
   const { environmentId } = useEnvironment();
-  const { data } = useGetEnvironmentSummary({ path: { id: environmentId } });
-  return data?.summary;
+  const { data: summary } = useGetEnvironmentSummary(
+    { path: { id: environmentId } },
+    { query: { select: (data) => data.summary } },
+  );
+  return summary;
 }
 
 /** Most recent deployment (undefined while loading, null when none). */
 export function useLatestDeployment(): Deployment | null | undefined {
   const { environmentId } = useEnvironment();
-  const { data } = useGetLatestDeployment({ path: { id: environmentId } });
-  const doc = data?.deployment;
+  const { data: doc } = useGetLatestDeployment(
+    { path: { id: environmentId } },
+    { query: { select: (data) => data.deployment } },
+  );
   return useMemo(() => (doc ? toDeployment(doc) : doc), [doc]);
 }

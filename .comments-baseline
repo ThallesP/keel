@@ -54,7 +54,7 @@
 2 apps/web/src/components/canvas/use-hotkey.ts
 1 apps/web/src/components/canvas/use-now.ts
 6 apps/web/src/components/canvas/use-synced-graph.ts
-10 apps/web/src/components/invite-dialog.tsx
+6 apps/web/src/components/invite-dialog.tsx
 1 apps/web/src/components/logo.tsx
 17 apps/web/src/components/palette.tsx
 1 apps/web/src/components/sign-in-form.tsx
@@ -66,7 +66,7 @@
 23 apps/web/src/lib/canvas-overlay.ts
 7 apps/web/src/lib/panel-write.ts
 52 apps/web/src/lib/query.ts
-35 apps/web/src/lib/realtime.tsx
+34 apps/web/src/lib/realtime.tsx
 35 apps/web/src/lib/session.tsx
 2 apps/web/src/main.tsx
 1 apps/web/src/routes/__root.tsx

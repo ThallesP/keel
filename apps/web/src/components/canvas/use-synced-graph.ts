@@ -29,14 +29,14 @@ export function useSyncedGraph() {
       const prevById = new Map(prev.map((n) => [n.id, n]));
       return toCanvasNodes(views).map((next) => {
         const old = prevById.get(next.id);
-        if (!old) return select.has(next.id) ? ({ ...next, selected: true } as CanvasNode) : next;
+        if (!old) return select.has(next.id) ? { ...next, selected: true } : next;
         return {
           ...next,
           selected: select.size > 0 ? select.has(next.id) : old.selected,
           dragging: old.dragging,
           measured: old.measured,
           position: old.dragging ? old.position : next.position,
-        } as CanvasNode;
+        };
       });
     });
   }, [data, overlayVersion, overlay, setNodes]);

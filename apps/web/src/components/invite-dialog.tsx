@@ -11,15 +11,8 @@ import { Label } from "@my-better-t-app/ui/components/label";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { type Organization, useCreateInvitation } from "@/api/gen";
+import { useCreateInvitation } from "@/api/gen";
 import { errorMessage } from "@/lib/api";
-
-/**
- * Whether a role may invite people: owners and admins. The server refuses members ("You are not
- * allowed to invite users to this organization"), so the menu hides "Invite people…" for them.
- */
-export const canInvite = (role: Organization["role"] | undefined) =>
-  role === "owner" || role === "admin";
 
 /**
  * Account → Invite people. Creates an organization invitation for an email and shows the link

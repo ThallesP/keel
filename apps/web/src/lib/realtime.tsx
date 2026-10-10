@@ -30,8 +30,6 @@ import { invalidateAll, invalidateTopics, markSignedOut, meQueryOptions } from "
 
 /** Close code: the session is gone (terminal). */
 export const CLOSE_SIGNED_OUT = 4501;
-/** Close code: the user's organization changed; centrifuge reconnects by itself. */
-export const CLOSE_MEMBERSHIP_CHANGED = 4001;
 
 /** Client-side batching of invalidation topics (web-data.md §9.1). */
 const BATCH_MS = 50;

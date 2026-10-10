@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -27,13 +28,13 @@ type DeviceView struct {
 }
 
 func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client ClientInfo) (DeviceStart, error) {
-	if r := domain.CheckDeviceClient(clientID); r != nil {
-		return DeviceStart{}, r
+	if clientID != domain.DeviceClientID {
+		return DeviceStart{}, &domain.DeviceRefusal{Status: 400, Code: "invalid_client", Description: domain.MsgDeviceInvalidClient}
 	}
 	if err := a.limited(a.limits().deviceStart, client.IP); err != nil {
 		return DeviceStart{}, err
 	}
-	deviceCode := domain.NewDeviceCode()
+	deviceCode := domain.NewSecret(25)
 	var userCode string
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
 		now := a.Now()
@@ -68,29 +69,31 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client Clie
 
 func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, clientID string, client ClientInfo) (DeviceToken, error) {
 	if grantType != domain.DeviceGrantType {
-		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "unsupported_grant_type", Description: domain.MsgDeviceGrantType}
+		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "unsupported_grant_type", Description: "Unsupported grant type"}
 	}
 	if err := a.limited(a.limits().devicePoll, client.IP); err != nil {
 		return DeviceToken{}, err
 	}
+	if clientID != domain.DeviceClientID {
+		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "invalid_grant", Description: domain.MsgDeviceInvalidClient}
+	}
+	invalidCode := &domain.DeviceRefusal{Status: 400, Code: "invalid_grant", Description: "Invalid device code"}
 	var (
-		out     DeviceToken
+		action  domain.PollAction
 		refusal *domain.DeviceRefusal
+		token   string
 	)
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
 		now := a.Now()
-		var dc *domain.DeviceCode
-		if clientID == domain.DeviceClientID {
-			row, err := tx.AuthDeviceCodeByHash(domain.HashSecret(deviceCode))
-			if err == nil {
-				dc = &row
-			} else if !errors.Is(err, ErrNoRow) {
-				return err
-			}
+		dc, err := tx.AuthDeviceCodeByHash(domain.HashSecret(deviceCode))
+		if errors.Is(err, ErrNoRow) {
+			return invalidCode
 		}
-		d := domain.DecidePoll(dc, clientID, now)
-		refusal = d.Refusal
-		switch d.Action {
+		if err != nil {
+			return err
+		}
+		action, refusal = domain.DecidePoll(dc, now)
+		switch action {
 		case domain.PollTouch:
 			return tx.AuthSetDevicePolled(dc.ID, now)
 		case domain.PollTouchDelete:
@@ -101,22 +104,15 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 				return err
 			}
 			if !consumed {
-				refusal = &domain.DeviceRefusal{Status: 400, Code: "invalid_grant", Description: domain.MsgDeviceInvalidCode}
-				return nil
+				return invalidCode
 			}
 			user, err := tx.AuthUser(dc.UserID)
-			if errors.Is(err, ErrNoRow) {
-				refusal = &domain.DeviceRefusal{Status: 500, Code: "server_error", Description: domain.MsgDeviceUserNotFound}
-				return nil
-			}
 			if err != nil {
 				return err
 			}
 			s, err := issueSession(tx, user, now, client)
-			if err != nil {
-				return err
-			}
-			out = DeviceToken{AccessToken: s.Token, ExpiresIn: (s.Session.ExpiresAt - now) / 1000}
+			token = s.Token
+			return err
 		}
 		return nil
 	})
@@ -126,57 +122,39 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 	if refusal != nil {
 		return DeviceToken{}, refusal
 	}
-	return out, nil
+	return DeviceToken{AccessToken: token, ExpiresIn: domain.SessionTTL / 1000}, nil
 }
 
 func (a *App) ClaimDeviceCode(ctx context.Context, actor domain.Actor, userCode string) (DeviceView, error) {
-	clean := domain.CleanUserCode(userCode)
-	var out DeviceView
-	look := func(tx Tx) (*domain.DeviceCode, error) {
-		dc, err := tx.AuthDeviceCodeByUserCode(clean)
-		if errors.Is(err, ErrNoRow) {
-			return nil, domain.CheckUserCode(nil, a.Now())
-		}
-		if err != nil {
-			return nil, err
-		}
-		if r := domain.CheckUserCode(&dc, a.Now()); r != nil {
-			return nil, r
-		}
-		out = DeviceView{UserCode: userCode, Status: dc.Status}
-		return &dc, nil
+	var dc domain.DeviceCode
+	look := func(tx Tx) (err error) {
+		dc, err = liveDeviceCode(tx, userCode, a.Now())
+		return err
 	}
 	if !actor.SignedIn() {
-		err := a.read(ctx, func(tx Tx) error { _, err := look(tx); return err })
-		return out, err
+		err := a.read(ctx, look)
+		return DeviceView{UserCode: userCode, Status: dc.Status}, err
 	}
 	err := a.write(ctx, func(tx Tx, _ *Changes) error {
-		dc, err := look(tx)
-		if err != nil {
+		if err := look(tx); err != nil {
 			return err
 		}
-		if dc.ShouldBind(actor.UserID) {
-			_, err = tx.AuthBindDeviceCode(dc.ID, actor.UserID)
-		}
+		_, err := tx.AuthBindDeviceCode(dc.ID, actor.UserID)
 		return err
 	})
-	return out, err
+	return DeviceView{UserCode: userCode, Status: dc.Status}, err
 }
 
 func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCode string, approve bool) error {
 	if !actor.SignedIn() {
-		return domain.DecideDevice(nil, "", approve, 0)
+		return &domain.DeviceRefusal{Status: 401, Code: "unauthorized", Description: "Authentication required"}
 	}
-	clean := domain.CleanUserCode(userCode)
 	return a.write(ctx, func(tx Tx, _ *Changes) error {
-		var dc *domain.DeviceCode
-		row, err := tx.AuthDeviceCodeByUserCode(clean)
-		if err == nil {
-			dc = &row
-		} else if !errors.Is(err, ErrNoRow) {
+		dc, err := liveDeviceCode(tx, userCode, a.Now())
+		if err != nil {
 			return err
 		}
-		if r := domain.DecideDevice(dc, actor.UserID, approve, a.Now()); r != nil {
+		if r := domain.DecideDevice(dc, actor.UserID, approve); r != nil {
 			return r
 		}
 		status := domain.DeviceDenied
@@ -192,4 +170,18 @@ func (a *App) DecideDeviceLogin(ctx context.Context, actor domain.Actor, userCod
 		}
 		return nil
 	})
+}
+
+func liveDeviceCode(tx Tx, userCode string, now int64) (domain.DeviceCode, error) {
+	dc, err := tx.AuthDeviceCodeByUserCode(strings.ReplaceAll(userCode, "-", ""))
+	if errors.Is(err, ErrNoRow) {
+		return domain.DeviceCode{}, &domain.DeviceRefusal{Status: 400, Code: "invalid_request", Description: "Invalid user code"}
+	}
+	if err != nil {
+		return domain.DeviceCode{}, err
+	}
+	if dc.Expired(now) {
+		return domain.DeviceCode{}, &domain.DeviceRefusal{Status: 400, Code: "expired_token", Description: "User code has expired"}
+	}
+	return dc, nil
 }

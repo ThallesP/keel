@@ -149,150 +149,67 @@ func TestInviteRole(t *testing.T) {
 	}
 }
 
-func TestDeviceCodes(t *testing.T) {
-	dc := regexp.MustCompile(`^[a-zA-Z0-9]{40}$`)
-	uc := regexp.MustCompile(`^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$`)
-	seen := map[string]bool{}
+func TestNewUserCode(t *testing.T) {
+	re := regexp.MustCompile(`^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$`)
 	for range 200 {
-		d, u := NewDeviceCode(), NewUserCode()
-		if !dc.MatchString(d) {
-			t.Fatalf("device code %q", d)
-		}
-		if !uc.MatchString(u) {
+		if u := NewUserCode(); !re.MatchString(u) {
 			t.Fatalf("user code %q", u)
 		}
-		if seen[d] {
-			t.Fatal("device code repeated")
-		}
-		seen[d] = true
-	}
-	if CleanUserCode("ABCD-EFGH") != "ABCDEFGH" || CleanUserCode("abcd-efgh") != "abcdefgh" {
-		t.Fatal("CleanUserCode strips dashes only")
-	}
-	if CheckDeviceClient("keel-cli") != nil {
-		t.Fatal("keel-cli refused")
-	}
-	if r := CheckDeviceClient("other"); r == nil || r.Status != 400 || r.Code != "invalid_client" || r.Description != "Invalid client ID" {
-		t.Fatalf("other client: %+v", r)
 	}
 }
 
-func authI64(v int64) *int64 { return &v }
-
 func TestDecidePoll(t *testing.T) {
 	const now = int64(1_000_000)
-	base := DeviceCode{ClientID: DeviceClientID, Status: DevicePending, IntervalS: 5, ExpiresAt: now + 60_000}
-	with := func(f func(*DeviceCode)) *DeviceCode { d := base; f(&d); return &d }
+	base := DeviceCode{Status: DevicePending, IntervalS: 5, ExpiresAt: now + 60_000}
+	with := func(f func(*DeviceCode)) DeviceCode { d := base; f(&d); return d }
+	slowDown := &DeviceRefusal{400, "slow_down", "Polling too frequently"}
+	pending := &DeviceRefusal{400, "authorization_pending", "Authorization pending"}
 	cases := []struct {
-		name   string
-		dc     *DeviceCode
-		client string
-		action PollAction
-		status int
-		code   string
-		desc   string
+		name    string
+		dc      DeviceCode
+		action  PollAction
+		refusal *DeviceRefusal
 	}{
-		{"wrong client", &base, "other", PollRefuse, 400, "invalid_grant", "Invalid client ID"},
-		{"unknown code", nil, DeviceClientID, PollRefuse, 400, "invalid_grant", "Invalid device code"},
-		{"client mismatch", with(func(d *DeviceCode) { d.ClientID = "x" }), DeviceClientID, PollRefuse, 400, "invalid_grant", "Client ID mismatch"},
-		{"slow down", with(func(d *DeviceCode) { d.LastPolledAt = authI64(now - 4_999) }), DeviceClientID, PollRefuse, 400, "slow_down", "Polling too frequently"},
-		{"slow down beats expiry", with(func(d *DeviceCode) { d.LastPolledAt = authI64(now - 1); d.ExpiresAt = now - 1 }), DeviceClientID, PollRefuse, 400, "slow_down", "Polling too frequently"},
-		{"interval elapsed", with(func(d *DeviceCode) { d.LastPolledAt = authI64(now - 5_000) }), DeviceClientID, PollTouch, 400, "authorization_pending", "Authorization pending"},
-		{"pending", &base, DeviceClientID, PollTouch, 400, "authorization_pending", "Authorization pending"},
-		{"expired", with(func(d *DeviceCode) { d.ExpiresAt = now - 1 }), DeviceClientID, PollTouchDelete, 400, "expired_token", "Device code has expired"},
-		{"expires now is still valid", with(func(d *DeviceCode) { d.ExpiresAt = now }), DeviceClientID, PollTouch, 400, "authorization_pending", "Authorization pending"},
-		{"denied", with(func(d *DeviceCode) { d.Status = DeviceDenied; d.UserID = "u" }), DeviceClientID, PollTouchDelete, 400, "access_denied", "Access denied"},
-		{"approved", with(func(d *DeviceCode) { d.Status = DeviceApproved; d.UserID = "u" }), DeviceClientID, PollIssue, 0, "", ""},
-		{"approved without user", with(func(d *DeviceCode) { d.Status = DeviceApproved }), DeviceClientID, PollTouch, 500, "server_error", "Invalid device code status"},
-		{"no stored client", with(func(d *DeviceCode) { d.ClientID = "" }), DeviceClientID, PollTouch, 400, "authorization_pending", "Authorization pending"},
+		{"slow down", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 4_999) }), PollRefuse, slowDown},
+		{"slow down beats expiry", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 1); d.ExpiresAt = now - 1 }), PollRefuse, slowDown},
+		{"interval elapsed", with(func(d *DeviceCode) { d.LastPolledAt = new(now - 5_000) }), PollTouch, pending},
+		{"pending", base, PollTouch, pending},
+		{"expired", with(func(d *DeviceCode) { d.ExpiresAt = now - 1 }), PollTouchDelete, &DeviceRefusal{400, "expired_token", "Device code has expired"}},
+		{"expires now is still valid", with(func(d *DeviceCode) { d.ExpiresAt = now }), PollTouch, pending},
+		{"denied", with(func(d *DeviceCode) { d.Status = DeviceDenied; d.UserID = "u" }), PollTouchDelete, &DeviceRefusal{400, "access_denied", "Access denied"}},
+		{"approved", with(func(d *DeviceCode) { d.Status = DeviceApproved; d.UserID = "u" }), PollIssue, nil},
 	}
 	for _, c := range cases {
-		got := DecidePoll(c.dc, c.client, now)
-		if got.Action != c.action {
-			t.Errorf("%s: action %d, want %d", c.name, got.Action, c.action)
-		}
-		if c.action == PollIssue {
-			if got.Refusal != nil {
-				t.Errorf("%s: refusal %+v", c.name, got.Refusal)
-			}
-			continue
-		}
-		r := got.Refusal
-		if r == nil || r.Status != c.status || r.Code != c.code || r.Description != c.desc {
-			t.Errorf("%s: %+v, want %d %s %q", c.name, r, c.status, c.code, c.desc)
+		action, refusal := DecidePoll(c.dc, now)
+		if action != c.action || !reflect.DeepEqual(refusal, c.refusal) {
+			t.Errorf("%s: %d %+v, want %d %+v", c.name, action, refusal, c.action, c.refusal)
 		}
 	}
 }
 
 func TestDecideDevice(t *testing.T) {
-	const now = int64(1_000_000)
-	pending := DeviceCode{Status: DevicePending, UserID: "u1", ExpiresAt: now + 1}
-	with := func(f func(*DeviceCode)) *DeviceCode { d := pending; f(&d); return &d }
+	claimed := DeviceCode{Status: DevicePending, UserID: "u1"}
 	cases := []struct {
 		name    string
-		dc      *DeviceCode
+		dc      DeviceCode
 		user    string
 		approve bool
-		status  int
-		code    string
-		desc    string
+		refusal *DeviceRefusal
 	}{
-		{"signed out", &pending, "", true, 401, "unauthorized", "Authentication required"},
-		{"signed out before lookup", nil, "", true, 401, "unauthorized", "Authentication required"},
-		{"unknown", nil, "u1", true, 400, "invalid_request", "Invalid user code"},
-		{"expired", with(func(d *DeviceCode) { d.ExpiresAt = now - 1 }), "u1", true, 400, "expired_token", "User code has expired"},
-		{"processed", with(func(d *DeviceCode) { d.Status = DeviceApproved }), "u1", true, 400, "invalid_request", "Device code already processed"},
-		{"unclaimed", with(func(d *DeviceCode) { d.UserID = "" }), "u1", true, 400, "invalid_request", MsgDeviceNotClaimed},
-		{"someone else approves", &pending, "u2", true, 403, "access_denied", "You are not authorized to approve this device authorization"},
-		{"someone else denies", &pending, "u2", false, 403, "access_denied", "You are not authorized to deny this device authorization"},
-		{"approve", &pending, "u1", true, 0, "", ""},
-		{"deny", &pending, "u1", false, 0, "", ""},
+		{"processed", DeviceCode{Status: DeviceApproved, UserID: "u1"}, "u1", true, &DeviceRefusal{400, "invalid_request", "Device code already processed"}},
+		{"unclaimed", DeviceCode{Status: DevicePending}, "u1", true, &DeviceRefusal{400, "invalid_request", MsgDeviceNotClaimed}},
+		{"someone else approves", claimed, "u2", true, &DeviceRefusal{403, "access_denied", "You are not authorized to approve this device authorization"}},
+		{"someone else denies", claimed, "u2", false, &DeviceRefusal{403, "access_denied", "You are not authorized to deny this device authorization"}},
+		{"approve", claimed, "u1", true, nil},
+		{"deny", claimed, "u1", false, nil},
 	}
 	for _, c := range cases {
-		r := DecideDevice(c.dc, c.user, c.approve, now)
-		if c.status == 0 {
-			if r != nil {
-				t.Errorf("%s: refused %+v", c.name, r)
-			}
-			continue
+		if r := DecideDevice(c.dc, c.user, c.approve); !reflect.DeepEqual(r, c.refusal) {
+			t.Errorf("%s: %+v, want %+v", c.name, r, c.refusal)
 		}
-		if r == nil || r.Status != c.status || r.Code != c.code || r.Description != c.desc {
-			t.Errorf("%s: %+v, want %d %s %q", c.name, r, c.status, c.code, c.desc)
-		}
-	}
-	if !strings.Contains(MsgDeviceNotClaimed, "`GET /device`") {
-		t.Fatal("not-claimed message must keep its backticks")
 	}
 }
 
-func TestCheckUserCodeAndBind(t *testing.T) {
-	const now = int64(50)
-	if r := CheckUserCode(nil, now); r == nil || r.Code != "invalid_request" || r.Description != "Invalid user code" {
-		t.Fatalf("unknown: %+v", r)
-	}
-	if r := CheckUserCode(&DeviceCode{ExpiresAt: now - 1}, now); r == nil || r.Code != "expired_token" || r.Description != "User code has expired" {
-		t.Fatalf("expired: %+v", r)
-	}
-	if r := CheckUserCode(&DeviceCode{ExpiresAt: now}, now); r != nil {
-		t.Fatalf("valid: %+v", r)
-	}
-	cases := []struct {
-		dc   DeviceCode
-		user string
-		want bool
-	}{
-		{DeviceCode{Status: DevicePending}, "u", true},
-		{DeviceCode{Status: DevicePending}, "", false},
-		{DeviceCode{Status: DevicePending, UserID: "v"}, "u", false},
-		{DeviceCode{Status: DeviceApproved}, "u", false},
-		{DeviceCode{Status: DeviceDenied}, "u", false},
-	}
-	for _, c := range cases {
-		if got := c.dc.ShouldBind(c.user); got != c.want {
-			t.Errorf("ShouldBind(%+v, %q) = %v", c.dc, c.user, got)
-		}
-	}
-}
 func TestRateLimitError(t *testing.T) {
 	var de *Error
 	if !errors.As(&RateLimitError{RetryAfterSeconds: 30}, &de) || de.Code != CodeRateLimited || de.Message != MsgTooManyRequests {

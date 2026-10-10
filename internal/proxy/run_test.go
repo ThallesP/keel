@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -119,17 +120,12 @@ func startEdge(t *testing.T, opts Options) (stop func()) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	stopped := false
-	stop = func() {
-		if stopped {
-			return
-		}
-		stopped = true
+	stop = sync.OnceFunc(func() {
 		cancel()
 		if err := <-done; err != nil {
 			t.Errorf("stop: %v", err)
 		}
-	}
+	})
 	t.Cleanup(stop)
 	return stop
 }

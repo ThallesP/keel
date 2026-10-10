@@ -154,33 +154,3 @@ func TestAdminRoutes(t *testing.T) {
 		}
 	}
 }
-
-func TestErrorText(t *testing.T) {
-	cases := []struct {
-		in   any
-		want string
-	}{
-		{errors.New(" a\n b  c "), "a b c"},
-		{"x\ty", "x y"},
-		{42, "42"},
-		{nil, "<nil>"},
-	}
-	for _, c := range cases {
-		if got := errorText(c.in); got != c.want {
-			t.Errorf("errorText(%v) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
-func TestBaseWithSocket(t *testing.T) {
-	b, err := baseWithSocket("")
-	if err != nil || strings.TrimSpace(string(b)) != `{
-  "admin": { "listen": "unix//run/keel-proxy/admin.sock|0600" }
-}` {
-		t.Fatalf("default: %s %v", b, err)
-	}
-	b, err = baseWithSocket("/tmp/k/admin.sock")
-	if err != nil || string(b) != `{"admin":{"listen":"unix//tmp/k/admin.sock|0600"}}` {
-		t.Fatalf("custom: %s %v", b, err)
-	}
-}

@@ -50,9 +50,8 @@ func serveHostAddrs(w http.ResponseWriter, r *http.Request) error {
 }
 
 type Cert struct {
-	State    string    `json:"state"`
-	Error    string    `json:"error,omitempty"`
-	NotAfter time.Time `json:"notAfter,omitzero"`
+	State string `json:"state"`
+	Error string `json:"error,omitempty"`
 }
 
 func serveCerts(w http.ResponseWriter, r *http.Request) error {
@@ -69,7 +68,7 @@ func serveCerts(w http.ResponseWriter, r *http.Request) error {
 func certOf(name string) Cert {
 	for _, c := range matchingCerts(name) {
 		if c.Leaf != nil && time.Now().Before(c.Leaf.NotAfter) {
-			return Cert{State: "ok", NotAfter: c.Leaf.NotAfter}
+			return Cert{State: "ok"}
 		}
 	}
 	failuresMu.Lock()
@@ -113,8 +112,7 @@ func (r *Reporter) Provision(ctx caddy.Context) error {
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				var conn net.Conn
-				err := inHost(func() error {
-					var err error
+				err := inHost(func() (err error) {
 					conn, err = (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, network, addr)
 					return err
 				})
@@ -143,11 +141,8 @@ func (r *Reporter) Handle(_ context.Context, e caddy.Event) error {
 		delete(failures, name)
 		failuresMu.Unlock()
 	case "cert_failed":
-		report.Error = errorText(e.Data["error"])
-		if strings.Contains(report.Error, "context canceled") {
-			return nil
-		}
-		if certOf(name).State == "ok" {
+		report.Error = strings.Join(strings.Fields(fmt.Sprint(e.Data["error"])), " ")
+		if strings.Contains(report.Error, "context canceled") || certOf(name).State == "ok" {
 			return nil
 		}
 		failuresMu.Lock()
@@ -187,19 +182,6 @@ func (r *Reporter) post(report certEvent) {
 		}
 		r.logger.Warn("keel report", zap.String("name", report.Name), zap.Error(err))
 	}
-}
-
-func errorText(v any) string {
-	var s string
-	switch e := v.(type) {
-	case error:
-		s = e.Error()
-	case string:
-		s = e
-	default:
-		s = fmt.Sprint(v)
-	}
-	return strings.Join(strings.Fields(s), " ")
 }
 
 func writeJSON(w http.ResponseWriter, v any) error {

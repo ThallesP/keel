@@ -3,8 +3,8 @@
 package proxy
 
 import (
+	"cmp"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,9 +29,6 @@ import (
 
 const DefaultSocket = "/run/keel-proxy/admin.sock"
 
-//go:embed caddy.json
-var baseConfig []byte
-
 type Options struct {
 	Socket     string
 	ConfigFile string
@@ -40,15 +37,12 @@ type Options struct {
 
 func Run(ctx context.Context, opts Options) error {
 	prepareACME()
+	opts.Socket = cmp.Or(opts.Socket, DefaultSocket)
 	config, resumed, err := initialConfig(opts)
 	if err != nil {
 		return err
 	}
-	socket := opts.Socket
-	if socket == "" {
-		socket = DefaultSocket
-	}
-	if err := os.MkdirAll(filepath.Dir(socket), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(opts.Socket), 0o755); err != nil {
 		return err
 	}
 	log := caddy.Log()
@@ -67,7 +61,7 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("loading initial config: %w", err)
 		}
 	}
-	log.Info("keel proxy serving", zap.String("admin", socket))
+	log.Info("keel proxy serving", zap.String("admin", opts.Socket))
 	<-ctx.Done()
 	return caddy.Stop()
 }
@@ -99,17 +93,5 @@ func startConfig(opts Options) ([]byte, error) {
 	if opts.ConfigFile != "" {
 		return os.ReadFile(opts.ConfigFile)
 	}
-	return baseWithSocket(opts.Socket)
-}
-
-func baseWithSocket(socket string) ([]byte, error) {
-	if socket == "" {
-		return baseConfig, nil
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(baseConfig, &cfg); err != nil {
-		return nil, err
-	}
-	cfg["admin"] = map[string]any{"listen": "unix/" + socket + "|0600"}
-	return json.Marshal(cfg)
+	return json.Marshal(caddy.Config{Admin: &caddy.AdminConfig{Listen: "unix/" + opts.Socket + "|0600"}})
 }

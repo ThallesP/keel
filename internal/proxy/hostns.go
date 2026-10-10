@@ -6,16 +6,16 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/caddyserver/caddy/v2"
 	"golang.org/x/sys/unix"
 )
-
-const HostNetNS = "/run/hostns/net"
 
 func init() {
 	caddy.RegisterNetwork("host-tcp", listenInHost("tcp"))
@@ -30,8 +30,7 @@ func listenInHost(network string) caddy.ListenerFunc {
 		}
 		addr := caddy.NetworkAddress{Network: network, Host: host, StartPort: uint(port), EndPort: uint(port)}
 		var ln any
-		err = inHost(func() error {
-			var err error
+		err = inHost(func() (err error) {
 			ln, err = addr.Listen(ctx, portOffset, cfg)
 			return err
 		})
@@ -40,19 +39,18 @@ func listenInHost(network string) caddy.ListenerFunc {
 }
 
 func inHost(fn func() error) error {
+	host, err := os.Open("/run/hostns/net")
+	if err != nil {
+		return fmt.Errorf("host network namespace: %w", err)
+	}
+	defer host.Close()
 	runtime.LockOSThread()
-	own, err := os.Open(fmt.Sprintf("/proc/self/task/%d/ns/net", unix.Gettid()))
+	own, err := os.Open("/proc/thread-self/ns/net")
 	if err != nil {
 		runtime.UnlockOSThread()
 		return err
 	}
 	defer own.Close()
-	host, err := os.Open(HostNetNS)
-	if err != nil {
-		runtime.UnlockOSThread()
-		return fmt.Errorf("host network namespace: %w", err)
-	}
-	defer host.Close()
 	if err := unix.Setns(int(host.Fd()), unix.CLONE_NEWNET); err != nil {
 		runtime.UnlockOSThread()
 		return fmt.Errorf("enter host network namespace: %w", err)
@@ -92,25 +90,17 @@ func hostAddrs() ([]string, error) {
 }
 
 var (
-	tailnetV4    = mustCIDR("100.64.0.0/10")
-	tailnetV6    = mustCIDR("fd7a:115c:a1e0::/48")
+	tailnetV4    = netip.MustParsePrefix("100.64.0.0/10")
+	tailnetV6    = netip.MustParsePrefix("fd7a:115c:a1e0::/48")
 	skipPrefixes = []string{"lo", "tailscale", "docker", "br-", "veth"}
 )
 
 func public(iface string, ip net.IP) bool {
-	for _, p := range skipPrefixes {
-		if strings.HasPrefix(iface, p) {
-			return false
-		}
+	if slices.ContainsFunc(skipPrefixes, func(p string) bool { return strings.HasPrefix(iface, p) }) {
+		return false
 	}
-	return !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsMulticast() &&
-		!tailnetV4.Contains(ip) && !tailnetV6.Contains(ip)
-}
-
-func mustCIDR(s string) *net.IPNet {
-	_, n, err := net.ParseCIDR(s)
-	if err != nil {
-		panic(err)
-	}
-	return n
+	addr, _ := netip.AddrFromSlice(ip)
+	addr = addr.Unmap()
+	return !addr.IsLoopback() && !addr.IsLinkLocalUnicast() && !addr.IsMulticast() &&
+		!tailnetV4.Contains(addr) && !tailnetV6.Contains(addr)
 }

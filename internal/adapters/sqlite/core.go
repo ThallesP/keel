@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"cmp"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -170,23 +171,20 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		CreatedAt:        n.CreatedAt,
 	}
 	if d := n.Desired; d != nil {
-		img, rev, rep := d.Image, int64(d.Revision), int64(d.Replicas)
-		p.DesiredImage, p.DesiredRevision, p.DesiredReplicas = &img, &rev, &rep
+		p.DesiredImage, p.DesiredRevision, p.DesiredReplicas = new(d.Image), new(int64(d.Revision)), new(int64(d.Replicas))
 		p.DesiredPort = ptrInt64(d.Port)
 		p.DesiredTracing = b2i(d.Tracing)
 	}
 	if o := n.Observed; o != nil {
-		rev, run, at, state := int64(o.Revision), int64(o.Running), o.At, string(o.State)
 		ids := o.NodeIDs
 		if ids == nil {
 			ids = []string{}
 		}
 		b, _ := json.Marshal(ids)
-		js := string(b)
-		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = &rev, &run, &at, &state
+		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = new(int64(o.Revision)), new(int64(o.Running)), new(o.At), new(string(o.State))
 		p.ObservedCompleted = ptrInt64(o.Completed)
 		p.ObservedFinishedAt = o.FinishedAt
-		p.ObservedNodeIds = &js
+		p.ObservedNodeIds = new(string(b))
 		p.ObservedError = nullStr(o.Error)
 	}
 	return p
@@ -216,12 +214,8 @@ func (t *tx) ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error {
 		return err
 	}
 	for i, e := range eps {
-		id := e.ID
-		if id == "" {
-			id = domain.NewID()
-		}
 		err := t.q.CoreInsertEndpoint(t.ctx, sqlc.CoreInsertEndpointParams{
-			ID:          id,
+			ID:          cmp.Or(e.ID, domain.NewID()),
 			NodeID:      nodeID,
 			Ord:         int64(i),
 			Protocol:    string(e.Protocol),

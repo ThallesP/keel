@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -37,19 +38,17 @@ func seedEnvironment(t *testing.T, s *Store) string {
 func TestNodeRoundTrip(t *testing.T) {
 	s := OpenTest(t)
 	env := seedEnvironment(t, s)
-	port, completed, finished := 8080, 1, int64(99)
 	want := domain.Node{
 		ID: domain.NewID(), EnvironmentID: env, Type: domain.NodeService, Name: "api",
 		Position: domain.Position{X: 1.5, Y: -2},
-		Desired:  &domain.Desired{Image: "nginx:1", Revision: 3, Replicas: 2, Port: &port, Tracing: true},
-		Observed: &domain.Observed{Revision: 3, Running: 2, Completed: &completed, FinishedAt: &finished,
+		Desired:  &domain.Desired{Image: "nginx:1", Revision: 3, Replicas: 2, Port: new(8080), Tracing: true},
+		Observed: &domain.Observed{Revision: 3, Running: 2, Completed: new(1), FinishedAt: new(int64(99)),
 			State: domain.ObservedOK, NodeIDs: []string{"n1"}, At: 42},
 		Dirty: true, ApplyError: "boom", OneShot: true, CreatedAt: 7,
 	}
-	pub := 5432
 	eps := []domain.Endpoint{
 		{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "api.example.com", Status: domain.EndpointStatus{State: domain.EndpointLive, At: 1}},
-		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: &pub, PinnedPort: true, Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "in use", At: 2}},
+		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: new(5432), PinnedPort: true, Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "in use", At: 2}},
 	}
 	ctx := context.Background()
 	err := s.Write(ctx, func(tx app.Tx) error {
@@ -88,7 +87,7 @@ func TestNodeRoundTrip(t *testing.T) {
 		if n.Desired != nil || n.Observed != nil || n.Name != "api-2" {
 			t.Errorf("after update: %+v", n)
 		}
-		if _, err := tx.Node("missing"); err != app.ErrNoRow {
+		if _, err := tx.Node("missing"); !errors.Is(err, app.ErrNoRow) {
 			t.Errorf("missing node: %v", err)
 		}
 		return nil

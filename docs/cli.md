@@ -9,7 +9,7 @@ go build -o bin/keel ./cmd/keel                        # the whole binary: CLI, 
 go build -tags keel_noproxy -o bin/keel ./cmd/keel     # leaves the embedded Caddy edge out (laptops, agents)
 ```
 
-Go 1.27. The CLI verbs are the `keel` binary that also runs the control plane (`keel serve`), its edge (`keel proxy`) and the node agent (`keel agent`); one module at the repo root. CI runs `gofmt`, `go vet` and `go test` (`ci.yml`, job `go`), and the install job logs in with it against a fresh install, approving the link with curl.
+Go 1.27. The CLI verbs are the `keel` binary that also runs the control plane (`keel serve`), its edge (`keel proxy`) and the node agent (`keel agent`); one module at the repo root. CI runs `gofmt`, `go vet`, `tools/nocomments`, `go test` and the `openapi.json` check (`ci.yml`, job `go`), and the install job logs in with it against a fresh install, approving the link with curl.
 
 ## Use
 
@@ -81,27 +81,30 @@ The session token comes straight from the device token poll, handed out once, an
 Without a saved login, set `KEEL_URL` (dashboard) and `KEEL_TOKEN` (from `keel token`). Dashboard and API share one origin, so the dashboard URL is all the CLI needs, a dev one too (Vite proxies `/api` to `keel serve`).
 
 - **Install:** `KEEL_URL`, else `--instance` / `KEEL_INSTANCE`, else the directory's link, else the last login.
-- **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`; none at all is `NO_PROJECTS`. On a fresh install the first account founds the organization with its first `keel project create`, if it never opened the dashboard's home page.
+- **Project:** `--project` / `KEEL_PROJECT`, else the directory's link (nearest parent), else the only project. Several projects and none picked is `PROJECT_REQUIRED`; none at all is `NO_PROJECTS`. On a fresh install the first account founds the organization when it signs up; its first project comes from the dashboard's home page or `keel project create`.
 - **Environment:** production for now.
 - **Services:** named by name (unique per environment) or id.
 
 ## Layout
 
 ```
-cmd/keel/                 main: signals, then cli.Execute
-internal/cli/             root.go: global flags, error funnel, exit codes, the server subcommands
-                          (serve, openapi; proxy, agent through Extra);
+cmd/keel/                 main: signals, then cli.Execute(ctx, web.Dist()) (the dashboard for serve)
+internal/cli/             root.go: global flags, error funnel, exit codes, the server subcommands:
+                          serve, openapi and agent (agent_cmd.go) registered directly; proxy
+                          (proxy_cmd.go, built on linux without -tags keel_noproxy) appends
+                          itself to `extra` from init;
                           one file per noun; commands resolve the target, call, print
 internal/cli/output/      the contract above: printer, error codes, exit codes
 internal/cli/config/      config.json: installs and directory links
 internal/cli/client/      the HTTP API client: discovery (/api/meta), device login, typed calls
-                          over internal/api's wire types; the CLI's printed types; problem
-                          codes passed through, fixes added (withFix)
+                          returning internal/api's wire types, or the CLI's own types
+                          (types.go) where the printout differs; problems decoded into
+                          api.Problem, codes passed through, fixes added (withFix)
 ```
 
 The version is `cli.Version` (`-ldflags "-X github.com/ThallesP/keel/internal/cli.Version=1.2.3"`); requests carry `User-Agent: keel-cli/<version>`.
 
-A new command: add the API call to `internal/cli/client/api.go` (decode into `internal/api` types; return the CLI's types from `types.go`, whose JSON is what the CLI prints), then a cobra command in `internal/cli` that ends in `a.out.Result(v, human)`. A new server error code needs nothing here unless it deserves a `fix` (`withFix` in `client/client.go`); a code agents branch on is listed above.
+A new command: add the API call to `internal/cli/client/api.go` (decode into `internal/api` types; return them as they are, or a CLI type from `types.go` when what the CLI prints differs, such as RFC 3339 times), then a cobra command in `internal/cli` that ends in `a.out.Result(v, human)`. A new server error code needs nothing here unless it deserves a `fix` (`withFix` in `client/client.go`); a code agents branch on is listed above.
 
 ## Next
 

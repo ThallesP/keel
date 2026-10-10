@@ -55,7 +55,7 @@ The `endpoints` table (`internal/adapters/sqlite/migrations/0001_init.sql`, `dom
 | `status`     | `starting` → `live` / `failed` (+ `error`) | same                                           |
 
 - **Expose** (`Expose` in `internal/app/ingress.go`, `POST /api/nodes/{id}/expose`) is immediate, not Ship-gated, like the Quick Tunnel was. No options: https on the default domain for a service, tcp on its own port for a database or cache. `publicPort` defaults to the container port when it is free on that protocol, else the first free one from 20000. TCP cannot take 80/443. At most 10 endpoints per node.
-- **Unexpose** (`Unexpose`, `POST /api/nodes/{id}/unexpose`) closes one endpoint (domain, or protocol + public port) or all ("Make private"). Deleting a node closes its endpoints.
+- **Unexpose** (`Unexpose`, `POST /api/nodes/{id}/unexpose`) closes one endpoint (domain, or protocol + public port) or all ("Make private"). The domain and port are checked with Expose's rules, so a malformed one is `INVALID_INPUT` even when nothing matches. Deleting a node closes its endpoints.
 - **The canvas:** toolbar Expose / ⋯ Make private; Settings → Public networking lists endpoints (address with copy, target port, state, ✕) and adds https domains or tcp/udp ports; the card subtitle is the best https domain (live > starting > failed); the Deployments meta strip lists every address.
 - `KEEL_PUBLIC_IP` (`keel serve` env, detected by `install.sh`) names default domains and tcp/udp addresses. Without it, Expose asks for it.
 

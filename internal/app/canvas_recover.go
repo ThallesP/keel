@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -28,7 +29,6 @@ func (a *App) recoverCanvas(ctx context.Context) {
 func (a *App) canvasBackfillRedisPasswords(ctx context.Context) (int, error) {
 	added := 0
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		added = 0
 		nodes, err := tx.AllNodes()
 		if err != nil {
 			return err
@@ -41,7 +41,7 @@ func (a *App) canvasBackfillRedisPasswords(ctx context.Context) (int, error) {
 			if err != nil {
 				return err
 			}
-			if canvasHasKey(rows, canvasRedisPassword) {
+			if slices.ContainsFunc(rows, func(r domain.Variable) bool { return r.Key == canvasRedisPassword }) {
 				continue
 			}
 			v := domain.Variable{ID: domain.NewID(), NodeID: n.ID, Key: canvasRedisPassword, Value: domain.RandomSecret(20), Secret: true}
@@ -70,12 +70,3 @@ func (a *App) canvasBackfillRedisPasswords(ctx context.Context) (int, error) {
 
 // canvasRedisPassword is the variable apply turns into `redis-server --requirepass`.
 const canvasRedisPassword = "REDIS_PASSWORD"
-
-func canvasHasKey(rows []domain.Variable, key string) bool {
-	for _, r := range rows {
-		if r.Key == key {
-			return true
-		}
-	}
-	return false
-}

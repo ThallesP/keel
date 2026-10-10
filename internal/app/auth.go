@@ -303,7 +303,7 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 		return SignedIn{}, err
 	}
 	key := client.IP + "\x00" + email
-	limiter := a.signInAttempts()
+	limiter := a.limits().signIn
 	if err := a.limited(limiter, key); err != nil {
 		return SignedIn{}, err
 	}

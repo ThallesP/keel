@@ -54,8 +54,6 @@ func (a *App) limits() *authLimiters {
 	return a.authLimits
 }
 
-func (a *App) signInAttempts() *authAttempts { return a.limits().signIn }
-
 // limited counts one call against l for key; a refusal is RATE_LIMITED with Retry-After.
 func (a *App) limited(l *authAttempts, key string) error {
 	if wait := l.take(key, a.Now()); wait > 0 {
@@ -88,21 +86,13 @@ func (l *authAttempts) take(key string, now int64) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if now-l.swept >= l.window {
-		for k, w := range l.hits {
-			if now-w.start >= l.window {
-				delete(l.hits, k)
-			}
-		}
+		l.sweep(now)
 		l.swept = now
 	}
 	w := l.hits[key]
 	if w == nil || now-w.start >= l.window {
 		if w == nil && len(l.hits) >= limiterMaxKeys {
-			for k, old := range l.hits {
-				if now-old.start >= l.window {
-					delete(l.hits, k)
-				}
-			}
+			l.sweep(now)
 			for k := range l.hits {
 				if len(l.hits) < limiterMaxKeys {
 					break
@@ -118,6 +108,14 @@ func (l *authAttempts) take(key string, now int64) int64 {
 	}
 	w.n++
 	return 0
+}
+
+func (l *authAttempts) sweep(now int64) {
+	for k, w := range l.hits {
+		if now-w.start >= l.window {
+			delete(l.hits, k)
+		}
+	}
 }
 
 // reset forgets key's attempts (after a successful sign-in).

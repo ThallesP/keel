@@ -33,11 +33,6 @@ func (c *Changes) Add(organizationID string, topics ...string) {
 // Projects: the project list.
 func (c *Changes) Projects(org string) { c.Add(org, "/api/projects") }
 
-// Project: one project (and the list, which shows it).
-func (c *Changes) Project(org, projectID string) {
-	c.Add(org, "/api/projects")
-}
-
 // Environment: the canvas, summary, deployments and anything else under /api/environments/<id>,
 // plus every node-scoped query (/api/nodes/...): a change to the environment can show in any of
 // its nodes' views (web-data.md §10.2). Changes carry no node list, so this covers the
@@ -58,9 +53,6 @@ func (c *Changes) Deployment(org, environmentID, deploymentID string) {
 
 // Organization: members, invitations, the log sink, the current organization.
 func (c *Changes) Organization(org string) { c.Add(org, "/api/organization") }
-
-// Everything: every query of the organization.
-func (c *Changes) Everything(org string) { c.Add(org, "/api") }
 
 func (c *Changes) publish(p Publisher) {
 	defer func() {

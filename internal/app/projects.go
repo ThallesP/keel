@@ -39,8 +39,7 @@ func canvasMembership(tx Tx, ch *Changes, actor domain.Actor, now int64) (domain
 		return m, errors.New("joinOrFound returned no organization")
 	}
 	if actor.OrganizationID == "" {
-		ch.Organization(m.OrganizationID)
-		ch.Add(m.OrganizationID, "/api/me")
+		authMembershipChanged(ch, m.OrganizationID)
 	}
 	return m, nil
 }
@@ -148,14 +147,7 @@ func (a *App) ProjectBySlug(ctx context.Context, actor domain.Actor, slug string
 		if err != nil || len(envs) == 0 {
 			return err
 		}
-		env := envs[0]
-		for _, e := range envs {
-			if e.IsProduction {
-				env = e
-				break
-			}
-		}
-		out = &ProjectHome{Project: p, Environment: env}
+		out = &ProjectHome{Project: p, Environment: canvasProductionFirst(envs)[0]}
 		return nil
 	})
 	return out, err

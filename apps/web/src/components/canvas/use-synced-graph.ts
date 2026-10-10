@@ -1,40 +1,45 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { useNodesState } from "@xyflow/react";
-import { useQuery } from "convex/react";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+
+import { useListNodes } from "@/gen/api";
 
 import { useCanvasActions } from "./actions";
 import { useEnvironment } from "./environment";
 import { toCanvasNodes } from "./mapping";
 import type { CanvasNode } from "./types";
 
-/** Convex subscriptions → React Flow state. Selection, drag and measurements stay local. */
+/**
+ * The environment's node list (kept live by realtime invalidation) → React Flow state, with the
+ * moves and deletes still in flight laid over it. Selection, drag and measurements stay local.
+ */
 export function useSyncedGraph() {
   const { environmentId } = useEnvironment();
-  const nodeDocs = useQuery(api.nodes.list, { environmentId });
+  const { data } = useListNodes({ path: { id: environmentId } });
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
-  const { selectOnArrival } = useCanvasActions();
+  const { overlay } = useCanvasActions();
+  // A move or delete settling, or a create queuing its id, merges again with the list we have.
+  const overlayVersion = useSyncExternalStore(overlay.subscribe, overlay.getVersion);
 
   useEffect(() => {
-    if (!nodeDocs) return;
-    const arriving = selectOnArrival.current;
-    const select = new Set(nodeDocs.filter((d) => arriving.has(d.id)).map((d) => d.id as string));
-    for (const id of select) arriving.delete(id);
+    if (!data) return;
+    const views = overlay.apply(data.nodes);
+    // Nodes this client just created: select them (and only them) once, as they arrive.
+    const select = overlay.takeArrivals(views);
     setNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
-      return toCanvasNodes(nodeDocs).map((next) => {
+      return toCanvasNodes(views).map((next) => {
         const old = prevById.get(next.id);
-        if (!old) return select.has(next.id) ? ({ ...next, selected: true } as CanvasNode) : next;
+        if (!old) return select.has(next.id) ? { ...next, selected: true } : next;
         return {
           ...next,
-          selected: select.size > 0 ? false : old.selected,
+          selected: select.size > 0 ? select.has(next.id) : old.selected,
           dragging: old.dragging,
           measured: old.measured,
           position: old.dragging ? old.position : next.position,
-        } as CanvasNode;
+        };
       });
     });
-  }, [nodeDocs, setNodes, selectOnArrival]);
+  }, [data, overlayVersion, overlay, setNodes]);
 
   return { nodes, onNodesChange };
 }

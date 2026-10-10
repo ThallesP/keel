@@ -1,3 +1,0 @@
-{
-  "admin": { "listen": "unix//run/keel-proxy/admin.sock|0600" }
-}

@@ -17,9 +17,6 @@
       "react": "^19.2.8",
       "react-dom": "^19.2.8",
       "sonner": "^2.0.8",
-      "convex": "^1.45.0",
-      "better-auth": "1.6.17",
-      "@convex-dev/better-auth": "^0.12.5",
       "@types/react": "^19.2.18",
       "@types/react-dom": "^19.2.7",
       "tailwindcss": "^4.3.3"
@@ -31,11 +28,9 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "dev:web": "turbo run dev -F web --",
-    "dev:server": "turbo run dev -F @my-better-t-app/backend --",
-    "dev:setup": "turbo run dev:setup -F @my-better-t-app/backend --",
     "env:generate": "varlock codegen --path ./apps/web/",
     "postinstall": "varlock codegen --path ./apps/web/",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint --type-aware && oxfmt --write"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -45,6 +40,7 @@
     "@types/node": "catalog:",
     "oxfmt": "^0.66.0",
     "oxlint": "^1.81.0",
+    "oxlint-tsgolint": "^7.0.2003",
     "turbo": "^2.10.12",
     "typescript": "catalog:",
     "varlock": "catalog:"

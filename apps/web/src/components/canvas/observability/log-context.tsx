@@ -1,19 +1,21 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { TraceSummary } from "@my-better-t-app/backend/convex/traces";
-import { useAction } from "convex/react";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import {
+  type EnvironmentLogLine,
+  type TraceSummary,
+  useListLogsAround,
+  useListTracesAround,
+} from "@/gen/api";
 import { stripAnsi } from "@/lib/ansi";
+import { errorMessage } from "@/lib/api";
 
 import { useEnvironment } from "../environment";
-import { errorMessage } from "../errors";
 import { formatDuration, formatLogTime, formatTimestamp } from "../format";
 import { SectionLabel } from "../primitives";
 import { useServices } from "./chrome";
 import { EventStream, lineEvent, requestEvent, type StreamEvent } from "./stream";
-import { LineDetail } from "./trace";
+import { LineDetail } from "./trace/line-detail";
 
 /**
  * A log line that names no trace, full screen: every service's lines from 30s either side of it
@@ -29,26 +31,28 @@ export function LogContext({
 }: {
   at: number;
   /** The line it was opened from; from a link, the first line at `at` stands in. */
-  focus?: ProjectLine;
+  focus?: EnvironmentLogLine;
   onBack: () => void;
   onOpen: (event: StreamEvent) => void;
 }) {
   const { environmentId } = useEnvironment();
   const services = useServices();
-  const linesAround = useAction(api.logs.around);
-  const requestsAround = useAction(api.traces.around);
-  const [data, setData] = useState<{ lines: ProjectLine[]; requests: TraceSummary[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([linesAround({ environmentId, at }), requestsAround({ environmentId, at })])
-      .then(([lines, requests]) => !cancelled && setData({ lines, requests }))
-      .catch((err) => !cancelled && setError(errorMessage(err)));
-    return () => {
-      cancelled = true;
-    };
-  }, [environmentId, at, linesAround, requestsAround]);
+  // Once per (environment, at): what was around a moment does not change.
+  // Once per open, nothing kept after close: lines still arriving show on the next open.
+  const once = { query: { staleTime: Infinity, gcTime: 0, meta: { realtime: false } } };
+  const request = { path: { id: environmentId }, query: { at } };
+  const linesAround = useListLogsAround(request, once);
+  const requestsAround = useListTracesAround(request, once);
+  // Either failing fails the view.
+  const failure = linesAround.error ?? requestsAround.error;
+  const error = failure ? errorMessage(failure) : null;
+  const data = useMemo(
+    () =>
+      linesAround.data === undefined || requestsAround.data === undefined
+        ? null
+        : { lines: linesAround.data, requests: requestsAround.data },
+    [linesAround.data, requestsAround.data],
+  );
 
   const events = useMemo(() => data?.lines.map(lineEvent) ?? [], [data]);
   const focused = events.find(
@@ -85,33 +89,62 @@ export function LogContext({
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-auto py-2">
-          {error ? (
-            <p className="px-5 text-xs text-danger">{error}</p>
-          ) : data === null ? (
-            <p className="px-5 text-xs text-faint">Loading…</p>
-          ) : (
-            <EventStream events={events} onOpen={onOpen} focusKey={focused?.key} />
-          )}
+          <AroundLines
+            error={error}
+            loading={data === null}
+            events={events}
+            onOpen={onOpen}
+            focusKey={focused?.key}
+          />
         </div>
         <aside className="flex w-[360px] shrink-0 flex-col overflow-auto border-l border-line">
           {line && <LineDetail line={line} />}
           <section className="flex flex-col gap-2 px-4 py-3">
             <SectionLabel>Requests within 30s</SectionLabel>
-            {data === null ? null : data.requests.length === 0 ? (
-              <p className="text-2xs text-faint">No requests started in that minute.</p>
-            ) : (
-              <div className="-mx-4 flex flex-col">
-                {data.requests
-                  .slice()
-                  .sort((a, b) => a.start - b.start)
-                  .map((t) => (
-                    <RequestRow key={t.traceId} trace={t} onOpen={() => onOpen(requestEvent(t))} />
-                  ))}
-              </div>
-            )}
+            {data && <RequestsAround requests={data.requests} onOpen={onOpen} />}
           </section>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function AroundLines({
+  error,
+  loading,
+  events,
+  onOpen,
+  focusKey,
+}: {
+  error: string | null;
+  loading: boolean;
+  events: StreamEvent[];
+  onOpen: (event: StreamEvent) => void;
+  focusKey: string | undefined;
+}) {
+  if (error) return <p className="px-5 text-xs text-danger">{error}</p>;
+  if (loading) return <p className="px-5 text-xs text-faint">Loading…</p>;
+  return <EventStream events={events} onOpen={onOpen} focusKey={focusKey} />;
+}
+
+function RequestsAround({
+  requests,
+  onOpen,
+}: {
+  requests: TraceSummary[];
+  onOpen: (event: StreamEvent) => void;
+}) {
+  if (requests.length === 0) {
+    return <p className="text-2xs text-faint">No requests started in that minute.</p>;
+  }
+  return (
+    <div className="-mx-4 flex flex-col">
+      {requests
+        .slice()
+        .sort((a, b) => a.start - b.start)
+        .map((t) => (
+          <RequestRow key={t.traceId} trace={t} onOpen={() => onOpen(requestEvent(t))} />
+        ))}
     </div>
   );
 }

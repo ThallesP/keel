@@ -59,21 +59,38 @@ export function Palette({
   /** Where focus lands on close. Defaults to the element that opened it. */
   finalFocus?: RefObject<HTMLElement | null>;
 }) {
-  const [stack, setStack] = useState<PalettePage[]>([root]);
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        initialFocus={inputRef}
+        finalFocus={finalFocus}
+        className="top-[22%] w-[440px] max-w-[calc(100%-2rem)] translate-y-0 gap-0 overflow-hidden rounded-[12px] border border-line bg-bg p-0 text-ink shadow-[0_1px_2px_rgba(11,18,32,0.06),0_16px_48px_rgba(11,18,32,0.14)] ring-0"
+      >
+        <PaletteBody root={root} inputRef={inputRef} close={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Mounted per open (the dialog unmounts its content when closed), so every open starts at the root.
+function PaletteBody({
+  root,
+  inputRef,
+  close,
+}: {
+  root: PalettePage;
+  inputRef: RefObject<HTMLInputElement | null>;
+  close: () => void;
+}) {
+  const [pages, setPages] = useState<PalettePage[]>([]);
+  const [query, setQuery] = useState("");
+  const [selected, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Every open starts fresh at the root, never mid-flow.
-  useEffect(() => {
-    if (!open) return;
-    setStack([root]);
-    setQuery("");
-    setActive(0);
-  }, [open, root]);
-
-  const page = stack[stack.length - 1] ?? root;
+  const stack = [root, ...pages];
+  const page = stack[stack.length - 1]!;
   const needle = query.trim().toLowerCase();
 
   const rows = useMemo<PaletteItem[]>(() => {
@@ -90,29 +107,26 @@ export function Palette({
     return [submit, ...filtered];
   }, [page, needle, query]);
 
-  useEffect(() => setActive(0), [rows.length, page]);
+  const active = Math.min(selected, Math.max(rows.length - 1, 0));
 
   useEffect(() => {
     const el = listRef.current?.children[active];
     if (el instanceof HTMLElement) el.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  const close = () => onOpenChange(false);
-  const select = (item: PaletteItem) => {
-    const next = item.onSelect();
-    if (next) {
-      setStack((s) => [...s, next]);
-      setQuery("");
-      setActive(0);
-    } else {
-      close();
-    }
-  };
-  const back = () => {
-    if (stack.length <= 1) return close();
-    setStack((s) => s.slice(0, -1));
+  const goTo = (next: PalettePage[]) => {
+    setPages(next);
     setQuery("");
     setActive(0);
+  };
+  const select = (item: PaletteItem) => {
+    const next = item.onSelect();
+    if (next) goTo([...pages, next]);
+    else close();
+  };
+  const back = () => {
+    if (pages.length === 0) return close();
+    goTo(pages.slice(0, -1));
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -141,102 +155,92 @@ export function Palette({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        initialFocus={inputRef}
-        finalFocus={finalFocus}
-        className="top-[22%] w-[440px] max-w-[calc(100%-2rem)] translate-y-0 gap-0 overflow-hidden rounded-[12px] border border-line bg-bg p-0 text-ink shadow-[0_1px_2px_rgba(11,18,32,0.06),0_16px_48px_rgba(11,18,32,0.14)] ring-0"
-        onKeyDown={onKeyDown}
+    <div className="contents" onKeyDown={onKeyDown}>
+      <DialogTitle className="sr-only">{page.title}</DialogTitle>
+      <div className="flex h-11 items-center gap-1.5 border-b border-line px-3.5">
+        {stack.map((p, i) => (
+          <span key={i} className="flex shrink-0 items-center gap-1.5">
+            {i > 0 && <ChevronRight size={11} strokeWidth={1.8} className="text-faint" />}
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => goTo(pages.slice(0, i))}
+              className={cn(
+                "text-2xs font-semibold tracking-[0.06em] uppercase",
+                i === stack.length - 1 ? "text-ink" : "text-faint hover:text-ink",
+              )}
+            >
+              {p.title}
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+          }}
+          placeholder={page.placeholder ?? "Type to filter…"}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          aria-activedescendant={rows[active] ? `palette-${rows[active].id}` : undefined}
+          className="ml-2 min-w-0 flex-1 bg-transparent font-mono text-xs text-ink outline-none placeholder:font-sans placeholder:text-sm placeholder:text-faint"
+        />
+      </div>
+      <div
+        ref={listRef}
+        role="listbox"
+        className="flex max-h-[360px] flex-col gap-0.5 overflow-y-auto p-1.5"
       >
-        <DialogTitle className="sr-only">{page.title}</DialogTitle>
-        <div className="flex h-11 items-center gap-1.5 border-b border-line px-3.5">
-          {stack.map((p, i) => (
-            <span key={i} className="flex shrink-0 items-center gap-1.5">
-              {i > 0 && <ChevronRight size={11} strokeWidth={1.8} className="text-faint" />}
-              <button
-                type="button"
-                tabIndex={-1}
-                onClick={() => setStack((s) => s.slice(0, i + 1))}
-                className={cn(
-                  "text-2xs font-semibold tracking-[0.06em] uppercase",
-                  i === stack.length - 1 ? "text-ink" : "text-faint hover:text-ink",
-                )}
-              >
-                {p.title}
-              </button>
-            </span>
-          ))}
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={page.placeholder ?? "Type to filter…"}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoComplete="off"
-            aria-activedescendant={rows[active] ? `palette-${rows[active].id}` : undefined}
-            className="ml-2 min-w-0 flex-1 bg-transparent font-mono text-xs text-ink outline-none placeholder:font-sans placeholder:text-sm placeholder:text-faint"
-          />
-        </div>
-        <div
-          ref={listRef}
-          role="listbox"
-          className="flex max-h-[360px] flex-col gap-0.5 overflow-y-auto p-1.5"
-        >
-          {rows.length === 0 && (
-            <div className="px-3 py-6 text-center text-sm text-faint">
-              {page.onSubmit && page.items.length === 0 ? "Type, then ↵" : "No matches"}
-            </div>
-          )}
-          {rows.map((item, i) => {
-            const isActive = i === active;
-            return (
-              <button
-                key={item.id}
-                id={`palette-${item.id}`}
-                type="button"
-                role="option"
-                aria-selected={isActive}
-                tabIndex={-1}
-                onMouseMove={() => setActive(i)}
-                onClick={() => select(item)}
-                className={cn(
-                  "flex h-11 w-full items-center gap-3 rounded-lg px-2.5 text-left outline-none",
-                  isActive && "bg-primary-soft",
-                  item.disabled && "opacity-55",
-                )}
-              >
-                <span className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] bg-surface-2 text-ink">
-                  {item.icon}
+        {rows.length === 0 && (
+          <div className="px-3 py-6 text-center text-sm text-faint">
+            {page.onSubmit && page.items.length === 0 ? "Type, then ↵" : "No matches"}
+          </div>
+        )}
+        {rows.map((item, i) => {
+          const isActive = i === active;
+          return (
+            <button
+              key={item.id}
+              id={`palette-${item.id}`}
+              type="button"
+              role="option"
+              aria-selected={isActive}
+              tabIndex={-1}
+              onMouseMove={() => setActive(i)}
+              onClick={() => select(item)}
+              className={cn(
+                "flex h-11 w-full items-center gap-3 rounded-lg px-2.5 text-left outline-none",
+                isActive && "bg-primary-soft",
+                item.disabled && "opacity-55",
+              )}
+            >
+              <span className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] bg-surface-2 text-ink">
+                {item.icon}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-px">
+                <span className="truncate text-sm leading-4 font-medium text-ink">
+                  {item.label}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-px">
-                  <span className="truncate text-sm leading-4 font-medium text-ink">
-                    {item.label}
-                  </span>
-                  {item.hint && <span className="truncate text-2xs text-faint">{item.hint}</span>}
-                </span>
-                {isActive && (
-                  <CornerDownLeft
-                    size={12}
-                    strokeWidth={1.8}
-                    className="text-primary"
-                    aria-hidden
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex h-8 items-center gap-3 border-t border-line px-3.5 font-mono text-2xs text-faint">
-          <span>↑↓ move</span>
-          <span>↵ select</span>
-          {stack.length > 1 && <span>⌫ back</span>}
-          <span className="ml-auto">esc</span>
-        </div>
-      </DialogContent>
-    </Dialog>
+                {item.hint && <span className="truncate text-2xs text-faint">{item.hint}</span>}
+              </span>
+              {isActive && (
+                <CornerDownLeft size={12} strokeWidth={1.8} className="text-primary" aria-hidden />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex h-8 items-center gap-3 border-t border-line px-3.5 font-mono text-2xs text-faint">
+        <span>↑↓ move</span>
+        <span>↵ select</span>
+        {stack.length > 1 && <span>⌫ back</span>}
+        <span className="ml-auto">esc</span>
+      </div>
+    </div>
   );
 }

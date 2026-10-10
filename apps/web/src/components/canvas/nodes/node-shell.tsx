@@ -66,7 +66,7 @@ export function NodeShell({ id, type, name, subtitle, status, selected, children
   );
 }
 
-/** Mirrors `NAME_RE` in `packages/backend/convex/access.ts`. */
+/** Mirrors `nameRE` in `internal/domain/validate.go`. */
 const NAME_RE = /^[a-z0-9-]{1,40}$/;
 
 /**

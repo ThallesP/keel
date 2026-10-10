@@ -1,9 +1,9 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
 
+import { useGetProjectBySlug } from "@/gen/api";
 import { Canvas } from "@/components/canvas/canvas";
 import Loader from "@/components/loader";
+import { errorMessage } from "@/lib/api";
 
 /**
  * `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable.
@@ -19,17 +19,18 @@ type Search = {
   around?: number;
 };
 
-const OBSERVABILITY = new Set(["observability", "logs", "traces"]);
+const VIEWS = new Map<string, Search["view"]>([
+  ["observability", "observability"],
+  ["logs", "observability"],
+  ["traces", "observability"],
+  ["settings", "settings"],
+]);
 
 export const Route = createFileRoute("/_auth/p/$projectId")({
   component: ProjectPage,
   validateSearch: (search: Record<string, unknown>): Search => ({
     deployment: typeof search.deployment === "string" ? search.deployment : undefined,
-    view: OBSERVABILITY.has(String(search.view))
-      ? "observability"
-      : search.view === "settings"
-        ? "settings"
-        : undefined,
+    view: VIEWS.get(String(search.view)),
     trace: typeof search.trace === "string" ? search.trace : undefined,
     // The router parses `around=1790…` to a number.
     around:
@@ -42,19 +43,23 @@ export const Route = createFileRoute("/_auth/p/$projectId")({
 /** Resolves the slug to its production environment and hands it to the canvas. */
 function ProjectPage() {
   const { projectId } = Route.useParams();
-  const project = useQuery(api.projects.getBySlug, { slug: projectId });
+  // undefined while loading; null when no such project, or not the caller's.
+  const { data: project, error } = useGetProjectBySlug(
+    { path: { slug: projectId } },
+    { query: { select: (p) => p.project } },
+  );
 
-  if (project === undefined) {
+  if (project === undefined && !error) {
     return (
       <div className="h-svh bg-canvas">
         <Loader />
       </div>
     );
   }
-  if (project === null) {
+  if (!project) {
     return (
       <div className="flex h-svh flex-col items-center justify-center gap-2 bg-canvas text-sm text-muted-foreground">
-        <span>Project “{projectId}” not found.</span>
+        <span>{project === null ? `Project “${projectId}” not found.` : errorMessage(error)}</span>
         <Link to="/" className="text-primary hover:underline">
           Go to your project
         </Link>

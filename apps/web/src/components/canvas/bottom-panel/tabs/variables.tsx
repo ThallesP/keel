@@ -1,23 +1,29 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
+import { useSuspenseQueries } from "@tanstack/react-query";
 import { useReactFlow } from "@xyflow/react";
-import type { FunctionReturnType } from "convex/server";
-import { useMutation, useQuery } from "convex/react";
 import { Braces, Eye, EyeOff, Link2, Lock, LockOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
-import { attempt } from "../../errors";
-import { asNodeId } from "../../mapping";
+import {
+  listReferenceableVariablesSuspenseQueryOptions,
+  listVariablesSuspenseQueryOptions,
+  type ReferenceKey,
+  type ReferenceSource,
+  useDeleteVariable,
+  useSetVariable,
+  type VariableRef,
+  type VariableView,
+} from "@/gen/api";
+import { succeeded } from "@/lib/panel-write";
+
 import { Kbd } from "../../primitives";
 import { useCanvasDispatch } from "../../store";
 import type { CanvasNode, InfraNode } from "../../types";
-import { defaultKey, ReferencePalette, refText, type ReferenceSource } from "../reference-palette";
+import { ReferencePalette, refText } from "../reference-palette";
 
-type Variable = FunctionReturnType<typeof api.variables.list>[number];
-type Part = Variable["parts"][number];
 type Save = (key: string, value: string, secret: boolean) => Promise<boolean>;
 
-/** Mirrors `ENV_KEY_RE` in `packages/backend/convex/access.ts`. */
+/** Mirrors `envKeyRE` in `internal/domain/validate.go`. */
 const KEY_RE = /^[A-Z_][A-Z0-9_]{0,63}$/;
 const MASK = "••••••••••••";
 
@@ -50,8 +56,7 @@ function Editor({
 }: {
   initial?: { key: string; value: string; secret: boolean };
   sources: ReferenceSource[];
-  /** Keys already used on this node (minus the one being edited). */
-  taken: Set<string>;
+  taken: string[];
   onSave: Save;
   onCancel?: () => void;
   autoFocus?: boolean;
@@ -65,17 +70,17 @@ function Editor({
   const valueRef = useRef<HTMLInputElement>(null);
 
   const trimmed = key.trim();
-  const clash = taken.has(trimmed);
+  const clash = taken.includes(trimmed);
   const valid = KEY_RE.test(trimmed) && !clash;
 
   // Inserts at the caret the value input had before the palette took focus.
-  const onPick = useCallback((source: ReferenceSource, k: string) => {
+  const onPick = useCallback((source: ReferenceSource, k: ReferenceKey) => {
     const input = valueRef.current;
     setValue((v) => {
       const at = input?.selectionStart ?? v.length;
-      return v.slice(0, at) + refText(source.name, k) + v.slice(input?.selectionEnd ?? at);
+      return v.slice(0, at) + refText(source.name, k.key) + v.slice(input?.selectionEnd ?? at);
     });
-    setKey((current) => current || defaultKey(source.name, k));
+    setKey((current) => current || k.as);
   }, []);
 
   const reset = () => {
@@ -91,13 +96,13 @@ function Editor({
     keyRef.current?.focus();
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") void submit();
     if (e.key === "Escape") {
       if (onCancel) onCancel();
       else {
         reset();
-        (e.target as HTMLElement).blur();
+        e.currentTarget.blur();
       }
     }
   };
@@ -199,8 +204,8 @@ function Editor({
 }
 
 /** `${{ postgres.DATABASE_URL }}` as a chip; clicking it jumps to that node. */
-function RefChip({ part, jump }: { part: Extract<Part, { ref: unknown }>; jump: () => void }) {
-  const { node, key, nodeId, missing } = part.ref;
+function RefChip({ reference, jump }: { reference: VariableRef; jump: () => void }) {
+  const { node, key, nodeId, missing } = reference;
   const label = node ? `${node}.${key}` : key;
   return (
     <button
@@ -226,13 +231,14 @@ function Row({
   onEdit,
   onRemove,
 }: {
-  variable: Variable;
+  variable: VariableView;
   onEdit: () => void;
   onRemove: () => void;
 }) {
   const [revealed, setRevealed] = useState(false);
   const jumpTo = useJumpTo();
-  const hasRef = variable.parts.some((p) => "ref" in p);
+  const { parts } = variable;
+  const hasRef = parts.some((p) => p.ref);
   const maskable = variable.secret || variable.resolvedSecret;
 
   return (
@@ -248,13 +254,14 @@ function Row({
         {hasRef ? (
           <>
             <span className="flex min-w-0 shrink-0 items-center gap-0.5 whitespace-pre">
-              {variable.parts.map((p, i) =>
-                "ref" in p ? (
-                  <RefChip key={i} part={p} jump={() => p.ref.nodeId && jumpTo(p.ref.nodeId)} />
+              {parts.map((p, i) => {
+                const { ref } = p;
+                return ref ? (
+                  <RefChip key={i} reference={ref} jump={() => ref.nodeId && jumpTo(ref.nodeId)} />
                 ) : (
                   <span key={i}>{variable.secret && !revealed ? "•••" : p.text}</span>
-                ),
-              )}
+                );
+              })}
             </span>
             <span className="min-w-0 truncate text-faint">
               → {variable.resolvedSecret && !revealed ? MASK : variable.resolved || '""'}
@@ -300,39 +307,32 @@ function Row({
   );
 }
 
-/** One-click references for a service: each other node's connection var it does not use yet. */
-function suggestionsFor(node: InfraNode, variables: Variable[], sources: ReferenceSource[]) {
-  if (node.type !== "service") return [];
-  const used = new Set(
-    variables.flatMap((v) =>
-      v.parts.flatMap((p) => ("ref" in p && p.ref.nodeId ? [p.ref.nodeId] : [])),
-    ),
-  );
-  const keys = new Set(variables.map((v) => v.key));
-  return sources.flatMap((source) => {
-    const offered = source.keys.find((k) => k.provided && k.key !== "HOST" && k.key !== "PORT");
-    if (!offered || used.has(source.nodeId)) return [];
-    const as = defaultKey(source.name, offered.key);
-    return keys.has(as) ? [] : [{ source, key: offered.key, as }];
-  });
-}
-
 export function VariablesTab({ node }: { node: InfraNode }) {
-  const id = asNodeId(node.id);
-  const variables = useQuery(api.variables.list, { nodeId: id });
-  const sources = useQuery(api.variables.referenceable, { nodeId: id }) ?? [];
-  const setVariable = useMutation(api.variables.set);
-  const removeVariable = useMutation(api.variables.remove);
+  const path = { id: node.id };
+  const [
+    {
+      data: { variables },
+    },
+    {
+      data: { sources, suggestions },
+    },
+  ] = useSuspenseQueries({
+    queries: [
+      listVariablesSuspenseQueryOptions({ path }),
+      listReferenceableVariablesSuspenseQueryOptions({ path }),
+    ],
+  });
+  const setVariable = useSetVariable();
+  const deleteVariable = useDeleteVariable();
   const [editing, setEditing] = useState<string | null>(null);
 
-  const rows = variables ?? [];
-  const keys = new Set(rows.map((v) => v.key));
-  const suggestions = suggestionsFor(node, rows, sources).slice(0, 4);
+  const keys = variables.map((v) => v.key);
 
+  // The key travels in the body (it is user input); a rename keeps the row's place.
   const save =
     (previousKey?: string): Save =>
-    async (key, value, secret) =>
-      (await attempt(setVariable({ nodeId: id, key, value, secret, previousKey }))) !== undefined;
+    (key, value, secret) =>
+      succeeded(setVariable.mutateAsync({ path, body: { key, value, secret, previousKey } }));
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-auto">
@@ -340,33 +340,33 @@ export function VariablesTab({ node }: { node: InfraNode }) {
       {suggestions.length > 0 && (
         <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line px-5 text-2xs text-faint">
           <span className="pr-1">Connect</span>
-          {suggestions.map((s) => (
+          {suggestions.slice(0, 4).map((s) => (
             <button
-              key={s.source.nodeId}
+              key={s.nodeId}
               type="button"
-              onClick={() => void save()(s.as, refText(s.source.name, s.key), false)}
+              onClick={() => void save()(s.as, s.value, false)}
               className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-primary"
             >
               <Plus size={10} strokeWidth={2} aria-hidden />
-              {s.source.name}.{s.key}
+              {s.node}.{s.key}
             </button>
           ))}
         </div>
       )}
-      {variables && rows.length === 0 && (
+      {variables.length === 0 && (
         <p className="px-5 py-4 text-xs text-faint">
           No variables yet. Type one above, paste <code className="font-mono">KEY=value</code>, or
           use <span className="text-primary">Reference</span> to pull one from another service.
         </p>
       )}
-      {rows.map((v) =>
+      {variables.map((v) =>
         editing === v.key ? (
           <Editor
             key={v.key}
             autoFocus
             initial={v}
             sources={sources}
-            taken={new Set([...keys].filter((k) => k !== v.key))}
+            taken={keys.filter((k) => k !== v.key)}
             onSave={async (key, value, secret) => {
               const ok = await save(v.key)(key, value, secret);
               if (ok) setEditing(null);
@@ -380,7 +380,9 @@ export function VariablesTab({ node }: { node: InfraNode }) {
             key={v.key}
             variable={v}
             onEdit={() => setEditing(v.key)}
-            onRemove={() => void attempt(removeVariable({ nodeId: id, key: v.key }))}
+            onRemove={() =>
+              void succeeded(deleteVariable.mutateAsync({ path, body: { key: v.key } }))
+            }
           />
         ),
       )}

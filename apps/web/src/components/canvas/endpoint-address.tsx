@@ -2,7 +2,7 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
-import type { Endpoint } from "./types";
+import type { EndpointView } from "@/gen/api";
 
 /**
  * Where an endpoint answers, with a copy button: an https link once it serves (open in a new
@@ -12,7 +12,7 @@ export function EndpointAddress({
   endpoint,
   className,
 }: {
-  endpoint: Endpoint;
+  endpoint: EndpointView;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);

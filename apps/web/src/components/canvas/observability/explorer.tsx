@@ -1,26 +1,33 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { TimeRange, TraceOverview } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
+import {
+  type EnvironmentLogLine,
+  type GetTraceOverviewQuery,
+  type LogSinkView,
+  type TraceOverview,
+  useGetTraceOverview,
+  useListEnvironmentLogs,
+} from "@/gen/api";
 import Loader from "@/components/loader";
+import { errorMessage } from "@/lib/api";
 
 import { CopyPrompt } from "../copy-prompt";
 import { useEnvironment } from "../environment";
-import { errorMessage } from "../errors";
 import { formatTimestamp } from "../format";
 import { PageHeader, SectionLabel } from "../primitives";
 import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
-import { type Hover, LatencyChart, RequestsChart, StatRow } from "./charts";
-import { route, SearchField, type Sink } from "./chrome";
+import type { Hover } from "./charts/layout";
+import { LatencyChart } from "./charts/latency-chart";
+import { RequestsChart } from "./charts/requests-chart";
+import { StatRow } from "./charts/stat-row";
+import { route, SearchField } from "./chrome";
 import { StreamEmpty, StreamError } from "./lamp";
 import { LogContext } from "./log-context";
 import { EventStream, mergeEvents, type StreamEvent } from "./stream";
-import { TraceDetail } from "./trace";
+import { TraceDetail } from "./trace/trace-detail";
 
 /**
  * The Observability page with a sink: requests and logs in one place (ClickStack-style, no
@@ -29,6 +36,9 @@ import { TraceDetail } from "./trace";
  * the trace waterfall with its log lines inline (`&trace=<id>`); any other line as the lines
  * around it plus the requests of that minute (`&around=<ms>`).
  */
+
+type TimeRange = GetTraceOverviewQuery["range"];
+type Sink = NonNullable<LogSinkView>;
 
 const RANGES: { id: TimeRange; label: string; long: string }[] = [
   { id: "15m", label: "15m", long: "15 minutes" },
@@ -44,13 +54,12 @@ const KINDS: { id: Kind; label: string }[] = [
   { id: "logs", label: "Logs" },
 ];
 
-const POLL_MS = 10_000;
 const LINES = 300;
 /** traceProviders/axiom LIST: how many requests overview returns. */
 const REQUESTS = 100;
 
 /** What a row was opened from: when, and the line itself if it was one. */
-export type Opened = { at: number; line?: ProjectLine };
+export type Opened = { at: number; line?: EnvironmentLogLine };
 
 export function Explorer({ sink }: { sink: Sink }) {
   const { trace, around } = route.useSearch();
@@ -65,8 +74,9 @@ export function Explorer({ sink }: { sink: Sink }) {
       setOpened({ at: e.trace.start });
       void navigate({ search: (prev) => ({ ...prev, trace: e.trace.traceId, around: undefined }) });
     } else if (e.ref) {
+      const { traceId } = e.ref;
       setOpened({ at: e.time, line: e.line });
-      void navigate({ search: (prev) => ({ ...prev, trace: e.ref!.traceId, around: undefined }) });
+      void navigate({ search: (prev) => ({ ...prev, trace: traceId, around: undefined }) });
     } else {
       setOpened({ at: e.time, line: e.line });
       void navigate({ search: (prev) => ({ ...prev, trace: undefined, around: e.time }) });
@@ -90,7 +100,7 @@ export function Explorer({ sink }: { sink: Sink }) {
               placeholder="Filter requests and logs"
             />
             <Segmented
-              options={RANGES.map((r) => ({ ...r, label: r.label, title: `Last ${r.long}` }))}
+              options={RANGES.map((r) => ({ ...r, title: `Last ${r.long}` }))}
               value={range}
               onChange={setRange}
               label="Time range"
@@ -165,60 +175,57 @@ function Segmented<T extends string>({
 
 /** `search`: the filter this answer is for, which can lag the field while the next one loads. */
 type StreamData = {
-  key: string;
   search: string;
-  lines: ProjectLine[];
+  lines: EnvironmentLogLine[];
   overview: TraceOverview | null;
 };
 
 /**
- * Lines and request numbers for the range and filter, polled while visible: the next poll is
- * scheduled once both halves settle, so a slow answer never lands after a newer one. Either half
- * failing keeps the other. A new range or filter keeps the previous data up, dimmed, until its own
- * arrives: no skeleton, no layout jump.
+ * Lines and request numbers for the range and filter, polled every 10 s while visible (one fetch
+ * per half at a time, so a slow answer never lands after a newer one). Either half failing keeps
+ * the other; the poll is the retry. A new range or filter keeps the previous data up, dimmed,
+ * until its own arrives: no skeleton, no layout jump. Polled rather than pushed: a deploy's
+ * stream of writes must not re-run Axiom queries (web-data.md §9.2, §9.5).
  */
 function useStream(
-  environmentId: Id<"environments">,
+  environmentId: string,
   range: TimeRange,
   search: string,
   withTraces: boolean,
   active: boolean,
 ) {
-  const recent = useAction(api.logs.recent);
-  const overview = useAction(api.traces.overview);
-  const key = `${range}|${search}|${withTraces}`;
-  const [data, setData] = useState<StreamData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
-      const [lines, numbers] = await Promise.allSettled([
-        recent({ environmentId, range, search, tail: LINES }),
-        withTraces ? overview({ environmentId, range, search }) : Promise.resolve(null),
-      ]);
-      if (cancelled) return;
-      setData((prev) => {
-        const same = prev?.key === key;
-        return {
-          key,
-          search,
-          lines: lines.status === "fulfilled" ? lines.value.lines : same ? prev.lines : [],
-          overview: numbers.status === "fulfilled" ? numbers.value : same ? prev.overview : null,
-        };
-      });
-      const failed = [lines, numbers].find((r) => r.status === "rejected");
-      setError(failed?.status === "rejected" ? errorMessage(failed.reason) : null);
-      timer = setTimeout(() => void load(), POLL_MS);
-    };
-    void load();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [environmentId, range, search, withTraces, key, active, recent, overview]);
-  return { data, stale: data !== null && data.key !== key, error };
+  const polled = {
+    refetchInterval: 10_000,
+    retry: false,
+    placeholderData: keepPreviousData,
+    meta: { realtime: false },
+  };
+  const path = { id: environmentId };
+  const logs = useListEnvironmentLogs(
+    { path, query: { range, search, tail: LINES } },
+    { query: { ...polled, enabled: active } },
+  );
+  const numbers = useGetTraceOverview(
+    { path, query: { range, search } },
+    { query: { ...polled, enabled: active && withTraces } },
+  );
+
+  const settled = (q: { data: unknown; isError: boolean }) => q.data !== undefined || q.isError;
+  const loaded = settled(logs) && (!withTraces || settled(numbers));
+  const stale = logs.isPlaceholderData || (withTraces && numbers.isPlaceholderData);
+  // The filter of the last answer shown in full; while a new one loads, the dimmed data is its.
+  const [answered, setAnswered] = useState(search);
+  if (loaded && !stale && answered !== search) setAnswered(search);
+
+  const lines = logs.data?.lines;
+  const overview = withTraces ? (numbers.data ?? null) : null;
+  const shownSearch = stale ? answered : search;
+  const data = useMemo<StreamData | null>(
+    () => (loaded ? { search: shownSearch, lines: lines ?? [], overview } : null),
+    [loaded, shownSearch, lines, overview],
+  );
+  const failed = logs.error ?? (withTraces ? numbers.error : null);
+  return { data, stale, error: failed ? errorMessage(failed) : null };
 }
 
 function Overview({
@@ -324,13 +331,11 @@ function Overview({
         <section className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between px-5">
             <SectionLabel>Events</SectionLabel>
-            {data && (
-              <span className="text-2xs text-faint">
-                {counts(events)} · newest first · every row opens its trace or context
-              </span>
-            )}
+            <span className="text-2xs text-faint">
+              {counts(events)} · newest first · every row opens its trace or context
+            </span>
           </div>
-          {data === null ? null : events.length === 0 ? (
+          {events.length === 0 ? (
             <p className="px-5 text-xs text-faint">
               {filter
                 ? `Nothing matches “${filter}” in the last ${long}.`
@@ -363,7 +368,7 @@ function counts(events: StreamEvent[]) {
  * and checks its own work with `keel run` + `keel traces`; then the service's Tracing switch and
  * a Ship send its deployed requests here too (docs/logs.md "Traces").
  */
-function NoRequests({ environmentId, long }: { environmentId: Id<"environments">; long: string }) {
+function NoRequests({ environmentId, long }: { environmentId: string; long: string }) {
   return (
     <div className="flex items-center gap-4 rounded-lg border border-line px-4 py-3 text-xs text-muted-foreground">
       <p className="min-w-0 flex-1">

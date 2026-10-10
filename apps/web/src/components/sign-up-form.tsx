@@ -5,10 +5,12 @@ import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import z from "zod";
 
-import { authClient } from "@/lib/auth-client";
+import type { PublicInvitation } from "@/gen/api";
+import { errorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/session";
 
 /** An invite link (`/invite/$invitationId`): the account it creates joins that organization. */
-export type Invitation = { id: string; email: string; organization: string };
+export type Invitation = PublicInvitation & { id: string };
 
 export default function SignUpForm({
   onSwitchToSignIn,
@@ -19,6 +21,7 @@ export default function SignUpForm({
   invitation?: Invitation;
   onSuccess?: () => void;
 }) {
+  const auth = useAuth();
   const form = useForm({
     defaultValues: {
       email: invitation?.email ?? "",
@@ -26,32 +29,33 @@ export default function SignUpForm({
       name: "",
     },
     onSubmit: async ({ value }) => {
-      // `invitationId` is not a user field; the server's sign-up hook reads it from the body
-      // (convex/auth.ts) to admit the account and add it to the organization.
-      const body = {
-        email: value.email,
-        password: value.password,
-        name: value.name,
-        ...(invitation && { invitationId: invitation.id }),
-      };
-      await authClient.signUp.email(body, {
-        onSuccess: () => {
-          toast.success("Sign up successful");
-          onSuccess?.();
-        },
-        onError: (error) => {
-          toast.error(error.error.message || error.error.statusText);
-        },
-      });
+      // `invitationId` admits the account once the first one exists and makes it a member of
+      // that invitation's organization (`POST /api/auth/sign-up`).
+      try {
+        await auth.signUp({
+          email: value.email,
+          password: value.password,
+          name: value.name,
+          ...(invitation && { invitationId: invitation.id }),
+        });
+      } catch (err) {
+        toast.error(errorMessage(err));
+        return;
+      }
+      toast.success("Sign up successful");
+      onSuccess?.();
     },
     validators: {
       onSubmit: z.object({
         name: z.string().min(2, "Name must be at least 2 characters"),
         email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        password: z
+          .string()
+          .refine((p) => Array.from(p).length >= 8, "Password must be at least 8 characters"),
       }),
     },
   });
+  const submitLabel = invitation ? "Join" : "Create account";
 
   return (
     <div>
@@ -68,7 +72,7 @@ export default function SignUpForm({
         onSubmit={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          form.handleSubmit();
+          void form.handleSubmit();
         }}
         className="space-y-4"
       >
@@ -149,7 +153,7 @@ export default function SignUpForm({
         >
           {({ canSubmit, isSubmitting }) => (
             <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Creating account…" : invitation ? "Join" : "Create account"}
+              {isSubmitting ? "Creating account…" : submitLabel}
             </Button>
           )}
         </form.Subscribe>

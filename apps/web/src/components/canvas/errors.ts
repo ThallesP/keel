@@ -1,18 +1,19 @@
-import { ConvexError } from "convex/values";
 import { toast } from "sonner";
 
-export function errorMessage(err: unknown): string {
-  if (err instanceof ConvexError) return String(err.data);
-  if (err instanceof Error) return err.message.split("\n")[0] ?? err.message;
-  return String(err);
-}
+import { errorMessage } from "@/lib/api";
 
-/** Surface a failed mutation/action as a toast. Returns undefined on failure. */
-export async function attempt<T>(promise: Promise<T>): Promise<T | undefined> {
+/**
+ * What `attempt` resolves to. Writes that answer 204 resolve `undefined` on success, so success
+ * is `ok`, never "the value is defined" (web-data.md §9.4).
+ */
+export type Attempt<T> = { ok: true; data: T } | { ok: false };
+
+/** Surface a failed mutation/action as a toast. Resolves `{ ok: false }` on failure. */
+export async function attempt<T>(promise: Promise<T>): Promise<Attempt<T>> {
   try {
-    return await promise;
+    return { ok: true, data: await promise };
   } catch (err) {
     toast.error(errorMessage(err));
-    return undefined;
+    return { ok: false };
   }
 }

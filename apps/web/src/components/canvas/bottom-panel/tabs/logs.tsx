@@ -1,46 +1,35 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { LogLine, Replica, Tail } from "@my-better-t-app/backend/convex/logs";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { errorMessage } from "../../errors";
+import { type LogReplica, type LogTail, type ServiceLogLine, useTailNodeLogs } from "@/gen/api";
+import { errorMessage } from "@/lib/api";
+
 import { formatLogTime } from "../../format";
-import { asNodeId } from "../../mapping";
 import type { InfraNode } from "../../types";
 import { FollowingBadge, LogStream } from "../log-stream";
 import { PanelMain } from "../panel-frame";
 
-const POLL_MS = 3000;
 const TAIL = 300;
 
-/** Docker logs are the one thing polled, not subscribed: they never touch a table. */
+/**
+ * Service logs are the one thing polled, not pushed: they never touch a table, so no write
+ * invalidates them (`meta.realtime: false`). One call per poll, no retries: a failure shows its
+ * message until the next poll succeeds.
+ */
 function useServiceLogs(nodeId: string, enabled: boolean) {
-  const tail = useAction(api.logs.tail);
-  const [data, setData] = useState<Tail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const next = await tail({ nodeId: asNodeId(nodeId), tail: TAIL });
-        if (!cancelled) {
-          setData(next);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(errorMessage(err));
-      }
-    };
-    void load();
-    const id = setInterval(() => void load(), POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [nodeId, enabled, tail]);
-  return { data, error };
+  const { data, error } = useTailNodeLogs(
+    { path: { id: nodeId }, query: { tail: TAIL } },
+    {
+      query: {
+        enabled,
+        refetchInterval: 3_000,
+        staleTime: 0,
+        retry: false,
+        meta: { realtime: false },
+      },
+    },
+  );
+  return { data: data ?? null, error: error ? errorMessage(error) : null };
 }
 
 /** One muted hue per replica so interleaved lines read apart. Never the accent. */
@@ -54,7 +43,7 @@ const REPLICA_TONES = [
 ] as const;
 
 /** task id → `r<slot>` label. Tasks Swarm has already pruned fall back to a short id. */
-function replicaLabels(replicas: Replica[]) {
+function replicaLabels(replicas: LogReplica[]) {
   const bySlot = new Map<number, number>();
   const labels = new Map<string, { text: string; tone: string }>();
   for (const r of replicas) {
@@ -72,21 +61,22 @@ function ReplicaTag({ text, tone }: { text: string; tone: string }) {
   return <span className={cn("inline-block w-9 pr-3 text-right", tone)}>{text}</span>;
 }
 
-function rawText(l: LogLine) {
+function rawText(l: ServiceLogLine) {
   const stamp = l.time ? new Date(l.time).toISOString() : "";
   return `${stamp} ${l.task} [${l.stream}] ${l.text}`;
 }
 
 type BodyProps = {
   node: InfraNode;
-  data: Tail | null;
+  data: LogTail | null;
   error: string | null;
   raw: boolean;
   following: boolean;
 };
 
 function LogBody({ node, data, error, raw, following }: BodyProps) {
-  const label = useMemo(() => replicaLabels(data?.replicas ?? []), [data?.replicas]);
+  const replicas = data?.replicas;
+  const label = useMemo(() => replicaLabels(replicas ?? []), [replicas]);
   if (error) return <p className="text-xs text-danger">{error}</p>;
   if (node.type === "volume") return <p className="text-xs text-faint">Volumes have no logs.</p>;
   if (data === null) {
@@ -96,12 +86,13 @@ function LogBody({ node, data, error, raw, following }: BodyProps) {
       </p>
     );
   }
-  if (data.lines.length === 0) return <p className="text-xs text-faint">No log output.</p>;
-  const tagged = data.replicas.length > 1 || data.lines.some((l) => l.task !== "");
+  const { lines } = data;
+  if (lines.length === 0) return <p className="text-xs text-faint">No log output.</p>;
+  const tagged = (replicas?.length ?? 0) > 1 || lines.some((l) => l.task !== "");
   return (
     <LogStream
       following={following}
-      lines={data.lines.map((l, i) => ({
+      lines={lines.map((l, i) => ({
         key: `${l.time}:${i}`,
         time: raw || !l.time ? undefined : formatLogTime(l.time),
         tag: raw || !tagged ? undefined : <ReplicaTag {...label(l.task)} />,

@@ -1,7 +1,7 @@
 name: ci
 
 # Pull requests run this directly. Pushes to main and v* tags run it as the first job of
-# images.yml, which publishes images only when every job here passed.
+# images.yml, which publishes the image only when every job here passed.
 on:
   pull_request:
   workflow_call:
@@ -10,7 +10,57 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  # The keel binary: one Go module at the repo root (serve, proxy, agent and the CLI). `./...`
+  # stops at nested modules.
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          # The root module's package directories only (gofmt alone would walk nested modules).
+          dirs=$(go list -f '{{.Dir}}' ./...)
+          # shellcheck disable=SC2086
+          unformatted=$(gofmt -l $dirs)
+          if [ -n "$unformatted" ]; then
+            echo "Not gofmt-ed:"; echo "$unformatted"
+            exit 1
+          fi
+      - run: go vet ./...
+      - name: No comments in Go
+        run: go run ./tools/nocomments $(go list -f '{{.Dir}}' ./...)
+      - run: go test ./...
+      - name: openapi.json is current
+        run: |
+          # The dashboard's hooks and the CLI are built against this file: a handler change must
+          # come with `make openapi`.
+          go run ./cmd/keel openapi > /tmp/openapi.json
+          if ! diff -u openapi.json /tmp/openapi.json; then
+            echo "openapi.json is stale: run make openapi and commit it"; exit 1
+          fi
+
+  # keel serve + keel agent in one test process against the runner's own fresh Swarm: deploy,
+  # ship a variable change, stop, start, redeploy, delete (internal/serve/swarm_it_test.go).
+  swarm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Swarm
+        run: |
+          docker swarm init --advertise-addr 127.0.0.1
+          docker network create -d overlay --attachable --opt com.docker.network.driver.mtu=1200 keel
+      - run: go test ./internal/serve -run SwarmIT -v -count=1 -timeout 15m
+        env:
+          KEEL_IT_DOCKER_HOST: unix:///var/run/docker.sock
+
+  # The dashboard, embedded into the binary by the image build.
+  web:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -18,54 +68,27 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
+      - name: No new comments
+        run: scripts/check-comments.sh
       - run: bun run check-types
+        working-directory: packages/ui
+      - run: bun run check-types
+        working-directory: apps/web
+      - name: oxlint (type-aware, needs the generated client from check-types)
+        run: bunx oxlint --type-aware
+      - run: bun run build
+        working-directory: apps/web
 
-  # The keel CLI: its own Go module, outside bun and turbo.
-  cli:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: apps/cli
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: apps/cli/go.mod
-          cache-dependency-path: apps/cli/go.sum
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test ./...
-
-  # keel-proxy's Caddy plugin (apps/proxy): its own Go module, built into the image by xcaddy.
-  proxy:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: apps/proxy
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: apps/proxy/go.mod
-          cache-dependency-path: apps/proxy/go.sum
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test ./...
-
-  # Runs install.sh end to end on a fresh runner against images built from this commit, twice:
-  # the second run must be a no-op upgrade that keeps every secret.
+  # Runs install.sh end to end on a fresh runner against the image built from this commit, twice:
+  # the second run must be a no-op upgrade that keeps every secret and the data.
   install:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
-      - name: Build images
-        run: |
-          docker buildx build --load -t local/keel-web:ci -f apps/web/Dockerfile .
-          docker buildx build --load -t local/keel-functions:ci -f deploy/functions.Dockerfile .
-          docker buildx build --load -t local/keel-worker:ci apps/worker
-          docker buildx build --load -t local/keel-proxy:ci apps/proxy
-      - name: Configure the installer for local images
+      - name: Build the image
+        run: docker buildx build --load --build-arg VERSION=ci -t local/keel:ci .
+      - name: Configure the installer for the local image
         run: |
           # Swarm will not advertise on loopback; use the runner's primary address.
           {
@@ -77,48 +100,53 @@ jobs:
             echo "KEEL_JSON=1"
           } >> "$GITHUB_ENV"
       - run: sudo -E ./install.sh > first.json
-      - run: jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR' first.json
+      - name: The installer's JSON result
+        run: |
+          jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR and .apiUrl == .url' first.json
+          jq -e '.version == "ci" and .stateDir == "/opt/keel" and (.publicIp | type) == "string" and (.warnings | type) == "array"' first.json
       - name: Sign up and sign in against the installed control plane
         run: |
-          site="http://$KEEL_ADDR:3211"
+          site="http://$KEEL_ADDR"
           creds='"email":"ci@example.com","password":"correct-horse-battery"'
-          post() { curl -fsS -X POST -H 'Content-Type: application/json' -H "Origin: http://$KEEL_ADDR" "$site/api/auth/$1" -d "$2"; }
-          post sign-up/email "{$creds,\"name\":\"CI\"}" | jq -e .user.id
-          post sign-in/email "{$creds}" | jq -e .token
+          post() { curl -fsS -X POST -H 'Content-Type: application/json' -H "Origin: $site" "$@"; }
+          curl -fsS "$site/api/auth/sign-up-open" | jq -e '.open == true'
+          # Sign-up sets the dashboard's cookie and returns the same session as a bearer token.
+          post -c cookies.txt "$site/api/auth/sign-up" -d "{$creds,\"name\":\"CI\"}" | jq -e '.token | length > 0'
+          curl -fsS -b cookies.txt "$site/api/me" | jq -e '.user.email == "ci@example.com"'
+          token=$(post "$site/api/auth/sign-in" -d "{$creds}" | jq -r .token)
+          curl -fsS -H "Authorization: Bearer $token" "$site/api/me" | jq -e '.user.email == "ci@example.com"'
+          curl -fsS "$site/api/me" | jq -e '.user == null'
           # Once an account exists, sign-up is by invitation only.
-          ! post sign-up/email '{"email":"second@example.com","password":"correct-horse-battery","name":"Second"}'
+          curl -fsS "$site/api/auth/sign-up-open" | jq -e '.open == false'
+          ! post "$site/api/auth/sign-up" -d '{"email":"second@example.com","password":"correct-horse-battery","name":"Second"}'
       - uses: actions/setup-go@v6
         with:
-          go-version-file: apps/cli/go.mod
-          cache-dependency-path: apps/cli/go.sum
+          go-version-file: go.mod
       - name: keel CLI finds the install from the dashboard URL and logs in through an approved link
-        working-directory: apps/cli
         run: |
           go build -o "$RUNNER_TEMP/keel" ./cmd/keel
           export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
           keel() { "$RUNNER_TEMP/keel" "$@"; }
-          site="http://$KEEL_ADDR:3211"
-          auth() { curl -fsS -H 'Content-Type: application/json' -H "Origin: http://$KEEL_ADDR" "$@"; }
+          site="http://$KEEL_ADDR"
+          auth() { curl -fsS -H 'Content-Type: application/json' -H "Origin: $site" "$@"; }
           # No terminal: login returns at once with the link, and commands wait for the approval.
-          keel login "http://$KEEL_ADDR" > pending.json
+          keel login "$site" > pending.json
           jq -e '.ok and .status == "pending" and (.approvalUrl | startswith("http://" + env.KEEL_ADDR + "/device?user_code="))' pending.json
           code=$(jq -r .code pending.json)
           ! keel whoami > early.json
           jq -e '.code == "AUTHORIZATION_PENDING"' early.json
           # The human: signed in, opens the link (binds the code to them) and approves.
-          token=$(auth -X POST "$site/api/auth/sign-in/email" -d '{"email":"ci@example.com","password":"correct-horse-battery"}' | jq -r .token)
+          token=$(auth -X POST "$site/api/auth/sign-in" -d '{"email":"ci@example.com","password":"correct-horse-battery"}' | jq -r .token)
           auth -H "Authorization: Bearer $token" "$site/api/auth/device?user_code=$code" | jq -e '.status == "pending"'
-          auth -X POST -H "Authorization: Bearer $token" "$site/api/auth/device/approve" -d "{\"userCode\":\"$code\"}" | jq -e .success
+          auth -X POST -H "Authorization: Bearer $token" "$site/api/auth/device/approve" -d "{\"userCode\":\"$code\"}"
           # The next command finishes the login.
           keel whoami | jq -e '.ok and .user.email == "ci@example.com" and .url == "http://" + env.KEEL_ADDR'
           keel login | jq -e '.ok and .status == "loggedIn"'
       - name: keel CLI creates a project and stages a service in it, as an agent would
-        working-directory: apps/cli
         run: |
           export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
           keel() { "$RUNNER_TEMP/keel" "$@"; }
-          # This account never opened the dashboard, so there is no organization yet: no projects,
-          # and the first project create founds it.
+          # Sign-up founded this account's organization; it has no project until the first create.
           keel project list | jq -e '.ok and .projects == []'
           keel project create "CI App" --link | jq -e '.ok and .project.slug == "ci-app" and .project.environments[0].name == "production" and .url == "http://" + env.KEEL_ADDR + "/p/ci-app"'
           ! keel project create ci-app > taken.json
@@ -134,24 +162,35 @@ jobs:
           jq -e '.code == "USAGE"' unconfirmed.json
           keel service delete api --yes | jq -e '.ok and .deleted'
           keel service list | jq -e '.services == []'
-      - name: keel-proxy answers Convex on the shared admin socket and listens on nothing yet
+      - name: keel proxy answers serve on the shared admin socket, listens on nothing yet, and has no Docker socket
         run: |
-          admin() { sudo docker compose -p keel exec -T backend curl -fsS --unix-socket /run/keel-proxy/admin.sock "http://proxy$1"; }
+          # The admin socket lives in the proxy-admin volume; read it from the host.
+          sock="$(sudo docker volume inspect -f '{{.Mountpoint}}' keel_proxy-admin)/admin.sock"
+          admin() { sudo curl -fsS --unix-socket "$sock" "http://proxy$1"; }
           admin /keel/host-addrs | jq -e 'type == "array" and length > 0'
-          # migrations:run synced it: nothing is exposed, so no app and no public listener.
+          # serve synced it at start: nothing is exposed, so no app and no public listener.
           admin /config/ | jq -e '(.apps // {}) == {}'
-      - name: Re-run is idempotent
+          # The container that parses internet traffic never holds the Docker socket.
+          proxy=$(sudo docker compose -p keel --env-file /opt/keel/.env -f /opt/keel/compose.yml ps -q proxy)
+          mounts=$(sudo docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$proxy")
+          echo "proxy mounts: $mounts"
+          [[ -n "$mounts" && "$mounts" != *docker.sock* ]]
+      - name: Re-run is idempotent and keeps the data
         run: |
-          secrets() { sudo grep -E '^(INSTANCE_SECRET|BETTER_AUTH_SECRET|KEEL_WORKER_TOKEN|CONVEX_SELF_HOSTED_ADMIN_KEY)=' /opt/keel/.env | sha256sum; }
+          secrets() { sudo grep -E '^KEEL_WORKER_TOKEN=' /opt/keel/.env | sha256sum; }
           before=$(secrets)
           sudo -E ./install.sh > second.json
           jq -e '.ok == true' second.json
           [ "$before" = "$(secrets)" ]
+          # The account, the CLI's session and the project survive it.
+          export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
+          "$RUNNER_TEMP/keel" whoami | jq -e '.ok and .user.email == "ci@example.com"'
+          "$RUNNER_TEMP/keel" project list | jq -e '[.projects[].slug] == ["ci-app"]'
       - name: Diagnostics
         if: failure()
         run: |
           cat first.json second.json 2>/dev/null || true
           sudo docker compose -p keel ps || true
           sudo docker compose -p keel logs --tail 200 || true
-          sudo docker service ps keel-worker --no-trunc || true
-          sudo docker service logs keel-worker --tail 100 || true
+          sudo docker service ps keel-agent --no-trunc || true
+          sudo docker service logs keel-agent --tail 100 || true

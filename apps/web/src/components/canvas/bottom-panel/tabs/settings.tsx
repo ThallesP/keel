@@ -1,4 +1,3 @@
-import { asNodeId } from "../../mapping";
 import type { RuntimeNode } from "../../types";
 import { NetworkingSection } from "./networking";
 import { TracingSection } from "./tracing";
@@ -11,7 +10,7 @@ export function SettingsTab({ node }: { node: RuntimeNode }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-auto">
       <NetworkingSection node={node} />
-      {node.type === "service" && <TracingSection nodeId={asNodeId(node.id)} />}
+      {node.type === "service" && <TracingSection nodeId={node.id} />}
     </div>
   );
 }

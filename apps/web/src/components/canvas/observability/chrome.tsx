@@ -1,17 +1,14 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { getRouteApi } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
 import { Search } from "lucide-react";
 import { useMemo } from "react";
+
+import { useListNodes } from "@/gen/api";
 
 import { useEnvironment } from "../environment";
 
 // Pieces the Observability page's views share: the search field, service names.
 
 export const route = getRouteApi("/_auth/p/$projectId");
-
-/** What logSinks.get returns for an Axiom sink; never the token. */
-export type Sink = { domain: string; dataset: string; traces: string | null; org: string | null };
 
 export function SearchField({
   value,
@@ -56,7 +53,10 @@ export type ServiceLabel = { text: string; tone: string };
  */
 export function useServices() {
   const { environmentId } = useEnvironment();
-  const nodes = useQuery(api.nodes.list, { environmentId });
+  const { data: nodes } = useListNodes(
+    { path: { id: environmentId } },
+    { query: { select: (l) => l.nodes } },
+  );
   return useMemo(() => {
     const byId = new Map<string, ServiceLabel>();
     const byName = new Map<string, ServiceLabel>();
@@ -66,10 +66,8 @@ export function useServices() {
       byName.set(n.name, label);
     });
     return {
-      /** A log line's service, by node id. */
       ofLine: (id: string): ServiceLabel =>
         byId.get(id) ?? { text: id.slice(0, 8), tone: "text-faint" },
-      /** A span's service, by OTel service.name. */
       ofSpan: (name: string): ServiceLabel =>
         byName.get(name) ?? { text: name, tone: "text-faint" },
     };

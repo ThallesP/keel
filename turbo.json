@@ -16,10 +16,6 @@
     "dev": {
       "cache": false,
       "persistent": true
-    },
-    "dev:setup": {
-      "cache": false,
-      "interactive": true
     }
   },
   "globalEnv": [
@@ -29,9 +25,7 @@
     "VERCEL_ENV",
     "VERCEL_PROJECT_PRODUCTION_URL",
     "VERCEL_URL",
-    "VITE_CONVEX_SITE_URL",
-    "VITE_CONVEX_URL",
     "_VARLOCK_ENV_KEY"
   ],
-  "globalDependencies": [".env*", "apps/*/.env*", "packages/*/.env*"]
+  "globalDependencies": [".env*", "apps/*/.env*", "packages/*/.env*", "openapi.json"]
 }

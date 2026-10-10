@@ -1,12 +1,20 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
-import { type ExposeOptions, useCanvasActions } from "../../actions";
+import {
+  type EndpointView,
+  exposeRequestSchema,
+  useExposeNode,
+  useGetControlPlane,
+} from "@/gen/api";
+import { errorMessage } from "@/lib/api";
+import { formValues } from "@/lib/form";
+
+import { useCanvasActions } from "../../actions";
 import { EndpointAddress } from "../../endpoint-address";
-import type { Endpoint, RuntimeNode } from "../../types";
+import type { RuntimeNode } from "../../types";
 
 const PROTOCOLS = [
   { id: "http", label: "HTTPS" },
@@ -16,33 +24,45 @@ const PROTOCOLS = [
 
 type Protocol = (typeof PROTOCOLS)[number]["id"];
 
+const firstProtocol: Record<RuntimeNode["type"], Protocol> = {
+  service: "http",
+  database: "tcp",
+  cache: "tcp",
+};
+
+const stateLabel: Record<Protocol, Record<EndpointView["state"], string>> = {
+  http: { live: "live", starting: "getting a certificate…", failed: "failed" },
+  tcp: { live: "live", starting: "starting", failed: "failed" },
+  udp: { live: "live", starting: "starting", failed: "failed" },
+};
+
+const stateTone: Record<EndpointView["state"], string> = {
+  live: "text-success",
+  starting: "text-faint",
+  failed: "text-danger",
+};
+
 const chipClass =
   "inline-flex h-4 w-11 shrink-0 items-center justify-center rounded-sm bg-surface-2 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted-foreground";
 const inputClass =
-  "h-7 min-w-0 rounded-sm border border-line bg-bg px-2 font-mono text-xs text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-primary";
+  "h-7 min-w-0 rounded-sm border border-line bg-bg px-2 font-mono text-xs text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-primary invalid:border-danger [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none";
 const buttonClass =
   "flex h-6 shrink-0 items-center gap-1.5 rounded-sm border border-line bg-bg px-2 text-2xs text-ink hover:border-primary hover:text-primary disabled:opacity-50";
 
-/**
- * How the internet reaches this node: keel-proxy on the control plane, https on 80/443 by domain,
- * raw tcp/udp on a port of the control plane (docs/networking.md). Changes apply at once, like
- * the toolbar's Expose; they never wait for Ship.
- */
 export function NetworkingSection({ node }: { node: RuntimeNode }) {
-  const ip = useQuery(api.nodes.publicAddress);
+  const { data: ip } = useGetControlPlane({
+    query: { staleTime: Infinity, meta: { realtime: false }, select: (c) => c.publicIp },
+  });
   const [adding, setAdding] = useState(false);
   const { endpoints } = node.data;
-  const raw = endpoints
-    .filter((e) => e.protocol !== "http")
-    .map((e) => `${e.publicPort}/${e.protocol}`);
   const where = ip ? `the control plane (${ip})` : "the control plane";
+  const openPorts = new Set(
+    endpoints.map((e) => (e.protocol === "http" ? "80 and 443" : `${e.publicPort}/${e.protocol}`)),
+  );
   const note =
     endpoints.length === 0
       ? "Private: only nodes on this canvas reach it."
-      : `Served by ${where}. Its firewall or router must let in ${[
-          ...(endpoints.some((e) => e.protocol === "http") ? ["80 and 443"] : []),
-          ...raw,
-        ].join(", ")}.`;
+      : `Served by ${where}. Its firewall or router must let in ${[...openPorts].join(", ")}.`;
 
   return (
     <section className="shrink-0 border-b border-line">
@@ -61,16 +81,21 @@ export function NetworkingSection({ node }: { node: RuntimeNode }) {
       {endpoints.map((e) => (
         <EndpointRow key={`${e.protocol}:${e.address}`} nodeId={node.id} endpoint={e} />
       ))}
-      {adding && <AddEndpoint node={node} ip={ip ?? undefined} onDone={() => setAdding(false)} />}
+      {adding && (
+        <AddEndpoint
+          node={node}
+          target={ip || "the control plane's public IP"}
+          onDone={() => setAdding(false)}
+        />
+      )}
     </section>
   );
 }
 
-const stateText = { live: "live", starting: "getting a certificate…", failed: "failed" } as const;
-
-function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoint }) {
+function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: EndpointView }) {
   const actions = useCanvasActions();
-  const label = PROTOCOLS.find((p) => p.id === e.protocol)!.label;
+  const { label } = PROTOCOLS.find((p) => p.id === e.protocol)!;
+  const status = e.state === "failed" && e.error ? e.error : stateLabel[e.protocol][e.state];
   return (
     <div className="flex h-8 items-center gap-3 border-t border-line/60 px-5 font-mono text-xs">
       <span className="flex min-w-0 flex-1 items-center gap-3 pl-2">
@@ -79,17 +104,10 @@ function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoi
         <span className="shrink-0 text-faint">→ :{e.port}</span>
       </span>
       <span
-        className={cn(
-          "max-w-1/2 truncate font-sans text-2xs",
-          e.state === "failed" ? "text-danger" : e.state === "live" ? "text-success" : "text-faint",
-        )}
+        className={cn("max-w-1/2 truncate font-sans text-2xs", stateTone[e.state])}
         title={e.error}
       >
-        {e.state === "failed"
-          ? (e.error ?? "failed")
-          : e.protocol === "http"
-            ? stateText[e.state]
-            : e.state}
+        {status}
       </span>
       <button
         type="button"
@@ -104,36 +122,35 @@ function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoi
   );
 }
 
-/**
- * One row: protocol, then a domain (https) or a public port (tcp/udp), then the container port.
- * Empty fields take the defaults: a generated sslip.io domain, the container port as the public
- * one when it is free, the node's own port. ↵ adds, Esc cancels.
- */
-function AddEndpoint({ node, ip, onDone }: { node: RuntimeNode; ip?: string; onDone: () => void }) {
-  const actions = useCanvasActions();
-  const [protocol, setProtocol] = useState<Protocol>(node.type === "service" ? "http" : "tcp");
+function AddEndpoint({
+  node,
+  target,
+  onDone,
+}: {
+  node: RuntimeNode;
+  target: string;
+  onDone: () => void;
+}) {
+  const [protocol, setProtocol] = useState(firstProtocol[node.type]);
   const [domain, setDomain] = useState("");
-  const [publicPort, setPublicPort] = useState("");
-  const [port, setPort] = useState(node.data.port ? String(node.data.port) : "");
-  const [busy, setBusy] = useState(false);
+  const expose = useExposeNode({
+    mutation: { onSuccess: onDone, onError: (err) => toast.error(errorMessage(err)) },
+  });
 
-  const num = (s: string) => (s.trim() === "" ? undefined : Number(s));
-  const submit = async () => {
-    const options: ExposeOptions = { protocol, port: num(port) };
-    if (protocol === "http") options.domain = domain.trim() || undefined;
-    else options.publicPort = num(publicPort);
-    setBusy(true);
-    const ok = await actions.expose(node.id, options);
-    setBusy(false);
-    if (ok) onDone();
-  };
-  const keys = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") void submit();
-    if (e.key === "Escape") onDone();
+  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const body = exposeRequestSchema.parse({ protocol, ...formValues(e.currentTarget) });
+    expose.mutate({ path: { id: node.id }, body });
   };
 
   return (
-    <div className="border-t border-line/60 px-5 py-2">
+    <form
+      className="border-t border-line/60 px-5 py-2"
+      onSubmit={submit}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onDone();
+      }}
+    >
       <div className="flex items-center gap-2 pl-2">
         <div className="flex shrink-0 rounded-sm border border-line p-0.5" role="radiogroup">
           {PROTOCOLS.map((p) => (
@@ -144,10 +161,8 @@ function AddEndpoint({ node, ip, onDone }: { node: RuntimeNode; ip?: string; onD
               aria-checked={protocol === p.id}
               onClick={() => setProtocol(p.id)}
               className={cn(
-                "h-5 rounded-[3px] px-2 text-[10px] font-semibold tracking-[0.06em]",
-                protocol === p.id
-                  ? "bg-surface-2 text-ink"
-                  : "text-muted-foreground hover:text-ink",
+                "h-5 rounded-[3px] px-2 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground hover:text-ink",
+                protocol === p.id && "bg-surface-2 text-ink",
               )}
             >
               {p.label}
@@ -157,37 +172,38 @@ function AddEndpoint({ node, ip, onDone }: { node: RuntimeNode; ip?: string; onD
         {protocol === "http" ? (
           <input
             autoFocus
+            name="domain"
             className={cn(inputClass, "flex-1")}
             placeholder="app.example.com (empty: a generated domain)"
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
-            onKeyDown={keys}
             aria-label="Domain"
           />
         ) : (
           <input
             autoFocus
+            name="publicPort"
+            type="number"
+            min={1}
+            max={65535}
             className={cn(inputClass, "w-36")}
             placeholder="public port (empty: same)"
-            inputMode="numeric"
-            value={publicPort}
-            onChange={(e) => setPublicPort(e.target.value)}
-            onKeyDown={keys}
             aria-label="Public port"
           />
         )}
         <span className="shrink-0 font-mono text-xs text-faint">→ :</span>
         <input
+          name="port"
+          type="number"
+          min={1}
+          max={65535}
+          defaultValue={node.data.port}
           className={cn(inputClass, "w-20")}
           placeholder="port"
-          inputMode="numeric"
-          value={port}
-          onChange={(e) => setPort(e.target.value)}
-          onKeyDown={keys}
           aria-label="Container port"
         />
         {protocol !== "http" && <span className="flex-1" />}
-        <button type="button" className={buttonClass} disabled={busy} onClick={() => void submit()}>
+        <button type="submit" className={buttonClass} disabled={expose.isPending}>
           Add
         </button>
         <button
@@ -201,10 +217,10 @@ function AddEndpoint({ node, ip, onDone }: { node: RuntimeNode; ip?: string; onD
       {protocol === "http" && domain.trim() !== "" && (
         <p className="mt-1.5 pl-2 text-2xs text-muted-foreground">
           Point <span className="font-mono text-ink">{domain.trim()}</span> at{" "}
-          <span className="font-mono text-ink">{ip ?? "the control plane's public IP"}</span> with
-          an A record. The certificate follows once it resolves.
+          <span className="font-mono text-ink">{target}</span> with an A record. The certificate
+          follows once it resolves.
         </p>
       )}
-    </div>
+    </form>
   );
 }

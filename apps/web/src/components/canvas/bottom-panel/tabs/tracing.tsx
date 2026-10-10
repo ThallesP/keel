@@ -1,12 +1,10 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useAction, useQuery } from "convex/react";
 import { Lock } from "lucide-react";
-import { useState } from "react";
+
+import { useGetNodeTracing, useSetNodeTracing } from "@/gen/api";
+import { succeeded } from "@/lib/panel-write";
 
 import { CopyPrompt } from "../../copy-prompt";
-import { attempt } from "../../errors";
 import { Spinner } from "../../primitives";
 
 /**
@@ -14,35 +12,29 @@ import { Spinner } from "../../primitives";
  * OTEL_* variables listed here on the next Ship; the service's own variables win over them.
  * The code side is the agent prompt's job.
  */
-export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
-  const tracing = useQuery(api.tracing.forNode, { nodeId });
-  const enable = useAction(api.tracing.enable);
-  const [busy, setBusy] = useState(false);
-  if (tracing === undefined) {
+export function TracingSection({ nodeId }: { nodeId: string }) {
+  const { data } = useGetNodeTracing({ path: { id: nodeId } });
+  const { mutateAsync: setTracing, isPending } = useSetNodeTracing();
+  if (data === undefined) {
     return (
       <div className="flex h-16 items-center justify-center">
         <Spinner />
       </div>
     );
   }
+  // null: not a service with a runtime, or not the caller's.
+  const { tracing } = data;
   if (!tracing) return null;
 
   const { enabled } = tracing;
   const blocked = tracing.traces !== "on" && !enabled;
-  const note =
-    tracing.traces === "off"
-      ? "Sign in with Axiom on Observability first: spans need somewhere to go."
-      : tracing.traces === "old"
-        ? "This Axiom connection predates traces: Sign in with Axiom again on Observability."
-        : enabled
-          ? "Keel sets these on the next Ship. Your own variables win."
-          : "Have your coding agent instrument the repo with the prompt, then turn this on and Ship.";
-
-  const toggle = async () => {
-    setBusy(true);
-    await attempt(enable({ nodeId, on: !enabled }));
-    setBusy(false);
-  };
+  const note = {
+    off: "Sign in with Axiom on Observability first: spans need somewhere to go.",
+    old: "This Axiom connection predates traces: Sign in with Axiom again on Observability.",
+    on: enabled
+      ? "Keel sets these on the next Ship. Your own variables win."
+      : "Have your coding agent instrument the repo with the prompt, then turn this on and Ship.",
+  }[tracing.traces];
 
   return (
     <section className="shrink-0 border-b border-line">
@@ -58,8 +50,10 @@ export function TracingSection({ nodeId }: { nodeId: Id<"nodes"> }) {
             role="switch"
             aria-checked={enabled}
             aria-label="OpenTelemetry tracing"
-            disabled={busy || blocked}
-            onClick={() => void toggle()}
+            disabled={isPending || blocked}
+            onClick={() =>
+              void succeeded(setTracing({ path: { id: nodeId }, body: { on: !enabled } }))
+            }
             className={cn(
               "relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-50",
               enabled ? "bg-primary" : "bg-line",

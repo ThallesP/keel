@@ -33,7 +33,7 @@ func TestOpenWithoutAuthKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	if m.Tailnet || m.Client == nil || m.Client.Transport != http.DefaultTransport {
+	if m.Client.Transport != http.DefaultTransport {
 		t.Fatalf("mesh = %+v, want the default transport", m)
 	}
 }

@@ -2,21 +2,23 @@ package mesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"tailscale.com/tsnet"
 )
 
 type Options struct {
-	AuthKey  string
-	Hostname string
-	Logf     func(format string, args ...any)
+	AuthKey string
+	Logf    func(format string, args ...any)
 }
 
 type Mesh struct {
-	Client  *http.Client
-	Tailnet bool
-	close   func() error
+	Client *http.Client
+	close  func() error
 }
 
 func (m *Mesh) Close() error {
@@ -32,23 +34,46 @@ func OptionsFromEnv(logf func(format string, args ...any)) Options {
 
 func Open(ctx context.Context, opts Options) (*Mesh, error) {
 	if opts.AuthKey == "" {
-		return direct(), nil
+		return &Mesh{Client: &http.Client{Transport: http.DefaultTransport}}, nil
 	}
-	return openTailnet(ctx, opts)
+	host, _ := os.Hostname()
+	dir, err := os.MkdirTemp("", "keel-agent-tsnet-")
+	if err != nil {
+		return nil, err
+	}
+	srv := &tsnet.Server{
+		Hostname:  tailnetHostname(host),
+		AuthKey:   opts.AuthKey,
+		Ephemeral: true,
+		Dir:       dir,
+		Logf:      func(string, ...any) {},
+		UserLogf:  opts.Logf,
+	}
+	upCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	if _, err := srv.Up(upCtx); err != nil {
+		srv.Close()
+		os.RemoveAll(dir)
+		return nil, fmt.Errorf("tailnet: %w", err)
+	}
+	opts.Logf("joined the tailnet as %s", srv.Hostname)
+	return &Mesh{
+		Client: srv.HTTPClient(),
+		close: func() error {
+			err := srv.Close()
+			os.RemoveAll(dir)
+			return err
+		},
+	}, nil
 }
 
-func direct() *Mesh { return &Mesh{Client: &http.Client{Transport: http.DefaultTransport}} }
-
 func tailnetHostname(host string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(host) {
+	name := strings.Trim(strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('-')
+			return r
 		}
-	}
-	name := strings.Trim(b.String(), "-")
+		return '-'
+	}, strings.ToLower(host)), "-")
 	if name == "" {
 		return "keel-agent"
 	}

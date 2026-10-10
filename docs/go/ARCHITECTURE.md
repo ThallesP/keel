@@ -64,7 +64,7 @@ func (a *App) RenameNode(ctx context.Context, actor domain.Actor, id string, nam
 		scope, err := requireNode(tx, actor, id)          // access rule, returns domain errors
 		if err != nil { return err }
 		...
-		ch.Environment(scope.Org, scope.Environment.ID)   // what the dashboard must refetch
+		ch.Environment(scope.Project.OrganizationID, scope.Environment.ID)   // what the dashboard must refetch
 		return nil
 	})
 }

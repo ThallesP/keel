@@ -9,6 +9,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/moby/moby/api/types/events"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type fakeDocker struct {
@@ -105,24 +109,22 @@ func (d *fakeDocker) sinces() []string {
 
 type fakeEvents struct {
 	ctx    context.Context
-	events []Event
+	events []events.Message
 	end    error
 }
 
-func (s *fakeEvents) Next() (Event, error) {
+func (s *fakeEvents) Next() (events.Message, error) {
 	if len(s.events) > 0 {
 		e := s.events[0]
 		s.events = s.events[1:]
 		return e, nil
 	}
 	if s.end != nil {
-		return Event{}, s.end
+		return events.Message{}, s.end
 	}
 	<-s.ctx.Done()
-	return Event{}, s.ctx.Err()
+	return events.Message{}, s.ctx.Err()
 }
-
-func (s *fakeEvents) Close() error { return nil }
 
 type scriptedReader struct {
 	ctx    context.Context
@@ -195,14 +197,14 @@ func (s *fakeSink) messages() []string {
 
 type sinkSet struct {
 	mu     sync.Mutex
-	sinks  map[SinkConfig]*fakeSink
+	sinks  map[domain.LogSink]*fakeSink
 	builds int
 	setup  func(*fakeSink)
 }
 
-func newSinkSet() *sinkSet { return &sinkSet{sinks: map[SinkConfig]*fakeSink{}} }
+func newSinkSet() *sinkSet { return &sinkSet{sinks: map[domain.LogSink]*fakeSink{}} }
 
-func (ss *sinkSet) factory(cfg SinkConfig) (Sink, bool) {
+func (ss *sinkSet) factory(cfg domain.LogSink) (Sink, bool) {
 	if cfg.Kind != "axiom" {
 		return nil, false
 	}
@@ -217,7 +219,7 @@ func (ss *sinkSet) factory(cfg SinkConfig) (Sink, bool) {
 	return s, true
 }
 
-func (ss *sinkSet) get(cfg SinkConfig) *fakeSink {
+func (ss *sinkSet) get(cfg domain.LogSink) *fakeSink {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	return ss.sinks[cfg]

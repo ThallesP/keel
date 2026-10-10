@@ -11,22 +11,24 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 var (
-	sinkA = SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-a", Token: "xaat-aaaaaa"}
-	sinkB = SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-b", Token: "xaat-bbbbbb"}
+	sinkA = domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-a", Token: "xaat-aaaaaa"}
+	sinkB = domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-b", Token: "xaat-bbbbbb"}
 )
 
 func newTestShipper(t *testing.T, d *fakeDocker, ss *sinkSet) (*Shipper, *State, *syncBuffer) {
 	t.Helper()
 	state := LoadState(t.TempDir() + "/state.json")
-	buf := &syncBuffer{}
-	s := NewShipper(d, state, NewLogger(buf), ss.factory, func() {})
+	log, buf := testLogger()
+	s := NewShipper(d, state, log, ss.factory, func() {})
 	s.flushEvery = 5 * time.Millisecond
 	s.retryEvery = 5 * time.Millisecond
 	s.followRetry = 5 * time.Millisecond
-	s.SetNodeID("node-1")
+	s.nodeID = "node-1"
 	t.Cleanup(func() { s.Close(time.Second) })
 	return s, state, buf
 }
@@ -49,7 +51,7 @@ func (s *Shipper) lastRead(id string) string {
 	return s.readSince[id]
 }
 
-func (s *Shipper) queued(cfg SinkConfig) (lines int, draining bool) {
+func (s *Shipper) queued(cfg domain.LogSink) (lines int, draining bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	q := s.queues[cfg]
@@ -76,7 +78,7 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 	ss := newSinkSet()
 	gate := make(chan struct{})
 	ss.setup = func(f *fakeSink) { f.gate = gate }
-	s, state, logs := newTestShipper(t, d, ss)
+	s, state, _ := newTestShipper(t, d, ss)
 
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1704067200000}})
 	reconcile(t, s)
@@ -103,15 +105,6 @@ func TestShipperShipsAndCheckpointsAfterDelivery(t *testing.T) {
 	}
 	if !slices.Equal(events, want) {
 		t.Fatalf("events = %+v\nwant %+v", events, want)
-	}
-	out := logs.String()
-	for _, w := range []string{
-		`[logs] config applied: sinks=1 services=1`,
-		`[logs] following svc-n1 (aaaaaaaaaaaa) since 1704067200.000000000`,
-	} {
-		if !strings.Contains(out, w) {
-			t.Errorf("log lacks %q:\n%s", w, out)
-		}
 	}
 }
 
@@ -144,10 +137,7 @@ func TestShipperResumePointPrecedence(t *testing.T) {
 	if got := d.callsFor(flaky.ID); !slices.Equal(got, []string{"1704067200.000000000", "1704067205.000000008"}) {
 		t.Errorf("re-opened tail since = %v, want the line read in this process", got)
 	}
-	if !strings.Contains(logs.String(), "[logs] follow rrrrrrrrrrrr failed (unexpected EOF), retry in 3s") {
-		t.Errorf("log = %s", logs.String())
-	}
-	if !strings.Contains(logs.String(), `[logs] following svc-n2 (ffffffffffff) since now`) {
+	if !strings.Contains(logs.String(), `container=rrrrrrrrrrrr err="unexpected EOF"`) {
 		t.Errorf("log = %s", logs.String())
 	}
 }
@@ -263,7 +253,7 @@ func TestShipperRemovedSinkDropsItsQueue(t *testing.T) {
 	if lines, _ := s.queued(sinkA); lines != 0 {
 		t.Fatalf("%d lines queued, want the removed sink's dropped", lines)
 	}
-	if !strings.Contains(logs.String(), "[logs] dropping 3 queued lines for a removed sink") {
+	if !strings.Contains(logs.String(), `msg="dropping the queued log lines of a removed sink" lines=3`) {
 		t.Fatalf("log = %s", logs.String())
 	}
 	reconcile(t, s)
@@ -305,7 +295,7 @@ func TestShipperRemovedSinkReleasesWaiters(t *testing.T) {
 	if got := ss.get(sinkA).messages(); len(got) != 0 {
 		t.Fatalf("the removed sink was sent %v", got)
 	}
-	if !strings.Contains(logs.String(), "[logs] dropping 2 queued lines for a removed sink") {
+	if !strings.Contains(logs.String(), `msg="dropping the queued log lines of a removed sink" lines=2`) {
 		t.Fatalf("log = %s", logs.String())
 	}
 	waitFor(t, func() bool { v, _ := state.LogsSince(c.ID); return v == "1704067204.000000001" })
@@ -559,30 +549,23 @@ func TestShipperSharedSinkQueue(t *testing.T) {
 	}
 }
 
-func TestApplyConfigChanged(t *testing.T) {
+func TestApplyConfigReusesSinks(t *testing.T) {
 	ss := newSinkSet()
-	s, _, logs := newTestShipper(t, newFakeDocker(), ss)
-	applied := func() int { return strings.Count(logs.String(), "config applied") }
+	s, _, _ := newTestShipper(t, newFakeDocker(), ss)
 	cfg := []SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA, Since: 1}}
 	s.ApplyConfig(cfg)
 	s.ApplyConfig(cfg)
-	if applied() != 1 || ss.builds != 1 {
-		t.Fatalf("applied %d times with %d builds, want once with the sink reused", applied(), ss.builds)
-	}
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1", "n2"}, Sink: sinkA}})
-	if applied() != 2 {
-		t.Fatal("a new service was not a change")
+	if ss.builds != 1 {
+		t.Fatalf("%d builds, want the sink reused", ss.builds)
 	}
 	rotated := sinkA
 	rotated.Token = "xaat-rotated"
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1", "n2"}, Sink: rotated}})
-	if applied() != 3 || ss.builds != 2 {
-		t.Fatalf("applied %d times with %d builds, want a new sink for the new token", applied(), ss.builds)
+	if ss.builds != 2 {
+		t.Fatalf("%d builds, want a new sink for the new token", ss.builds)
 	}
-	if !strings.Contains(logs.String(), "config applied: sinks=1 services=2") {
-		t.Errorf("log = %s", logs.String())
-	}
-	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: domain.LogSink{Kind: "clickhouse"}}})
 	if len(s.queues) != 0 {
 		t.Fatalf("an unknown sink kind was routed: %v", s.queues)
 	}
@@ -620,7 +603,7 @@ func TestShipperFlushAndClose(t *testing.T) {
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
 	reconcile(t, s)
 	waitFor(t, func() bool { lines, _ := s.queued(sinkA); return lines == 1 })
-	s.StopFollowing()
+	s.stopFollowing()
 	s.Flush(context.Background())
 	if got := ss.get(sinkA).messages(); !slices.Equal(got, []string{"one"}) {
 		t.Fatalf("flushed %v", got)

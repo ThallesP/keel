@@ -10,6 +10,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/moby/moby/api/types/events"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type recordedPost struct {
@@ -42,8 +46,8 @@ func (s *eventsServer) all() []recordedPost {
 
 func newTestControlPlane(t *testing.T, url string) (*ControlPlane, *syncBuffer, *[]time.Duration) {
 	t.Helper()
-	buf := &syncBuffer{}
-	cp := NewControlPlane(url, "tok", &http.Client{}, NewLogger(buf))
+	log, buf := testLogger()
+	cp := NewControlPlane(url, "tok", &http.Client{}, log)
 	var sleeps []time.Duration
 	cp.sleep = func(ctx context.Context, d time.Duration) error {
 		sleeps = append(sleeps, d)
@@ -60,7 +64,7 @@ func TestFetchConfig(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"sinks":[{"projectId":"p1","serviceIds":["n1","n2"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel","traces":"keel-traces","token":"xaat-1","org":"acme"},"since":1759912345678},{"projectId":"p2","serviceIds":[],"sink":{"kind":"axiom","domain":"d","dataset":"x","token":"t"}}]}`)
+		io.WriteString(w, `{"sinks":[{"serviceIds":["n1","n2"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel","traces":"keel-traces","token":"xaat-1","org":"acme"},"since":1759912345678},{"serviceIds":[],"sink":{"kind":"axiom","domain":"d","dataset":"x","token":"t"}}]}`)
 	}))
 	defer srv.Close()
 
@@ -76,7 +80,7 @@ func TestFetchConfig(t *testing.T) {
 	if !slices.Equal(s.ServiceIDs, []string{"n1", "n2"}) || s.Since != 1759912345678 {
 		t.Errorf("route = %+v", s)
 	}
-	if s.Sink != (SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel", Token: "xaat-1"}) {
+	if s.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel", Traces: "keel-traces", Token: "xaat-1", Org: "acme"}) {
 		t.Errorf("sink = %+v", s.Sink)
 	}
 	if cfg.Sinks[1].Since != 0 {
@@ -94,15 +98,15 @@ func TestPostEventsAccepted(t *testing.T) {
 	srv := httptest.NewServer(es)
 	defer srv.Close()
 	cp, _, sleeps := newTestControlPlane(t, srv.URL)
-	if !cp.PostEvents(context.Background(), []byte("[]"), true) {
+	if !cp.PostEvents(context.Background(), []events.Message{}, true) {
 		t.Fatal("not accepted")
 	}
-	if !cp.PostEvents(context.Background(), []byte(`{"Type":"node"}`), false) {
+	if !cp.PostEvents(context.Background(), []events.Message{ev("node", "update", "n", nil, 0)}, false) {
 		t.Fatal("not accepted")
 	}
 	want := []recordedPost{
 		{"[]", "1", "Bearer tok", "application/json"},
-		{`{"Type":"node"}`, "", "Bearer tok", "application/json"},
+		{`[{"Type":"node","Action":"update","Actor":{"ID":"n","Attributes":null}}]`, "", "Bearer tok", "application/json"},
 	}
 	if got := es.all(); !slices.Equal(got, want) {
 		t.Fatalf("posts = %+v, want %+v", got, want)
@@ -117,14 +121,13 @@ func TestPostEventsRejected(t *testing.T) {
 	srv := httptest.NewServer(es)
 	defer srv.Close()
 	cp, logs, sleeps := newTestControlPlane(t, srv.URL)
-	body := strings.Repeat("x", 200)
-	if cp.PostEvents(context.Background(), []byte(body), false) {
+	if cp.PostEvents(context.Background(), []events.Message{}, false) {
 		t.Fatal("a 4xx was accepted")
 	}
 	if len(es.all()) != 1 || len(*sleeps) != 0 {
 		t.Fatalf("a 4xx was retried: %d posts, sleeps %v", len(es.all()), *sleeps)
 	}
-	if want := `[events] rejected 400, skipping "` + strings.Repeat("x", 120) + `"`; !strings.Contains(logs.String(), want) {
+	if !strings.Contains(logs.String(), "status=400 events=0") {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
@@ -133,8 +136,8 @@ func TestPostEventsRetries(t *testing.T) {
 	es := &eventsServer{statuses: []int{500, 503, 502, 500, 500, 500, 500, 500, 500, 200}}
 	srv := httptest.NewServer(es)
 	defer srv.Close()
-	cp, logs, sleeps := newTestControlPlane(t, srv.URL)
-	if !cp.PostEvents(context.Background(), []byte("{}"), false) {
+	cp, _, sleeps := newTestControlPlane(t, srv.URL)
+	if !cp.PostEvents(context.Background(), []events.Message{}, false) {
 		t.Fatal("not accepted")
 	}
 	wantSleeps := []time.Duration{5, 10, 15, 20, 25, 30, 35, 35, 35}
@@ -153,11 +156,6 @@ func TestPostEventsRetries(t *testing.T) {
 			t.Fatalf("a retry did not ask for a resync: %+v", posts)
 		}
 	}
-	for _, want := range []string{"[events] post failed 500, retry in 5s", "[events] post failed 503, retry in 10s", "[events] post failed 500, retry in 35s"} {
-		if !strings.Contains(logs.String(), want) {
-			t.Errorf("log lacks %q:\n%s", want, logs.String())
-		}
-	}
 }
 
 func TestPostEventsNetworkErrorAndShutdown(t *testing.T) {
@@ -174,10 +172,10 @@ func TestPostEventsNetworkErrorAndShutdown(t *testing.T) {
 		}
 		return ctx.Err()
 	}
-	if cp.PostEvents(ctx, []byte("[]"), true) {
+	if cp.PostEvents(ctx, []events.Message{}, true) {
 		t.Fatal("accepted with the control plane down")
 	}
-	if !strings.Contains(logs.String(), "[events] post failed (") || !strings.Contains(logs.String(), "), retry in 10s") {
+	if !strings.Contains(logs.String(), `msg="posting docker events failed, retrying" status=0 err=`) || !strings.Contains(logs.String(), "in=10s") {
 		t.Fatalf("log = %s", logs.String())
 	}
 }

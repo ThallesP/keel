@@ -5,21 +5,24 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type AxiomSink struct {
 	url   string
 	token string
 	http  *http.Client
-	log   *Logger
+	log   *slog.Logger
 	sleep func(context.Context, time.Duration) error
 }
 
-func NewAxiomSink(cfg SinkConfig, hc *http.Client, log *Logger) *AxiomSink {
+func NewAxiomSink(cfg domain.LogSink, hc *http.Client, log *slog.Logger) *AxiomSink {
 	return &AxiomSink{url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token, http: hc, log: log, sleep: sleepCtx}
 }
 
@@ -46,20 +49,17 @@ func (s *AxiomSink) Send(ctx context.Context, events []LogEvent) bool {
 		case status >= 200 && status <= 299:
 			return true
 		case status >= 400 && status <= 499 && status != 429:
-			s.log.Logf("axiom", "rejected %d, dropping %d events: %q", status, len(events), text)
+			s.log.Error("axiom rejected log lines, dropping them", "status", status, "lines", len(events), "response", text)
 			return true
 		case ctx.Err() != nil:
 			return false
-		case err == nil:
-			s.log.Logf("axiom", "ingest %d, retry %d: %q", status, attempt+1, text)
-		default:
-			s.log.Logf("axiom", "ingest failed (%s), retry %d", errorText(err), attempt+1)
 		}
+		s.log.Warn("axiom ingest failed, retrying", "status", status, "err", err, "response", text, "attempt", attempt+1)
 		if s.sleep(ctx, time.Second<<attempt) != nil {
 			return false
 		}
 	}
-	s.log.Logf("axiom", "unreachable, keeping %d events for a later attempt", len(events))
+	s.log.Error("axiom unreachable, keeping log lines for a later attempt", "lines", len(events))
 	return false
 }
 
@@ -77,6 +77,6 @@ func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) 
 		return 0, "", err
 	}
 	defer res.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
-	return res.StatusCode, truncate(string(raw), 200), nil
+	text, _ := io.ReadAll(io.LimitReader(res.Body, 200))
+	return res.StatusCode, string(text), nil
 }

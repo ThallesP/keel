@@ -3,6 +3,7 @@ package mesh
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -11,45 +12,32 @@ import (
 	"tailscale.com/tsnet"
 )
 
-type Options struct {
-	AuthKey string
-	Logf    func(format string, args ...any)
-}
-
-type Mesh struct {
-	Client *http.Client
-	close  func() error
-}
-
-func (m *Mesh) Close() error { return m.close() }
-
-func OptionsFromEnv(logf func(format string, args ...any)) Options {
-	return Options{AuthKey: strings.TrimSpace(os.Getenv("KEEL_TS_AUTHKEY")), Logf: logf}
-}
-
-func Open(ctx context.Context, opts Options) (*Mesh, error) {
-	if opts.AuthKey == "" {
-		return &Mesh{Client: &http.Client{}, close: func() error { return nil }}, nil
+func Open(ctx context.Context, log *slog.Logger) (*http.Client, func(), error) {
+	authKey := os.Getenv("KEEL_TS_AUTHKEY")
+	if authKey == "" {
+		return http.DefaultClient, func() {}, nil
 	}
 	host, _ := os.Hostname()
 	dir, err := os.MkdirTemp("", "keel-agent-tsnet-")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	srv := &tsnet.Server{Hostname: tailnetHostname(host), AuthKey: opts.AuthKey, Ephemeral: true, Dir: dir, UserLogf: opts.Logf}
-	closeTailnet := func() error {
-		err := srv.Close()
+	srv := &tsnet.Server{
+		Hostname: tailnetHostname(host), AuthKey: authKey, Ephemeral: true, Dir: dir,
+		UserLogf: func(format string, args ...any) { log.Info(fmt.Sprintf(format, args...)) },
+	}
+	closeTailnet := func() {
+		srv.Close()
 		os.RemoveAll(dir)
-		return err
 	}
 	upCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	if _, err := srv.Up(upCtx); err != nil {
 		closeTailnet()
-		return nil, fmt.Errorf("tailnet: %w", err)
+		return nil, nil, fmt.Errorf("tailnet: %w", err)
 	}
-	opts.Logf("joined the tailnet as %s", srv.Hostname)
-	return &Mesh{Client: srv.HTTPClient(), close: closeTailnet}, nil
+	log.Info("joined the tailnet", "hostname", srv.Hostname)
+	return srv.HTTPClient(), closeTailnet, nil
 }
 
 func tailnetHostname(host string) string {

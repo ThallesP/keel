@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 )
 
@@ -152,24 +153,10 @@ func TestMobyContainerLogsQuery(t *testing.T) {
 func TestMobyEvents(t *testing.T) {
 	d, api := newTestMoby(t)
 	s := d.Events(context.Background(), "1704067200.000000001")
-	defer s.Close()
-	e1, err := s.Next()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if e1.Type != "container" || e1.Action != "start" || e1.ActorID != "c1" || e1.Attributes[labelServiceName] != "svc-n1" || e1.TimeNano != 1704067200000000001 {
-		t.Fatalf("event = %+v", e1)
-	}
-	var raw struct {
-		Type, Action string
-		Actor        struct{ Attributes map[string]string }
-		Time         int64
-	}
-	if err := json.Unmarshal(e1.Raw, &raw); err != nil {
-		t.Fatal(err)
-	}
-	if raw.Type != "container" || raw.Action != "start" || raw.Actor.Attributes[labelServiceName] != "svc-n1" || raw.Time != 1704067200 {
-		t.Fatalf("raw = %s", e1.Raw)
+	want := events.Message{Type: "container", Action: "start", Actor: events.Actor{ID: "c1", Attributes: map[string]string{labelServiceName: "svc-n1"}},
+		Scope: "local", Time: 1704067200, TimeNano: 1704067200000000001}
+	if e1, err := s.Next(); err != nil || !reflect.DeepEqual(e1, want) {
+		t.Fatalf("event = %+v, %v", e1, err)
 	}
 	if e2, err := s.Next(); err != nil || e2.Type != "node" {
 		t.Fatalf("second event = %+v, %v", e2, err)
@@ -181,8 +168,7 @@ func TestMobyEvents(t *testing.T) {
 	if q.Get("since") != "1704067200.000000001" {
 		t.Errorf("since = %q", q.Get("since"))
 	}
-	want := map[string]map[string]bool{"type": {"container": true, "service": true, "node": true}}
-	if got := filtersOf(t, q); !reflect.DeepEqual(got, want) {
+	if got := filtersOf(t, q); !reflect.DeepEqual(got, map[string]map[string]bool{"type": {"container": true, "service": true, "node": true}}) {
 		t.Errorf("filters = %v", got)
 	}
 }
@@ -194,7 +180,6 @@ func TestMobyEventsDockerDown(t *testing.T) {
 	}
 	defer d.Close()
 	s := d.Events(context.Background(), "")
-	defer s.Close()
 	if _, err := s.Next(); err == nil || errors.Is(err, io.EOF) {
 		t.Fatalf("first Next = %v, want the connect error", err)
 	}

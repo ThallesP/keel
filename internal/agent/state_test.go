@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,8 +99,7 @@ func TestStateWriterLogsFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := LoadState(filepath.Join(blocker, "state.json"))
-	var buf syncBuffer
-	log := NewLogger(&buf)
+	log, buf := testLogger()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -107,15 +107,20 @@ func TestStateWriterLogsFailures(t *testing.T) {
 		close(done)
 	}()
 	s.SetEventsSince("1.000000001")
-	waitFor(t, func() bool { return strings.Contains(buf.String(), "[state] write failed: ") })
+	waitFor(t, func() bool { return strings.Contains(buf.String(), `msg="writing the agent state failed" err=`) })
 	cancel()
 	<-done
-	if n := strings.Count(buf.String(), "write failed"); n != 1 {
+	if n := strings.Count(buf.String(), "writing the agent state failed"); n != 1 {
 		t.Fatalf("write failed logged %d times, want once per change", n)
 	}
 	if len(s.LogsSinceIDs()) != 0 {
 		t.Fatal("unexpected resume points")
 	}
+}
+
+func testLogger() (*slog.Logger, *syncBuffer) {
+	buf := &syncBuffer{}
+	return slog.New(slog.NewTextHandler(buf, nil)), buf
 }
 
 type syncBuffer struct {

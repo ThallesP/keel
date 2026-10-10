@@ -1,11 +1,8 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/binary"
-	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -161,25 +158,5 @@ func TestAxiomIngestURL(t *testing.T) {
 		if got := axiomIngestURL(tt.domain, tt.dataset); got != tt.want {
 			t.Errorf("axiomIngestURL(%q, %q) = %q, want %q", tt.domain, tt.dataset, got, tt.want)
 		}
-	}
-}
-
-func TestErrorText(t *testing.T) {
-	if got := errorText(errors.New("  a\n  b\tc  ")); got != "a b c" {
-		t.Errorf("errorText = %q", got)
-	}
-	long := strings.Repeat("é", 400)
-	if got := errorText(errors.New(long)); got != strings.Repeat("é", 300) {
-		t.Errorf("errorText keeps %d runes, want 300", len([]rune(got)))
-	}
-}
-
-func TestLoggerFormat(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewLogger(&buf)
-	l.now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 5_000_000, time.FixedZone("x", 3600)) }
-	l.Log("worker", "SIGTERM, flushing")
-	if want := "2023-12-31T23:00:00.005Z [worker] SIGTERM, flushing\n"; buf.String() != want {
-		t.Fatalf("log = %q, want %q", buf.String(), want)
 	}
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type axiomServer struct {
@@ -48,8 +51,8 @@ func testEvents() []LogEvent {
 
 func newTestAxiom(t *testing.T, srv *httptest.Server) (*AxiomSink, *syncBuffer, *[]time.Duration) {
 	t.Helper()
-	buf := &syncBuffer{}
-	s := NewAxiomSink(SinkConfig{Kind: "axiom", Domain: srv.URL, Dataset: "keel logs", Token: "xaat-secret"}, srv.Client(), NewLogger(buf))
+	log, buf := testLogger()
+	s := NewAxiomSink(domain.LogSink{Kind: "axiom", Domain: srv.URL, Dataset: "keel logs", Token: "xaat-secret"}, srv.Client(), log)
 	var sleeps []time.Duration
 	s.sleep = func(ctx context.Context, d time.Duration) error {
 		sleeps = append(sleeps, d)
@@ -93,7 +96,7 @@ func TestAxiomRejectDrops(t *testing.T) {
 	if len(as.requests()) != 1 || len(*sleeps) != 0 {
 		t.Fatalf("retried a 400")
 	}
-	if want := `[axiom] rejected 400, dropping 2 events: "{\"message\":\"bad\"}"`; !strings.Contains(logs.String(), want) {
+	if want := `status=400 lines=2 response="{\"message\":\"bad\"}"`; !strings.Contains(logs.String(), want) {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
@@ -115,9 +118,9 @@ func TestAxiomRetriesThenGivesUp(t *testing.T) {
 	}
 	out := logs.String()
 	for _, w := range []string{
-		`[axiom] ingest 429, retry 1: "` + strings.Repeat("e", 200) + `"`,
-		`[axiom] ingest 500, retry 5`,
-		`[axiom] unreachable, keeping 2 events for a later attempt`,
+		`status=429 err=<nil> response=` + strings.Repeat("e", 200) + ` attempt=1`,
+		`status=500 err=<nil> response=` + strings.Repeat("e", 200) + ` attempt=5`,
+		`msg="axiom unreachable, keeping log lines for a later attempt" lines=2`,
 	} {
 		if !strings.Contains(out, w) {
 			t.Errorf("log lacks %q", w)
@@ -145,17 +148,17 @@ func TestAxiomNetworkError(t *testing.T) {
 	if sink.Send(context.Background(), testEvents()) {
 		t.Fatal("delivered with Axiom down")
 	}
-	if !strings.Contains(logs.String(), "[axiom] ingest failed (") || !strings.Contains(logs.String(), "), retry 5") {
+	if !strings.Contains(logs.String(), `msg="axiom ingest failed, retrying" status=0 err=`) || !strings.Contains(logs.String(), "attempt=5") {
 		t.Fatalf("log = %s", logs.String())
 	}
 }
 
 func TestSinkFactory(t *testing.T) {
-	f := NewSinkFactory(http.DefaultClient, NewLogger(io.Discard))
-	if s, ok := f(SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.(*AxiomSink).url != "https://api.axiom.co/v1/datasets/d/ingest" {
+	f := NewSinkFactory(http.DefaultClient, slog.New(slog.DiscardHandler))
+	if s, ok := f(domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.(*AxiomSink).url != "https://api.axiom.co/v1/datasets/d/ingest" {
 		t.Fatalf("axiom sink = %+v, %v", s, ok)
 	}
-	if _, ok := f(SinkConfig{Kind: "clickhouse"}); ok {
+	if _, ok := f(domain.LogSink{Kind: "clickhouse"}); ok {
 		t.Fatal("unknown kind built a sink")
 	}
 }

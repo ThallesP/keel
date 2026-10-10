@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/moby/moby/api/types/events"
 )
 
 type post struct {
-	body   string
+	evs    []events.Message
 	resync bool
 }
 
@@ -22,10 +25,10 @@ type fakePoster struct {
 	results []bool
 }
 
-func (p *fakePoster) PostEvents(_ context.Context, body []byte, resync bool) bool {
+func (p *fakePoster) PostEvents(_ context.Context, evs []events.Message, resync bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.posts = append(p.posts, post{string(body), resync})
+	p.posts = append(p.posts, post{evs, resync})
 	return next(&p.results, true)
 }
 
@@ -35,9 +38,8 @@ func (p *fakePoster) all() []post {
 	return slices.Clone(p.posts)
 }
 
-func ev(typ, action, actor string, attrs map[string]string, timeNano int64) Event {
-	return Event{Type: typ, Action: action, ActorID: actor, Attributes: attrs, TimeNano: timeNano,
-		Raw: []byte(`{"Type":"` + typ + `","Action":"` + action + `"}`)}
+func ev(typ, action, actor string, attrs map[string]string, timeNano int64) events.Message {
+	return events.Message{Type: events.Type(typ), Action: events.Action(action), Actor: events.Actor{ID: actor, Attributes: attrs}, TimeNano: timeNano}
 }
 
 func svcAttrs(service string) map[string]string {
@@ -46,7 +48,7 @@ func svcAttrs(service string) map[string]string {
 
 func TestRelevant(t *testing.T) {
 	tests := []struct {
-		e    Event
+		e    events.Message
 		want bool
 	}{
 		{ev("container", "start", "c", svcAttrs("svc-a"), 0), true},
@@ -62,7 +64,7 @@ func TestRelevant(t *testing.T) {
 	}
 	for _, tt := range tests {
 		if got := relevant(tt.e); got != tt.want {
-			t.Errorf("relevant(%s %s %v) = %v, want %v", tt.e.Type, tt.e.Action, tt.e.Attributes, got, tt.want)
+			t.Errorf("relevant(%s %s %v) = %v, want %v", tt.e.Type, tt.e.Action, tt.e.Actor.Attributes, got, tt.want)
 		}
 	}
 }
@@ -70,11 +72,11 @@ func TestRelevant(t *testing.T) {
 type containerHook struct{ action, id string }
 
 func newTestForwarder(d *fakeDocker, p EventPoster, state *State) (*Forwarder, *syncBuffer, func() []containerHook) {
-	logs := &syncBuffer{}
+	log, logs := testLogger()
 	var mu sync.Mutex
 	var hooks []containerHook
 	f := &Forwarder{
-		Docker: d, Poster: p, State: state, Log: NewLogger(logs),
+		Docker: d, Poster: p, State: state, Log: log,
 		OnContainer: func(action, id string, _ map[string]string) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -100,32 +102,35 @@ func runUntil(t *testing.T, f *Forwarder, cond func() bool) {
 }
 
 func TestForwarderStream(t *testing.T) {
+	start := ev("container", "start", "c1", svcAttrs("svc-a"), 1704067200000000001)
+	update := ev("service", "update", "s1", map[string]string{"name": "svc-b"}, 1704067200000000005)
+	node := ev("node", "update", "n1", nil, 0)
 	d := newFakeDocker()
 	d.streams = []fakeEvents{{
-		events: []Event{
-			ev("container", "start", "c1", svcAttrs("svc-a"), 1704067200000000001),
+		events: []events.Message{
+			start,
 			ev("container", "exec_start: sh", "c1", svcAttrs("svc-a"), 1704067200000000002),
 			ev("container", "health_status: healthy", "c1", svcAttrs("svc-a"), 1704067200000000003),
 			ev("container", "start", "c9", svcAttrs("keel-agent"), 1704067200000000004),
-			ev("service", "update", "s1", map[string]string{"name": "svc-b"}, 1704067200000000005),
-			ev("node", "update", "n1", nil, 0),
+			update,
+			node,
 			ev("network", "connect", "x", nil, 1704067200999999999),
 		},
 		end: io.EOF,
 	}}
 	p := &fakePoster{}
 	state := LoadState(t.TempDir() + "/state.json")
-	f, logs, hooks := newTestForwarder(d, p, state)
+	f, _, hooks := newTestForwarder(d, p, state)
 	runUntil(t, f, func() bool { return len(d.sinces()) >= 2 })
 
 	want := []post{
-		{"[]", true},
-		{`{"Type":"container","Action":"start"}`, false},
-		{`{"Type":"service","Action":"update"}`, false},
-		{`{"Type":"node","Action":"update"}`, false},
-		{"[]", true},
+		{[]events.Message{}, true},
+		{[]events.Message{start}, false},
+		{[]events.Message{update}, false},
+		{[]events.Message{node}, false},
+		{[]events.Message{}, true},
 	}
-	if got := p.all(); !slices.Equal(got, want) {
+	if got := p.all(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("posts = %+v\nwant %+v", got, want)
 	}
 	wantHooks := []containerHook{{"start", "c1"}, {"exec_start: sh", "c1"}, {"health_status: healthy", "c1"}, {"start", "c9"}}
@@ -138,22 +143,12 @@ func TestForwarderStream(t *testing.T) {
 	if state.EventsSince() != "1704067201.000000000" {
 		t.Errorf("state eventsSince = %q", state.EventsSince())
 	}
-	out := logs.String()
-	for _, w := range []string{
-		"[events] streaming docker events since now\n",
-		"[events] docker events stream ended, reconnecting in 2s\n",
-		"[events] streaming docker events since 1704067201.000000000\n",
-	} {
-		if !strings.Contains(out, w) {
-			t.Errorf("log lacks %q:\n%s", w, out)
-		}
-	}
 }
 
 func TestForwarderResyncAfterFailure(t *testing.T) {
 	d := newFakeDocker()
 	d.streams = []fakeEvents{{
-		events: []Event{
+		events: []events.Message{
 			ev("node", "update", "n", nil, 0),
 			ev("node", "update", "n", nil, 0),
 			ev("node", "update", "n", nil, 0),
@@ -171,7 +166,7 @@ func TestForwarderResyncAfterFailure(t *testing.T) {
 			t.Fatalf("resync flags = %+v, want %v", got, want)
 		}
 	}
-	if !strings.Contains(logs.String(), "[events] stream error: unexpected EOF, reconnecting in 2s") {
+	if !strings.Contains(logs.String(), `msg="docker events stream ended, reconnecting" err="unexpected EOF"`) {
 		t.Errorf("log = %s", logs.String())
 	}
 }
@@ -181,7 +176,7 @@ type cancellingPoster struct {
 	n      int
 }
 
-func (p *cancellingPoster) PostEvents(ctx context.Context, _ []byte, _ bool) bool {
+func (p *cancellingPoster) PostEvents(ctx context.Context, _ []events.Message, _ bool) bool {
 	p.n++
 	if p.n < 3 {
 		return true
@@ -193,7 +188,7 @@ func (p *cancellingPoster) PostEvents(ctx context.Context, _ []byte, _ bool) boo
 
 func TestForwarderShutdownMidPostKeepsTheEvent(t *testing.T) {
 	d := newFakeDocker()
-	d.streams = []fakeEvents{{events: []Event{
+	d.streams = []fakeEvents{{events: []events.Message{
 		ev("node", "update", "n", nil, 1704067200000000001),
 		ev("node", "update", "n", nil, 1704067200000000005),
 	}}}

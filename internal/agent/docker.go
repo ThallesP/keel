@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"io"
+
+	"github.com/moby/moby/api/types/events"
 )
 
 type Docker interface {
@@ -23,18 +25,8 @@ type Container struct {
 	State  string
 }
 
-type Event struct {
-	Type       string
-	Action     string
-	ActorID    string
-	Attributes map[string]string
-	TimeNano   int64
-	Raw        []byte
-}
-
 type EventStream interface {
-	Next() (Event, error)
-	Close() error
+	Next() (events.Message, error)
 }
 
 const (

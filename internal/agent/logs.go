@@ -5,18 +5,21 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type Shipper struct {
 	docker  Docker
 	state   *State
-	log     *Logger
+	log     *slog.Logger
 	newSink SinkFactory
 	refresh func()
 
@@ -35,7 +38,7 @@ type Shipper struct {
 
 	mu             sync.Mutex
 	nodeID         string
-	queues         map[SinkConfig]*queue
+	queues         map[domain.LogSink]*queue
 	queueByService map[string]*queue
 	sinceByService map[string]string
 	readSince      map[string]string
@@ -64,7 +67,7 @@ type queue struct {
 
 type follower struct{ cancel context.CancelFunc }
 
-func NewShipper(docker Docker, state *State, log *Logger, newSink SinkFactory, refresh func()) *Shipper {
+func NewShipper(docker Docker, state *State, log *slog.Logger, newSink SinkFactory, refresh func()) *Shipper {
 	s := &Shipper{
 		docker: docker, state: state, log: log, newSink: newSink, refresh: refresh,
 		flushEvery: time.Second, flushLines: 500, retryEvery: 5 * time.Second, maxQueue: 20_000,
@@ -77,16 +80,10 @@ func NewShipper(docker Docker, state *State, log *Logger, newSink SinkFactory, r
 	return s
 }
 
-func (s *Shipper) SetNodeID(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nodeID = id
-}
-
 func (s *Shipper) ApplyConfig(routes []SinkRoute) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	queues := map[SinkConfig]*queue{}
+	queues := map[domain.LogSink]*queue{}
 	byService := map[string]*queue{}
 	since := map[string]string{}
 	for _, r := range routes {
@@ -106,21 +103,17 @@ func (s *Shipper) ApplyConfig(routes []SinkRoute) {
 			}
 		}
 	}
-	changed := !maps.Equal(queues, s.queues) || !maps.Equal(byService, s.queueByService)
 	for cfg, q := range s.queues {
 		if queues[cfg] != nil {
 			continue
 		}
 		if len(q.entries) > 0 {
-			s.log.Logf("logs", "dropping %d queued lines for a removed sink", len(q.entries))
+			s.log.Warn("dropping the queued log lines of a removed sink", "lines", len(q.entries))
 		}
 		q.entries = nil
 		wakeRoom(q)
 	}
 	s.queues, s.queueByService, s.sinceByService = queues, byService, since
-	if changed {
-		s.log.Logf("logs", "config applied: sinks=%d services=%d", len(queues), len(byService))
-	}
 }
 
 func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
@@ -166,30 +159,23 @@ func (s *Shipper) ReconcileFollowers(ctx context.Context) error {
 }
 
 func (s *Shipper) OnContainerEvent(action, id string, attrs map[string]string) {
-	switch action {
-	case "start":
-		serviceID, ok := serviceIDOf(attrs)
-		if !ok {
-			return
-		}
-		s.mu.Lock()
-		if s.queueByService[serviceID] != nil {
-			s.startLocked(Container{ID: id, Labels: attrs}, serviceID)
-			s.mu.Unlock()
-			return
-		}
-		now := s.now()
-		if now.Sub(s.lastRefresh) <= 5*time.Second {
-			s.mu.Unlock()
-			return
-		}
-		s.lastRefresh = now
-		s.mu.Unlock()
-		s.refresh()
-	case "destroy":
-		s.mu.Lock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if action == "destroy" {
 		s.stopLocked(id, true)
-		s.mu.Unlock()
+		return
+	}
+	serviceID, ok := serviceIDOf(attrs)
+	if action != "start" || !ok {
+		return
+	}
+	if s.queueByService[serviceID] != nil {
+		s.startLocked(Container{ID: id, Labels: attrs}, serviceID)
+		return
+	}
+	if now := s.now(); now.Sub(s.lastRefresh) > 5*time.Second {
+		s.lastRefresh = now
+		s.refresh()
 	}
 }
 
@@ -249,7 +235,7 @@ func (s *Shipper) follow(ctx context.Context, c Container, serviceID string) {
 		if errors.Is(err, errUnrouted) || ctx.Err() != nil {
 			return
 		}
-		s.log.Logf("logs", "follow %s failed (%s), retry in 3s", shortID(c.ID), errorText(err))
+		s.log.Error("following container logs failed, retrying", "container", shortID(c.ID), "err", err)
 		if sleepCtx(ctx, s.followRetry) != nil {
 			return
 		}
@@ -262,13 +248,12 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 		return err
 	}
 	defer rc.Close()
-	service := c.Labels[labelServiceName]
-	s.log.Logf("logs", "following %s (%s) since %s", service, shortID(c.ID), cmp.Or(since, "now"))
 	base := LogEvent{
 		ServiceID: serviceID,
-		Service:   service,
+		Service:   c.Labels[labelServiceName],
 		Task:      c.Labels[labelTaskID],
 		Replica:   replicaOf(c.Labels[labelTaskName]),
+		Node:      s.nodeID,
 		Container: shortID(c.ID),
 	}
 	var frames FrameParser
@@ -278,7 +263,7 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 		n, rerr := rc.Read(buf)
 		for _, frame := range frames.Push(buf[:n]) {
 			for _, line := range lines.Push(frame) {
-				if !s.ship(ctx, c.ID, serviceID, base, line) {
+				if !s.ship(ctx, c.ID, base, line) {
 					return errUnrouted
 				}
 			}
@@ -292,7 +277,7 @@ func (s *Shipper) read(ctx context.Context, c Container, serviceID, since string
 	}
 }
 
-func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, ev LogEvent, line Line) bool {
+func (s *Shipper) ship(ctx context.Context, containerID string, ev LogEvent, line Line) bool {
 	ev.Message, ev.Stream, ev.Time = line.Text, line.Stream, cmp.Or(line.Time, s.now()).UTC()
 	since := ""
 	if !line.Time.IsZero() {
@@ -300,13 +285,12 @@ func (s *Shipper) ship(ctx context.Context, containerID, serviceID string, ev Lo
 	}
 	for {
 		s.mu.Lock()
-		q := s.queueByService[serviceID]
+		q := s.queueByService[ev.ServiceID]
 		if q == nil || ctx.Err() != nil {
 			s.mu.Unlock()
 			return false
 		}
 		if len(q.entries) < s.maxQueue {
-			ev.Node = s.nodeID
 			if since != "" {
 				s.readSince[containerID] = since
 			}
@@ -414,8 +398,6 @@ func (s *Shipper) drain(q *queue, done chan struct{}) {
 	}
 }
 
-func (s *Shipper) StopFollowing() { s.stopFollowing() }
-
 func (s *Shipper) Flush(ctx context.Context) {
 	s.mu.Lock()
 	s.flushLocked()
@@ -440,18 +422,12 @@ func (s *Shipper) Close(wait time.Duration) {
 	s.cancelSends()
 	s.mu.Lock()
 	s.closed = true
-	if s.flushTimer != nil {
-		s.flushTimer.Stop()
-	}
-	if s.retryTimer != nil {
-		s.retryTimer.Stop()
-	}
 	s.mu.Unlock()
 	waitAtMost(&s.followersWG, wait)
 }
 
 func serviceIDOf(labels map[string]string) (string, bool) {
-	return strings.CutPrefix(labels[labelServiceName], "svc-")
+	return strings.CutPrefix(labels[labelServiceName], domain.ServicePrefix)
 }
 
 func replicaOf(taskName string) int {

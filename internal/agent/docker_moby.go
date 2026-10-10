@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,42 +61,20 @@ func (d *MobyDocker) ListSwarmContainers(ctx context.Context) ([]Container, erro
 }
 
 func (d *MobyDocker) Events(ctx context.Context, since string) EventStream {
-	ctx, cancel := context.WithCancel(ctx)
-	res := d.cli.Events(ctx, client.EventsListOptions{
+	return mobyEvents(d.cli.Events(ctx, client.EventsListOptions{
 		Since:   since,
 		Filters: make(client.Filters).Add("type", "container", "service", "node"),
-	})
-	return &mobyEvents{res: res, cancel: cancel}
+	}))
 }
 
-type mobyEvents struct {
-	res    client.EventsResult
-	cancel context.CancelFunc
-}
+type mobyEvents client.EventsResult
 
-func (s *mobyEvents) Next() (Event, error) {
+func (s mobyEvents) Next() (events.Message, error) {
 	select {
-	case m := <-s.res.Messages:
-		return eventOf(m), nil
-	case err := <-s.res.Err:
-		return Event{}, err
-	}
-}
-
-func (s *mobyEvents) Close() error {
-	s.cancel()
-	return nil
-}
-
-func eventOf(m events.Message) Event {
-	raw, _ := json.Marshal(m)
-	return Event{
-		Type:       string(m.Type),
-		Action:     string(m.Action),
-		ActorID:    m.Actor.ID,
-		Attributes: m.Actor.Attributes,
-		TimeNano:   m.TimeNano,
-		Raw:        raw,
+	case m := <-s.Messages:
+		return m, nil
+	case err := <-s.Err:
+		return events.Message{}, err
 	}
 }
 

@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -16,29 +17,17 @@ func TestTailnetHostname(t *testing.T) {
 		strings.Repeat("a", 80): "keel-agent-" + strings.Repeat("a", 52),
 	}
 	for in, want := range tests {
-		got := tailnetHostname(in)
-		if got != want {
+		if got := tailnetHostname(in); got != want {
 			t.Errorf("tailnetHostname(%q) = %q, want %q", in, got, want)
-		}
-		if len(got) > 63 {
-			t.Errorf("tailnetHostname(%q) is %d chars, over a DNS label", in, len(got))
 		}
 	}
 }
 
 func TestOpenWithoutAuthKey(t *testing.T) {
-	m, err := Open(context.Background(), Options{})
-	if err != nil {
-		t.Fatal(err)
+	t.Setenv("KEEL_TS_AUTHKEY", "")
+	client, closeMesh, err := Open(context.Background(), nil)
+	if err != nil || client != http.DefaultClient {
+		t.Fatalf("Open = %v, %v", client, err)
 	}
-	if err := m.Close(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestOptionsFromEnv(t *testing.T) {
-	t.Setenv("KEEL_TS_AUTHKEY", "  tskey-auth-x \n")
-	if got := OptionsFromEnv(nil).AuthKey; got != "tskey-auth-x" {
-		t.Fatalf("auth key = %q", got)
-	}
+	closeMesh()
 }

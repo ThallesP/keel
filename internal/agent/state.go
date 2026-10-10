@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -83,17 +84,22 @@ func (s *State) LogsSinceIDs() []string {
 
 func (s *State) Flush() error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.dirty {
-		s.mu.Unlock()
 		return nil
 	}
 	s.dirty = false
 	raw, _ := json.Marshal(s.data)
-	s.mu.Unlock()
-	return writeFileAtomic(s.path, raw)
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(s.path+".tmp", raw, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(s.path+".tmp", s.path)
 }
 
-func (s *State) RunWriter(ctx context.Context, every time.Duration, log *Logger) {
+func (s *State) RunWriter(ctx context.Context, every time.Duration, log *slog.Logger) {
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -102,31 +108,8 @@ func (s *State) RunWriter(ctx context.Context, every time.Duration, log *Logger)
 			return
 		case <-t.C:
 			if err := s.Flush(); err != nil {
-				log.Log("state", "write failed: "+err.Error())
+				log.Error("writing the agent state failed", "err", err)
 			}
 		}
 	}
-}
-
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".state-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }

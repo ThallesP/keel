@@ -1,10 +1,11 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"math"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,33 +22,21 @@ type Config struct {
 	DockerSocket string
 }
 
-const (
-	defaultConfigPoll = 30 * time.Second
-	shutdownBudget    = 5 * time.Second
-)
-
-func ConfigFromEnv() (Config, error) {
-	return configFrom(os.Getenv, "/run/secrets/keel_worker_token")
-}
-
 func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 	cfg := Config{
 		URL:          strings.TrimRight(getenv("KEEL_URL"), "/"),
-		StatePath:    getenv("KEEL_STATE"),
-		ConfigPoll:   defaultConfigPoll,
-		DockerSocket: dockerSocket(getenv),
+		Token:        getenv("KEEL_WORKER_TOKEN"),
+		StatePath:    cmp.Or(getenv("KEEL_STATE"), "/var/lib/keel-agent/state.json"),
+		ConfigPoll:   30 * time.Second,
+		DockerSocket: getenv("DOCKER_SOCKET"),
 	}
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (the control plane's URL, e.g. http://100.64.0.1:8080)")
 	}
-	if cfg.StatePath == "" {
-		cfg.StatePath = "/var/lib/keel-agent/state.json"
+	if ms, err := strconv.Atoi(getenv("KEEL_CONFIG_POLL_MS")); err == nil && ms > 0 {
+		cfg.ConfigPoll = time.Duration(ms) * time.Millisecond
 	}
-	if ms, err := strconv.ParseFloat(strings.TrimSpace(getenv("KEEL_CONFIG_POLL_MS")), 64); err == nil && ms > 0 && !math.IsInf(ms, 0) {
-		cfg.ConfigPoll = time.Duration(ms * float64(time.Millisecond))
-	}
-	if t := getenv("KEEL_WORKER_TOKEN"); t != "" {
-		cfg.Token = t
+	if cfg.Token != "" {
 		return cfg, nil
 	}
 	raw, err := os.ReadFile(secretPath)
@@ -58,17 +47,10 @@ func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 	return cfg, nil
 }
 
-func orDefault(v, def string) string {
-	if v == "" {
-		return def
-	}
-	return v
-}
-
 type Agent struct {
 	cfg       Config
 	docker    Docker
-	log       *Logger
+	log       *slog.Logger
 	state     *State
 	cp        *ControlPlane
 	shipper   *Shipper
@@ -76,7 +58,7 @@ type Agent struct {
 	wake      chan struct{}
 }
 
-func New(cfg Config, docker Docker, controlPlane, ingest *http.Client, log *Logger) *Agent {
+func New(cfg Config, docker Docker, controlPlane, ingest *http.Client, log *slog.Logger) *Agent {
 	a := &Agent{cfg: cfg, docker: docker, log: log, wake: make(chan struct{}, 1)}
 	a.state = LoadState(cfg.StatePath)
 	a.cp = NewControlPlane(cfg.URL, cfg.Token, controlPlane, log)
@@ -96,40 +78,29 @@ func (a *Agent) refreshConfig() {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	writerCtx, stopWriter := context.WithCancel(context.Background())
-	writerDone := make(chan struct{})
-	go func() {
-		defer close(writerDone)
-		a.state.RunWriter(writerCtx, time.Second, a.log)
-	}()
-	defer func() {
-		stopWriter()
-		<-writerDone
-		if err := a.state.Flush(); err != nil {
-			a.log.Log("state", "write failed: "+err.Error())
-		}
-	}()
-
 	me, err := a.docker.Info(ctx)
 	if err != nil {
-		a.shipper.Close(0)
 		return fmt.Errorf("docker /info: %w", err)
 	}
-	a.shipper.SetNodeID(orDefault(me.NodeID, me.Name))
-	a.log.Log("worker", "starting on node "+orDefault(me.NodeID, "?")+" ("+orDefault(me.Name, "?")+")")
+	a.shipper.nodeID = cmp.Or(me.NodeID, me.Name)
+	a.log.Info("keel agent", "node", me.NodeID, "name", me.Name)
 
 	var wg sync.WaitGroup
+	wg.Go(func() { a.state.RunWriter(ctx, time.Second, a.log) })
 	wg.Go(func() { a.pollConfig(ctx) })
 	wg.Go(func() { a.forwarder.Run(ctx) })
 
 	<-ctx.Done()
-	a.log.Log("worker", signalName(ctx)+", flushing")
-	a.shipper.StopFollowing()
-	flushCtx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
+	a.log.Info("keel agent: shutting down", "cause", context.Cause(ctx))
+	a.shipper.stopFollowing()
+	flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	a.shipper.Flush(flushCtx)
 	cancel()
 	a.shipper.Close(time.Second)
 	waitAtMost(&wg, time.Second)
+	if err := a.state.Flush(); err != nil {
+		a.log.Error("writing the agent state failed", "err", err)
+	}
 	return nil
 }
 
@@ -141,25 +112,24 @@ func (a *Agent) pollConfig(ctx context.Context) {
 			err = a.shipper.ReconcileFollowers(ctx)
 		}
 		if err != nil && ctx.Err() == nil {
-			a.log.Log("config", "poll failed: "+errorText(err))
+			a.log.Error("polling the worker config failed", "err", err)
 		}
-		t := time.NewTimer(a.cfg.ConfigPoll)
 		select {
 		case <-ctx.Done():
-			t.Stop()
 			return
-		case <-t.C:
+		case <-time.After(a.cfg.ConfigPoll):
 		case <-a.wake:
-			t.Stop()
 		}
 	}
 }
 
-func signalName(ctx context.Context) string {
-	if err := context.Cause(ctx); err != nil && strings.HasPrefix(err.Error(), "interrupt") {
-		return "SIGINT"
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	select {
+	case <-time.After(d):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return "SIGTERM"
 }
 
 func waitAtMost(wg *sync.WaitGroup, d time.Duration) {
@@ -172,14 +142,4 @@ func waitAtMost(wg *sync.WaitGroup, d time.Duration) {
 	case <-done:
 	case <-time.After(d):
 	}
-}
-
-func dockerSocket(getenv func(string) string) string {
-	if s := getenv("DOCKER_SOCKET"); s != "" {
-		return s
-	}
-	if getenv("DOCKER_HOST") != "" {
-		return ""
-	}
-	return "/var/run/docker.sock"
 }

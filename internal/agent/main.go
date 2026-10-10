@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -9,22 +10,20 @@ import (
 )
 
 func Main(ctx context.Context) error {
-	cfg, err := ConfigFromEnv()
+	cfg, err := configFrom(os.Getenv, "/run/secrets/keel_worker_token")
 	if err != nil {
 		return err
 	}
-	log := NewLogger(os.Stderr)
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	docker, err := NewMobyDocker(cfg.DockerSocket)
 	if err != nil {
 		return err
 	}
 	defer docker.Close()
-	m, err := mesh.Open(ctx, mesh.OptionsFromEnv(func(format string, args ...any) {
-		log.Logf("mesh", format, args...)
-	}))
+	controlPlane, closeMesh, err := mesh.Open(ctx, log)
 	if err != nil {
 		return err
 	}
-	defer m.Close()
-	return New(cfg, docker, m.Client, http.DefaultClient, log).Run(ctx)
+	defer closeMesh()
+	return New(cfg, docker, controlPlane, http.DefaultClient, log).Run(ctx)
 }

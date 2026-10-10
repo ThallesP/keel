@@ -3,21 +3,24 @@ package agent
 import (
 	"cmp"
 	"context"
-	"errors"
-	"io"
+	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/moby/moby/api/types/events"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type EventPoster interface {
-	PostEvents(ctx context.Context, body []byte, resync bool) bool
+	PostEvents(ctx context.Context, evs []events.Message, resync bool) bool
 }
 
 type Forwarder struct {
 	Docker      Docker
 	Poster      EventPoster
 	State       *State
-	Log         *Logger
+	Log         *slog.Logger
 	OnContainer func(action, containerID string, attrs map[string]string)
 	reconnect   time.Duration
 }
@@ -29,11 +32,7 @@ func (f *Forwarder) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		msg := "stream error: " + errorText(err)
-		if errors.Is(err, io.EOF) {
-			msg = "docker events stream ended"
-		}
-		f.Log.Log("events", msg+", reconnecting in 2s")
+		f.Log.Error("docker events stream ended, reconnecting", "err", err)
 		if sleepCtx(ctx, reconnect) != nil {
 			return
 		}
@@ -41,21 +40,18 @@ func (f *Forwarder) Run(ctx context.Context) {
 }
 
 func (f *Forwarder) stream(ctx context.Context) error {
-	since := f.State.EventsSince()
-	s := f.Docker.Events(ctx, since)
-	defer s.Close()
-	f.Log.Log("events", "streaming docker events since "+cmp.Or(since, "now"))
-	resync := !f.Poster.PostEvents(ctx, []byte("[]"), true)
+	s := f.Docker.Events(ctx, f.State.EventsSince())
+	resync := !f.Poster.PostEvents(ctx, []events.Message{}, true)
 	for {
 		e, err := s.Next()
 		if err != nil {
 			return err
 		}
-		if e.Type == "container" && e.ActorID != "" {
-			f.OnContainer(e.Action, e.ActorID, e.Attributes)
+		if e.Type == "container" {
+			f.OnContainer(string(e.Action), e.Actor.ID, e.Actor.Attributes)
 		}
 		if relevant(e) {
-			resync = !f.Poster.PostEvents(ctx, e.Raw, resync)
+			resync = !f.Poster.PostEvents(ctx, []events.Message{e}, resync)
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -66,15 +62,15 @@ func (f *Forwarder) stream(ctx context.Context) error {
 	}
 }
 
-func relevant(e Event) bool {
-	if strings.HasPrefix(e.Action, "exec_") || strings.HasPrefix(e.Action, "health_status") {
+func relevant(e events.Message) bool {
+	if strings.HasPrefix(string(e.Action), "exec_") || strings.HasPrefix(string(e.Action), "health_status") {
 		return false
 	}
 	switch e.Type {
 	case "container":
-		return strings.HasPrefix(e.Attributes[labelServiceName], "svc-")
+		return strings.HasPrefix(e.Actor.Attributes[labelServiceName], domain.ServicePrefix)
 	case "service":
-		return strings.HasPrefix(e.Attributes["name"], "svc-")
+		return strings.HasPrefix(e.Actor.Attributes["name"], domain.ServicePrefix)
 	case "node":
 		return true
 	default:

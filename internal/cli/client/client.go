@@ -39,13 +39,6 @@ type Client struct {
 // New is a client for the install at url, signed in with token ("" for none).
 func New(url, token string) *Client { return &Client{URL: url, Token: token} }
 
-func (c *Client) httpClient() *http.Client {
-	if c.HTTP != nil {
-		return c.HTTP
-	}
-	return sharedHTTP
-}
-
 // reply is one HTTP response, read whole.
 type reply struct {
 	status int
@@ -82,7 +75,7 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := cmp.Or(c.HTTP, sharedHTTP).Do(req)
 	if err != nil {
 		return nil, err
 	}

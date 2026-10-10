@@ -14,7 +14,7 @@ func TestCanvasListVariables(t *testing.T) {
 	env := k.project(canvasOrg, "Acme")
 	m := canvasMember(canvasOrg)
 	pg := k.create(env, app.CreateNodeInput{Type: domain.NodeDatabase})
-	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api", Port: canvasPtr(8080.0)})
+	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api", Port: new(8080.0)})
 	k.exec(`UPDATE variables SET value = 'pw' WHERE node_id = ? AND key = 'POSTGRES_PASSWORD'`, pg)
 	k.setVar(api, "DATABASE_URL", "${{ postgres.DATABASE_URL }}?sslmode=disable")
 	k.setVar(api, "SELF", "port ${{ PORT }} on ${{ HOST }}")
@@ -27,33 +27,16 @@ func TestCanvasListVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	type row struct {
-		key, value, resolved   string
-		secret, resolvedSecret bool
+	want := []app.VariableView{
+		{Key: "DATABASE_URL", Value: "${{ postgres.DATABASE_URL }}?sslmode=disable", Resolved: "postgres://app:pw@svc-" + pg + ":5432/app?sslmode=disable", ResolvedSecret: true,
+			Parts: []domain.RefPart{{Ref: &domain.Ref{Node: "postgres", NodeID: pg, Key: "DATABASE_URL"}}, {Text: "?sslmode=disable"}}},
+		{Key: "SELF", Value: "port ${{ PORT }} on ${{ HOST }}", Resolved: "port 8080 on svc-" + api,
+			Parts: []domain.RefPart{{Text: "port "}, {Ref: &domain.Ref{NodeID: api, Key: "PORT"}}, {Text: " on "}, {Ref: &domain.Ref{NodeID: api, Key: "HOST"}}}},
+		{Key: "TOKEN", Value: "t0k", Resolved: "t0k", Secret: true, Parts: []domain.RefPart{{Text: "t0k"}}},
+		{Key: "MISSING", Value: "${{ ghost.X }}", Parts: []domain.RefPart{{Ref: &domain.Ref{Node: "ghost", Key: "X", Missing: true}}}},
 	}
-	var got []row
-	for _, v := range vars {
-		got = append(got, row{v.Key, v.Value, v.Resolved, v.Secret, v.ResolvedSecret})
-	}
-	want := []row{
-		{"DATABASE_URL", "${{ postgres.DATABASE_URL }}?sslmode=disable", "postgres://app:pw@svc-" + pg + ":5432/app?sslmode=disable", false, true},
-		{"SELF", "port ${{ PORT }} on ${{ HOST }}", "port 8080 on svc-" + api, false, false},
-		{"TOKEN", "t0k", "t0k", true, false},
-		{"MISSING", "${{ ghost.X }}", "", false, false},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("variables\n got %+v\nwant %+v", got, want)
-	}
-	parts := vars[0].Parts
-	if len(parts) != 2 || parts[0].Ref == nil || parts[0].Ref.Node != "postgres" || parts[0].Ref.NodeID != pg || parts[0].Ref.Missing ||
-		parts[1].Ref != nil || parts[1].Text != "?sslmode=disable" {
-		t.Errorf("parts %+v", parts)
-	}
-	if p := vars[3].Parts; len(p) != 1 || !p[0].Ref.Missing || p[0].Ref.NodeID != "" {
-		t.Errorf("missing parts %+v", p)
-	}
-	if v := vars[2].Parts; len(v) != 1 || v[0].Text != "t0k" {
-		t.Errorf("plain parts %+v", v)
+	if !reflect.DeepEqual(vars, want) {
+		t.Fatalf("variables\n got %+v\nwant %+v", vars, want)
 	}
 
 	if vars, _ := k.app.ListVariables(k.ctx, domain.Actor{}, api); len(vars) != 0 {
@@ -149,7 +132,7 @@ func TestCanvasSetVariable(t *testing.T) {
 	k.clean(env)
 	k.pub.take(canvasOrg)
 
-	err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "NEW", Value: "v2", Secret: true, PreviousKey: canvasPtr("OLD")})
+	err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "NEW", Value: "v2", Secret: true, PreviousKey: "OLD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +157,7 @@ func TestCanvasSetVariable(t *testing.T) {
 	if vs := k.vars(api); canvasKeys(vs) != "FIRST,NEW,LAST" || vs[0].Value != "one" {
 		t.Errorf("upsert %+v", vs)
 	}
-	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "ADDED", Value: "x", PreviousKey: canvasPtr("GHOST")}); err != nil {
+	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "ADDED", Value: "x", PreviousKey: "GHOST"}); err != nil {
 		t.Fatal(err)
 	}
 	if canvasKeys(k.vars(api)) != "FIRST,NEW,LAST,ADDED" {
@@ -184,8 +167,8 @@ func TestCanvasSetVariable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "BIG", Value: strings.Repeat("a", 4096)}); err != nil {
-		t.Errorf("4096 chars: %v", err)
+	if err := k.app.SetVariable(k.ctx, m, api, app.SetVariableInput{Key: "BIG", Value: strings.Repeat("😀", 4096)}); err != nil {
+		t.Errorf("4096 characters: %v", err)
 	}
 	cases := []struct {
 		in        app.SetVariableInput
@@ -195,8 +178,7 @@ func TestCanvasSetVariable(t *testing.T) {
 		{app.SetVariableInput{Key: "1ABC", Value: "x"}, domain.CodeInvalidInput, "Key: UPPER_SNAKE_CASE only"},
 		{app.SetVariableInput{Key: "A/B", Value: "x"}, domain.CodeInvalidInput, "Key: UPPER_SNAKE_CASE only"},
 		{app.SetVariableInput{Key: "BIG", Value: strings.Repeat("a", 4097)}, domain.CodeInvalidInput, "Value too long"},
-		{app.SetVariableInput{Key: "BIG", Value: strings.Repeat("😀", 2049)}, domain.CodeInvalidInput, "Value too long"},
-		{app.SetVariableInput{Key: "FIRST", Value: "x", PreviousKey: canvasPtr("NEW")}, domain.CodeNameTaken, "FIRST already exists"},
+		{app.SetVariableInput{Key: "FIRST", Value: "x", PreviousKey: "NEW"}, domain.CodeNameTaken, "FIRST already exists"},
 	}
 	for _, c := range cases {
 		canvasWantErr(t, k.app.SetVariable(k.ctx, m, api, c.in), c.code, c.msg)

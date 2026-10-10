@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -21,7 +22,6 @@ import (
 type canvasHTTP struct {
 	t     *testing.T
 	srv   *httptest.Server
-	store *sqlite.Store
 	actor domain.Actor
 }
 
@@ -42,7 +42,7 @@ func canvasServe(t *testing.T) *canvasHTTP {
 		}
 	}
 	a := app.New(app.App{Store: store, Config: app.Config{PublicIP: "203.0.113.7"}})
-	c := &canvasHTTP{t: t, store: store, actor: domain.Actor{UserID: "u", OrganizationID: "org-a", Role: "member"}}
+	c := &canvasHTTP{t: t, actor: domain.Actor{UserID: "u", OrganizationID: "org-a", Role: "member"}}
 	s := &Server{app: a}
 	mux := http.NewServeMux()
 	s.registerCanvas(humago.New(mux, Config("test")))
@@ -56,12 +56,8 @@ func canvasServe(t *testing.T) *canvasHTTP {
 func (c *canvasHTTP) do(method, path string, body any) (int, string, string) {
 	c.t.Helper()
 	var r io.Reader
-	switch b := body.(type) {
-	case nil:
-	case string:
-		r = strings.NewReader(b)
-	default:
-		raw, _ := json.Marshal(b)
+	if body != nil {
+		raw, _ := json.Marshal(body)
 		r = bytes.NewReader(raw)
 	}
 	req, _ := http.NewRequest(method, c.srv.URL+path, r)
@@ -83,10 +79,8 @@ func (c *canvasHTTP) json(method, path string, body any, wantStatus int, out any
 	if status != wantStatus {
 		c.t.Fatalf("%s %s: %d %s, want %d", method, path, status, raw, wantStatus)
 	}
-	if out != nil {
-		if err := json.Unmarshal([]byte(raw), out); err != nil {
-			c.t.Fatalf("%s %s: %v in %s", method, path, err, raw)
-		}
+	if err := json.Unmarshal([]byte(raw), out); err != nil {
+		c.t.Fatalf("%s %s: %v in %s", method, path, err, raw)
 	}
 }
 
@@ -102,7 +96,6 @@ func (c *canvasHTTP) problem(method, path string, body any, status int, code, de
 
 func TestCanvasHTTPNodes(t *testing.T) {
 	c := canvasServe(t)
-	c.json("GET", "/api/environments/env/nodes", nil, 200, nil)
 	if _, _, raw := c.do("GET", "/api/environments/env/nodes", nil); raw != `{"nodes":[]}` {
 		t.Fatalf("empty canvas %s", raw)
 	}
@@ -122,7 +115,7 @@ func TestCanvasHTTPNodes(t *testing.T) {
 		"dirty": true, "status": "pending", "image": "nginx:alpine", "port": 8080.0, "replicas": 1.0, "running": 0.0, "revision": 0.0,
 		"public": false, "endpoints": []any{},
 	}
-	if len(list.Nodes) != 1 || !canvasJSONEqual(list.Nodes[0], want) {
+	if len(list.Nodes) != 1 || !reflect.DeepEqual(list.Nodes[0], want) {
 		t.Fatalf("view %v\nwant %v", list.Nodes, want)
 	}
 
@@ -141,7 +134,7 @@ func TestCanvasHTTPNodes(t *testing.T) {
 		t.Fatalf("move: %d", status)
 	}
 	c.json("GET", "/api/environments/env/nodes", nil, 200, &list)
-	if n := list.Nodes[0]; n["name"] != "web" || n["replicas"] != 2.0 || !canvasJSONEqual(n["position"], map[string]any{"x": 1.25, "y": -2.0}) {
+	if n := list.Nodes[0]; n["name"] != "web" || n["replicas"] != 2.0 || !reflect.DeepEqual(n["position"], map[string]any{"x": 1.25, "y": -2.0}) {
 		t.Errorf("after patch/move %v", n)
 	}
 	c.problem("PATCH", "/api/nodes/nope", map[string]any{"name": "x"}, 404, "SERVICE_NOT_FOUND", "Node not found")
@@ -260,10 +253,4 @@ func TestCanvasHTTPProjectsAndAccess(t *testing.T) {
 	if _, _, raw := c.do("GET", "/api/environments/env/summary", nil); raw != `{"summary":null}` {
 		t.Errorf("signed-out summary %s", raw)
 	}
-}
-
-func canvasJSONEqual(a, b any) bool {
-	x, _ := json.Marshal(a)
-	y, _ := json.Marshal(b)
-	return bytes.Equal(x, y)
 }

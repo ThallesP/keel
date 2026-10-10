@@ -23,21 +23,18 @@ func (a *App) EnvironmentSummaryOf(ctx context.Context, actor domain.Actor, envi
 		if err != nil {
 			return err
 		}
-		s := &EnvironmentSummary{Counts: map[domain.NodeStatus]int{}}
+		out = &EnvironmentSummary{Counts: map[domain.NodeStatus]int{}}
 		for _, n := range nodes {
 			if n.Type == domain.NodeGroup {
 				continue
 			}
 			if n.Dirty && n.Type.Deployable() {
-				s.PendingChanges++
+				out.PendingChanges++
 			}
-			s.Counts[domain.DeriveStatus(n)]++
+			out.Counts[domain.DeriveStatus(n)]++
 		}
-		if s.Servers, err = tx.CanvasClusterServers(); err != nil {
-			return err
-		}
-		out = s
-		return nil
+		out.Servers, err = tx.CanvasClusterServers()
+		return err
 	})
 	return out, err
 }

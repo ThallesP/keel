@@ -45,10 +45,10 @@ type ProjectBySlug struct {
 }
 
 type EnvironmentSummary struct {
-	_              struct{}       `nullable:"true"`
-	PendingChanges int            `json:"pendingChanges" doc:"Deployable nodes with a staged change"`
-	Counts         map[string]int `json:"counts" doc:"Derived status per node (groups excluded, volumes count as pending); zero counts are absent"`
-	Servers        int            `json:"servers" doc:"Ready Swarm nodes, install-wide"`
+	_              struct{}                  `nullable:"true"`
+	PendingChanges int                       `json:"pendingChanges" doc:"Deployable nodes with a staged change"`
+	Counts         map[domain.NodeStatus]int `json:"counts" doc:"Derived status per node (groups excluded, volumes count as pending); zero counts are absent"`
+	Servers        int                       `json:"servers" doc:"Ready Swarm nodes, install-wide"`
 }
 
 type EnvironmentSummaryResult struct {
@@ -102,8 +102,8 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 		Type:             string(n.Type),
 		Name:             n.Name,
 		ParentID:         n.ParentID,
-		Position:         Position{X: n.Position.X, Y: n.Position.Y},
-		Config:           NodeConfig{SizeGb: n.Config.SizeGb, Width: n.Config.Width, Height: n.Config.Height},
+		Position:         Position(n.Position),
+		Config:           NodeConfig(n.Config),
 		Dirty:            n.Dirty,
 		Status:           string(status),
 		DeployedRevision: n.DeployedRevision,
@@ -130,18 +130,17 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	}
 	switch status {
 	case domain.StatusDeploying:
-		if n.ShippedAt != nil && *n.ShippedAt != 0 {
-			var step string
-			switch {
-			case n.Observed == nil || n.Observed.Revision < n.Desired.Revision:
-				step = "pulling image"
-			case n.Observed.State == domain.ObservedUpdating:
-				step = "rolling out"
-			default:
-				step = "starting"
-			}
-			v.Deploy = &NodeDeploy{Step: step, StartedAt: *n.ShippedAt}
+		if n.ShippedAt == nil {
+			break
 		}
+		step := "starting"
+		switch {
+		case n.Observed == nil || n.Observed.Revision < n.Desired.Revision:
+			step = "pulling image"
+		case n.Observed.State == domain.ObservedUpdating:
+			step = "rolling out"
+		}
+		v.Deploy = &NodeDeploy{Step: step, StartedAt: *n.ShippedAt}
 	case domain.StatusStopped, domain.StatusStopping:
 		v.StoppedAt = n.ShippedAt
 	case domain.StatusDone:
@@ -200,15 +199,8 @@ type VariableRef struct {
 }
 
 type VariablePart struct {
-	Text *string      `json:"text,omitempty"`
+	Text string       `json:"text,omitempty"`
 	Ref  *VariableRef `json:"ref,omitempty"`
-}
-
-func VariablePartOf(p domain.RefPart) VariablePart {
-	if p.Ref == nil {
-		return VariablePart{Text: &p.Text}
-	}
-	return VariablePart{Ref: &VariableRef{Node: p.Ref.Node, NodeID: p.Ref.NodeID, Key: p.Ref.Key, Missing: p.Ref.Missing}}
 }
 
 type VariableView struct {
@@ -253,10 +245,10 @@ type ReferenceSourceList struct {
 }
 
 type SetVariableRequest struct {
-	Key         string  `json:"key" doc:"UPPER_SNAKE_CASE" example:"DATABASE_URL"`
-	Value       string  `json:"value" doc:"At most 4096 characters" example:"${{ postgres.DATABASE_URL }}"`
-	Secret      bool    `json:"secret"`
-	PreviousKey *string `json:"previousKey,omitempty" doc:"Rename that row to key instead of upserting; references follow"`
+	Key         string `json:"key" doc:"UPPER_SNAKE_CASE" example:"DATABASE_URL"`
+	Value       string `json:"value" doc:"At most 4096 characters" example:"${{ postgres.DATABASE_URL }}"`
+	Secret      bool   `json:"secret"`
+	PreviousKey string `json:"previousKey,omitempty" doc:"Rename that row to key instead of upserting; references follow"`
 }
 
 type DeleteVariableRequest struct {

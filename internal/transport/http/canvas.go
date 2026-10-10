@@ -72,13 +72,6 @@ func canvasProjectOf(p app.ProjectSummary) api.ProjectSummary {
 	return out
 }
 
-func canvasPosition(p *api.Position) *domain.Position {
-	if p == nil {
-		return nil
-	}
-	return &domain.Position{X: p.X, Y: p.Y}
-}
-
 func (s *Server) registerCanvas(h huma.API) {
 	operation := func(id, method, path, summary string) huma.Operation {
 		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary, Tags: []string{"canvas"}}
@@ -145,11 +138,7 @@ func (s *Server) registerCanvas(h huma.API) {
 			}
 			out := &canvasSummaryOut{}
 			if sum != nil {
-				counts := make(map[string]int, len(sum.Counts))
-				for status, n := range sum.Counts {
-					counts[string(status)] = n
-				}
-				out.Body.Summary = &api.EnvironmentSummary{PendingChanges: sum.PendingChanges, Counts: counts, Servers: sum.Servers}
+				out.Body.Summary = &api.EnvironmentSummary{PendingChanges: sum.PendingChanges, Counts: sum.Counts, Servers: sum.Servers}
 			}
 			return out, nil
 		})
@@ -174,7 +163,7 @@ func (s *Server) registerCanvas(h huma.API) {
 	op(h, createNode, func(ctx context.Context, in *canvasCreateNodeInput) (*canvasCreatedNodeOut, error) {
 		b := in.Body
 		created, err := s.app.CreateNode(ctx, ActorFrom(ctx), in.ID, app.CreateNodeInput{
-			Type: domain.NodeType(b.Type), Name: b.Name, Position: canvasPosition(b.Position),
+			Type: domain.NodeType(b.Type), Name: b.Name, Position: (*domain.Position)(b.Position),
 			Image: b.Image, Engine: domain.Engine(b.Engine), Port: b.Port, Replicas: b.Replicas, Deploy: b.Deploy,
 		})
 		if err != nil {
@@ -187,20 +176,16 @@ func (s *Server) registerCanvas(h huma.API) {
 		"Rename, change the runtime (image, port, replicas), config, or group"),
 		func(ctx context.Context, in *canvasUpdateNodeInput) (*canvasNoContent, error) {
 			b := in.Body
-			u := app.NodeUpdate{
-				Name: b.Name, Image: b.Image, Port: b.Port, Replicas: b.Replicas,
-				ParentID: b.ParentID, Position: canvasPosition(b.Position),
-			}
-			if b.Config != nil {
-				u.Config = &domain.NodeConfig{SizeGb: b.Config.SizeGb, Width: b.Config.Width, Height: b.Config.Height}
-			}
-			return &canvasNoContent{}, s.app.UpdateNode(ctx, ActorFrom(ctx), in.ID, u)
+			return &canvasNoContent{}, s.app.UpdateNode(ctx, ActorFrom(ctx), in.ID, app.NodeUpdate{
+				Name: b.Name, Image: b.Image, Port: b.Port, Replicas: b.Replicas, Config: (*domain.NodeConfig)(b.Config),
+				ParentID: b.ParentID, Position: (*domain.Position)(b.Position),
+			})
 		})
 
 	op(h, operation("moveNode", http.MethodPut, "/api/nodes/{id}/position",
 		"Canvas position (relative to the node's group)"),
 		func(ctx context.Context, in *canvasMoveNodeInput) (*canvasNoContent, error) {
-			return &canvasNoContent{}, s.app.MoveNode(ctx, ActorFrom(ctx), in.ID, domain.Position{X: in.Body.X, Y: in.Body.Y})
+			return &canvasNoContent{}, s.app.MoveNode(ctx, ActorFrom(ctx), in.ID, domain.Position(in.Body))
 		})
 
 	duplicate := operation("duplicateNode", http.MethodPost, "/api/nodes/{id}/duplicate",
@@ -255,7 +240,7 @@ func (s *Server) registerCanvas(h huma.API) {
 			for _, v := range vars {
 				parts := make([]api.VariablePart, 0, len(v.Parts))
 				for _, p := range v.Parts {
-					parts = append(parts, api.VariablePartOf(p))
+					parts = append(parts, api.VariablePart{Text: p.Text, Ref: (*api.VariableRef)(p.Ref)})
 				}
 				out.Body.Variables = append(out.Body.Variables, api.VariableView{
 					Key: v.Key, Value: v.Value, Resolved: v.Resolved, Secret: v.Secret, ResolvedSecret: v.ResolvedSecret, Parts: parts,
@@ -276,12 +261,12 @@ func (s *Server) registerCanvas(h huma.API) {
 				Suggestions: make([]api.ReferenceSuggestion, 0, len(ref.Suggestions)),
 			}}
 			for _, sg := range ref.Suggestions {
-				out.Body.Suggestions = append(out.Body.Suggestions, api.ReferenceSuggestion{NodeID: sg.NodeID, Node: sg.Node, Key: sg.Key, As: sg.As, Value: sg.Value})
+				out.Body.Suggestions = append(out.Body.Suggestions, api.ReferenceSuggestion(sg))
 			}
 			for _, src := range ref.Sources {
 				keys := make([]api.ReferenceKey, 0, len(src.Keys))
 				for _, k := range src.Keys {
-					keys = append(keys, api.ReferenceKey{Key: k.Key, As: k.As, Secret: k.Secret, Provided: k.Provided})
+					keys = append(keys, api.ReferenceKey(k))
 				}
 				out.Body.Sources = append(out.Body.Sources, api.ReferenceSource{
 					NodeID: src.NodeID, Name: src.Name, Type: string(src.Type), Image: src.Image, Keys: keys,
@@ -293,10 +278,7 @@ func (s *Server) registerCanvas(h huma.API) {
 	op(h, operation("setVariable", http.MethodPost, "/api/nodes/{id}/variables",
 		"Set (upsert) a variable, or rename one with previousKey"),
 		func(ctx context.Context, in *canvasSetVariableInput) (*canvasNoContent, error) {
-			b := in.Body
-			return &canvasNoContent{}, s.app.SetVariable(ctx, ActorFrom(ctx), in.ID, app.SetVariableInput{
-				Key: b.Key, Value: b.Value, Secret: b.Secret, PreviousKey: b.PreviousKey,
-			})
+			return &canvasNoContent{}, s.app.SetVariable(ctx, ActorFrom(ctx), in.ID, app.SetVariableInput(in.Body))
 		})
 
 	op(h, operation("deleteVariable", http.MethodPost, "/api/nodes/{id}/variables/delete",

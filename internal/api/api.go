@@ -1,5 +1,7 @@
 package api
 
+import "cmp"
+
 type Problem struct {
 	Type   string        `json:"type,omitempty" doc:"A URI reference identifying the problem type" default:"about:blank"`
 	Title  string        `json:"title,omitempty" doc:"Short summary of the problem type" example:"Not Found"`
@@ -15,12 +17,7 @@ type ErrorDetail struct {
 	Value    any    `json:"value,omitempty"`
 }
 
-func (p *Problem) Error() string {
-	if p.Detail != "" {
-		return p.Detail
-	}
-	return p.Title
-}
+func (p *Problem) Error() string { return cmp.Or(p.Detail, p.Title) }
 
 func (p *Problem) GetStatus() int { return p.Status }
 

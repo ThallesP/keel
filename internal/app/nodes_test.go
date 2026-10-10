@@ -17,23 +17,22 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 	cases := []struct {
 		in       app.CreateNodeInput
 		name     string
-		image    string
-		port     int
+		desired  *domain.Desired
 		dirty    bool
 		vars     string
 		config   domain.NodeConfig
 		position domain.Position
 	}{
-		{app.CreateNodeInput{Type: domain.NodeService}, "nginx", "nginx:alpine", 80, true, "", domain.NodeConfig{}, domain.Position{X: 0, Y: 0}},
-		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", "ghcr.io/acme/api-server:1.2", 80, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", "postgres:16", 5432, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", "mysql:8", 3306, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", "mongo:7", 27018, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
-		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", "redis:7", 6379, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
-		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", "redis:7", 6379, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
-		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", "", 0, false, "", domain.NodeConfig{SizeGb: new(10.0)}, domain.Position{X: 1960}},
-		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", "", 0, false, "", domain.NodeConfig{Width: new(300.0), Height: new(180.0)}, domain.Position{X: 5.5, Y: -3}},
-		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", "nginx:alpine", 80, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
+		{app.CreateNodeInput{Type: domain.NodeService}, "nginx", &domain.Desired{Image: "nginx:alpine", Replicas: 1, Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 0, Y: 0}},
+		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", &domain.Desired{Image: "ghcr.io/acme/api-server:1.2", Replicas: 1, Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", &domain.Desired{Image: "postgres:16", Replicas: 1, Port: new(5432)}, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", &domain.Desired{Image: "mysql:8", Replicas: 1, Port: new(3306)}, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", &domain.Desired{Image: "mongo:7", Replicas: 1, Port: new(27018)}, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
+		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", &domain.Desired{Image: "redis:7", Replicas: 1, Port: new(6379)}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
+		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", &domain.Desired{Image: "redis:7", Replicas: 1, Port: new(6379)}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
+		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", nil, false, "", domain.NodeConfig{SizeGb: new(10.0)}, domain.Position{X: 1960}},
+		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", nil, false, "", domain.NodeConfig{Width: new(300.0), Height: new(180.0)}, domain.Position{X: 5.5, Y: -3}},
+		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", &domain.Desired{Image: "nginx:alpine", Port: new(80)}, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
 	}
 	var ids []string
 	for _, c := range cases {
@@ -43,19 +42,8 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 		if n.Name != c.name || n.Dirty != c.dirty || !reflect.DeepEqual(n.Config, c.config) || n.Position != c.position {
 			t.Errorf("%s: got name %q dirty %v config %+v position %+v", c.name, n.Name, n.Dirty, n.Config, n.Position)
 		}
-		if c.image == "" {
-			if n.Desired != nil {
-				t.Errorf("%s: desired %+v", c.name, n.Desired)
-			}
-		} else {
-			replicas := 1
-			if c.in.Replicas != nil {
-				replicas = int(*c.in.Replicas)
-			}
-			if n.Desired == nil || n.Desired.Image != c.image || n.Desired.Port == nil || *n.Desired.Port != c.port ||
-				n.Desired.Revision != 0 || n.Desired.Replicas != replicas {
-				t.Errorf("%s: desired %+v", c.name, n.Desired)
-			}
+		if !reflect.DeepEqual(n.Desired, c.desired) {
+			t.Errorf("%s: desired %+v", c.name, n.Desired)
 		}
 		if got := canvasKeys(k.vars(id)); got != c.vars {
 			t.Errorf("%s: variables %s, want %s", c.name, got, c.vars)

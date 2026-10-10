@@ -27,6 +27,16 @@ func canvasTouch(tx Tx, ch *Changes, org, environmentID string) error {
 	return nil
 }
 
+func canvasInsertVariables(tx Tx, nodeID string, vars []domain.Variable) error {
+	for _, v := range vars {
+		v.ID, v.NodeID = domain.NewID(), nodeID
+		if err := tx.CanvasInsertVariable(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func canvasNames(nodes []domain.Node) map[string]bool {
 	taken := make(map[string]bool, len(nodes))
 	for _, n := range nodes {

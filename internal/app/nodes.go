@@ -117,11 +117,8 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			return err
 		}
 		if in.Type == domain.NodeDatabase || in.Type == domain.NodeCache {
-			for _, v := range domain.SeedVariables(domain.EngineOf(image)) {
-				v.ID, v.NodeID = domain.NewID(), node.ID
-				if err := tx.CanvasInsertVariable(v); err != nil {
-					return err
-				}
+			if err := canvasInsertVariables(tx, node.ID, domain.SeedVariables(domain.EngineOf(image))); err != nil {
+				return err
 			}
 		}
 		if err := canvasTouch(tx, ch, scope.Org, environmentID); err != nil {
@@ -135,8 +132,11 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 		if _, refused := errors.AsType[*domain.Error](err); refused {
 			return nil
 		}
+		if err != nil {
+			return err
+		}
 		out.DeploymentID = id
-		return err
+		return nil
 	})
 	if err != nil {
 		return CreatedNode{}, err
@@ -159,133 +159,133 @@ func (a *App) UpdateNode(ctx context.Context, actor domain.Actor, id string, u N
 		if err != nil {
 			return err
 		}
-		node, changed := scope.Node, false
-		if u.Name != nil && *u.Name != node.Name {
-			if node, err = canvasRename(tx, node, *u.Name); err != nil {
-				return err
-			}
-			changed = true
+		node := scope.Node
+		renamed := u.Name != nil && *u.Name != node.Name
+		runtime := u.Image != nil || u.Port != nil || u.Replicas != nil
+		reparented := u.ParentID != nil && *u.ParentID != node.ParentID
+		if !renamed && !runtime && u.Config == nil && !reparented && u.Position == nil {
+			return nil
 		}
-		if u.Image != nil || u.Port != nil || u.Replicas != nil {
-			if node, err = canvasSetDesired(tx, ch, scope.Org, node, u); err != nil {
+		if renamed {
+			if err := canvasRename(tx, &node, *u.Name); err != nil {
 				return err
 			}
-			changed = true
+		}
+		if runtime {
+			if err := canvasSetDesired(&node, u); err != nil {
+				return err
+			}
 		}
 		if u.Config != nil {
-			if node, err = canvasSetConfig(tx, node, *u.Config); err != nil {
+			if err := canvasSetConfig(&node, *u.Config); err != nil {
 				return err
 			}
-			changed = true
 		}
-		if u.ParentID != nil && *u.ParentID != node.ParentID {
-			if node, err = canvasSetParent(tx, node, *u.ParentID); err != nil {
+		if reparented {
+			if err := canvasSetParent(tx, &node, *u.ParentID); err != nil {
 				return err
 			}
-			changed = true
 		}
 		if u.Position != nil {
 			node.Position = *u.Position
-			if err := tx.CanvasUpdateNode(node); err != nil {
+		}
+		err = tx.CanvasUpdateNode(node)
+		if errors.Is(err, ErrCanvasTaken) {
+			return canvasNameTaken(node.Name)
+		}
+		if err != nil {
+			return err
+		}
+		if runtime {
+			if err := markReferrersDirty(tx, ch, scope.Org, node); err != nil {
 				return err
 			}
-			changed = true
-		}
-		if !changed {
-			return nil
 		}
 		return canvasTouch(tx, ch, scope.Org, node.EnvironmentID)
 	})
 }
 
-func canvasRename(tx Tx, node domain.Node, name string) (domain.Node, error) {
+func canvasRename(tx Tx, node *domain.Node, name string) error {
 	if err := domain.ValidName(name); err != nil {
-		return node, err
+		return err
 	}
-	if err := canvasRewriteReferences(tx, node, func(key string) (string, string) { return name, key }); err != nil {
-		return node, err
+	if err := canvasRewriteReferences(tx, *node, func(key string) (string, string) { return name, key }); err != nil {
+		return err
 	}
 	node.Name = name
-	err := tx.CanvasUpdateNode(node)
-	if errors.Is(err, ErrCanvasTaken) {
-		return node, canvasNameTaken(name)
-	}
-	return node, err
+	return nil
 }
 
-func canvasSetDesired(tx Tx, ch *Changes, org string, node domain.Node, u NodeUpdate) (domain.Node, error) {
+func canvasSetDesired(node *domain.Node, u NodeUpdate) error {
 	if node.Desired == nil {
-		return node, domain.Invalid("This node type has no runtime settings")
+		return domain.Invalid("This node type has no runtime settings")
 	}
 	if u.Image != nil {
 		if err := domain.ValidImage(*u.Image); err != nil {
-			return node, err
+			return err
 		}
 		node.Desired.Image = *u.Image
 	}
 	port, err := domain.PortNumber(u.Port)
 	if err != nil {
-		return node, err
+		return err
 	}
 	replicas, err := domain.ReplicasNumber(u.Replicas)
 	if err != nil {
-		return node, err
+		return err
 	}
 	node.Desired.Port = cmp.Or(port, node.Desired.Port)
 	if replicas != nil {
 		node.Desired.Replicas = *replicas
 	}
 	node.Dirty = true
-	if err := tx.CanvasUpdateNode(node); err != nil {
-		return node, err
-	}
-	return node, markReferrersDirty(tx, ch, org, node)
+	return nil
 }
 
-func canvasSetConfig(tx Tx, node domain.Node, c domain.NodeConfig) (domain.Node, error) {
+func canvasSetConfig(node *domain.Node, c domain.NodeConfig) error {
 	positive := func(p *float64) bool { return p == nil || *p > 0 }
 	if c.SizeGb != nil && node.Type != domain.NodeVolume {
-		return node, domain.Invalid("Only volumes have a size")
+		return domain.Invalid("Only volumes have a size")
 	}
 	if (c.Width != nil || c.Height != nil) && node.Type != domain.NodeGroup {
-		return node, domain.Invalid("Only groups have a width and height")
+		return domain.Invalid("Only groups have a width and height")
 	}
 	if !positive(c.SizeGb) {
-		return node, domain.Invalid("Size must be more than 0 GB")
+		return domain.Invalid("Size must be more than 0 GB")
 	}
 	if !positive(c.Width) || !positive(c.Height) {
-		return node, domain.Invalid("Width and height must be more than 0")
+		return domain.Invalid("Width and height must be more than 0")
 	}
 	node.Config.SizeGb = cmp.Or(c.SizeGb, node.Config.SizeGb)
 	node.Config.Width = cmp.Or(c.Width, node.Config.Width)
 	node.Config.Height = cmp.Or(c.Height, node.Config.Height)
-	return node, tx.CanvasUpdateNode(node)
+	return nil
 }
 
-func canvasSetParent(tx Tx, node domain.Node, parentID string) (domain.Node, error) {
+func canvasSetParent(tx Tx, node *domain.Node, parentID string) error {
 	if node.ParentID != "" {
 		old, err := tx.Node(node.ParentID)
 		if err != nil {
-			return node, err
+			return err
 		}
 		node.Position = old.Position.Add(node.Position)
 	}
 	node.ParentID = parentID
 	if parentID == "" {
-		return node, tx.CanvasUpdateNode(node)
+		return nil
 	}
 	if node.Type == domain.NodeGroup {
-		return node, domain.Invalid("Groups cannot be nested")
+		return domain.Invalid("Groups cannot be nested")
 	}
 	group, err := tx.Node(parentID)
 	if err != nil && !errors.Is(err, ErrNoRow) {
-		return node, err
+		return err
 	}
 	if group.EnvironmentID != node.EnvironmentID || group.Type != domain.NodeGroup {
-		return node, domain.Invalid("Parent must be a group in the same environment")
+		return domain.Invalid("Parent must be a group in the same environment")
 	}
 	node.Position = node.Position.Sub(group.Position)
-	return node, tx.CanvasUpdateNode(node)
+	return nil
 }
 
 func (a *App) MoveNode(ctx context.Context, actor domain.Actor, id string, pos domain.Position) error {
@@ -343,11 +343,8 @@ func (a *App) DuplicateNode(ctx context.Context, actor domain.Actor, id string) 
 		if err != nil {
 			return err
 		}
-		for _, v := range vars {
-			v.ID, v.NodeID = domain.NewID(), dup.ID
-			if err := tx.CanvasInsertVariable(v); err != nil {
-				return err
-			}
+		if err := canvasInsertVariables(tx, dup.ID, vars); err != nil {
+			return err
 		}
 		copyID = dup.ID
 		return canvasTouch(tx, ch, scope.Org, n.EnvironmentID)

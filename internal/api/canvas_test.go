@@ -14,7 +14,7 @@ func TestNodeViewOf(t *testing.T) {
 		return &domain.Desired{Image: "nginx:alpine", Revision: rev, Replicas: replicas, Port: new(80)}
 	}
 	obs := func(rev, running int, state domain.ObservedState) *domain.Observed {
-		return &domain.Observed{Revision: rev, Running: running, State: state, NodeIDs: []string{}, At: 1}
+		return &domain.Observed{Revision: rev, Running: running, State: state, At: 1}
 	}
 	cases := []struct {
 		name string
@@ -71,9 +71,6 @@ func TestNodeViewOf(t *testing.T) {
 	}
 	for _, c := range cases {
 		c.n.ID, c.n.Name = "n1", "api"
-		if c.n.Type == "" {
-			c.n.Type = domain.NodeService
-		}
 		want := NodeView{ID: "n1", Name: "api", Type: "service", Endpoints: []EndpointView{}}
 		c.want(&want)
 		if got := NodeViewOf(c.n, "203.0.113.7"); !reflect.DeepEqual(got, want) {
@@ -87,9 +84,10 @@ func TestNodeViewEndpoints(t *testing.T) {
 		{Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: new(5432), Status: domain.EndpointStatus{State: domain.EndpointLive}},
 		{Protocol: domain.ProtocolHTTP, Port: 80, Domain: "a.example.com", Status: domain.EndpointStatus{State: domain.EndpointFailed, Error: "no cert"}},
 		{Protocol: domain.ProtocolHTTP, Port: 80, Domain: "b.example.com", Status: domain.EndpointStatus{State: domain.EndpointLive}},
+		{Protocol: domain.ProtocolUDP, Port: 53, Status: domain.EndpointStatus{State: domain.EndpointStarting}},
 	}}
 	v := NodeViewOf(n, "")
-	if !v.Public || v.PublicURL != "https://a.example.com" || len(v.Endpoints) != 3 {
+	if !v.Public || v.PublicURL != "https://a.example.com" || len(v.Endpoints) != 4 {
 		t.Fatalf("view %+v", v)
 	}
 	if e := v.Endpoints[0]; e.Address != "<public IP>:5432" || e.State != "live" || e.PublicPort == nil || *e.PublicPort != 5432 {
@@ -97,6 +95,9 @@ func TestNodeViewEndpoints(t *testing.T) {
 	}
 	if e := v.Endpoints[1]; e.Address != "https://a.example.com" || e.Error != "no cert" || e.State != "failed" {
 		t.Errorf("http endpoint %+v", e)
+	}
+	if e := v.Endpoints[3]; e.Address != "<public IP>:0" || e.PublicPort != nil {
+		t.Errorf("udp endpoint without a public port %+v", e)
 	}
 }
 

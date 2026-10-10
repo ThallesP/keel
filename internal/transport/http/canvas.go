@@ -163,8 +163,8 @@ func (s *Server) registerCanvas(h huma.API) {
 	op(h, createNode, func(ctx context.Context, in *canvasCreateNodeInput) (*canvasCreatedNodeOut, error) {
 		b := in.Body
 		created, err := s.app.CreateNode(ctx, ActorFrom(ctx), in.ID, app.CreateNodeInput{
-			Type: domain.NodeType(b.Type), Name: b.Name, Position: (*domain.Position)(b.Position),
-			Image: b.Image, Engine: domain.Engine(b.Engine), Port: b.Port, Replicas: b.Replicas, Deploy: b.Deploy,
+			Type: b.Type, Name: b.Name, Position: (*domain.Position)(b.Position),
+			Image: b.Image, Engine: b.Engine, Port: b.Port, Replicas: b.Replicas, Deploy: b.Deploy,
 		})
 		if err != nil {
 			return nil, err
@@ -269,7 +269,7 @@ func (s *Server) registerCanvas(h huma.API) {
 					keys = append(keys, api.ReferenceKey(k))
 				}
 				out.Body.Sources = append(out.Body.Sources, api.ReferenceSource{
-					NodeID: src.NodeID, Name: src.Name, Type: string(src.Type), Image: src.Image, Keys: keys,
+					NodeID: src.NodeID, Name: src.Name, Type: src.Type, Image: src.Image, Keys: keys,
 				})
 			}
 			return out, nil

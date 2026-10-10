@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
+	"github.com/ThallesP/keel/internal/api"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -100,23 +101,22 @@ func TestCanvasHTTPNodes(t *testing.T) {
 		t.Fatalf("empty canvas %s", raw)
 	}
 
-	var created struct {
-		ID           string
-		DeploymentID *string `json:"deploymentId"`
-	}
+	var created api.CreatedNode
 	c.json("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "api", "port": 8080, "position": map[string]any{"x": 10, "y": 20}}, 201, &created)
-	if created.ID == "" || created.DeploymentID != nil {
+	if created.ID == "" || created.DeploymentID != "" {
 		t.Fatalf("created %+v", created)
 	}
-	var list struct{ Nodes []map[string]any }
-	c.json("GET", "/api/environments/env/nodes", nil, 200, &list)
-	want := map[string]any{
-		"id": created.ID, "type": "service", "name": "api", "position": map[string]any{"x": 10.0, "y": 20.0}, "config": map[string]any{},
-		"dirty": true, "status": "pending", "image": "nginx:alpine", "port": 8080.0, "replicas": 1.0, "running": 0.0, "revision": 0.0,
-		"public": false, "endpoints": []any{},
+	nodes := func() []api.NodeView {
+		var list api.NodeList
+		c.json("GET", "/api/environments/env/nodes", nil, 200, &list)
+		return list.Nodes
 	}
-	if len(list.Nodes) != 1 || !reflect.DeepEqual(list.Nodes[0], want) {
-		t.Fatalf("view %v\nwant %v", list.Nodes, want)
+	want := api.NodeView{
+		ID: created.ID, Type: "service", Name: "api", Position: api.Position{X: 10, Y: 20}, Dirty: true, Status: "pending",
+		Image: "nginx:alpine", Port: new(8080), Replicas: 1, Endpoints: []api.EndpointView{},
+	}
+	if got := nodes(); !reflect.DeepEqual(got, []api.NodeView{want}) {
+		t.Fatalf("view %+v\nwant %+v", got, want)
 	}
 
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "Bad"}, 422, "INVALID_INPUT", "Name: 1–40 chars, a-z 0-9 and - only")
@@ -133,9 +133,9 @@ func TestCanvasHTTPNodes(t *testing.T) {
 	if status, _, _ := c.do("PUT", "/api/nodes/"+created.ID+"/position", map[string]any{"x": 1.25, "y": -2}); status != 204 {
 		t.Fatalf("move: %d", status)
 	}
-	c.json("GET", "/api/environments/env/nodes", nil, 200, &list)
-	if n := list.Nodes[0]; n["name"] != "web" || n["replicas"] != 2.0 || !reflect.DeepEqual(n["position"], map[string]any{"x": 1.25, "y": -2.0}) {
-		t.Errorf("after patch/move %v", n)
+	want.Name, want.Replicas, want.Position = "web", 2, api.Position{X: 1.25, Y: -2}
+	if got := nodes(); !reflect.DeepEqual(got, []api.NodeView{want}) {
+		t.Errorf("after patch/move %+v", got)
 	}
 	c.problem("PATCH", "/api/nodes/nope", map[string]any{"name": "x"}, 404, "SERVICE_NOT_FOUND", "Node not found")
 

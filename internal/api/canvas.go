@@ -154,14 +154,14 @@ type NodeList struct {
 }
 
 type CreateNodeRequest struct {
-	Type     string    `json:"type" enum:"service,database,cache,volume,group"`
-	Name     string    `json:"name,omitempty" doc:"Omitted or empty: named after the engine or image, made unique"`
-	Position *Position `json:"position,omitempty" doc:"Omitted: right of the rightmost top-level node"`
-	Image    *string   `json:"image,omitempty" doc:"Services only" example:"nginx:alpine"`
-	Engine   string    `json:"engine,omitempty" enum:"postgres,mysql,mongo,redis" doc:"Databases and caches: picks image and port"`
-	Port     *float64  `json:"port,omitempty" doc:"Container port, 1–65535"`
-	Replicas *float64  `json:"replicas,omitempty" doc:"0–20, default 1"`
-	Deploy   bool      `json:"deploy,omitempty" doc:"Ship it right away (skipped when a deployment is already running)"`
+	Type     domain.NodeType `json:"type" enum:"service,database,cache,volume,group"`
+	Name     string          `json:"name,omitempty" doc:"Omitted or empty: named after the engine or image, made unique"`
+	Position *Position       `json:"position,omitempty" doc:"Omitted: right of the rightmost top-level node"`
+	Image    *string         `json:"image,omitempty" doc:"Services only" example:"nginx:alpine"`
+	Engine   domain.Engine   `json:"engine,omitempty" enum:"postgres,mysql,mongo,redis" doc:"Databases and caches: picks image and port"`
+	Port     *float64        `json:"port,omitempty" doc:"Container port, 1–65535"`
+	Replicas *float64        `json:"replicas,omitempty" doc:"0–20, default 1"`
+	Deploy   bool            `json:"deploy,omitempty" doc:"Ship it right away (skipped when a deployment is already running)"`
 }
 
 type CreatedNode struct {
@@ -224,11 +224,11 @@ type ReferenceKey struct {
 }
 
 type ReferenceSource struct {
-	NodeID string         `json:"nodeId"`
-	Name   string         `json:"name"`
-	Type   string         `json:"type" enum:"service,database,cache"`
-	Image  string         `json:"image,omitempty"`
-	Keys   []ReferenceKey `json:"keys" doc:"Provided keys first (URL key, HOST, PORT), then the node's rows"`
+	NodeID string          `json:"nodeId"`
+	Name   string          `json:"name"`
+	Type   domain.NodeType `json:"type" enum:"service,database,cache"`
+	Image  string          `json:"image,omitempty"`
+	Keys   []ReferenceKey  `json:"keys" doc:"Provided keys first (URL key, HOST, PORT), then the node's rows"`
 }
 
 type ReferenceSuggestion struct {

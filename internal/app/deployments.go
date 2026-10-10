@@ -212,7 +212,7 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 	if err := tx.UpdateDeployment(d, appended); err != nil {
 		return err
 	}
-	org, err := deployOrgOf(tx, d.EnvironmentID)
+	org, err := tx.OrganizationOfEnvironment(d.EnvironmentID)
 	if err != nil {
 		return err
 	}
@@ -221,9 +221,6 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 }
 
 func (a *App) writeStep(ctx context.Context, deploymentID, nodeID string, change stepChange, text string) {
-	if deploymentID == "" {
-		return
-	}
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		return a.patchStep(tx, ch, deploymentID, nodeID, change, text)
 	})

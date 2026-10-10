@@ -55,11 +55,3 @@ func deploymentChanged(ch *Changes, org string, d domain.Deployment) {
 		}
 	}
 }
-
-func deployOrgOf(tx Tx, environmentID string) (string, error) {
-	org, err := tx.OrganizationOfEnvironment(environmentID)
-	if errors.Is(err, ErrNoRow) {
-		return "", nil
-	}
-	return org, err
-}

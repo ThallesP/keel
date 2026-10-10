@@ -52,7 +52,7 @@ func TestApplyQueueSerializesPerNode(t *testing.T) {
 		callers.Add(1)
 		go func() {
 			defer callers.Done()
-			a.scheduleApply(applyRequest{nodeID: "x", revision: i})
+			a.scheduleApply(applyRequest{nodeID: "x", deploymentID: "d", revision: i})
 		}()
 	}
 	callers.Wait()

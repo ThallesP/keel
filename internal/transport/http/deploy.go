@@ -32,28 +32,26 @@ type nodeDeploymentsInput struct {
 	ID string `path:"id" doc:"Node id"`
 }
 
-type DeploymentEnvelope api.DeploymentEnvelope
+type deploymentEnvelope api.DeploymentEnvelope
 
-func (DeploymentEnvelope) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
-	if p := s.Properties["deployment"]; p != nil {
-		s.Properties["deployment"] = &huma.Schema{
-			Description: "null when there is none or it is not yours",
-			OneOf:       []*huma.Schema{p, {Type: "null"}},
-		}
+func (deploymentEnvelope) TransformSchema(r huma.Registry, s *huma.Schema) *huma.Schema {
+	s.Properties["deployment"] = &huma.Schema{
+		Description: "null when there is none or it is not yours",
+		OneOf:       []*huma.Schema{s.Properties["deployment"], {Type: "null"}},
 	}
 	return s
 }
 
-type deploymentEnvelopeOutput struct{ Body DeploymentEnvelope }
+type deploymentEnvelopeOutput struct{ Body deploymentEnvelope }
 
 type nodeDeploymentsOutput struct{ Body []api.Deployment }
 
-func deploymentEnvelopeOf(d *domain.Deployment) DeploymentEnvelope {
+func deploymentEnvelopeOf(d *domain.Deployment) deploymentEnvelope {
 	if d == nil {
-		return DeploymentEnvelope{}
+		return deploymentEnvelope{}
 	}
 	wire := api.DeploymentOf(*d)
-	return DeploymentEnvelope{Deployment: &wire}
+	return deploymentEnvelope{Deployment: &wire}
 }
 
 func (s *Server) registerDeploy(h huma.API) {

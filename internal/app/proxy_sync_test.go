@@ -76,7 +76,7 @@ func TestProxySyncLoadsAndRecordsStatuses(t *testing.T) {
 	if api[0].Status != (domain.EndpointStatus{State: domain.EndpointLive, At: 7_000}) || pg[0].Status.State != domain.EndpointLive {
 		t.Fatalf("statuses: %+v %+v", api, pg)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
+	if got := igTopics(e.pub.take()); !slices.Equal(got, igEnvTopics) {
 		t.Fatalf("published %v", got)
 	}
 
@@ -107,7 +107,7 @@ func TestProxySyncCertStates(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node(igAPI, igEnvA, domain.NodeService, "api", "api:1", 8080)
 	for _, d := range []string{"ok.example.com", "bad.example.com", "wait.example.com"} {
-		if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: igS(d)}); err != nil {
+		if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new(d)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -122,7 +122,7 @@ func TestProxySyncCertStates(t *testing.T) {
 		"http:bad.example.com failed DNS problem: NXDOMAIN looking up A for bad.example.com. Point the domain at 203.0.113.7 with an A record.",
 		"http:wait.example.com starting ",
 	}
-	if got := igStatus(e.endpoints(igAPI)); !reflect.DeepEqual(got, want) {
+	if got := igStatus(e.endpoints(igAPI)); !slices.Equal(got, want) {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}
 
@@ -146,7 +146,7 @@ func TestProxySyncBlamesTheListener(t *testing.T) {
 	if len(e.proxy.loads) != 2 || !strings.Contains(e.proxy.loads[0], "layer4") || strings.Contains(e.proxy.loads[1], "layer4") {
 		t.Fatalf("loads: %q", e.proxy.loads)
 	}
-	if got := igStatus(e.endpoints(igPG)); !reflect.DeepEqual(got, []string{"tcp:5432 failed Port 5432/tcp is already in use on the control plane"}) {
+	if got := igStatus(e.endpoints(igPG)); !slices.Equal(got, []string{"tcp:5432 failed Port 5432/tcp is already in use on the control plane"}) {
 		t.Fatalf("pg: %q", got)
 	}
 	if got := igStatus(e.endpoints(igAPI)); got[0] != "http:api-16w41g.203-0-113-7.sslip.io live " {
@@ -195,7 +195,7 @@ func TestProxySyncWholeFailure(t *testing.T) {
 			e.jobs.Run(t)
 			got := append(igStatus(e.endpoints(igAPI)), igStatus(e.endpoints(igPG))...)
 			want := []string{"http:api-16w41g.203-0-113-7.sslip.io failed " + c.want, "tcp:5432 failed " + c.want}
-			if !reflect.DeepEqual(got, want) {
+			if !slices.Equal(got, want) {
 				t.Fatalf("got %q\nwant %q", got, want)
 			}
 		})
@@ -264,7 +264,7 @@ func TestProxyCertReport(t *testing.T) {
 	e := newIngressEnv(t)
 	igExposeAll(t, e)
 	e.node("other", igEnvB, domain.NodeService, "shop", "shop:1", 80)
-	if _, err := e.expose(e.other, "other", app.ExposeInput{Domain: igS("shop.example.com")}); err != nil {
+	if _, err := e.expose(e.other, "other", app.ExposeInput{Domain: new("shop.example.com")}); err != nil {
 		t.Fatal(err)
 	}
 	e.jobs.Run(t)
@@ -280,7 +280,7 @@ func TestProxyCertReport(t *testing.T) {
 	if got := e.endpoints(igAPI)[0].Status; got != want {
 		t.Fatalf("got %+v", got)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
+	if got := igTopics(e.pub.take()); !slices.Equal(got, igEnvTopics) {
 		t.Fatalf("published %v", got)
 	}
 	if e.endpoints("other")[0].Status.State == domain.EndpointFailed {
@@ -293,7 +293,7 @@ func TestProxyCertReport(t *testing.T) {
 	if got := e.endpoints("other")[0].Status.Error; got != "Could not get a certificate" {
 		t.Fatalf("no error text: %q", got)
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org-b /api/environments/env-b", "org-b /api/nodes/"}) {
+	if got := igTopics(e.pub.take()); !slices.Equal(got, []string{"org-b /api/environments/env-b", "org-b /api/nodes/"}) {
 		t.Fatalf("published %v", got)
 	}
 
@@ -425,7 +425,7 @@ func TestProxyRecover(t *testing.T) {
 	if eps[1].Domain != "app.example.com" || eps[1].Status.State != domain.EndpointLive {
 		t.Fatalf("custom domain: %+v", eps[1])
 	}
-	if got := igTopics(e.pub.take()); !reflect.DeepEqual(got, []string{"org /api/environments/env", "org /api/nodes/"}) {
+	if got := igTopics(e.pub.take()); !slices.Equal(got, igEnvTopics) {
 		t.Fatalf("published %v", got)
 	}
 	if !e.jobs.Pending("proxy:startup") {
@@ -454,7 +454,7 @@ func TestProxyRecoverKeepsDomainsUnique(t *testing.T) {
 	e.setEndpoints(igPG, domain.Endpoint{Protocol: domain.ProtocolHTTP, Port: 8080, Domain: "web-i8r0ew.198-51-100-2.sslip.io", Status: live})
 	e.app.RecoverIngressForTest(e.ctx)
 
-	if got := igStatus(e.endpoints(igAPI)); !reflect.DeepEqual(got, []string{
+	if got := igStatus(e.endpoints(igAPI)); !slices.Equal(got, []string{
 		"http:api-16w41g.198-51-100-2.sslip.io live ", "http:api-16w41g.203-0-113-7.sslip.io live ",
 	}) {
 		t.Fatalf("api: %q", got)

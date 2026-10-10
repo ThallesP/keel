@@ -172,6 +172,8 @@ const (
 	igIP   = "203.0.113.7"
 )
 
+var igEnvTopics = []string{"org /api/environments/env", "org /api/nodes/"}
+
 func newIngressEnv(t *testing.T) *igEnv {
 	t.Helper()
 	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "keel.db"))
@@ -258,9 +260,6 @@ func (e *igEnv) setEndpoints(nodeID string, eps ...domain.Endpoint) {
 func (e *igEnv) expose(actor domain.Actor, nodeID string, in app.ExposeInput) (domain.Endpoint, error) {
 	return e.app.Expose(e.ctx, actor, nodeID, in)
 }
-
-func igF(v float64) *float64 { return &v }
-func igS(v string) *string   { return &v }
 
 func igWantErr(t *testing.T, err error, code, message string) {
 	t.Helper()

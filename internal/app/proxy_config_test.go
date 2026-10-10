@@ -17,8 +17,9 @@ var (
 		{NodeID: "k17cs4z0mn2mr6yr7gx8tjqe1n7rw9qj", Protocol: domain.ProtocolTCP, Port: 5432, PublicPort: 5432},
 		{NodeID: "jd7f9g6h5k4m3n2p1q0r9s8t7v6w5x4y", Protocol: domain.ProtocolUDP, Port: 27015, PublicPort: 27015},
 	}
-	addrs63    = []string{"203.0.113.7", "2001:db8::1"}
-	reporter63 = proxyReporter{URL: "http://100.64.0.1:3211/proxy/events", Token: "<KEEL_WORKER_TOKEN>"}
+	addrs63  = []string{"203.0.113.7", "2001:db8::1"}
+	report63 = "http://100.64.0.1:3211/proxy/events"
+	token63  = "<KEEL_WORKER_TOKEN>"
 )
 
 func sameJSON(t *testing.T, got any, want string) {
@@ -41,33 +42,32 @@ func sameJSON(t *testing.T, got any, want string) {
 }
 
 func TestCaddyAppsGolden(t *testing.T) {
-	golden, err := os.ReadFile("../proxy/testdata/spec-6.3.json")
+	b, err := os.ReadFile("../proxy/testdata/spec-6.3.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	apps := caddyApps(routes63, addrs63, reporter63, proxyACME{Email: "ops@example.com"})
-	full := map[string]any{"admin": map[string]any{"listen": "unix//run/keel-proxy/admin.sock|0600"}, "apps": apps}
-	sameJSON(t, full, string(golden))
+	var golden struct{ Apps json.RawMessage }
+	if err := json.Unmarshal(b, &golden); err != nil {
+		t.Fatal(err)
+	}
+	sameJSON(t, caddyApps(routes63, addrs63, report63, Config{WorkerToken: token63, ACMEEmail: "ops@example.com"}), string(golden.Apps))
 }
 
 func TestCaddyAppsVariants(t *testing.T) {
 	staging := "https://acme-staging-v02.api.letsencrypt.org/directory"
 	web := routes63[:1]
 	t.Run("staging CA without email", func(t *testing.T) {
-		apps := caddyApps(web, addrs63[:1], reporter63, proxyACME{CA: staging})
-		sameJSON(t, apps["tls"], `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`"}]}]}}`)
+		apps := caddyApps(web, addrs63[:1], report63, Config{ACMECA: staging})
+		sameJSON(t, apps.TLS, `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`"}]}]}}`)
 	})
 	t.Run("staging CA with email", func(t *testing.T) {
-		apps := caddyApps(web, addrs63[:1], reporter63, proxyACME{CA: staging, Email: "ops@example.com"})
-		sameJSON(t, apps["tls"], `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`","email":"ops@example.com"}]}]}}`)
+		apps := caddyApps(web, addrs63[:1], report63, Config{ACMECA: staging, ACMEEmail: "ops@example.com"})
+		sameJSON(t, apps.TLS, `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`","email":"ops@example.com"}]}]}}`)
 	})
 	t.Run("no ACME settings: no tls app", func(t *testing.T) {
-		apps := caddyApps(web, addrs63[:1], reporter63, proxyACME{})
-		if _, ok := apps["tls"]; ok {
-			t.Fatal("tls app without ACME settings")
-		}
-		if _, ok := apps["events"]; !ok {
-			t.Fatal("events app missing")
+		apps := caddyApps(web, addrs63[:1], report63, Config{})
+		if apps.TLS != nil || apps.Events == nil {
+			t.Fatalf("tls %v, events %v", apps.TLS, apps.Events)
 		}
 	})
 	t.Run("localhost names are never in a policy", func(t *testing.T) {
@@ -75,19 +75,18 @@ func TestCaddyAppsVariants(t *testing.T) {
 			{NodeID: "a", Protocol: domain.ProtocolHTTP, Port: 80, Domain: "app.localhost"},
 			{NodeID: "b", Protocol: domain.ProtocolHTTP, Port: 80, Domain: "localhost"},
 		}
-		apps := caddyApps(local, addrs63[:1], reporter63, proxyACME{CA: staging})
-		if _, ok := apps["tls"]; ok {
+		if apps := caddyApps(local, addrs63[:1], report63, Config{ACMECA: staging}); apps.TLS != nil {
 			t.Fatal("tls app for localhost names only")
 		}
-		apps = caddyApps(append(local, web...), addrs63[:1], reporter63, proxyACME{CA: staging})
-		sameJSON(t, apps["tls"], `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`"}]}]}}`)
+		apps := caddyApps(append(local, web...), addrs63[:1], report63, Config{ACMECA: staging})
+		sameJSON(t, apps.TLS, `{"automation":{"policies":[{"subjects":["api-16w41g.203-0-113-7.sslip.io"],"issuers":[{"module":"acme","ca":"`+staging+`"}]}]}}`)
 	})
 	t.Run("tcp only: no http, tls or events", func(t *testing.T) {
-		apps := caddyApps(routes63[2:3], addrs63[:1], reporter63, proxyACME{Email: "ops@example.com"})
+		apps := caddyApps(routes63[2:3], addrs63[:1], report63, Config{ACMEEmail: "ops@example.com"})
 		sameJSON(t, apps, `{"layer4":{"servers":{"tcp-5432":{"listen":["host-tcp/203.0.113.7:5432"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["svc-k17cs4z0mn2mr6yr7gx8tjqe1n7rw9qj:5432"]}]}]}]}}}}`)
 	})
 	t.Run("nothing exposed", func(t *testing.T) {
-		sameJSON(t, caddyApps(nil, nil, reporter63, proxyACME{Email: "ops@example.com"}), `{}`)
+		sameJSON(t, caddyApps(nil, nil, report63, Config{ACMEEmail: "ops@example.com"}), `{}`)
 	})
 }
 

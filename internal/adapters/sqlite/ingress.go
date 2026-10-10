@@ -49,6 +49,7 @@ func (t *tx) IngressAnyEndpoint() (bool, error) {
 	return t.q.IngressAnyEndpoint(t.ctx)
 }
 
-func (t *tx) IngressNodesWithDomain(name string) ([]string, error) {
-	return t.q.IngressListNodesWithDomain(t.ctx, &name)
+func (t *tx) IngressNodeWithDomain(name string) (string, error) {
+	id, err := t.q.IngressNodeWithDomain(t.ctx, &name)
+	return id, noRow(err)
 }

@@ -11,7 +11,7 @@ type IngressTx interface {
 	IngressOtherEndpoints(nodeID string) ([]OwnedEndpoint, error)
 	IngressRoutes() ([]ProxyRoute, error)
 	IngressAnyEndpoint() (bool, error)
-	IngressNodesWithDomain(domain string) ([]string, error)
+	IngressNodeWithDomain(domain string) (string, error)
 }
 
 type OwnedEndpoint struct {

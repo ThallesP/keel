@@ -39,38 +39,10 @@ func (q *Queries) IngressHasVariable(ctx context.Context, arg IngressHasVariable
 	return exists, err
 }
 
-const ingressListNodesWithDomain = `-- name: IngressListNodesWithDomain :many
-SELECT node_id FROM endpoints WHERE protocol = 'http' AND domain = ?
-`
-
-func (q *Queries) IngressListNodesWithDomain(ctx context.Context, domain *string) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, ingressListNodesWithDomain, domain)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var node_id string
-		if err := rows.Scan(&node_id); err != nil {
-			return nil, err
-		}
-		items = append(items, node_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const ingressListOtherEndpoints = `-- name: IngressListOtherEndpoints :many
 SELECT e.protocol, e.domain, e.public_port, n.name
 FROM endpoints e JOIN nodes n ON n.id = e.node_id
 WHERE e.node_id <> ?
-ORDER BY n.created_at, n.id, e.ord
 `
 
 type IngressListOtherEndpointsRow struct {
@@ -149,4 +121,15 @@ func (q *Queries) IngressListRoutes(ctx context.Context) ([]IngressListRoutesRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const ingressNodeWithDomain = `-- name: IngressNodeWithDomain :one
+SELECT node_id FROM endpoints WHERE protocol = 'http' AND domain = ?
+`
+
+func (q *Queries) IngressNodeWithDomain(ctx context.Context, domain *string) (string, error) {
+	row := q.db.QueryRowContext(ctx, ingressNodeWithDomain, domain)
+	var node_id string
+	err := row.Scan(&node_id)
+	return node_id, err
 }

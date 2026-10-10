@@ -18,11 +18,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-const (
-	proxyStartupKey      = "proxy:startup"
-	proxyStartupAttempts = 8
-	proxySyncPasses      = 3
-)
+const proxyStartupKey = "proxy:startup"
 
 const (
 	CertObtained = "cert_obtained"
@@ -30,11 +26,10 @@ const (
 )
 
 type ingressState struct {
-	mu          sync.Mutex
-	running     bool
-	again       bool
-	failed      atomic.Bool
-	resyncArmed atomic.Bool
+	mu      sync.Mutex
+	running bool
+	again   bool
+	failed  atomic.Bool
 }
 
 var ingressStates sync.Map
@@ -81,15 +76,8 @@ func (st *ingressState) againIfRunning() {
 }
 
 func (a *App) ScheduleProxySync() {
-	if a.Jobs == nil {
-		return
-	}
 	a.Jobs.After("proxy:sync", 0, a.SyncProxy)
 }
-
-type proxyReporter struct{ URL, Token string }
-
-type proxyACME struct{ CA, Email string }
 
 type routeStatus struct {
 	ProxyRoute
@@ -98,7 +86,6 @@ type routeStatus struct {
 
 func (a *App) SyncProxy(ctx context.Context) {
 	if a.Proxy == nil {
-		a.Log.Warn("keel-proxy sync skipped: no proxy configured")
 		return
 	}
 	st := a.ingress()
@@ -121,15 +108,13 @@ func (a *App) SyncProxy(ctx context.Context) {
 }
 
 func (a *App) syncProxy(ctx context.Context, st *ingressState) {
-	reporter := proxyReporter{URL: cmp.Or(a.Proxy.ReportURL(), a.Config.SiteURL+"/proxy/events"), Token: a.Config.WorkerToken}
-	acme := proxyACME{CA: a.Config.ACMECA, Email: a.Config.ACMEEmail}
-	for range proxySyncPasses {
+	for range 3 {
 		routes, err := a.proxyRoutes(ctx)
 		if err != nil {
 			a.Log.Error("keel-proxy sync: read endpoints", "err", err)
 			return
 		}
-		statuses, loaded := a.applyProxy(ctx, routes, reporter, acme)
+		statuses, loaded := a.applyProxy(ctx, routes)
 		st.failed.Store(!loaded)
 		if err := a.setEndpointStatuses(ctx, statuses); err != nil {
 			a.Log.Error("keel-proxy sync: write statuses", "err", err)
@@ -155,10 +140,10 @@ func (a *App) proxyRoutes(ctx context.Context) ([]ProxyRoute, error) {
 	return routes, err
 }
 
-func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyReporter, acme proxyACME) ([]routeStatus, bool) {
+func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute) ([]routeStatus, bool) {
 	at := a.Now()
 	out := make([]routeStatus, 0, len(routes))
-	failed, err := a.loadProxy(ctx, routes, rep, acme)
+	failed, err := a.loadProxy(ctx, routes)
 	if err != nil {
 		msg := domain.TruncateRunes(strings.Join(strings.Fields(err.Error()), " "), 300)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
@@ -197,7 +182,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepo
 	return out, true
 }
 
-func (a *App) loadProxy(ctx context.Context, routes []ProxyRoute, rep proxyReporter, acme proxyACME) (map[string]string, error) {
+func (a *App) loadProxy(ctx context.Context, routes []ProxyRoute) (map[string]string, error) {
 	var addrs []string
 	if len(routes) > 0 {
 		var err error
@@ -208,10 +193,11 @@ func (a *App) loadProxy(ctx context.Context, routes []ProxyRoute, rep proxyRepor
 			return nil, errors.New("keel-proxy found no public network address on the control plane")
 		}
 	}
+	reportURL := cmp.Or(a.Proxy.ReportURL(), a.Config.SiteURL+"/proxy/events")
 	failed := map[string]string{}
 	live := routes
 	for {
-		body, _ := json.Marshal(caddyApps(live, addrs, rep, acme))
+		body, _ := json.Marshal(caddyApps(live, addrs, reportURL, a.Config))
 		err := a.Proxy.LoadApps(ctx, body)
 		if err == nil {
 			return failed, nil
@@ -321,58 +307,42 @@ func (a *App) ReportCert(ctx context.Context, event, name, certError string) err
 		return domain.Invalid("bad report")
 	}
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
-		ids, err := tx.IngressNodesWithDomain(name)
+		id, err := tx.IngressNodeWithDomain(name)
+		if errors.Is(err, ErrNoRow) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
-		for _, id := range ids {
-			node, err := tx.Node(id)
-			if errors.Is(err, ErrNoRow) {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			for i, e := range node.Endpoints {
-				if e.Protocol == domain.ProtocolHTTP && e.Domain == name {
-					node.Endpoints[i].Status = status
-				}
-			}
-			if err := tx.ReplaceEndpoints(id, node.Endpoints); err != nil {
-				return err
-			}
-			if err := environmentChanged(tx, ch, node.EnvironmentID); err != nil {
-				return err
+		node, err := tx.Node(id)
+		if err != nil {
+			return err
+		}
+		for i, e := range node.Endpoints {
+			if e.Domain == name {
+				node.Endpoints[i].Status = status
 			}
 		}
-		if len(ids) > 0 {
-			ch.AfterCommit(a.ingress().againIfRunning)
+		if err := tx.ReplaceEndpoints(id, node.Endpoints); err != nil {
+			return err
 		}
-		return nil
+		ch.AfterCommit(a.ingress().againIfRunning)
+		return environmentChanged(tx, ch, node.EnvironmentID)
 	})
 }
 
 func (a *App) recoverIngress(ctx context.Context) {
 	if ip := a.Config.PublicIP; ip != "" {
-		moved, err := a.moveDefaultDomains(ctx, ip)
-		if err != nil {
+		if err := a.moveDefaultDomains(ctx, ip); err != nil {
 			a.Log.Error("move default domains", "err", err)
-		} else if moved > 0 {
-			a.Log.Info("default domains moved to the current public IP", "ip", ip, "domainsMoved", moved)
 		}
 	}
-	if a.Jobs == nil {
-		return
-	}
 	a.Jobs.After(proxyStartupKey, 0, a.startupProxySync(0))
-	if a.ingress().resyncArmed.CompareAndSwap(false, true) {
-		a.Jobs.Every("proxy:resync", 2*time.Minute, a.ResyncProxy)
-	}
+	a.Jobs.Every("proxy:resync", 2*time.Minute, a.ResyncProxy)
 }
 
-func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
-	moved := 0
-	err := a.write(ctx, func(tx Tx, ch *Changes) error {
+func (a *App) moveDefaultDomains(ctx context.Context, ip string) error {
+	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		nodes, err := tx.AllNodes()
 		if err != nil {
 			return err
@@ -395,7 +365,6 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 				node.Endpoints[i].Domain = d
 				node.Endpoints[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: at}
 				changed = true
-				moved++
 			}
 			if !changed {
 				continue
@@ -409,7 +378,6 @@ func (a *App) moveDefaultDomains(ctx context.Context, ip string) (int, error) {
 		}
 		return nil
 	})
-	return moved, err
 }
 
 func (a *App) ResyncProxy(ctx context.Context) {
@@ -426,7 +394,7 @@ func (a *App) ResyncProxy(ctx context.Context) {
 func (a *App) startupProxySync(attempt int) func(context.Context) {
 	return func(ctx context.Context) {
 		exposed, _ := a.anyEndpoint(ctx)
-		if a.Proxy != nil && attempt < proxyStartupAttempts && exposed {
+		if a.Proxy != nil && attempt < 8 && exposed {
 			if _, err := a.Proxy.HostAddrs(ctx); err != nil {
 				delay := min(time.Second<<attempt, 10*time.Second)
 				a.Jobs.After(proxyStartupKey, delay, a.startupProxySync(attempt+1))

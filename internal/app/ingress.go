@@ -3,7 +3,6 @@ package app
 import (
 	"cmp"
 	"context"
-	"errors"
 	"slices"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -20,6 +19,12 @@ type UnexposeInput struct {
 	Protocol   domain.EndpointProtocol
 	Domain     *string
 	PublicPort *float64
+}
+
+var defaultProtocol = map[domain.NodeType]domain.EndpointProtocol{
+	domain.NodeService:  domain.ProtocolHTTP,
+	domain.NodeDatabase: domain.ProtocolTCP,
+	domain.NodeCache:    domain.ProtocolTCP,
 }
 
 func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in ExposeInput) (domain.Endpoint, error) {
@@ -43,13 +48,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 				return domain.Invalid("Ship this Redis first: its password takes effect on the next Ship")
 			}
 		}
-		protocol := in.Protocol
-		if protocol == "" {
-			protocol = domain.ProtocolTCP
-			if node.Type == domain.NodeService {
-				protocol = domain.ProtocolHTTP
-			}
-		}
+		protocol := cmp.Or(in.Protocol, defaultProtocol[node.Type])
 		port, err := domain.PortNumber(in.Port)
 		if err != nil {
 			return err
@@ -125,7 +124,7 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 		if err != nil {
 			return err
 		}
-		all := in.Protocol == "" && in.Domain == nil && in.PublicPort == nil
+		all := in == UnexposeInput{}
 		named := in.PublicPort != nil
 		if in.Protocol == domain.ProtocolHTTP {
 			named = in.Domain != nil
@@ -133,24 +132,17 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 		if !all && (in.Protocol == "" || !named) {
 			return domain.Invalid("Name the endpoint: protocol and domain (http) or public port")
 		}
-		name := ""
-		if in.Domain != nil && *in.Domain != "" {
-			if name, err = domain.ValidDomain(*in.Domain); err != nil {
+		target := domain.Endpoint{Protocol: in.Protocol}
+		if in.Domain != nil {
+			if target.Domain, err = domain.ValidDomain(*in.Domain); err != nil {
 				return err
 			}
 		}
+		if target.PublicPort, err = domain.PortNumber(in.PublicPort); err != nil {
+			return err
+		}
 		node := scope.Node
-		keep := slices.DeleteFunc(slices.Clone(node.Endpoints), func(e domain.Endpoint) bool {
-			switch {
-			case all:
-				return true
-			case e.Protocol != in.Protocol:
-				return false
-			case e.Protocol == domain.ProtocolHTTP:
-				return e.Domain == name
-			}
-			return float64(*e.PublicPort) == *in.PublicPort
-		})
+		keep := slices.DeleteFunc(slices.Clone(node.Endpoints), func(e domain.Endpoint) bool { return all || e.Key() == target.Key() })
 		if len(keep) == len(node.Endpoints) {
 			return nil
 		}
@@ -175,59 +167,54 @@ func pickPublicPort(protocol domain.EndpointProtocol, port int, requested *float
 	if err != nil {
 		return 0, err
 	}
-	if public == nil {
-		if i := slices.IndexFunc(own, func(e domain.Endpoint) bool { return e.Protocol == protocol && e.Port == port }); i >= 0 {
-			return *own[i].PublicPort, nil
+	if public != nil {
+		if protocol == domain.ProtocolTCP && domain.IsHTTPPort(*public) {
+			return 0, domain.Invalid("80 and 443 serve HTTP; pick another public port")
 		}
-		taken := map[int]bool{}
 		for _, o := range others {
-			if o.Protocol == protocol {
-				taken[o.PublicPort] = true
+			if o.Protocol == protocol && o.PublicPort == *public {
+				return 0, domain.Conflict("Port %d/%s is already used by %s", *public, protocol, o.Owner)
 			}
 		}
-		for _, e := range own {
-			if e.Protocol == protocol {
-				taken[*e.PublicPort] = true
-			}
-		}
-		if protocol == domain.ProtocolTCP {
-			taken[80], taken[443] = true, true
-		}
-		return domain.AllocatePublicPort(port, taken)
+		return *public, nil
 	}
-	if protocol == domain.ProtocolTCP && domain.IsHTTPPort(*public) {
-		return 0, domain.Invalid("80 and 443 serve HTTP; pick another public port")
+	taken := map[int]bool{}
+	if protocol == domain.ProtocolTCP {
+		taken[80], taken[443] = true, true
 	}
 	for _, o := range others {
-		if o.Protocol == protocol && o.PublicPort == *public {
-			return 0, domain.Conflict("Port %d/%s is already used by %s", *public, protocol, o.Owner)
+		if o.Protocol == protocol {
+			taken[o.PublicPort] = true
 		}
 	}
-	return *public, nil
+	for _, e := range own {
+		if e.Protocol != protocol || e.PublicPort == nil {
+			continue
+		}
+		if e.Port == port {
+			return *e.PublicPort, nil
+		}
+		taken[*e.PublicPort] = true
+	}
+	return domain.AllocatePublicPort(port, taken)
 }
 
 func followPort(tx Tx, ch *Changes, scope NodeScope, port int, now int64) (bool, error) {
-	node, err := tx.Node(scope.Node.ID)
-	if errors.Is(err, ErrNoRow) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
+	eps := scope.Node.Endpoints
 	moved := false
-	for i, e := range node.Endpoints {
+	for i, e := range eps {
 		if !e.PinnedPort && e.Port != port {
-			node.Endpoints[i].Port = port
-			node.Endpoints[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: now}
+			eps[i].Port = port
+			eps[i].Status = domain.EndpointStatus{State: domain.EndpointStarting, At: now}
 			moved = true
 		}
 	}
 	if !moved {
 		return false, nil
 	}
-	if err := tx.ReplaceEndpoints(node.ID, node.Endpoints); err != nil {
+	if err := tx.ReplaceEndpoints(scope.Node.ID, eps); err != nil {
 		return false, err
 	}
-	ch.Environment(scope.Org, node.EnvironmentID)
+	ch.Environment(scope.Org, scope.Environment.ID)
 	return true, nil
 }

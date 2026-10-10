@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/app"
@@ -43,9 +44,6 @@ func TestCanvasTx(t *testing.T) {
 		if err := tx.CanvasUpdateVariable(domain.Variable{ID: "vM", Key: "A"}); !errors.Is(err, app.ErrCanvasTaken) {
 			t.Errorf("rename onto a taken key: %v", err)
 		}
-		if err := tx.CanvasUpdateVariable(domain.Variable{ID: "missing", Key: "Q"}); !errors.Is(err, app.ErrNoRow) {
-			t.Errorf("update missing: %v", err)
-		}
 		if err := tx.CanvasInsertVariable(domain.Variable{ID: "vb", NodeID: "b", Key: "B", Value: "b"}); err != nil {
 			return err
 		}
@@ -53,12 +51,22 @@ func TestCanvasTx(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(vs) != 3 || vs[0].Key != "ZZ" || !vs[0].Secret || vs[1].Key != "A" || vs[2].Key != "M" {
+		want := []domain.Variable{
+			{ID: "vZ", NodeID: "a", Key: "ZZ", Value: "z", Secret: true},
+			{ID: "vA", NodeID: "a", Key: "A", Value: "A"},
+			{ID: "vM", NodeID: "a", Key: "M", Value: "M"},
+		}
+		if !reflect.DeepEqual(vs, want) {
 			t.Errorf("variables %+v", vs)
 		}
 		all, err := tx.CanvasEnvironmentVariables(env)
 		if err != nil || len(all) != 4 {
 			t.Errorf("environment variables %+v %v", all, err)
+		}
+		for _, wantDeleted := range []bool{true, false} {
+			if deleted, err := tx.CanvasDeleteVariable("a", "M"); deleted != wantDeleted || err != nil {
+				t.Errorf("delete M: %v %v, want %v", deleted, err, wantDeleted)
+			}
 		}
 		if err := tx.CanvasMarkDirty("b"); err != nil {
 			return err
@@ -78,9 +86,6 @@ func TestCanvasTx(t *testing.T) {
 		}
 		if err := tx.CanvasInsertProject(domain.Project{ID: "p2", OrganizationID: "org", Name: "Acme", Slug: "acme"}); !errors.Is(err, app.ErrCanvasTaken) {
 			t.Errorf("duplicate slug: %v", err)
-		}
-		if n, err := tx.CanvasClusterServers(); n != 0 || err != nil {
-			t.Errorf("no cluster row: %d %v", n, err)
 		}
 		return nil
 	})

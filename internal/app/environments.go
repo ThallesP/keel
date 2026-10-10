@@ -33,7 +33,7 @@ func (a *App) EnvironmentSummaryOf(ctx context.Context, actor domain.Actor, envi
 			}
 			out.Counts[domain.DeriveStatus(n)]++
 		}
-		out.Servers, err = tx.CanvasClusterServers()
+		out.Servers, err = tx.ClusterServers()
 		return err
 	})
 	return out, err

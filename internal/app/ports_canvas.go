@@ -13,8 +13,6 @@ type CanvasTx interface {
 	CanvasEnvironments(projectID string) ([]domain.Environment, error)
 	CanvasInsertEnvironment(e domain.Environment) error
 
-	CanvasClusterServers() (int, error)
-
 	CanvasInsertNode(n domain.Node) error
 	CanvasUpdateNode(n domain.Node) error
 	CanvasMarkDirty(nodeID string) error
@@ -23,7 +21,7 @@ type CanvasTx interface {
 	CanvasEnvironmentVariables(environmentID string) ([]domain.Variable, error)
 	CanvasInsertVariable(v domain.Variable) error
 	CanvasUpdateVariable(v domain.Variable) error
-	CanvasDeleteVariable(id string) error
+	CanvasDeleteVariable(nodeID, key string) (bool, error)
 	CanvasDeleteNodeVariables(nodeID string) error
 }
 

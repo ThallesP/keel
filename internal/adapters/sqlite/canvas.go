@@ -1,8 +1,11 @@
 package sqlite
 
 import (
+	"errors"
 	"fmt"
-	"strings"
+
+	modernc "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
@@ -10,7 +13,8 @@ import (
 )
 
 func canvasTaken(err error) error {
-	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
+	var sqliteErr *modernc.Error
+	if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE {
 		return fmt.Errorf("%w: %v", app.ErrCanvasTaken, err)
 	}
 	return err
@@ -68,14 +72,6 @@ func (t *tx) CanvasInsertEnvironment(e domain.Environment) error {
 	})
 }
 
-func (t *tx) CanvasClusterServers() (int, error) {
-	rows, err := t.q.CanvasGetClusterServers(t.ctx)
-	if err != nil || len(rows) == 0 {
-		return 0, err
-	}
-	return int(rows[0]), nil
-}
-
 func (t *tx) CanvasInsertNode(n domain.Node) error { return canvasTaken(t.InsertNode(n)) }
 
 func (t *tx) CanvasUpdateNode(n domain.Node) error { return canvasTaken(t.UpdateNode(n)) }
@@ -105,19 +101,15 @@ func (t *tx) CanvasInsertVariable(v domain.Variable) error {
 }
 
 func (t *tx) CanvasUpdateVariable(v domain.Variable) error {
-	n, err := t.q.CanvasUpdateVariable(t.ctx, sqlc.CanvasUpdateVariableParams{
+	return canvasTaken(t.q.CanvasUpdateVariable(t.ctx, sqlc.CanvasUpdateVariableParams{
 		ID: v.ID, Key: v.Key, Value: v.Value, Secret: b2i(v.Secret),
-	})
-	if err != nil {
-		return canvasTaken(err)
-	}
-	if n == 0 {
-		return app.ErrNoRow
-	}
-	return nil
+	}))
 }
 
-func (t *tx) CanvasDeleteVariable(id string) error { return t.q.CanvasDeleteVariable(t.ctx, id) }
+func (t *tx) CanvasDeleteVariable(nodeID, key string) (bool, error) {
+	n, err := t.q.CanvasDeleteVariable(t.ctx, sqlc.CanvasDeleteVariableParams{NodeID: nodeID, Key: key})
+	return n > 0, err
+}
 
 func (t *tx) CanvasDeleteNodeVariables(nodeID string) error {
 	return t.q.CanvasDeleteNodeVariables(t.ctx, nodeID)

@@ -1,4 +1,4 @@
--- Canvas area: projects, environments, variables, the cluster row it reads.
+-- Canvas area: projects, environments, variables.
 -- Creation order is rowid order (insertion order; an UPDATE keeps the rowid).
 
 -- name: CanvasListProjects :many
@@ -16,9 +16,6 @@ SELECT * FROM environments WHERE project_id = ? ORDER BY rowid;
 -- name: CanvasInsertEnvironment :exec
 INSERT INTO environments (id, project_id, name, is_production, created_at) VALUES (?, ?, ?, ?, ?);
 
--- name: CanvasGetClusterServers :many
-SELECT servers FROM cluster WHERE id = 1;
-
 -- name: CanvasMarkDirty :exec
 UPDATE nodes SET dirty = 1 WHERE id = ?;
 
@@ -32,11 +29,11 @@ WHERE n.environment_id = ? ORDER BY v.rowid;
 -- name: CanvasInsertVariable :exec
 INSERT INTO variables (id, node_id, key, value, secret) VALUES (?, ?, ?, ?, ?);
 
--- name: CanvasUpdateVariable :execrows
+-- name: CanvasUpdateVariable :exec
 UPDATE variables SET key = ?2, value = ?3, secret = ?4 WHERE id = ?1;
 
--- name: CanvasDeleteVariable :exec
-DELETE FROM variables WHERE id = ?;
+-- name: CanvasDeleteVariable :execrows
+DELETE FROM variables WHERE node_id = ? AND key = ?;
 
 -- name: CanvasDeleteNodeVariables :exec
 DELETE FROM variables WHERE node_id = ?;

@@ -74,7 +74,6 @@ func nodeOf(r sqlc.Node) domain.Node {
 			State:      domain.ObservedState(str(r.ObservedState)),
 			Error:      str(r.ObservedError),
 			At:         *r.ObservedAt,
-			NodeIDs:    []string{},
 		}
 		if r.ObservedNodeIds != nil {
 			_ = json.Unmarshal([]byte(*r.ObservedNodeIds), &o.NodeIDs)
@@ -176,11 +175,7 @@ func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
 		p.DesiredTracing = b2i(d.Tracing)
 	}
 	if o := n.Observed; o != nil {
-		ids := o.NodeIDs
-		if ids == nil {
-			ids = []string{}
-		}
-		b, _ := json.Marshal(ids)
+		b, _ := json.Marshal(o.NodeIDs)
 		p.ObservedRevision, p.ObservedRunning, p.ObservedAt, p.ObservedState = new(int64(o.Revision)), new(int64(o.Running)), new(o.At), new(string(o.State))
 		p.ObservedCompleted = ptrInt64(o.Completed)
 		p.ObservedFinishedAt = o.FinishedAt

@@ -1,7 +1,7 @@
 -- Shared reads every area uses. Area files are named queries/<area>.sql and prefix their query
--- ASCII only in this directory: sqlc miscounts offsets after multi-byte characters.
 -- names with the area (AuthGetUser, CanvasInsertNode, DeployListRunning, ...) so that sqlc's one
 -- generated package never sees a duplicate.
+-- ASCII only in this directory: sqlc miscounts offsets after multi-byte characters.
 
 -- name: CoreGetProject :one
 SELECT * FROM projects WHERE id = ?;

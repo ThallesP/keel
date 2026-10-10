@@ -58,22 +58,23 @@ func TestCanvasReferenceable(t *testing.T) {
 	web := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "web"})
 	k.setVar(web, "HOST", "override")
 	k.setVar(web, "A", "1")
+	k.exec(`UPDATE nodes SET desired_image = NULL WHERE id = ?`, k.create(env, app.CreateNodeInput{Type: domain.NodeCache}))
 
 	ref, err := k.app.ReferenceableVariables(k.ctx, m, api)
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := ref.Sources
-	if len(src) != 2 || src[0].NodeID != redis || src[1].NodeID != web || src[0].Image != "redis:7" || src[0].Type != domain.NodeCache {
-		t.Fatalf("sources %+v", src)
+	want := []app.ReferenceSource{
+		{NodeID: redis, Name: "redis", Type: domain.NodeCache, Image: "redis:7", Keys: []app.ReferenceKey{
+			{Key: "REDIS_URL", As: "REDIS_URL", Provided: true}, {Key: "HOST", As: "REDIS_HOST", Provided: true},
+			{Key: "PORT", As: "REDIS_PORT", Provided: true}, {Key: "REDIS_PASSWORD", As: "REDIS_PASSWORD", Secret: true},
+		}},
+		{NodeID: web, Name: "web", Type: domain.NodeService, Image: "nginx:alpine", Keys: []app.ReferenceKey{
+			{Key: "URL", As: "WEB_URL", Provided: true}, {Key: "PORT", As: "WEB_PORT", Provided: true}, {Key: "HOST", As: "HOST"}, {Key: "A", As: "A"},
+		}},
 	}
-	wantRedis := []app.ReferenceKey{{Key: "REDIS_URL", As: "REDIS_URL", Provided: true}, {Key: "HOST", As: "REDIS_HOST", Provided: true}, {Key: "PORT", As: "REDIS_PORT", Provided: true}, {Key: "REDIS_PASSWORD", As: "REDIS_PASSWORD", Secret: true}}
-	if !reflect.DeepEqual(src[0].Keys, wantRedis) {
-		t.Errorf("redis keys %+v (REDIS_URL reads as not secret: credentials are never read here)", src[0].Keys)
-	}
-	wantWeb := []app.ReferenceKey{{Key: "URL", As: "WEB_URL", Provided: true}, {Key: "PORT", As: "WEB_PORT", Provided: true}, {Key: "HOST", As: "HOST"}, {Key: "A", As: "A"}}
-	if !reflect.DeepEqual(src[1].Keys, wantWeb) {
-		t.Errorf("web keys %+v (an own HOST shadows the provided one)", src[1].Keys)
+	if !reflect.DeepEqual(ref.Sources, want) {
+		t.Errorf("sources\n got %+v\nwant %+v", ref.Sources, want)
 	}
 	if ref, _ := k.app.ReferenceableVariables(k.ctx, canvasMember(canvasOther), api); len(ref.Sources) != 0 {
 		t.Error("foreign member sees sources")

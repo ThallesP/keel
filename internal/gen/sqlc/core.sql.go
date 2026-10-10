@@ -91,9 +91,9 @@ SELECT id, organization_id, name, slug, created_at FROM projects WHERE id = ?
 `
 
 // Shared reads every area uses. Area files are named queries/<area>.sql and prefix their query
-// ASCII only in this directory: sqlc miscounts offsets after multi-byte characters.
 // names with the area (AuthGetUser, CanvasInsertNode, DeployListRunning, ...) so that sqlc's one
 // generated package never sees a duplicate.
+// ASCII only in this directory: sqlc miscounts offsets after multi-byte characters.
 func (q *Queries) CoreGetProject(ctx context.Context, id string) (Project, error) {
 	row := q.db.QueryRowContext(ctx, coreGetProject, id)
 	var i Project

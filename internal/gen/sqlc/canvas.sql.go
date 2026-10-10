@@ -18,40 +18,21 @@ func (q *Queries) CanvasDeleteNodeVariables(ctx context.Context, nodeID string) 
 	return err
 }
 
-const canvasDeleteVariable = `-- name: CanvasDeleteVariable :exec
-DELETE FROM variables WHERE id = ?
+const canvasDeleteVariable = `-- name: CanvasDeleteVariable :execrows
+DELETE FROM variables WHERE node_id = ? AND key = ?
 `
 
-func (q *Queries) CanvasDeleteVariable(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, canvasDeleteVariable, id)
-	return err
+type CanvasDeleteVariableParams struct {
+	NodeID string
+	Key    string
 }
 
-const canvasGetClusterServers = `-- name: CanvasGetClusterServers :many
-SELECT servers FROM cluster WHERE id = 1
-`
-
-func (q *Queries) CanvasGetClusterServers(ctx context.Context) ([]int64, error) {
-	rows, err := q.db.QueryContext(ctx, canvasGetClusterServers)
+func (q *Queries) CanvasDeleteVariable(ctx context.Context, arg CanvasDeleteVariableParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, canvasDeleteVariable, arg.NodeID, arg.Key)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
-	items := []int64{}
-	for rows.Next() {
-		var servers int64
-		if err := rows.Scan(&servers); err != nil {
-			return nil, err
-		}
-		items = append(items, servers)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return result.RowsAffected()
 }
 
 const canvasGetProjectBySlug = `-- name: CanvasGetProjectBySlug :one
@@ -217,7 +198,7 @@ const canvasListProjects = `-- name: CanvasListProjects :many
 SELECT id, organization_id, name, slug, created_at FROM projects WHERE organization_id = ? ORDER BY rowid
 `
 
-// Canvas area: projects, environments, variables, the cluster row it reads.
+// Canvas area: projects, environments, variables.
 // Creation order is rowid order (insertion order; an UPDATE keeps the rowid).
 func (q *Queries) CanvasListProjects(ctx context.Context, organizationID string) ([]Project, error) {
 	rows, err := q.db.QueryContext(ctx, canvasListProjects, organizationID)
@@ -290,7 +271,7 @@ func (q *Queries) CanvasMarkDirty(ctx context.Context, id string) error {
 	return err
 }
 
-const canvasUpdateVariable = `-- name: CanvasUpdateVariable :execrows
+const canvasUpdateVariable = `-- name: CanvasUpdateVariable :exec
 UPDATE variables SET key = ?2, value = ?3, secret = ?4 WHERE id = ?1
 `
 
@@ -301,15 +282,12 @@ type CanvasUpdateVariableParams struct {
 	Secret int64
 }
 
-func (q *Queries) CanvasUpdateVariable(ctx context.Context, arg CanvasUpdateVariableParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, canvasUpdateVariable,
+func (q *Queries) CanvasUpdateVariable(ctx context.Context, arg CanvasUpdateVariableParams) error {
+	_, err := q.db.ExecContext(ctx, canvasUpdateVariable,
 		arg.ID,
 		arg.Key,
 		arg.Value,
 		arg.Secret,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return err
 }

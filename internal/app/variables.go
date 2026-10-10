@@ -111,7 +111,7 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 			}
 		}
 		for _, n := range nodes {
-			if n.ID == nodeID || !n.Type.Deployable() {
+			if n.ID == nodeID || !n.Type.Deployable() || n.Desired == nil {
 				continue
 			}
 			own := r.Own(n.ID)
@@ -162,10 +162,6 @@ func (a *App) SetVariable(ctx context.Context, actor domain.Actor, nodeID string
 		if err != nil {
 			return err
 		}
-		renamed := previous != in.Key
-		if renamed && slices.ContainsFunc(rows, func(v domain.Variable) bool { return v.Key == in.Key }) {
-			return canvasKeyExists(in.Key)
-		}
 		row := domain.Variable{ID: domain.NewID(), NodeID: nodeID, Key: in.Key, Value: in.Value, Secret: in.Secret}
 		save := tx.CanvasInsertVariable
 		i := slices.IndexFunc(rows, func(v domain.Variable) bool { return v.Key == previous })
@@ -174,13 +170,13 @@ func (a *App) SetVariable(ctx context.Context, actor domain.Actor, nodeID string
 		}
 		err = save(row)
 		if errors.Is(err, ErrCanvasTaken) {
-			return canvasKeyExists(in.Key)
+			return domain.E(domain.CodeNameTaken, "%s already exists", in.Key)
 		}
 		if err != nil {
 			return err
 		}
 		node := scope.Node
-		if i >= 0 && renamed {
+		if i >= 0 && previous != in.Key {
 			err := canvasRewriteReferences(tx, node, func(k string) (string, string) {
 				if k == previous {
 					return node.Name, in.Key
@@ -195,25 +191,14 @@ func (a *App) SetVariable(ctx context.Context, actor domain.Actor, nodeID string
 	})
 }
 
-func canvasKeyExists(key string) error {
-	return domain.E(domain.CodeNameTaken, "%s already exists", key)
-}
-
 func (a *App) RemoveVariable(ctx context.Context, actor domain.Actor, nodeID, key string) error {
 	return a.write(ctx, func(tx Tx, ch *Changes) error {
 		scope, err := requireNode(tx, actor, nodeID)
 		if err != nil {
 			return err
 		}
-		rows, err := tx.CanvasVariables(nodeID)
-		if err != nil {
-			return err
-		}
-		i := slices.IndexFunc(rows, func(v domain.Variable) bool { return v.Key == key })
-		if i < 0 {
-			return nil
-		}
-		if err := tx.CanvasDeleteVariable(rows[i].ID); err != nil {
+		deleted, err := tx.CanvasDeleteVariable(nodeID, key)
+		if err != nil || !deleted {
 			return err
 		}
 		return canvasVariablesChanged(tx, ch, scope)

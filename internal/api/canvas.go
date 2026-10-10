@@ -5,8 +5,6 @@ import "github.com/ThallesP/keel/internal/domain"
 // Canvas area wire types: projects, environments, nodes, variables (docs/go/spec/web-data.md §5.1,
 // §5.2, §5.4, §5.6; docs/go/spec/projects.md §4.3, §9.1–9.4).
 
-// ── Projects ──────────────────────────────────────────────────────────────────────────────
-
 type ProjectEnvironment struct {
 	ID           string `json:"id"`
 	Name         string `json:"name" example:"production"`
@@ -52,8 +50,6 @@ type ProjectBySlug struct {
 	Project *ProjectHome `json:"project" doc:"null when missing or not in the caller's organization"`
 }
 
-// ── Environments ──────────────────────────────────────────────────────────────────────────
-
 // EnvironmentSummary: the Ship button's and status bar's numbers.
 type EnvironmentSummary struct {
 	_              struct{}       `nullable:"true"`
@@ -65,8 +61,6 @@ type EnvironmentSummary struct {
 type EnvironmentSummaryResult struct {
 	Summary *EnvironmentSummary `json:"summary" doc:"null when the environment is missing or not the caller's"`
 }
-
-// ── Nodes ─────────────────────────────────────────────────────────────────────────────────
 
 type Position struct {
 	X float64 `json:"x"`
@@ -142,30 +136,27 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	switch {
 	case n.ApplyError != "":
 		v.Error = n.ApplyError
-	case status == domain.StatusError && n.Observed != nil:
+	case status == domain.StatusError:
 		v.Error = n.Observed.Error
 	}
 	switch status {
 	case domain.StatusDeploying:
 		if n.ShippedAt != nil && *n.ShippedAt != 0 {
-			step := "starting"
-			revision := 0
-			if n.Desired != nil {
-				revision = n.Desired.Revision
-			}
-			if n.Observed == nil || n.Observed.Revision < revision {
+			var step string
+			switch {
+			case n.Observed == nil || n.Observed.Revision < n.Desired.Revision:
 				step = "pulling image"
-			} else if n.Observed.State == domain.ObservedUpdating {
+			case n.Observed.State == domain.ObservedUpdating:
 				step = "rolling out"
+			default:
+				step = "starting"
 			}
 			v.Deploy = &NodeDeploy{Step: step, StartedAt: *n.ShippedAt}
 		}
 	case domain.StatusStopped, domain.StatusStopping:
 		v.StoppedAt = n.ShippedAt
 	case domain.StatusDone:
-		if n.Observed != nil {
-			v.FinishedAt = n.Observed.FinishedAt
-		}
+		v.FinishedAt = n.Observed.FinishedAt
 	}
 	return v
 }
@@ -212,8 +203,6 @@ type StoppedNode struct {
 	DeploymentID *string `json:"deploymentId" doc:"null when it already was at 0 replicas"`
 }
 
-// ── Variables ─────────────────────────────────────────────────────────────────────────────
-
 // VariableRef is a reference inside a value. node absent = the variable's own node; nodeId absent
 // = the name resolves to nothing.
 type VariableRef struct {
@@ -232,8 +221,7 @@ type VariablePart struct {
 // VariablePartOf converts a domain part.
 func VariablePartOf(p domain.RefPart) VariablePart {
 	if p.Ref == nil {
-		t := p.Text
-		return VariablePart{Text: &t}
+		return VariablePart{Text: &p.Text}
 	}
 	return VariablePart{Ref: &VariableRef{Node: p.Ref.Node, NodeID: p.Ref.NodeID, Key: p.Ref.Key, Missing: p.Ref.Missing}}
 }

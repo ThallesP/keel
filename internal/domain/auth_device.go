@@ -47,7 +47,7 @@ type DeviceCode struct {
 	CreatedAt    int64
 }
 
-// DeviceExpired: better-auth's `expiresAt < now`.
+// Expired: better-auth's `expiresAt < now`.
 func (d DeviceCode) Expired(now int64) bool { return d.ExpiresAt < now }
 
 const deviceAlnum = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

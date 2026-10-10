@@ -1,5 +1,7 @@
 package domain
 
+import "strconv"
+
 // EndpointProtocol: http = https://<domain> on the control plane's 80/443; tcp/udp =
 // <public IP>:<publicPort>. Both → svc-<id>:<port>. See docs/networking.md.
 type EndpointProtocol string
@@ -48,7 +50,7 @@ func (e Endpoint) Key() string {
 	if e.PublicPort != nil {
 		port = *e.PublicPort
 	}
-	return string(e.Protocol) + ":" + itoa(port)
+	return string(e.Protocol) + ":" + strconv.Itoa(port)
 }
 
 // Address is how the endpoint is reached: https://<domain>, or <ip>:<publicPort> (the literal
@@ -64,27 +66,5 @@ func (e Endpoint) Address(publicIP string) string {
 	if e.PublicPort != nil {
 		port = *e.PublicPort
 	}
-	return publicIP + ":" + itoa(port)
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var b [20]byte
-	n := len(b)
-	for i > 0 {
-		n--
-		b[n] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		n--
-		b[n] = '-'
-	}
-	return string(b[n:])
+	return publicIP + ":" + strconv.Itoa(port)
 }

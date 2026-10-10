@@ -56,9 +56,6 @@ const OTLPKeyPrefix = "keel_otlp_"
 // MaskOTLPKey is how tracing views show an ingest key: keel_otlp_…<last 4>, or keel_otlp_… when
 // the environment has none yet.
 func MaskOTLPKey(key string) string {
-	if key == "" {
-		return OTLPKeyPrefix + "…"
-	}
 	return OTLPKeyPrefix + "…" + obsLastChars(key, 4)
 }
 
@@ -70,8 +67,6 @@ func obsLastChars(s string, n int) string {
 	}
 	return string(r[len(r)-n:])
 }
-
-// ── Time ranges (convex/timeRange.ts) ────────────────────────────────────────────────────────
 
 // TimeRange is the Observability page's range.
 type TimeRange string
@@ -124,8 +119,6 @@ func rangeFloorDiv(a, b int64) int64 {
 	return q
 }
 
-// ── Log read model (logProviders/types.ts) ───────────────────────────────────────────────────
-
 // Log sources.
 const (
 	LogSourceDocker = "docker"
@@ -165,8 +158,6 @@ type EnvironmentLogs struct {
 	Source string               `json:"source" enum:"docker,axiom"`
 	Lines  []EnvironmentLogLine `json:"lines"`
 }
-
-// ── Trace read model (traceProviders/types.ts) ───────────────────────────────────────────────
 
 type Attribute struct {
 	Key   string `json:"key"`
@@ -243,8 +234,6 @@ type Trace struct {
 	Spans   []Span               `json:"spans"`
 	Logs    []EnvironmentLogLine `json:"logs"`
 }
-
-// ── Tracing switch ───────────────────────────────────────────────────────────────────────────
 
 // Traces store states of an organization: no sink, a sink from before traces, or yes.
 const (

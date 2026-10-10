@@ -16,14 +16,6 @@ func (t NodeType) Deployable() bool {
 	return t == NodeService || t == NodeDatabase || t == NodeCache
 }
 
-func (t NodeType) Valid() bool {
-	switch t {
-	case NodeService, NodeDatabase, NodeCache, NodeVolume, NodeGroup:
-		return true
-	}
-	return false
-}
-
 type Position struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`

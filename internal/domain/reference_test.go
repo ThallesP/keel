@@ -96,15 +96,13 @@ func TestCanvasReferrers(t *testing.T) {
 	}
 }
 
-func canvasPort(p int) *int { return &p }
-
 func TestCanvasResolver(t *testing.T) {
-	pg := Node{ID: "pg1", Name: "pg", Type: NodeDatabase, Desired: &Desired{Image: "postgres:16", Port: canvasPort(5432)}}
+	pg := Node{ID: "pg1", Name: "pg", Type: NodeDatabase, Desired: &Desired{Image: "postgres:16", Port: iptr(5432)}}
 	my := Node{ID: "my1", Name: "my", Type: NodeDatabase, Desired: &Desired{Image: "mysql:8"}}
-	mongo := Node{ID: "mo1", Name: "mongo", Type: NodeDatabase, Desired: &Desired{Image: "mongo:7", Port: canvasPort(27018)}}
-	redis := Node{ID: "rd1", Name: "redis", Type: NodeCache, Desired: &Desired{Image: "redis:7", Port: canvasPort(6379)}}
+	mongo := Node{ID: "mo1", Name: "mongo", Type: NodeDatabase, Desired: &Desired{Image: "mongo:7", Port: iptr(27018)}}
+	redis := Node{ID: "rd1", Name: "redis", Type: NodeCache, Desired: &Desired{Image: "redis:7", Port: iptr(6379)}}
 	bare := Node{ID: "rd2", Name: "bare", Type: NodeCache, Desired: &Desired{Image: "valkey:8"}}
-	api := Node{ID: "api1", Name: "api", Type: NodeService, Desired: &Desired{Image: "nginx", Port: canvasPort(8080)}}
+	api := Node{ID: "api1", Name: "api", Type: NodeService, Desired: &Desired{Image: "nginx", Port: iptr(8080)}}
 	noport := Node{ID: "np1", Name: "noport", Type: NodeService, Desired: &Desired{Image: "worker"}}
 	vol := Node{ID: "vol1", Name: "data", Type: NodeVolume}
 	nodes := []Node{pg, my, mongo, redis, bare, api, noport, vol}
@@ -203,9 +201,9 @@ func TestCanvasProvidedKeysOrder(t *testing.T) {
 		n    Node
 		want []string
 	}{
-		{Node{ID: "1", Type: NodeDatabase, Desired: &Desired{Image: "postgres:16", Port: canvasPort(5432)}}, []string{"DATABASE_URL", "HOST", "PORT"}},
+		{Node{ID: "1", Type: NodeDatabase, Desired: &Desired{Image: "postgres:16", Port: iptr(5432)}}, []string{"DATABASE_URL", "HOST", "PORT"}},
 		{Node{ID: "2", Type: NodeCache, Desired: &Desired{Image: "redis:7"}}, []string{"REDIS_URL", "HOST"}},
-		{Node{ID: "3", Type: NodeService, Desired: &Desired{Image: "nginx", Port: canvasPort(80)}}, []string{"URL", "HOST", "PORT"}},
+		{Node{ID: "3", Type: NodeService, Desired: &Desired{Image: "nginx", Port: iptr(80)}}, []string{"URL", "HOST", "PORT"}},
 		{Node{ID: "4", Type: NodeService, Desired: &Desired{Image: "nginx"}}, []string{"HOST"}},
 		{Node{ID: "5", Type: NodeGroup}, nil},
 	}

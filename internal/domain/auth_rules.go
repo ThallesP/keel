@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
-	"unicode/utf16"
 )
 
 // Account rules ported from better-auth 1.6.17 and convex/auth.ts (docs/go/spec/auth-orgs.md).
@@ -36,7 +35,6 @@ const (
 // zod 4.6.4's z.email() pattern, which Better Auth validates emails with.
 var userEmailRE = regexp.MustCompile(`^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$`)
 
-// ValidUserEmail: the address Better Auth would accept.
 // ValidUserEmail: at most 254 characters (RFC 5321's path limit), checked before the regex.
 func ValidUserEmail(email string) bool {
 	return len(email) <= 254 && userEmailRE.MatchString(email)
@@ -48,12 +46,9 @@ func NormalizeUserEmail(email string) string { return strings.ToLower(strings.Tr
 // SameUserEmail: convex/auth.ts sameEmail (trimmed, case-insensitive).
 func SameUserEmail(a, b string) bool { return NormalizeUserEmail(a) == NormalizeUserEmail(b) }
 
-// authJSLength is s.length in JavaScript: UTF-16 code units.
-func authJSLength(s string) int { return len(utf16.Encode([]rune(s))) }
-
 // ValidPassword: Better Auth's length rule (min 8, max 128).
 func ValidPassword(password string) error {
-	n := authJSLength(password)
+	n := UTF16Len(password)
 	if n < PasswordMinLength {
 		return Invalid(MsgPasswordTooShort)
 	}
@@ -70,8 +65,7 @@ func HashSessionToken(token string) string {
 	if i := strings.IndexByte(token, '.'); i >= 0 {
 		token = token[:i]
 	}
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
+	return HashSecret(token)
 }
 
 // HashSecret is hex SHA-256 of a secret stored only as its hash (device codes).

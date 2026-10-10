@@ -81,9 +81,6 @@ func canvasImageRepo(image string) string {
 // EngineOf: `postgres:16` → postgres, `docker.io/library/mysql:8.4` → mysql, `nginx` → "". It is
 // image based, so a service running `redis:7` is Redis too (expose guard, --requirepass).
 func EngineOf(image string) Engine {
-	if image == "" {
-		return ""
-	}
 	e := Engine(canvasImageRepo(image))
 	if _, ok := Engines[e]; ok {
 		return e
@@ -194,7 +191,7 @@ func NextPosition(nodes []Node) Position {
 func PortNumber(p *float64) (*int, error) {
 	v, ok := canvasIntNumber(p, 1, 65535)
 	if !ok {
-		return nil, Invalid("Port must be 1–65535")
+		return nil, Invalid(MsgPortRange)
 	}
 	return v, nil
 }

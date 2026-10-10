@@ -5,7 +5,6 @@ package domain
 import (
 	"crypto/rand"
 	"encoding/base32"
-	"strings"
 )
 
 var idEncoding = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
@@ -25,5 +24,5 @@ func NewSecret(n int) string {
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
-	return strings.ToLower(idEncoding.EncodeToString(b))
+	return idEncoding.EncodeToString(b)
 }

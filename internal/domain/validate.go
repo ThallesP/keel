@@ -40,15 +40,7 @@ func ValidImage(image string) error {
 // ValidPort accepts nil (no port).
 func ValidPort(port *int) error {
 	if port != nil && (*port < 1 || *port > 65535) {
-		return Invalid("Port must be 1–65535")
-	}
-	return nil
-}
-
-// ValidReplicas accepts nil (unchanged).
-func ValidReplicas(replicas *int) error {
-	if replicas != nil && (*replicas < 0 || *replicas > 20) {
-		return Invalid("Replicas must be 0–20")
+		return Invalid(MsgPortRange)
 	}
 	return nil
 }

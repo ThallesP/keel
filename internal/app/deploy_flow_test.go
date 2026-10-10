@@ -492,9 +492,9 @@ func TestIngestEventsDebounce(t *testing.T) {
 
 	svcEvent := func(typ, name string) app.DockerEvent {
 		if typ == "container" {
-			return app.DockerEvent{Type: typ, Action: "start", Name: name + ".1.abc", ServiceName: name}
+			return app.DockerEvent{Type: typ, Name: name + ".1.abc", ServiceName: name}
 		}
-		return app.DockerEvent{Type: typ, Action: "update", Name: name}
+		return app.DockerEvent{Type: typ, Name: name}
 	}
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{
 		svcEvent("container", "svc-"+a.ID),
@@ -502,9 +502,9 @@ func TestIngestEventsDebounce(t *testing.T) {
 		svcEvent("container", "svc-"+b.ID),
 		svcEvent("container", "svc-unknown"),
 		svcEvent("container", "postgres"),
-		{Type: "network", Action: "connect"},
-		{Type: "node", Action: "update"},
-		{Type: "node", Action: "update"},
+		{Type: "network"},
+		{Type: "node"},
+		{Type: "node"},
 	}, false)
 	if w.jobs.count("observe:servers") != 1 || w.jobs.count("observe:"+a.ID) != 1 || w.jobs.count("observe:"+b.ID) != 1 || w.jobs.count("observe:all") != 0 {
 		t.Fatalf("jobs: %v", w.jobs.keys())
@@ -565,13 +565,13 @@ func TestObservePublishesOnlyChanges(t *testing.T) {
 
 	w.pub.reset()
 	w.swarm.ready = 2
-	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, false)
+	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node"}}, false)
 	w.jobs.run()
 	if !w.pub.has("org", "/api/environments") || !w.pub.has("org2", "/api/environments") {
 		t.Fatalf("servers: %v", w.pub.topics)
 	}
 	w.pub.reset()
-	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, false)
+	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node"}}, false)
 	w.jobs.run()
 	if len(w.pub.topics) != 0 {
 		t.Fatalf("unchanged servers published %v", w.pub.topics)

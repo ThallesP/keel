@@ -77,7 +77,7 @@ func TestDockerCallsHaveDeadlines(t *testing.T) {
 	a := w.addNode("api")
 	w.ship(app.ShipOptions{})
 	w.jobs.advance(time.Second)
-	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node", Action: "update"}}, true)
+	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node"}}, true)
 	w.jobs.run()
 	w.deleteNode(a.ID)
 	w.app.ScheduleRemoveService(a.ID)

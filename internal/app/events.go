@@ -10,7 +10,6 @@ import (
 
 type DockerEvent struct {
 	Type        string
-	Action      string
 	Name        string
 	ServiceName string
 }

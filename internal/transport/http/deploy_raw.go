@@ -40,9 +40,8 @@ func (s *Server) workerEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 type dockerEvent struct {
-	Type   string
-	Action string
-	Actor  struct {
+	Type  string
+	Actor struct {
 		Attributes struct {
 			Name        string `json:"name"`
 			ServiceName string `json:"com.docker.swarm.service.name"`
@@ -57,10 +56,10 @@ func parseWorkerEvents(body []byte) ([]app.DockerEvent, error) {
 	}
 	events := make([]app.DockerEvent, len(docker))
 	for i, e := range docker {
-		if e.Type == "" || e.Action == "" {
+		if e.Type == "" {
 			return nil, errors.New("not a Docker event")
 		}
-		events[i] = app.DockerEvent{Type: e.Type, Action: e.Action, Name: e.Actor.Attributes.Name, ServiceName: e.Actor.Attributes.ServiceName}
+		events[i] = app.DockerEvent{Type: e.Type, Name: e.Actor.Attributes.Name, ServiceName: e.Actor.Attributes.ServiceName}
 	}
 	return events, nil
 }

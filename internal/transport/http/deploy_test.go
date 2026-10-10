@@ -71,7 +71,7 @@ func TestParseWorkerEvents(t *testing.T) {
 	}{
 		{"empty array", " [] ", nil},
 		{"array", `[{"Type":"container","Action":"start","Actor":{"ID":"c1","Attributes":{"name":"svc-n.1.x","com.docker.swarm.service.name":"svc-n"}},"time":1700000000},{"Type":"node","Action":"update"}]`,
-			[]app.DockerEvent{{Type: "container", Action: "start", Name: "svc-n.1.x", ServiceName: "svc-n"}, {Type: "node", Action: "update"}}},
+			[]app.DockerEvent{{Type: "container", Name: "svc-n.1.x", ServiceName: "svc-n"}, {Type: "node"}}},
 	}
 	for _, c := range cases {
 		got, err := parseWorkerEvents([]byte(c.body))
@@ -84,7 +84,7 @@ func TestParseWorkerEvents(t *testing.T) {
 		"one object":          `{"Type":"node","Action":"update"}`,
 		"ndjson":              "{\"Type\":\"node\",\"Action\":\"create\"}\n{\"Type\":\"node\",\"Action\":\"update\"}\n",
 		"array in a document": `[[1]]`,
-		"missing Action":      `[{"Type":"node"}]`,
+		"missing Type":        `[{"Action":"update"}]`,
 		"not a string":        `[{"Type":5,"Action":"update"}]`,
 		"broken array":        "[{",
 	} {
@@ -116,7 +116,7 @@ func TestWorkerEventsRoute(t *testing.T) {
 		{"scheme is case-sensitive", "bearer s3cret", "[]", 401, "unauthorized"},
 		{"token is trimmed", "Bearer  s3cret ", "[]", 200, "ok"},
 		{"bad json", "Bearer s3cret", "{", 400, "bad json"},
-		{"not events", "Bearer s3cret", `[{"Type":"x"}]`, 400, "bad json"},
+		{"not events", "Bearer s3cret", `[{"Action":"start"}]`, 400, "bad json"},
 		{"limit is inclusive", "Bearer s3cret", "[" + strings.Repeat(" ", workerEventsMaxBody-2) + "]", 200, "ok"},
 		{"too large", "Bearer s3cret", "[" + strings.Repeat(" ", workerEventsMaxBody-1) + "]", 413, "too large"},
 		{"counted in bytes", "Bearer s3cret", `[{"Type":"x","Action":"` + strings.Repeat("é", workerEventsMaxBody/2) + `"}]`, 413, "too large"},

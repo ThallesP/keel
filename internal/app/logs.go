@@ -44,7 +44,7 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 		return domain.EnvironmentLogs{}, err
 	}
 	lines, err := a.axiomLines(ctx, scope.Sink, scope.ServiceIDs, linesQuery{
-		N: clampLogTail(tail), Search: truncateRunes(search, 200), From: from, To: a.axiomUntil(),
+		N: clampLogTail(tail), Search: domain.TruncateRunes(search, 200), From: from, To: a.axiomUntil(),
 	})
 	if err != nil {
 		return domain.EnvironmentLogs{}, obsInvalid(err)

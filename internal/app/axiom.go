@@ -21,17 +21,7 @@ import (
 )
 
 func CompactText(text string, maxRunes int) string {
-	return truncateRunes(strings.Join(strings.Fields(strings.ToValidUTF8(text, "\uFFFD")), " "), maxRunes)
-}
-
-func truncateRunes(s string, n int) string {
-	for i := range s {
-		if n == 0 {
-			return s[:i]
-		}
-		n--
-	}
-	return s
+	return domain.TruncateRunes(strings.Join(strings.Fields(strings.ToValidUTF8(text, "\uFFFD")), " "), maxRunes)
 }
 
 const axiomQueryWindowMs = 30 * 24 * 60 * 60_000

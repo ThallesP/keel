@@ -24,24 +24,6 @@ func TestClampTail(t *testing.T) {
 	}
 }
 
-func TestTruncateRunes(t *testing.T) {
-	for _, c := range []struct {
-		in   string
-		n    int
-		want string
-	}{
-		{"abc", 200, "abc"},
-		{"abc", 2, "ab"},
-		{"é𝄞x", 2, "é𝄞"},
-		{"", 3, ""},
-		{"abc", 0, ""},
-	} {
-		if got := truncateRunes(c.in, c.n); got != c.want {
-			t.Errorf("truncateRunes(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
-		}
-	}
-}
-
 func TestCompactText(t *testing.T) {
 	for in, want := range map[string]string{
 		"  {\"message\":\n\t\"forbidden\"}  ":               `{"message": "forbidden"}`,

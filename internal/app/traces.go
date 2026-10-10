@@ -82,7 +82,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 		ids = []string{nodeID}
 	}
 	from, to := spec.Window(a.Now())
-	search = truncateRunes(search, 200)
+	search = domain.TruncateRunes(search, 200)
 	statsAPL := aplRoots(scope.Sink.Traces, ids, search) + " | extend failed = " + traceFailed +
 		" | summarize requests = count(), errors = countif(failed), p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)"
 

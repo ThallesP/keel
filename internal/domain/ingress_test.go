@@ -150,8 +150,7 @@ func TestCertHint(t *testing.T) {
 }
 
 func TestEndpointKeyAndAddress(t *testing.T) {
-	pub := 5432
-	tcp := Endpoint{Protocol: ProtocolTCP, Port: 5432, PublicPort: &pub}
+	tcp := Endpoint{Protocol: ProtocolTCP, Port: 5432, PublicPort: 5432}
 	web := Endpoint{Protocol: ProtocolHTTP, Port: 8080, Domain: "api-16w41g.203-0-113-7.sslip.io"}
 	if tcp.Key() != "tcp:5432" || web.Key() != "http:api-16w41g.203-0-113-7.sslip.io" {
 		t.Errorf("keys %q %q", tcp.Key(), web.Key())
@@ -165,10 +164,20 @@ func TestEndpointKeyAndAddress(t *testing.T) {
 }
 
 func TestTruncateRunes(t *testing.T) {
-	if got := TruncateRunes("héllo", 2); got != "hé" {
-		t.Errorf("TruncateRunes = %q", got)
-	}
-	if got := TruncateRunes("hi", 5); got != "hi" {
-		t.Errorf("TruncateRunes short = %q", got)
+	for _, c := range []struct {
+		in   string
+		n    int
+		want string
+	}{
+		{"abc", 200, "abc"},
+		{"abc", 2, "ab"},
+		{"héllo", 2, "hé"},
+		{"é𝄞x", 2, "é𝄞"},
+		{"", 3, ""},
+		{"abc", 0, ""},
+	} {
+		if got := TruncateRunes(c.in, c.n); got != c.want {
+			t.Errorf("TruncateRunes(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
+		}
 	}
 }

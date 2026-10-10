@@ -90,17 +90,17 @@ func RandomSecret(n int) string {
 }
 
 func SeedVariables(e Engine) []Variable {
-	row := func(key, value string, secret bool) Variable { return Variable{Key: key, Value: value, Secret: secret} }
+	user := func(key string) Variable { return Variable{Key: key, Value: "app"} }
+	password := func(key string) Variable { return Variable{Key: key, Value: RandomSecret(20), Secret: true} }
 	switch e {
 	case EnginePostgres:
-		return []Variable{row("POSTGRES_USER", "app", false), row("POSTGRES_PASSWORD", RandomSecret(20), true), row("POSTGRES_DB", "app", false)}
+		return []Variable{user("POSTGRES_USER"), password("POSTGRES_PASSWORD"), user("POSTGRES_DB")}
 	case EngineMySQL:
-		return []Variable{row("MYSQL_ROOT_PASSWORD", RandomSecret(20), true), row("MYSQL_USER", "app", false),
-			row("MYSQL_PASSWORD", RandomSecret(20), true), row("MYSQL_DATABASE", "app", false)}
+		return []Variable{password("MYSQL_ROOT_PASSWORD"), user("MYSQL_USER"), password("MYSQL_PASSWORD"), user("MYSQL_DATABASE")}
 	case EngineMongo:
-		return []Variable{row("MONGO_INITDB_ROOT_USERNAME", "app", false), row("MONGO_INITDB_ROOT_PASSWORD", RandomSecret(20), true)}
+		return []Variable{user("MONGO_INITDB_ROOT_USERNAME"), password("MONGO_INITDB_ROOT_PASSWORD")}
 	case EngineRedis:
-		return []Variable{row("REDIS_PASSWORD", RandomSecret(20), true)}
+		return []Variable{password("REDIS_PASSWORD")}
 	}
 	return nil
 }
@@ -148,19 +148,19 @@ func NextPosition(nodes []Node) Position {
 }
 
 func PortNumber(p *float64) (*int, error) {
-	return canvasIntNumber(p, 1, 65535, Invalid(MsgPortRange))
+	return canvasIntNumber(p, 1, 65535, MsgPortRange)
 }
 
 func ReplicasNumber(r *float64) (*int, error) {
-	return canvasIntNumber(r, 0, 20, Invalid("Replicas must be 0–20"))
+	return canvasIntNumber(r, 0, 20, "Replicas must be 0–20")
 }
 
-func canvasIntNumber(p *float64, lo, hi float64, invalid error) (*int, error) {
+func canvasIntNumber(p *float64, lo, hi float64, msg string) (*int, error) {
 	if p == nil {
 		return nil, nil
 	}
 	if f := *p; f != math.Trunc(f) || f < lo || f > hi {
-		return nil, invalid
+		return nil, &Error{Code: CodeInvalidInput, Message: msg}
 	}
 	return new(int(*p)), nil
 }

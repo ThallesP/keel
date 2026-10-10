@@ -33,7 +33,8 @@ func RewriteRefs(value, rowNodeID string, node Node, to func(oldKey string) (nam
 	for _, m := range FindRefs(value) {
 		b.WriteString(value[last:m.Start])
 		last = m.End
-		if !(m.Name == node.Name || m.Name == "" && rowNodeID == node.ID) {
+		pointsAtNode := m.Name == node.Name || m.Name == "" && rowNodeID == node.ID
+		if !pointsAtNode {
 			b.WriteString(value[m.Start:m.End])
 			continue
 		}
@@ -91,11 +92,12 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 		return nil
 	}
 	host := node.ServiceName()
-	hostPort := func(def int) string {
+	hostPort := func(e Engine) string {
+		port := Engines[e].Port
 		if d.Port != nil {
-			def = *d.Port
+			port = *d.Port
 		}
-		return host + ":" + strconv.Itoa(def)
+		return host + ":" + strconv.Itoa(port)
 	}
 	var out []ProvidedKey
 	switch node.Type {
@@ -103,15 +105,15 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 		var u url.URL
 		switch EngineOf(d.Image) {
 		case EngineMySQL:
-			u = url.URL{Scheme: "mysql", User: url.UserPassword(get("MYSQL_USER", "app"), get("MYSQL_PASSWORD", "")), Host: hostPort(3306), Path: "/" + get("MYSQL_DATABASE", "app")}
+			u = url.URL{Scheme: "mysql", User: url.UserPassword(get("MYSQL_USER", "app"), get("MYSQL_PASSWORD", "")), Host: hostPort(EngineMySQL), Path: "/" + get("MYSQL_DATABASE", "app")}
 		case EngineMongo:
-			u = url.URL{Scheme: "mongodb", User: url.UserPassword(get("MONGO_INITDB_ROOT_USERNAME", "app"), get("MONGO_INITDB_ROOT_PASSWORD", "")), Host: hostPort(27017)}
+			u = url.URL{Scheme: "mongodb", User: url.UserPassword(get("MONGO_INITDB_ROOT_USERNAME", "app"), get("MONGO_INITDB_ROOT_PASSWORD", "")), Host: hostPort(EngineMongo)}
 		default:
-			u = url.URL{Scheme: "postgres", User: url.UserPassword(get("POSTGRES_USER", "app"), get("POSTGRES_PASSWORD", "")), Host: hostPort(5432), Path: "/" + get("POSTGRES_DB", "app")}
+			u = url.URL{Scheme: "postgres", User: url.UserPassword(get("POSTGRES_USER", "app"), get("POSTGRES_PASSWORD", "")), Host: hostPort(EnginePostgres), Path: "/" + get("POSTGRES_DB", "app")}
 		}
 		out = append(out, ProvidedKey{"DATABASE_URL", u.String(), true})
 	case NodeCache:
-		u := url.URL{Scheme: "redis", Host: hostPort(6379)}
+		u := url.URL{Scheme: "redis", Host: hostPort(EngineRedis)}
 		pass := get("REDIS_PASSWORD", "")
 		if pass != "" {
 			u.User = url.UserPassword("default", pass)
@@ -119,7 +121,7 @@ func ProvidedKeys(node Node, get func(key, fallback string) string) []ProvidedKe
 		out = append(out, ProvidedKey{"REDIS_URL", u.String(), pass != ""})
 	case NodeService:
 		if d.Port != nil {
-			out = append(out, ProvidedKey{"URL", "http://" + hostPort(0), false})
+			out = append(out, ProvidedKey{"URL", "http://" + host + ":" + strconv.Itoa(*d.Port), false})
 		}
 	}
 	out = append(out, ProvidedKey{"HOST", host, false})

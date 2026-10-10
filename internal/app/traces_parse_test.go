@@ -1,53 +1,41 @@
 package app
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"os"
 	"reflect"
 	"testing"
+
+	"github.com/ThallesP/keel/internal/domain"
 )
 
-func loadScenarioFiles(t *testing.T) (fixture struct {
+type axiomFixture struct {
 	SpanRows []json.RawMessage `json:"spanRows"`
-	Demux    []struct {
-		Name   string  `json:"name"`
-		Raw    *string `json:"raw"`
-		Frames [][2]any
-		Tail   string `json:"tail"`
-	} `json:"demux"`
-}, golden struct {
-	Spans []json.RawMessage `json:"spans"`
-	Demux []struct {
-		Name  string          `json:"name"`
-		Lines json.RawMessage `json:"lines"`
-	} `json:"demux"`
-}) {
-	t.Helper()
-	for path, v := range map[string]any{"testdata/axiom_scenarios.json": &fixture, "testdata/axiom_scenarios.golden.json": &golden} {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := json.Unmarshal(b, v); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return fixture, golden
+	Demux    []demuxCase       `json:"demux"`
 }
 
-func obsJSONEqual(t *testing.T, got any, want json.RawMessage) bool {
+type demuxCase struct {
+	Name   string       `json:"name"`
+	Raw    string       `json:"raw"`
+	Frames []demuxFrame `json:"frames"`
+	Tail   []byte       `json:"tail"`
+}
+
+type demuxFrame struct {
+	Stream  byte   `json:"stream"`
+	Payload string `json:"payload"`
+}
+
+func readAxiomFixture(t *testing.T) axiomFixture {
 	t.Helper()
-	gb, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var g, w any
-	_ = json.Unmarshal(gb, &g)
-	_ = json.Unmarshal(want, &w)
-	return reflect.DeepEqual(g, w)
+	return ReadJSON[axiomFixture](t, "testdata/axiom_scenarios.json")
+}
+
+func dockerFrame(stream byte, payload string) []byte {
+	head := make([]byte, 8, 8+len(payload))
+	head[0] = stream
+	binary.BigEndian.PutUint32(head[4:], uint32(len(payload)))
+	return append(head, payload...)
 }
 
 func obsRow(t *testing.T, raw string) AxiomRow {
@@ -60,18 +48,26 @@ func obsRow(t *testing.T, raw string) AxiomRow {
 }
 
 func TestAxiomSpanOf(t *testing.T) {
-	fx, golden := loadScenarioFiles(t)
-	if len(fx.SpanRows) != len(golden.Spans) {
-		t.Fatalf("%d span rows, %d golden spans", len(fx.SpanRows), len(golden.Spans))
-	}
+	fx := readAxiomFixture(t)
+	spans := make([]domain.Span, len(fx.SpanRows))
 	for i, raw := range fx.SpanRows {
-		got, err := axiomSpanOf(obsRow(t, string(raw)))
+		span, err := axiomSpanOf(obsRow(t, string(raw)))
 		if err != nil {
 			t.Fatalf("span row %d: %v", i, err)
 		}
-		if !obsJSONEqual(t, got, golden.Spans[i]) {
-			gb, _ := json.MarshalIndent(got, "", " ")
-			t.Errorf("span row %d\n got: %s\nwant: %s", i, gb, golden.Spans[i])
+		spans[i] = span
+	}
+	if *UpdateGolden {
+		RewriteAxiomGolden(t, func(g *AxiomGolden) { g.Spans = spans })
+		return
+	}
+	golden := ReadAxiomGolden(t)
+	if len(spans) != len(golden.Spans) {
+		t.Fatalf("%d span rows, %d golden spans", len(spans), len(golden.Spans))
+	}
+	for i, span := range spans {
+		if !reflect.DeepEqual(span, golden.Spans[i]) {
+			t.Errorf("span row %d\n got: %+v\nwant: %+v", i, span, golden.Spans[i])
 		}
 	}
 }
@@ -85,10 +81,25 @@ func TestAxiomSpanOfRejectsForeignShapes(t *testing.T) {
 		`{"duration":"garbage"}`,
 		`{"events":{"not":"an array"}}`,
 		`{"events":["str"]}`,
+		`{"events":[[1,2]]}`,
+		`{"events":[{"attributes":[1]}]}`,
+		`{"events":[{"timestamp":""}]}`,
+		`{"kind":5}`,
+		`{"status.code":3}`,
 	} {
 		if _, err := axiomSpanOf(obsRow(t, raw)); err == nil {
 			t.Errorf("%s: no error", raw)
 		}
+	}
+	if _, err := axiomTraceSummaryOf(obsRow(t, `{"events":[{"timestamp":""}]}`)); err != nil {
+		t.Errorf("a request summary read the events: %v", err)
+	}
+	if _, err := axiomTraceSummaryOf(obsRow(t, `{"kind":5}`)); err == nil {
+		t.Error("a request summary took a number kind")
+	}
+	span, err := axiomSpanOf(obsRow(t, `{"events":[null]}`))
+	if err != nil || span.Events == nil || len(span.Events) != 0 {
+		t.Errorf("null event: %+v %v", span.Events, err)
 	}
 }
 
@@ -102,58 +113,63 @@ func TestSpanAttributes(t *testing.T) {
 		"attributesx": "not an attribute",
 		"name": "GET"
 	}`)
-	got := sortedAttributes(spanAttributes(row, "attributes"))
-	want := `[{"key":"app.id","value":"4.50"},{"key":"app.ok","value":"false"},{"key":"app.tags","value":"[\"a\",null]"},` +
-		`{"key":"http.request.method","value":"GET"},{"key":"http.response.status_code","value":"200"},{"key":"http.route","value":"/u"}]`
-	if !obsJSONEqual(t, got, json.RawMessage(want)) {
-		gb, _ := json.Marshal(got)
-		t.Errorf("attributes %s", gb)
+	want := []domain.Attribute{
+		{Key: "app.id", Value: "4.50"}, {Key: "app.ok", Value: "false"}, {Key: "app.tags", Value: `["a",null]`},
+		{Key: "http.request.method", Value: "GET"}, {Key: "http.response.status_code", Value: "200"}, {Key: "http.route", Value: "/u"},
 	}
-	if got := sortedAttributes(spanAttributes(row, "resource")); !obsJSONEqual(t, got, json.RawMessage(`[{"key":"service.name","value":"api"}]`)) {
-		t.Errorf("resource %v", got)
+	if got := sortedAttributes(spanAttributes(row, "attributes")); !reflect.DeepEqual(got, want) {
+		t.Errorf("attributes %+v", got)
 	}
-	for attributes, want := range map[string]float64{
-		`{"attributes.http.response.status_code":503}`:                                                 503,
-		`{"attributes.custom":{"http.status_code":"404"}}`:                                             404,
-		`{"attributes.http.response.status_code":null,"attributes.custom":{"http.status_code":"502"}}`: 502,
-		`{"attributes.http.response.status_code":"abc"}`:                                               0,
-		`{"attributes.http.response.status_code":-5}`:                                                  0,
-		`{}`: 0,
+	if got := sortedAttributes(spanAttributes(row, "resource")); !reflect.DeepEqual(got, []domain.Attribute{{Key: "service.name", Value: "api"}}) {
+		t.Errorf("resource %+v", got)
+	}
+	collide := obsRow(t, `{"attributes.a.b":"flat","attributes.custom":{"a":{"b":"nested"},"a.b":"dotted"}}`)
+	for range 50 {
+		if got := spanAttributes(collide, "attributes")["a.b"]; got != "dotted" {
+			t.Fatalf("colliding key a.b = %q, want the last in byte order", got)
+		}
+	}
+	for _, c := range []struct {
+		row  string
+		want *float64
+	}{
+		{`{"attributes.http.response.status_code":503}`, new(503.0)},
+		{`{"attributes.custom":{"http.status_code":"404"}}`, new(404.0)},
+		{`{"attributes.http.response.status_code":null,"attributes.custom":{"http.status_code":"502"}}`, new(502.0)},
+		{`{"attributes.http.response.status_code":"abc"}`, nil},
+		{`{"attributes.http.response.status_code":-5}`, nil},
+		{`{}`, nil},
 	} {
-		got := httpStatusOf(spanAttributes(obsRow(t, attributes), "attributes"))
-		if (got == nil) != (want == 0) || (got != nil && *got != want) {
-			t.Errorf("httpStatusOf(%s) = %v, want %v", attributes, got, want)
+		if got := httpStatusOf(spanAttributes(obsRow(t, c.row), "attributes")); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("httpStatusOf(%s) = %v, want %v", c.row, got, c.want)
 		}
 	}
 }
 
 func TestDemuxDockerLogs(t *testing.T) {
-	fx, golden := loadScenarioFiles(t)
+	fx := readAxiomFixture(t)
+	got := make([]DemuxGolden, len(fx.Demux))
 	for i, d := range fx.Demux {
-		var buf bytes.Buffer
-		if d.Raw != nil {
-			buf.WriteString(*d.Raw)
-		}
+		buf := []byte(d.Raw)
 		for _, f := range d.Frames {
-			payload := []byte(f[1].(string))
-			head := make([]byte, 8)
-			head[0] = byte(f[0].(float64))
-			binary.BigEndian.PutUint32(head[4:], uint32(len(payload)))
-			buf.Write(head)
-			buf.Write(payload)
+			buf = append(buf, dockerFrame(f.Stream, f.Payload)...)
 		}
-		if d.Tail != "" {
-			b, _ := base64.StdEncoding.DecodeString(d.Tail)
-			buf.Write(b)
-		}
-		got := demuxDockerLogs(buf.Bytes())
-		if golden.Demux[i].Name != d.Name {
-			t.Fatalf("golden out of order")
-		}
-		if !obsJSONEqual(t, got, golden.Demux[i].Lines) {
-			gb, _ := json.Marshal(got)
-			t.Errorf("%s\n got: %s\nwant: %s", d.Name, gb, golden.Demux[i].Lines)
-		}
+		got[i] = DemuxGolden{Name: d.Name, Lines: demuxDockerLogs(append(buf, d.Tail...))}
+	}
+	if *UpdateGolden {
+		RewriteAxiomGolden(t, func(g *AxiomGolden) { g.Demux = got })
+		return
+	}
+	if want := ReadAxiomGolden(t).Demux; !reflect.DeepEqual(got, want) {
+		t.Errorf("demux\n got: %+v\nwant: %+v", got, want)
+	}
+}
+
+func TestDemuxDockerLogsJoinsSplitCharacters(t *testing.T) {
+	buf := append(dockerFrame(1, "2026-10-08T12:00:00Z caf\xc3"), dockerFrame(1, "\xa9\n")...)
+	want := []domain.ServiceLogLine{{Time: 1791460800000, Text: "café", Stream: "stdout"}}
+	if got := demuxDockerLogs(buf); !reflect.DeepEqual(got, want) {
+		t.Errorf("split character %+v", got)
 	}
 }
 
@@ -199,9 +215,10 @@ func TestAxiomTime(t *testing.T) {
 	for in, want := range map[string]float64{
 		`1791460800123`:                    1_791_460_800_123,
 		`1791460800123456`:                 1_791_460_800_123.456,
-		`1791460800123456789`:              1.791460800123456789e18 / 1e6,
+		`1791460800123456789`:              1_791_460_800_123.456789,
 		`"1791460800123"`:                  1_791_460_800_123,
-		`"1791460800123456789"`:            1.791460800123456789e18 / 1e6,
+		`"1791460800123456789"`:            1_791_460_800_123.456789,
+		`"1791460800750000000"`:            1_791_460_800_750,
 		`"2026-10-08T12:00:00.5Z"`:         1_791_460_800_500,
 		`"2026-10-08T12:00:00.123456789Z"`: 1_791_460_800_123 + 0.456789,
 		`"2026-10-08T12:00:00Z"`:           1_791_460_800_000,
@@ -213,7 +230,7 @@ func TestAxiomTime(t *testing.T) {
 			t.Errorf("time %s = %v (%v), want %v", in, float64(at), err, want)
 		}
 	}
-	for _, in := range []string{`"nope"`, `""`, `"-5"`, `true`, `"2026-10-08"`} {
+	for _, in := range []string{`"nope"`, `""`, `"-5"`, `-5`, `1791460800123.5`, `true`, `"2026-10-08"`, `"2026-10-08 12:00:00Z"`} {
 		var at axiomTime
 		if err := json.Unmarshal([]byte(in), &at); err == nil {
 			t.Errorf("time %s = %v, want an error", in, float64(at))
@@ -223,19 +240,19 @@ func TestAxiomTime(t *testing.T) {
 
 func TestSpanKindAndStatus(t *testing.T) {
 	for in, want := range map[string]string{"SPAN_KIND_SERVER": "server", "Client": "client", "span_kind_unspecified": "", "unspecified": "", "": ""} {
-		if got := (axiomSpanRow{Kind: in}).kind(); got != want {
+		if got := (axiomRootRow{Kind: in}).kind(); got != want {
 			t.Errorf("kind(%q) = %q, want %q", in, got, want)
 		}
 	}
 	for _, c := range []struct {
-		row  axiomSpanRow
+		row  axiomRootRow
 		want string
 	}{
-		{axiomSpanRow{StatusCode: "STATUS_CODE_OK"}, "ok"},
-		{axiomSpanRow{StatusCode: "Ok", Error: true}, "error"},
-		{axiomSpanRow{StatusCode: "STATUS_CODE_ERROR"}, "error"},
-		{axiomSpanRow{StatusCode: "unset"}, "unset"},
-		{axiomSpanRow{}, "unset"},
+		{axiomRootRow{StatusCode: "STATUS_CODE_OK"}, "ok"},
+		{axiomRootRow{StatusCode: "Ok", Error: true}, "error"},
+		{axiomRootRow{StatusCode: "STATUS_CODE_ERROR"}, "error"},
+		{axiomRootRow{StatusCode: "unset"}, "unset"},
+		{axiomRootRow{}, "unset"},
 	} {
 		if got := c.row.status(); got != c.want {
 			t.Errorf("status(%+v) = %q, want %q", c.row, got, c.want)

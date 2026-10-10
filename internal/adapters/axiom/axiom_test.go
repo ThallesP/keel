@@ -124,7 +124,8 @@ func TestDatasetsTokensOrgs(t *testing.T) {
 		case s.path == "/v2/tokens":
 			_, _ = w.Write([]byte(`{"id":"t1","token":"xaat-minted"}`))
 		case s.path == "/v2/orgs":
-			_, _ = w.Write([]byte(`[{"id":"o1","name":"One","defaultEdgeDeployment":"cloud.eu-central-1.aws","license":{"maxDatasets":3}},{"id":"o2","name":"Two","region":"us-east-1"}]`))
+			_, _ = w.Write([]byte(`[{"id":"o1","name":"One","defaultEdgeDeployment":"cloud.eu-central-1.aws","region":"us-east-1","license":{"maxDatasets":3}},` +
+				`{"id":"o2","name":"Two","region":"us-east-1","license":null},{"id":"o3","name":"Three","defaultEdgeDeployment":"","region":"eu-west-1"}]`))
 		}
 	})
 	c := New()
@@ -144,8 +145,12 @@ func TestDatasetsTokensOrgs(t *testing.T) {
 		t.Fatalf("mint %q %v", tok, err)
 	}
 	orgs, err := c.Orgs(ctx, tgt)
-	if err != nil || len(orgs) != 2 || orgs[0].ID != "o1" || *orgs[0].DefaultEdgeDeployment != "cloud.eu-central-1.aws" ||
-		*orgs[0].MaxDatasets != 3 || orgs[1].DefaultEdgeDeployment != nil || *orgs[1].Region != "us-east-1" || orgs[1].MaxDatasets != nil {
+	wantOrgs := []app.AxiomOrgInfo{
+		{ID: "o1", Name: "One", Edge: "cloud.eu-central-1.aws", MaxDatasets: 3},
+		{ID: "o2", Name: "Two", Edge: "us-east-1"},
+		{ID: "o3", Name: "Three", Edge: "eu-west-1"},
+	}
+	if err != nil || !reflect.DeepEqual(orgs, wantOrgs) {
 		t.Fatalf("orgs %+v %v", orgs, err)
 	}
 	calls := *got
@@ -166,6 +171,26 @@ func TestDatasetsTokensOrgs(t *testing.T) {
 	want := `{"name":"keel-acme","description":"d","datasetCapabilities":{"keel-logs":{"ingest":["create"],"query":["read"]},"keel-traces":{"ingest":["create"],"query":["read"]}},"orgCapabilities":{}}`
 	if string(calls[2].body) != want {
 		t.Errorf("token body %s", calls[2].body)
+	}
+}
+
+func TestDatasetsAndTokenRejectForeignShapes(t *testing.T) {
+	srv, _ := server(t, func(w http.ResponseWriter, s seen) {
+		switch s.path {
+		case "/v2/datasets":
+			_, _ = w.Write([]byte(`[{"name":"x","sharedByOrg":true}]`))
+		case "/v2/tokens":
+			_, _ = w.Write([]byte(`{"token":5}`))
+		}
+	})
+	c := New()
+	ctx := context.Background()
+	tgt := app.AxiomTarget{Domain: srv.URL, Token: "personal"}
+	if _, err := c.Datasets(ctx, tgt, "o1"); err == nil || !strings.HasPrefix(err.Error(), "Axiom datasets: ") {
+		t.Errorf("datasets: %v", err)
+	}
+	if _, err := c.MintToken(ctx, tgt, "o1", app.AxiomTokenRequest{}); err == nil || !strings.HasPrefix(err.Error(), "Axiom token: ") {
+		t.Errorf("token: %v", err)
 	}
 }
 
@@ -201,6 +226,8 @@ func TestOAuth(t *testing.T) {
 	}{
 		{400, `{"error":"invalid_redirect_uri","error_description":"plain http"}`, "plain http"},
 		{400, `{"error":"invalid_redirect_uri"}`, "invalid_redirect_uri"},
+		{400, `{"error":5,"error_description":"plain http"}`, "plain http"},
+		{400, `{"error":"invalid_redirect_uri","error_description":7}`, "invalid_redirect_uri"},
 		{502, `<html>`, "HTTP 502"},
 		{200, `{}`, "HTTP 200"},
 	} {

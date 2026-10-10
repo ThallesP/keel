@@ -18,14 +18,16 @@
       "scope.name": "@opentelemetry/instrumentation-http",
       "attributes.http.request.method": "GET",
       "attributes.http.response.status_code": 200,
-      "attributes.custom": { "http.route": "/users/:id", "app.user": { "id": 42, "tags": ["a","b",null], "ok": true }, "empty": "", "nil": null },
+      "attributes.custom": { "http.route": "/users/:id", "app.user": { "id": 42, "tags": ["a", "b", null], "ok": true }, "empty": "", "nil": null, "big": 1e+21, "tiny": 1.5e-7 },
       "resource.deployment.environment.name": "production",
       "resource.custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa", "keel.environment_id": "env1" },
       "resource.service.name": "api",
       "events": [
         { "time": "2026-10-08T12:00:00.5Z", "name": "exception", "attributes": { "exception.type": "Error", "exception.stacktrace": "Error: x\n    at y (\"z\")" } },
         { "timestamp": 1791460800500000000, "name": "n2" },
-        { "time": null, "_time": "2026-10-08T12:00:00.25Z", "name": "7" }
+        { "time": null, "_time": "2026-10-08T12:00:00.25Z", "name": "7" },
+        { "timeUnixNano": "1791460800750000000", "name": "retry", "attributes": { "http": { "status_code": 503 }, "tags": ["a", "b"] } },
+        null
       ]
     },
     {
@@ -41,7 +43,7 @@
       "status.message": "boom",
       "service.name": "api",
       "attributes.db.system": "postgresql",
-      "attributes.custom": { "http.method": "PUT", "2": "two", "1": "one", "x": "ex" },
+      "attributes.custom": { "http.method": "PUT", "x": "ex" },
       "resource.custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa" }
     },
     {
@@ -76,16 +78,16 @@
     }
   ],
   "demux": [
-    { "name": "multiplexed", "frames": [[1, "2026-10-08T12:00:02.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.service.id=s1,com.docker.swarm.task.id=t1 second\n2026-10-08T12:00:00.000000001Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t2 first\n"], [2, "2026-10-08T12:00:01.5Z com.docker.swarm.task.id=t1 oops\r\n"]] },
+    { "name": "multiplexed", "frames": [{ "stream": 1, "payload": "2026-10-08T12:00:02.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.service.id=s1,com.docker.swarm.task.id=t1 second\n2026-10-08T12:00:00.000000001Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t2 first\n" }, { "stream": 2, "payload": "2026-10-08T12:00:01.5Z com.docker.swarm.task.id=t1 oops\r\n" }] },
     { "name": "tty", "raw": "2026-10-08T12:00:00.123Z hello\r\nworld\n\n" },
-    { "name": "truncated", "frames": [[1, "2026-10-08T12:00:00Z a\n"]], "tail": "AQAAAAAAAGRpbmNvbXBsZXRl" },
-    { "name": "stdin-frame", "frames": [[0, "plain line\n"], [1, "2026-10-08T12:00:00Z late\n"]] },
-    { "name": "cr-only", "frames": [[1, "\r\n\nno-stamp text here\n"]] },
-    { "name": "details-only", "frames": [[1, "2026-10-08T12:00:00.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t1\n"]] },
-    { "name": "lowercase-z", "frames": [[1, "2026-10-08t12:00:00z text\n"]] },
+    { "name": "truncated", "frames": [{ "stream": 1, "payload": "2026-10-08T12:00:00Z a\n" }], "tail": "AQAAAAAAAGRpbmNvbXBsZXRl" },
+    { "name": "stdin-frame", "frames": [{ "stream": 0, "payload": "plain line\n" }, { "stream": 1, "payload": "2026-10-08T12:00:00Z late\n" }] },
+    { "name": "cr-only", "frames": [{ "stream": 1, "payload": "\r\n\nno-stamp text here\n" }] },
+    { "name": "details-only", "frames": [{ "stream": 1, "payload": "2026-10-08T12:00:00.123456789Z com.docker.swarm.node.id=n1,com.docker.swarm.task.id=t1\n" }] },
+    { "name": "lowercase-z", "frames": [{ "stream": 1, "payload": "2026-10-08t12:00:00z text\n" }] },
     { "name": "empty", "raw": "" },
-    { "name": "split-lines", "frames": [[1, "2026-10-08T12:00:00Z par"], [1, "tial\n"], [2, "2026-10-08T11:59:59Z err\n"]] },
-    { "name": "bad-stamp", "frames": [[1, "notatimeZ text\n2026-13-01T00:00:00Z bad month\n"]] }
+    { "name": "split-lines", "frames": [{ "stream": 1, "payload": "2026-10-08T12:00:00Z par" }, { "stream": 1, "payload": "tial\n" }, { "stream": 2, "payload": "2026-10-08T11:59:59Z err\n" }] },
+    { "name": "bad-stamp", "frames": [{ "stream": 1, "payload": "notatimeZ text\n2026-13-01T00:00:00Z bad month\n" }] }
   ],
   "scenarios": [
     {
@@ -151,6 +153,18 @@
       ]
     },
     {
+      "name": "tail-skips-foreign-row",
+      "call": "tail",
+      "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 10 },
+      "rules": [
+        { "contains": "where service_id ==", "fields": ["_time", "message", "stream", "task", "replica"], "rows": [
+          ["2026-10-08T12:00:02Z", "kept", "stdout", "t1", 1],
+          ["2026-10-08T12:00:01Z", "replica is text", "stdout", "t2", "two"],
+          ["2026-10-08T12:00:00Z", "also kept", "stdout", "t1", 1]
+        ] }
+      ]
+    },
+    {
       "name": "tail-empty-dataset",
       "call": "tail",
       "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 5000 },
@@ -165,6 +179,19 @@
           ["2026-10-08T12:00:05.987654321Z", "a\"b\\c newest", "stderr", "t2", "nodeworkerbbbbbbbbbb"],
           ["2026-10-08T12:00:04.1Z", "a\"b\\c older", "stdout", null, "nodeapiaaaaaaaaaaaaa"],
           ["2026-10-08T12:00:04.123Z", "5", null, "3", null]
+        ] }
+      ]
+    },
+    {
+      "name": "recent-skips-foreign-row",
+      "call": "recent",
+      "args": { "search": "", "tail": 300 },
+      "rules": [
+        { "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [
+          ["2026-10-08T12:00:03Z", "kept", "stdout", "t1", "nodeapiaaaaaaaaaaaaa"],
+          ["2026-10-08T12:00:02Z", 5, "stdout", "t1", "nodeapiaaaaaaaaaaaaa"],
+          ["2026-10-08 12:00:01Z", "time not RFC 3339", "stdout", "t1", "nodeapiaaaaaaaaaaaaa"],
+          ["2026-10-08T12:00:00Z", "also kept", "stderr", "t2", "nodeworkerbbbbbbbbbb"]
         ] }
       ]
     },
@@ -220,6 +247,38 @@
       "noTraces": true,
       "args": { "traceId": "00f067aa0ba902b7", "at": 1791460000000 },
       "rules": [{ "contains": "where service_id in", "fields": ["_time"], "rows": [] }]
+    },
+    {
+      "name": "overview-skips-foreign-rows",
+      "call": "overview",
+      "args": { "range": "15m", "search": "" },
+      "rules": [
+        { "contains": "summarize spans = count()", "fields": ["trace_id", "spans", "errors"], "rows": [["4bf92f3577b34da6a3ce929d0e0e4736", 3, 0], ["00f067aa0ba902b7", "many", 0]] },
+        { "contains": "by bin(_time", "fields": ["_time", "requests", "errors", "p50", "p95", "p99"], "rows": [
+          ["2026-10-08T11:59:30Z", 2, 0, 1000000, 2000000, 3000000],
+          ["2026-10-08T11:59:00Z", 1, 0, "garbage", null, null]
+        ] },
+        { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [["3", 0, 1000000, 2000000, 3000000]] },
+        { "contains": "sort by _time desc | limit 100", "fields": ["_time", "trace_id", "name", "kind", "duration", "error", "status.code", "service.name", "events"], "rows": [
+          ["2026-10-08T11:59:40Z", "4bf92f3577b34da6a3ce929d0e0e4736", "GET /ok", "SPAN_KIND_SERVER", 1000000, false, "STATUS_CODE_OK", "api", [{ "name": "exception", "timestamp": "" }]],
+          ["2026-10-08T11:59:20Z", "00f067aa0ba902b7", "GET /kind-is-a-number", 5, 1000000, false, "STATUS_CODE_OK", "api", null],
+          ["", "aaaaaaaaaaaaaaaa", "GET /time-is-empty", "SPAN_KIND_SERVER", 1000000, false, "STATUS_CODE_OK", "api", null]
+        ] }
+      ]
+    },
+    {
+      "name": "get-skips-foreign-span",
+      "call": "get",
+      "args": { "traceId": "4bf92f3577b34da6a3ce929d0e0e4736", "at": 1791460800000 },
+      "rules": [
+        { "contains": "where trace_id ==", "fields": ["_time", "trace_id", "span_id", "parent_span_id", "name", "kind", "duration", "service.name", "events"], "rows": [
+          ["2026-10-08T12:00:00Z", "4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7", "", "GET /", "SPAN_KIND_SERVER", 5000000, "api", null],
+          ["2026-10-08T12:00:00.001Z", "4bf92f3577b34da6a3ce929d0e0e4736", "b7ad6b7169203331", "00f067aa0ba902b7", "bad event", "SPAN_KIND_CLIENT", 1000000, "api", [{ "name": "exception", "timestamp": "" }]],
+          ["2026-10-08T12:00:00.002Z", "4bf92f3577b34da6a3ce929d0e0e4736", "c1", "00f067aa0ba902b7", "bad duration", "SPAN_KIND_CLIENT", "garbage", "api", null],
+          ["2026-10-08T12:00:00.003Z", "4bf92f3577b34da6a3ce929d0e0e4736", "c2", "00f067aa0ba902b7", "SELECT 1", "SPAN_KIND_CLIENT", 2000000, "api", [null, { "name": "retry", "timeUnixNano": 1791460800004000000 }]]
+        ] },
+        { "contains": "where service_id in", "fields": ["_time"], "rows": [] }
+      ]
     },
     {
       "name": "traces-around",

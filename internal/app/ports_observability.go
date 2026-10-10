@@ -1,8 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"strconv"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -99,11 +101,10 @@ type AxiomTokenRequest struct {
 }
 
 type AxiomOrgInfo struct {
-	ID                    string
-	Name                  string
-	DefaultEdgeDeployment *string
-	Region                *string
-	MaxDatasets           *float64
+	ID          string
+	Name        string
+	Edge        string
+	MaxDatasets int
 }
 
 type AxiomCodeExchange struct {
@@ -140,6 +141,14 @@ func (e *AxiomError) Error() string {
 	return "Axiom " + strconv.Itoa(e.Status) + ": " + e.Detail
 }
 
+func axiomStatus(err error) int {
+	var axiomErr *AxiomError
+	if !errors.As(err, &axiomErr) {
+		return 0
+	}
+	return axiomErr.Status
+}
+
 type OAuthError struct {
 	Status           int
 	ErrorCode        string
@@ -147,13 +156,7 @@ type OAuthError struct {
 }
 
 func (e *OAuthError) Error() string {
-	if e.ErrorDescription != "" {
-		return e.ErrorDescription
-	}
-	if e.ErrorCode != "" {
-		return e.ErrorCode
-	}
-	return "HTTP " + strconv.Itoa(e.Status)
+	return cmp.Or(e.ErrorDescription, e.ErrorCode, "HTTP "+strconv.Itoa(e.Status))
 }
 
 type LogReader interface {

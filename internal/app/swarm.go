@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 	"runtime/debug"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -217,7 +215,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			}
 			step(stepLog, "pull failed ("+deployErrorText(err)+"), using cached image")
 		} else {
-			step(stepLog, "pulled "+image+" in "+deployToFixed1(float64(a.Now()-t0)/1000)+"s")
+			step(stepLog, "pulled "+image+" in "+strconv.FormatFloat(float64(a.Now()-t0)/1000, 'f', 1, 64)+"s")
 		}
 	}
 
@@ -376,21 +374,4 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 	})
 }
 
-func deployErrorText(err error) string {
-	return truncateRunes(strings.Join(strings.Fields(err.Error()), " "), 300)
-}
-
-func deployToFixed1(x float64) string {
-	exact := new(big.Float).SetPrec(200).SetFloat64(x)
-	exact.Mul(exact, big.NewFloat(10).SetPrec(200))
-	floor, _ := exact.Int(nil)
-	frac := new(big.Float).SetPrec(200).Sub(exact, new(big.Float).SetPrec(200).SetInt(floor))
-	if frac.Cmp(big.NewFloat(0.5)) >= 0 {
-		floor.Add(floor, big.NewInt(1))
-	}
-	s := floor.String()
-	if len(s) < 2 {
-		s = "0" + s
-	}
-	return s[:len(s)-1] + "." + s[len(s)-1:]
-}
+func deployErrorText(err error) string { return compactText(err.Error(), 300) }

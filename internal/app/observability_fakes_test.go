@@ -14,7 +14,6 @@ type obsFakeAxiom struct {
 	calls []string
 
 	queryErr    func(t app.AxiomTarget, q app.AxiomQuery) error
-	queryRows   []app.AxiomRow
 	createErr   map[string]error
 	datasets    []app.AxiomDataset
 	datasetsErr error
@@ -54,7 +53,7 @@ func (f *obsFakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQu
 			return nil, err
 		}
 	}
-	return f.queryRows, nil
+	return []app.AxiomRow{}, nil
 }
 
 func (f *obsFakeAxiom) CreateDataset(_ context.Context, t app.AxiomTarget, orgID, name, description string) error {

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -59,8 +62,9 @@ func TestCompactDetail(t *testing.T) {
 		"a\u00a0b\u2003c\u2028d":                            "a b c d",
 		strings.Repeat("x", 250):                            strings.Repeat("x", 200),
 		strings.Repeat("é", 150) + strings.Repeat("😀", 100): strings.Repeat("é", 150) + strings.Repeat("😀", 50),
-		"":    "",
-		"   ": "",
+		"":           "",
+		"   ":        "",
+		"a\xff\xfeb": "a\uFFFDb",
 	} {
 		if got := CompactDetail(in); got != want {
 			t.Errorf("CompactDetail(%q) = %q, want %q", in, got, want)
@@ -76,9 +80,10 @@ func TestAxiomJWTAudience(t *testing.T) {
 		"opaque":                                 "(not a JWT)",
 		"h.!!.s":                                 "(not a JWT)",
 		"h.eyJheGlvbURlZmF1bHRPcmciOjV9.s":       "(not a JWT)",
-		"h.eyJhdWQiOiJtY3AifQ==.s":               `"mcp"`,
 		"h.eyJhdWQiOiJtY3AiLCJ4IjoiPz8_In0.s":    `"mcp"`,
-		"h.eyJhdWQiOiJtY3AiLCJ4IjoiPz8/In0.s":    `"mcp"`,
+		"h.eyJhdWQiOiJtY3AifQ==.s":               "(not a JWT)",
+		"h.eyJhdWQiOiJtY3AiLCJ4IjoiPz8/In0.s":    "(not a JWT)",
+		"h.eyJhdWQiOiJtY3AifQ":                   "(not a JWT)",
 		"h.eyJheGlvbURlZmF1bHRPcmciOiJvMSJ9.sig": "null",
 	} {
 		if got := axiomJWTAudience(token); got != want {
@@ -90,5 +95,19 @@ func TestAxiomJWTAudience(t *testing.T) {
 	}
 	if got := axiomChosenOrg("opaque"); got != "" {
 		t.Errorf("axiomChosenOrg(opaque) = %q", got)
+	}
+}
+
+func TestReadRowsSkipsWhatItCannotDecode(t *testing.T) {
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, nil))
+	rows := []AxiomRow{{"message": json.RawMessage(`"kept"`)}, {"message": json.RawMessage(`5`)}, {"_time": json.RawMessage(`"nope"`)}}
+	got := readRows(log, rows, decodeRow[axiomLogRow])
+	if len(got) != 1 || got[0].Message != "kept" || !strings.Contains(logged.String(), "skipped=2 rows=3") {
+		t.Errorf("rows %+v, log %q", got, logged.String())
+	}
+	logged.Reset()
+	if got := readRows(log, rows[:1], decodeRow[axiomLogRow]); len(got) != 1 || logged.Len() != 0 {
+		t.Errorf("clean rows %+v, log %q", got, logged.String())
 	}
 }

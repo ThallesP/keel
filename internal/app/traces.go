@@ -64,23 +64,18 @@ func aplRoots(dataset string, serviceIDs []string, search string) string {
 	return aplDataset(dataset) + " | " + traceRoot + " | where " + traceServiceID + " in (" + strings.Join(ids, ", ") + ")" + match
 }
 
-func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []string, search string, from float64, to *float64, limit int) ([]domain.TraceSummary, error) {
+func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []string, search string, from, to float64, limit int) ([]domain.TraceSummary, error) {
 	if len(serviceIDs) == 0 {
 		return []domain.TraceSummary{}, nil
 	}
-	latest, err := a.axiomRows(ctx, cfg, aplRoots(cfg.Dataset, serviceIDs, search)+" | sort by _time desc | limit "+strconv.Itoa(limit), &from, to)
+	latest, err := a.axiomRows(ctx, cfg, aplRoots(cfg.Dataset, serviceIDs, search)+" | sort by _time desc | limit "+strconv.Itoa(limit), from, to)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]domain.TraceSummary, len(latest))
+	out := readRows(a.Log, latest, axiomTraceSummaryOf)
 	var ids []string
 	seen := map[string]bool{}
-	for i, row := range latest {
-		summary, err := axiomTraceSummaryOf(row)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = summary
+	for _, summary := range out {
 		if traceIDRE.MatchString(summary.TraceID) && !seen[summary.TraceID] {
 			seen[summary.TraceID] = true
 			ids = append(ids, aplLit(summary.TraceID))
@@ -91,7 +86,7 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 	}
 	apl := aplDataset(cfg.Dataset) + " | where trace_id in (" + strings.Join(ids, ", ") + ") | extend failed = " + traceFailed +
 		" | summarize spans = count(), errors = countif(failed) by trace_id"
-	counts, err := axiomRowsAs[axiomTraceCountRow](ctx, a, cfg, apl, &from, nil)
+	counts, err := axiomRowsAs[axiomTraceCountRow](ctx, a, cfg, apl, from, a.axiomUntil())
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +127,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	search = truncateRunes(search, traceSearchMax)
 	matching := aplRoots(cfg.Dataset, ids, search)
 
-	totals, series := []axiomStatsRow{}, []axiomStatsRow{}
+	var totals, series []axiomStatsRow
 	traces := []domain.TraceSummary{}
 	if len(ids) > 0 {
 		var wg sync.WaitGroup
@@ -140,15 +135,15 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			totals, errs[0] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats, &from, &to)
+			totals, errs[0] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats, from, to)
 		}()
 		go func() {
 			defer wg.Done()
-			series, errs[1] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats+" by bin(_time, "+spec.Bin+")", &from, &to)
+			series, errs[1] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats+" by bin(_time, "+spec.Bin+")", from, to)
 		}()
 		go func() {
 			defer wg.Done()
-			traces, errs[2] = a.traceRequests(ctx, cfg, ids, search, from, nil, traceList)
+			traces, errs[2] = a.traceRequests(ctx, cfg, ids, search, from, a.axiomUntil(), traceList)
 		}()
 		wg.Wait()
 		for _, err := range errs {
@@ -191,28 +186,20 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 	if err != nil {
 		return domain.Trace{}, err
 	}
-	now := float64(a.Now())
+	from, to := float64(a.Now())-traceWindowMs, a.axiomUntil()
 	spans := []domain.Span{}
 	if scope.traces != nil {
-		since := now - traceWindowMs
+		since := from
 		if at != 0 {
 			since = at - traceHourMs
 		}
 		rows, err := a.axiomRows(ctx, *scope.traces, aplDataset(scope.traces.Dataset)+" | where trace_id == "+aplLit(id)+
-			" | sort by _time asc | limit "+strconv.Itoa(traceMaxSpans), &since, nil)
+			" | sort by _time asc | limit "+strconv.Itoa(traceMaxSpans), since, to)
 		if err != nil {
 			return domain.Trace{}, obsInvalid(err)
 		}
-		for _, row := range rows {
-			span, err := axiomSpanOf(row)
-			if err != nil {
-				return domain.Trace{}, obsInvalid(err)
-			}
-			spans = append(spans, span)
-		}
+		spans = readRows(a.Log, rows, axiomSpanOf)
 	}
-	var from float64
-	var to *float64
 	switch {
 	case len(spans) > 0:
 		lo, hi := math.Inf(1), math.Inf(-1)
@@ -223,13 +210,11 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 			lo = math.Min(lo, s.Start)
 			hi = math.Max(hi, s.Start+s.Duration)
 		}
-		from, to = lo-traceLogSlackMs, obsF64(hi+traceLogSlackMs)
+		from, to = lo-traceLogSlackMs, hi+traceLogSlackMs
 	case at != 0:
-		from, to = at-traceLogWindow, obsF64(at+traceLogWindow)
-	default:
-		from = now - traceWindowMs
+		from, to = at-traceLogWindow, at+traceLogWindow
 	}
-	lines, err := a.axiomLines(ctx, scope.logs, scope.serviceIDs, linesQuery{N: traceLogLines, Search: id, From: &from, To: to, OldestFirst: true})
+	lines, err := a.axiomLines(ctx, scope.logs, scope.serviceIDs, linesQuery{N: traceLogLines, Search: id, From: from, To: to, OldestFirst: true})
 	if err != nil {
 		return domain.Trace{}, obsInvalid(err)
 	}
@@ -247,7 +232,7 @@ func (a *App) TracesAround(ctx context.Context, actor domain.Actor, environmentI
 	if scope.traces == nil {
 		return []domain.TraceSummary{}, nil
 	}
-	out, err := a.traceRequests(ctx, *scope.traces, scope.serviceIDs, "", at-logsAroundMs, obsF64(at+logsAroundMs), traceList)
+	out, err := a.traceRequests(ctx, *scope.traces, scope.serviceIDs, "", at-logsAroundMs, at+logsAroundMs, traceList)
 	if err != nil {
 		return nil, obsInvalid(err)
 	}

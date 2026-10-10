@@ -4,52 +4,66 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/adapters/axiom"
+	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
 )
 
 type obsScenarioRule struct {
-	Contains string   `json:"contains"`
-	Fields   []string `json:"fields"`
-	Rows     [][]any  `json:"rows"`
-	SpanRows []int    `json:"spanRows"`
-	NoTables bool     `json:"noTables"`
-	Status   int      `json:"status"`
-	Text     string   `json:"text"`
+	Contains string              `json:"contains"`
+	Fields   []string            `json:"fields"`
+	Rows     [][]json.RawMessage `json:"rows"`
+	SpanRows []int               `json:"spanRows"`
+	NoTables bool                `json:"noTables"`
+	Status   int                 `json:"status"`
+	Text     string              `json:"text"`
+}
+
+type obsScenarioArgs struct {
+	Range     domain.TimeRange `json:"range"`
+	Search    string           `json:"search"`
+	ServiceID string           `json:"serviceId"`
+	TraceID   string           `json:"traceId"`
+	Tail      float64          `json:"tail"`
+	At        float64          `json:"at"`
 }
 
 type obsScenario struct {
 	Name     string            `json:"name"`
 	Call     string            `json:"call"`
 	NoTraces bool              `json:"noTraces"`
-	Args     map[string]any    `json:"args"`
+	Args     obsScenarioArgs   `json:"args"`
 	Rules    []obsScenarioRule `json:"rules"`
-	Raw      json.RawMessage   `json:"-"`
 }
 
 type obsScenarioFixture struct {
-	Now        int64             `json:"now"`
-	Sink       domain.LogSink    `json:"sink"`
-	ServiceIDs []string          `json:"serviceIds"`
-	SpanRows   []json.RawMessage `json:"spanRows"`
-	Scenarios  []obsScenario     `json:"scenarios"`
+	Now       int64                        `json:"now"`
+	Sink      domain.LogSink               `json:"sink"`
+	SpanRows  []map[string]json.RawMessage `json:"spanRows"`
+	Scenarios []obsScenario                `json:"scenarios"`
+}
+
+type aplCall struct {
+	APL       string `json:"apl"`
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
 }
 
 type obsGoldenCall struct {
-	Method        string         `json:"method"`
-	Path          string         `json:"path"`
-	Authorization string         `json:"authorization"`
-	ContentType   string         `json:"contentType"`
-	Body          map[string]any `json:"body"`
+	Method        string  `json:"method"`
+	Path          string  `json:"path"`
+	Authorization string  `json:"authorization"`
+	ContentType   string  `json:"contentType"`
+	Body          aplCall `json:"body"`
 }
 
 type obsGoldenScenario struct {
@@ -59,27 +73,29 @@ type obsGoldenScenario struct {
 	Calls  []obsGoldenCall `json:"calls"`
 }
 
-func obsReadJSON(t *testing.T, path string, v any) {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		t.Fatalf("%s: %v", path, err)
-	}
+type aplField struct {
+	Name string `json:"name"`
+}
+
+type aplTable struct {
+	Fields  []aplField          `json:"fields"`
+	Columns [][]json.RawMessage `json:"columns"`
+}
+
+type aplAnswer struct {
+	Tables []aplTable `json:"tables"`
 }
 
 type obsAPLServer struct {
 	mu       sync.Mutex
 	rules    []obsScenarioRule
-	spanRows []json.RawMessage
+	spanRows []map[string]json.RawMessage
 	calls    []obsGoldenCall
 }
 
 func (f *obsAPLServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
-	var body map[string]any
+	var body aplCall
 	_ = json.Unmarshal(data, &body)
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -87,9 +103,8 @@ func (f *obsAPLServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Method: r.Method, Path: r.URL.RequestURI(), Authorization: r.Header.Get("Authorization"),
 		ContentType: r.Header.Get("Content-Type"), Body: body,
 	})
-	apl, _ := body["apl"].(string)
 	for _, rule := range f.rules {
-		if !strings.Contains(apl, rule.Contains) {
+		if !strings.Contains(body.APL, rule.Contains) {
 			continue
 		}
 		if rule.Status != 0 {
@@ -97,93 +112,46 @@ func (f *obsAPLServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(rule.Text))
 			return
 		}
-		_, _ = w.Write(f.table(rule))
+		_ = json.NewEncoder(w).Encode(f.answer(rule))
 		return
 	}
-	_, _ = w.Write([]byte(`{"tables":[]}`))
+	_ = json.NewEncoder(w).Encode(aplAnswer{Tables: []aplTable{}})
 }
 
-func (f *obsAPLServer) table(rule obsScenarioRule) []byte {
+func (f *obsAPLServer) answer(rule obsScenarioRule) aplAnswer {
 	if rule.NoTables {
-		return []byte(`{"tables":[]}`)
+		return aplAnswer{Tables: []aplTable{}}
 	}
-	fields := rule.Fields
-	var rows [][]json.RawMessage
+	fields, rows := rule.Fields, rule.Rows
 	if rule.SpanRows != nil {
-		var objs []map[string]json.RawMessage
-		fields = nil
+		fields, rows = nil, nil
 		for _, i := range rule.SpanRows {
-			raw := f.spanRows[i]
-			fields = obsAppendKeys(fields, raw)
-			var m map[string]json.RawMessage
-			_ = json.Unmarshal(raw, &m)
-			objs = append(objs, m)
+			for _, k := range slices.Sorted(maps.Keys(f.spanRows[i])) {
+				if !slices.Contains(fields, k) {
+					fields = append(fields, k)
+				}
+			}
 		}
-		for _, o := range objs {
+		for _, i := range rule.SpanRows {
 			row := make([]json.RawMessage, len(fields))
 			for c, k := range fields {
-				if v, ok := o[k]; ok {
-					row[c] = v
-				} else {
+				row[c] = f.spanRows[i][k]
+				if row[c] == nil {
 					row[c] = json.RawMessage("null")
 				}
 			}
 			rows = append(rows, row)
 		}
-	} else {
-		for _, r := range rule.Rows {
-			row := make([]json.RawMessage, len(r))
-			for c, v := range r {
-				b, _ := json.Marshal(v)
-				row[c] = b
-			}
-			rows = append(rows, row)
+	}
+	table := aplTable{Fields: make([]aplField, len(fields)), Columns: make([][]json.RawMessage, len(fields))}
+	for c, name := range fields {
+		table.Fields[c] = aplField{Name: name}
+		table.Columns[c] = []json.RawMessage{}
+		for _, row := range rows {
+			table.Columns[c] = append(table.Columns[c], row[c])
 		}
 	}
-	var b strings.Builder
-	b.WriteString(`{"tables":[{"fields":[`)
-	for i, name := range fields {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		n, _ := json.Marshal(name)
-		b.WriteString(`{"name":` + string(n) + `}`)
-	}
-	b.WriteString(`],"columns":[`)
-	for c := range fields {
-		if c > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteByte('[')
-		for i, r := range rows {
-			if i > 0 {
-				b.WriteByte(',')
-			}
-			b.Write(r[c])
-		}
-		b.WriteByte(']')
-	}
-	b.WriteString(`]}]}`)
-	return []byte(b.String())
-}
-
-func obsAppendKeys(fields []string, raw json.RawMessage) []string {
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	_, _ = dec.Token()
-	for dec.More() {
-		tok, _ := dec.Token()
-		k := tok.(string)
-		var skip json.RawMessage
-		_ = dec.Decode(&skip)
-		found := false
-		for _, f := range fields {
-			found = found || f == k
-		}
-		if !found {
-			fields = append(fields, k)
-		}
-	}
-	return fields
+	return aplAnswer{Tables: []aplTable{table}}
 }
 
 func (f *obsAPLServer) reset(rules []obsScenarioRule) {
@@ -195,43 +163,38 @@ func (f *obsAPLServer) reset(rules []obsScenarioRule) {
 func (f *obsAPLServer) sortedCalls() []obsGoldenCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := append([]obsGoldenCall(nil), f.calls...)
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Body["apl"].(string) < out[j].Body["apl"].(string)
-	})
+	out := slices.Clone(f.calls)
+	slices.SortStableFunc(out, func(a, b obsGoldenCall) int { return strings.Compare(a.Body.APL, b.Body.APL) })
 	return out
 }
 
-func obsArgFloat(args map[string]any, k string) float64 {
-	f, _ := args[k].(float64)
-	return f
-}
-
-func obsArgString(args map[string]any, k string) string {
-	s, _ := args[k].(string)
-	return s
-}
-
-func obsAsJSON(t *testing.T, v any) any {
+func obsSameJSON(t *testing.T, got any, want json.RawMessage) bool {
 	t.Helper()
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out any
-	if err := json.Unmarshal(b, &out); err != nil {
+	var g, w any
+	if err := json.Unmarshal(b, &g); err != nil {
 		t.Fatal(err)
 	}
-	return out
+	if err := json.Unmarshal(want, &w); err != nil {
+		t.Fatal(err)
+	}
+	return reflect.DeepEqual(g, w)
 }
 
 func TestAxiomScenarios(t *testing.T) {
-	var fx obsScenarioFixture
-	obsReadJSON(t, "testdata/axiom_scenarios.json", &fx)
-	var golden struct {
-		Scenarios []obsGoldenScenario `json:"scenarios"`
+	fx := app.ReadJSON[obsScenarioFixture](t, "testdata/axiom_scenarios.json")
+	var golden []obsGoldenScenario
+	if !*app.UpdateGolden {
+		if err := json.Unmarshal(app.ReadAxiomGolden(t).Scenarios, &golden); err != nil {
+			t.Fatal(err)
+		}
+		if len(golden) != len(fx.Scenarios) {
+			t.Fatalf("%d scenarios, %d golden", len(fx.Scenarios), len(golden))
+		}
 	}
-	obsReadJSON(t, "testdata/axiom_scenarios.golden.json", &golden)
 
 	fake := &obsAPLServer{spanRows: fx.SpanRows}
 	srv := httptest.NewServer(fake)
@@ -246,11 +209,8 @@ func TestAxiomScenarios(t *testing.T) {
 
 	ctx := context.Background()
 	actor := env.member
+	got := make([]obsGoldenScenario, len(fx.Scenarios))
 	for i, s := range fx.Scenarios {
-		g := golden.Scenarios[i]
-		if g.Name != s.Name {
-			t.Fatalf("golden out of order: %s vs %s", g.Name, s.Name)
-		}
 		t.Run(s.Name, func(t *testing.T) {
 			if s.NoTraces {
 				old := sink
@@ -264,50 +224,59 @@ func TestAxiomScenarios(t *testing.T) {
 			a := s.Args
 			switch s.Call {
 			case "overview":
-				result, err = env.app.TraceOverview(ctx, actor, "env", domain.TimeRange(obsArgString(a, "range")), obsArgString(a, "search"), "")
+				result, err = env.app.TraceOverview(ctx, actor, "env", a.Range, a.Search, "")
 			case "tail":
-				result, err = env.app.TailNodeLogs(ctx, actor, obsArgString(a, "serviceId"), obsArgFloat(a, "tail"))
+				result, err = env.app.TailNodeLogs(ctx, actor, a.ServiceID, a.Tail)
 			case "recent":
-				result, err = env.app.EnvironmentLogs(ctx, actor, "env", obsArgString(a, "search"), obsArgFloat(a, "tail"), domain.TimeRange(obsArgString(a, "range")))
+				result, err = env.app.EnvironmentLogs(ctx, actor, "env", a.Search, a.Tail, a.Range)
 			case "around":
-				result, err = env.app.LogsAround(ctx, actor, "env", obsArgFloat(a, "at"))
+				result, err = env.app.LogsAround(ctx, actor, "env", a.At)
 			case "get":
-				result, err = env.app.GetTrace(ctx, actor, "env", obsArgString(a, "traceId"), obsArgFloat(a, "at"))
+				result, err = env.app.GetTrace(ctx, actor, "env", a.TraceID, a.At)
 			case "tracesAround":
-				result, err = env.app.TracesAround(ctx, actor, "env", obsArgFloat(a, "at"))
+				result, err = env.app.TracesAround(ctx, actor, "env", a.At)
 			default:
 				t.Fatalf("unknown call %s", s.Call)
 			}
-			if g.Error != nil {
-				if err == nil || err.Error() != *g.Error {
-					t.Fatalf("error = %v, want %q", err, *g.Error)
-				}
+			got[i] = obsGoldenScenario{Name: s.Name, Calls: fake.sortedCalls()}
+			if err != nil {
+				msg := err.Error()
+				got[i].Error = &msg
 				if domain.CodeOf(err) != domain.CodeInvalidInput {
 					t.Errorf("code = %s, want INVALID_INPUT", domain.CodeOf(err))
 				}
+			} else if got[i].Result, err = json.Marshal(result); err != nil {
+				t.Fatal(err)
+			}
+			if *app.UpdateGolden {
+				return
+			}
+			want := golden[i]
+			if want.Name != s.Name {
+				t.Fatalf("golden out of order: %s vs %s", want.Name, s.Name)
+			}
+			if want.Error != nil {
+				if got[i].Error == nil || *got[i].Error != *want.Error {
+					t.Fatalf("error = %v, want %q", got[i].Error, *want.Error)
+				}
 			} else {
-				if err != nil {
-					t.Fatal(err)
+				if got[i].Error != nil {
+					t.Fatal(*got[i].Error)
 				}
-				var want any
-				_ = json.Unmarshal(g.Result, &want)
-				if got := obsAsJSON(t, result); !reflect.DeepEqual(got, want) {
-					gb, _ := json.MarshalIndent(got, "", " ")
-					wb, _ := json.MarshalIndent(want, "", " ")
-					t.Fatalf("result differs\n got: %s\nwant: %s", gb, wb)
+				if !obsSameJSON(t, result, want.Result) {
+					t.Fatalf("result differs\n got: %s\nwant: %s", got[i].Result, want.Result)
 				}
 			}
-			calls := fake.sortedCalls()
-			if len(calls) != len(g.Calls) {
-				t.Fatalf("%d Axiom calls, want %d: %+v", len(calls), len(g.Calls), calls)
-			}
-			for i, c := range calls {
-				w := g.Calls[i]
-				if c.Method != w.Method || c.Path != w.Path || c.Authorization != w.Authorization || c.ContentType != w.ContentType ||
-					!reflect.DeepEqual(c.Body, w.Body) {
-					t.Errorf("call %d\n got: %+v\nwant: %+v", i, c, w)
-				}
+			if !slices.Equal(got[i].Calls, want.Calls) {
+				t.Errorf("calls\n got: %+v\nwant: %+v", got[i].Calls, want.Calls)
 			}
 		})
+	}
+	if *app.UpdateGolden {
+		scenarios, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		app.RewriteAxiomGolden(t, func(g *app.AxiomGolden) { g.Scenarios = scenarios })
 	}
 }

@@ -23,7 +23,12 @@ func (a *App) otlpEndpoint() string {
 	return strings.TrimRight(endpoint, "/")
 }
 
-func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key string, local bool) [][2]string {
+type envVar struct {
+	Key   string
+	Value string
+}
+
+func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key string, local bool) []envVar {
 	envName := env.Name
 	if local {
 		envName = "local"
@@ -31,18 +36,18 @@ func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key s
 	resource := "keel.service_id=" + domain.EncodeURIComponent(node.ID) +
 		",keel.environment_id=" + domain.EncodeURIComponent(env.ID) +
 		",deployment.environment.name=" + domain.EncodeURIComponent(envName)
-	var out [][2]string
+	var out []envVar
 	if !local {
-		out = append(out, [2]string{otelEndpoint, endpoint})
+		out = append(out, envVar{otelEndpoint, endpoint})
 	}
 	return append(out,
-		[2]string{"OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"},
-		[2]string{otelHeaders, "Authorization=Bearer%20" + key},
-		[2]string{"OTEL_SERVICE_NAME", node.Name},
-		[2]string{"OTEL_RESOURCE_ATTRIBUTES", resource},
-		[2]string{"OTEL_TRACES_EXPORTER", "otlp"},
-		[2]string{"OTEL_METRICS_EXPORTER", "none"},
-		[2]string{"OTEL_LOGS_EXPORTER", "none"},
+		envVar{"OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"},
+		envVar{otelHeaders, "Authorization=Bearer%20" + key},
+		envVar{"OTEL_SERVICE_NAME", node.Name},
+		envVar{"OTEL_RESOURCE_ATTRIBUTES", resource},
+		envVar{"OTEL_TRACES_EXPORTER", "otlp"},
+		envVar{"OTEL_METRICS_EXPORTER", "none"},
+		envVar{"OTEL_LOGS_EXPORTER", "none"},
 	)
 }
 
@@ -50,7 +55,7 @@ func tracingOverridden(own map[string]bool, k string) bool {
 	return own[k] || (k == otelHeaders && (own[otelEndpoint] || own[otelTracesEndpoint]))
 }
 
-func (a *App) tracingVars(tx Tx, node domain.Node, own map[string]bool) ([][2]string, error) {
+func (a *App) tracingVars(tx Tx, node domain.Node, own map[string]bool) ([]envVar, error) {
 	if node.Desired == nil || !node.Desired.Tracing {
 		return nil, nil
 	}
@@ -68,10 +73,10 @@ func (a *App) tracingVars(tx Tx, node domain.Node, own map[string]bool) ([][2]st
 	if err != nil {
 		return nil, err
 	}
-	var out [][2]string
-	for _, kv := range tracingEnv(a.otlpEndpoint(), node, env, key, false) {
-		if !tracingOverridden(own, kv[0]) {
-			out = append(out, kv)
+	var out []envVar
+	for _, v := range tracingEnv(a.otlpEndpoint(), node, env, key, false) {
+		if !tracingOverridden(own, v.Key) {
+			out = append(out, v)
 		}
 	}
 	return out, nil
@@ -90,8 +95,8 @@ func (a *App) withTracing(tx Tx, node domain.Node, env map[string]string) (map[s
 	for k, v := range env {
 		out[k] = v
 	}
-	for _, kv := range added {
-		out[kv[0]] = kv[1]
+	for _, v := range added {
+		out[v.Key] = v.Value
 	}
 	return out, nil
 }
@@ -196,9 +201,9 @@ func (a *App) NodeTracing(ctx context.Context, actor domain.Actor, nodeID string
 			return err
 		}
 		view = &domain.TracingView{Enabled: node.Desired.Tracing, Traces: state, Env: []domain.TracingEnvVar{}}
-		for _, kv := range tracingEnv(a.otlpEndpoint(), node, scope.Environment, domain.MaskOTLPKey(key), false) {
+		for _, v := range tracingEnv(a.otlpEndpoint(), node, scope.Environment, domain.MaskOTLPKey(key), false) {
 			view.Env = append(view.Env, domain.TracingEnvVar{
-				Key: kv[0], Value: kv[1], Secret: kv[0] == otelHeaders, Overridden: tracingOverridden(own, kv[0]),
+				Key: v.Key, Value: v.Value, Secret: v.Key == otelHeaders, Overridden: tracingOverridden(own, v.Key),
 			})
 		}
 		return nil
@@ -230,8 +235,8 @@ func (a *App) LocalTracingEnv(ctx context.Context, actor domain.Actor, nodeID st
 			return err
 		}
 		out.Env = map[string]string{}
-		for _, kv := range tracingEnv(a.otlpEndpoint(), scope.Node, scope.Environment, key, true) {
-			out.Env[kv[0]] = kv[1]
+		for _, v := range tracingEnv(a.otlpEndpoint(), scope.Node, scope.Environment, key, true) {
+			out.Env[v.Key] = v.Value
 		}
 		return nil
 	})

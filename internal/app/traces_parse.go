@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -83,24 +84,28 @@ type axiomTraceCountRow struct {
 	Errors  float64 `json:"errors"`
 }
 
-type axiomSpanRow struct {
-	Time          axiomTime        `json:"_time"`
-	TraceID       string           `json:"trace_id"`
-	SpanID        string           `json:"span_id"`
-	ParentID      string           `json:"parent_span_id"`
-	Name          string           `json:"name"`
-	Kind          string           `json:"kind"`
-	Duration      axiomDuration    `json:"duration"`
-	Error         bool             `json:"error"`
-	StatusCode    string           `json:"status.code"`
-	StatusMessage string           `json:"status.message"`
-	Service       string           `json:"service.name"`
-	Scope         string           `json:"scope.name"`
-	Environment   string           `json:"resource.deployment.environment.name"`
-	Events        []axiomSpanEvent `json:"events"`
+type axiomRootRow struct {
+	Time        axiomTime     `json:"_time"`
+	TraceID     string        `json:"trace_id"`
+	Name        string        `json:"name"`
+	Kind        string        `json:"kind"`
+	Duration    axiomDuration `json:"duration"`
+	Error       bool          `json:"error"`
+	StatusCode  string        `json:"status.code"`
+	Service     string        `json:"service.name"`
+	Environment string        `json:"resource.deployment.environment.name"`
 }
 
-func (s axiomSpanRow) kind() string {
+type axiomSpanRow struct {
+	axiomRootRow
+	SpanID        string            `json:"span_id"`
+	ParentID      string            `json:"parent_span_id"`
+	StatusMessage string            `json:"status.message"`
+	Scope         string            `json:"scope.name"`
+	Events        []*axiomSpanEvent `json:"events"`
+}
+
+func (s axiomRootRow) kind() string {
 	kind := strings.TrimPrefix(strings.ToLower(s.Kind), "span_kind_")
 	if kind == "unspecified" {
 		return ""
@@ -108,7 +113,7 @@ func (s axiomSpanRow) kind() string {
 	return kind
 }
 
-func (s axiomSpanRow) status() string {
+func (s axiomRootRow) status() string {
 	code := strings.ToLower(s.StatusCode)
 	if s.Error || strings.Contains(code, "error") {
 		return "error"
@@ -142,7 +147,7 @@ func (e axiomSpanEvent) event() domain.SpanEvent {
 
 func spanAttributes(row AxiomRow, root string) map[string]string {
 	attributes := map[string]string{}
-	for column, raw := range row {
+	for _, column := range slices.Sorted(maps.Keys(row)) {
 		key, ok := strings.CutPrefix(column, root+".")
 		if !ok {
 			continue
@@ -150,7 +155,7 @@ func spanAttributes(row AxiomRow, root string) map[string]string {
 		if key == "custom" {
 			key = ""
 		}
-		flattenAttribute(attributes, key, raw)
+		flattenAttribute(attributes, key, row[column])
 	}
 	return attributes
 }
@@ -158,21 +163,30 @@ func spanAttributes(row AxiomRow, root string) map[string]string {
 func flattenAttribute(attributes map[string]string, key string, raw json.RawMessage) {
 	var object map[string]json.RawMessage
 	if json.Unmarshal(raw, &object) == nil {
-		for child, value := range object {
+		for _, child := range slices.Sorted(maps.Keys(object)) {
+			name := child
 			if key != "" {
-				child = key + "." + child
+				name = key + "." + child
 			}
-			flattenAttribute(attributes, child, value)
+			flattenAttribute(attributes, name, object[child])
 		}
 		return
 	}
-	var text string
-	if json.Unmarshal(raw, &text) != nil {
-		text = string(raw)
-	}
-	if key != "" && text != "" {
+	if text := attributeText(raw); key != "" && text != "" {
 		attributes[key] = text
 	}
+}
+
+func attributeText(raw json.RawMessage) string {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	var compact bytes.Buffer
+	if json.Compact(&compact, raw) != nil {
+		return string(raw)
+	}
+	return compact.String()
 }
 
 func sortedAttributes(attributes map[string]string) []domain.Attribute {
@@ -192,17 +206,20 @@ func httpStatusOf(attributes map[string]string) *float64 {
 	if err != nil || status <= 0 {
 		return nil
 	}
-	return obsF64(float64(status))
+	return new(float64(status))
 }
 
 func axiomSpanOf(row AxiomRow) (domain.Span, error) {
-	var s axiomSpanRow
-	if err := row.decode(&s); err != nil {
+	s, err := decodeRow[axiomSpanRow](row)
+	if err != nil {
 		return domain.Span{}, err
 	}
-	events := make([]domain.SpanEvent, len(s.Events))
-	for i, e := range s.Events {
-		events[i] = e.event()
+	events := []domain.SpanEvent{}
+	for _, e := range s.Events {
+		if e == nil {
+			continue
+		}
+		events = append(events, e.event())
 	}
 	return domain.Span{
 		SpanID:        s.SpanID,
@@ -222,8 +239,8 @@ func axiomSpanOf(row AxiomRow) (domain.Span, error) {
 }
 
 func axiomTraceSummaryOf(row AxiomRow) (domain.TraceSummary, error) {
-	var s axiomSpanRow
-	if err := row.decode(&s); err != nil {
+	s, err := decodeRow[axiomRootRow](row)
+	if err != nil {
 		return domain.TraceSummary{}, err
 	}
 	summary := domain.TraceSummary{

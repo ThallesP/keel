@@ -2,6 +2,7 @@ package axiom
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -109,7 +110,7 @@ func tabularRows(data []byte) ([]app.AxiomRow, error) {
 	}
 	rows := make([]app.AxiomRow, count)
 	for i := range rows {
-		rows[i] = app.AxiomRow{}
+		rows[i] = make(app.AxiomRow, len(table.Fields))
 		for c, field := range table.Fields {
 			rows[i][field.Name] = table.Columns[c][i]
 		}
@@ -182,12 +183,12 @@ func (c *Client) Orgs(ctx context.Context, t app.AxiomTarget) ([]app.AxiomOrgInf
 		return nil, err
 	}
 	var list []struct {
-		ID                    string  `json:"id"`
-		Name                  string  `json:"name"`
-		DefaultEdgeDeployment *string `json:"defaultEdgeDeployment"`
-		Region                *string `json:"region"`
-		License               *struct {
-			MaxDatasets *float64 `json:"maxDatasets"`
+		ID                    string `json:"id"`
+		Name                  string `json:"name"`
+		DefaultEdgeDeployment string `json:"defaultEdgeDeployment"`
+		Region                string `json:"region"`
+		License               struct {
+			MaxDatasets int `json:"maxDatasets"`
 		} `json:"license"`
 	}
 	if err := json.Unmarshal(data, &list); err != nil {
@@ -195,10 +196,7 @@ func (c *Client) Orgs(ctx context.Context, t app.AxiomTarget) ([]app.AxiomOrgInf
 	}
 	out := make([]app.AxiomOrgInfo, len(list))
 	for i, o := range list {
-		out[i] = app.AxiomOrgInfo{ID: o.ID, Name: o.Name, DefaultEdgeDeployment: o.DefaultEdgeDeployment, Region: o.Region}
-		if o.License != nil {
-			out[i].MaxDatasets = o.License.MaxDatasets
-		}
+		out[i] = app.AxiomOrgInfo{ID: o.ID, Name: o.Name, Edge: cmp.Or(o.DefaultEdgeDeployment, o.Region), MaxDatasets: o.License.MaxDatasets}
 	}
 	return out, nil
 }
@@ -296,7 +294,7 @@ func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTP
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil {
 		return app.HTTPReply{}, err
 	}
 	return app.HTTPReply{Status: res.StatusCode, ContentType: strings.TrimSpace(res.Header.Get("Content-Type")), Body: data}, nil

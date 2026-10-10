@@ -52,10 +52,10 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
 		return domain.EnvironmentLogs{}, domain.Invalid(msgNoLogStore)
 	}
-	q := linesQuery{N: clampLogTail(tail), Search: truncateRunes(search, 200)}
+	q := linesQuery{N: clampLogTail(tail), Search: truncateRunes(search, 200), From: float64(a.Now() - axiomQueryWindowMs), To: a.axiomUntil()}
 	if rng != "" {
 		from, _, _ := domain.RangeWindow(rng, a.Now())
-		q.From = obsF64(float64(from))
+		q.From = float64(from)
 	}
 	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, q)
 	if err != nil {
@@ -85,7 +85,7 @@ func (a *App) LogsAround(ctx context.Context, actor domain.Actor, environmentID 
 		return nil, domain.Invalid(msgNoLogStore)
 	}
 	lines, err := a.axiomLines(ctx, axiomLogsCfg(*scope.Sink), scope.ServiceIDs, linesQuery{
-		N: 500, From: obsF64(at - logsAroundMs), To: obsF64(at + logsAroundMs), OldestFirst: true,
+		N: 500, From: at - logsAroundMs, To: at + logsAroundMs, OldestFirst: true,
 	})
 	if err != nil {
 		return nil, obsInvalid(err)

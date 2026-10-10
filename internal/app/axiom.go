@@ -9,8 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,8 +39,10 @@ func AxiomBaseURL(domain string) string {
 	return strings.TrimRight(domain, "/")
 }
 
-func CompactDetail(body string) string {
-	return truncateRunes(strings.Join(strings.Fields(body), " "), 200)
+func CompactDetail(body string) string { return compactText(body, 200) }
+
+func compactText(text string, maxRunes int) string {
+	return truncateRunes(strings.Join(strings.Fields(strings.ToValidUTF8(text, "\uFFFD")), " "), maxRunes)
 }
 
 func truncateRunes(s string, n int) string {
@@ -67,70 +70,71 @@ func aplTime(ms float64) string {
 	return time.UnixMilli(int64(ms)).UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
-func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, since float64, until *float64) ([]AxiomRow, error) {
-	end := float64(a.Now() + axiomUntilSlackMs)
-	if until != nil {
-		end = *until
-	}
-	return a.Axiom.Query(ctx, cfg.target(), AxiomQuery{APL: apl, StartTime: aplTime(since), EndTime: aplTime(end)})
+func (a *App) axiomUntil() float64 { return float64(a.Now() + axiomUntilSlackMs) }
+
+func (a *App) axiomQuery(ctx context.Context, cfg axiomCfg, apl string, from, to float64) ([]AxiomRow, error) {
+	return a.Axiom.Query(ctx, cfg.target(), AxiomQuery{APL: apl, StartTime: aplTime(from), EndTime: aplTime(to)})
 }
 
-var axiomInvalidFieldRE = regexp.MustCompile(`Axiom 400.*invalid field`)
-
-func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, since, until *float64) ([]AxiomRow, error) {
-	from := float64(a.Now() - axiomQueryWindowMs)
-	if since != nil {
-		from = *since
+func (a *App) axiomRows(ctx context.Context, cfg axiomCfg, apl string, from, to float64) ([]AxiomRow, error) {
+	rows, err := a.axiomQuery(ctx, cfg, apl, from, to)
+	if axiomStatus(err) == http.StatusBadRequest && strings.Contains(err.Error(), "invalid field") {
+		return []AxiomRow{}, nil
 	}
-	rows, err := a.axiomQuery(ctx, cfg, apl, from, until)
-	if err != nil {
-		if axiomInvalidFieldRE.MatchString(err.Error()) {
-			return []AxiomRow{}, nil
-		}
-		return nil, err
-	}
-	return rows, nil
+	return rows, err
 }
 
-func axiomRowsAs[T any](ctx context.Context, a *App, cfg axiomCfg, apl string, since, until *float64) ([]T, error) {
-	rows, err := a.axiomRows(ctx, cfg, apl, since, until)
+func axiomRowsAs[T any](ctx context.Context, a *App, cfg axiomCfg, apl string, from, to float64) ([]T, error) {
+	rows, err := a.axiomRows(ctx, cfg, apl, from, to)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]T, len(rows))
-	for i, row := range rows {
-		if err := row.decode(&out[i]); err != nil {
-			return nil, err
-		}
-	}
-	return out, nil
+	return readRows(a.Log, rows, decodeRow[T]), nil
 }
 
-func (r AxiomRow) decode(v any) error {
-	b, err := json.Marshal(r)
+func readRows[T any](log *slog.Logger, rows []AxiomRow, read func(AxiomRow) (T, error)) []T {
+	out := make([]T, 0, len(rows))
+	var skipped []error
+	for _, row := range rows {
+		v, err := read(row)
+		if err != nil {
+			skipped = append(skipped, err)
+			continue
+		}
+		out = append(out, v)
+	}
+	if len(skipped) > 0 {
+		log.Warn("Axiom: skipped rows Keel cannot read", "skipped", len(skipped), "rows", len(rows), "err", skipped[0])
+	}
+	return out
+}
+
+func decodeRow[T any](row AxiomRow) (T, error) {
+	var v T
+	b, err := json.Marshal(row)
 	if err != nil {
-		return fmt.Errorf("Axiom row: %w", err)
+		return v, fmt.Errorf("Axiom row: %w", err)
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		return fmt.Errorf("Axiom row: %w", err)
+	if err := json.Unmarshal(b, &v); err != nil {
+		return v, fmt.Errorf("Axiom row: %w", err)
 	}
-	return nil
+	return v, nil
 }
 
 type axiomTime float64
 
 func (t *axiomTime) UnmarshalJSON(b []byte) error {
-	var epoch float64
-	if err := json.Unmarshal(b, &epoch); err == nil {
-		*t = axiomTime(epochMs(epoch))
+	var epoch uint64
+	if json.Unmarshal(b, &epoch) == nil {
+		*t = epochTime(epoch)
 		return nil
 	}
 	var text string
 	if err := json.Unmarshal(b, &text); err != nil {
 		return err
 	}
-	if digits, err := strconv.ParseUint(text, 10, 64); err == nil {
-		*t = axiomTime(epochMs(float64(digits)))
+	if epoch, err := strconv.ParseUint(text, 10, 64); err == nil {
+		*t = epochTime(epoch)
 		return nil
 	}
 	at, err := time.Parse(time.RFC3339Nano, text)
@@ -141,36 +145,34 @@ func (t *axiomTime) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func epochMs(epoch float64) float64 {
+func epochTime(epoch uint64) axiomTime {
 	switch {
 	case epoch > 1e17:
-		return epoch / 1e6
+		return axiomTime(float64(epoch/1e6) + float64(epoch%1e6)/1e6)
 	case epoch > 1e14:
-		return epoch / 1e3
+		return axiomTime(float64(epoch/1e3) + float64(epoch%1e3)/1e3)
 	}
-	return epoch
+	return axiomTime(epoch)
 }
 
-func obsF64(x float64) *float64 { return &x }
-
-var (
-	axiomExistsRE  = regexp.MustCompile(`(?i)exists|409`)
-	axiomAuthErrRE = regexp.MustCompile(`40[13]`)
-)
+var axiomDatasetDescriptions = map[string]string{
+	domain.DatasetLogs:   "Keel container logs",
+	domain.DatasetTraces: "Keel OpenTelemetry traces",
+}
 
 func (a *App) axiomVerify(ctx context.Context, cfg axiomCfg) error {
 	if !domain.ValidDataset(cfg.Dataset) {
 		return errors.New("Dataset name: letters, digits, - _ . only")
 	}
-	err := a.Axiom.CreateDataset(ctx, cfg.target(), "", cfg.Dataset, "Keel container logs")
-	if err != nil && !axiomExistsRE.MatchString(err.Error()) && axiomAuthErrRE.MatchString(err.Error()) {
+	err := a.Axiom.CreateDataset(ctx, cfg.target(), "", cfg.Dataset, axiomDatasetDescriptions[domain.DatasetLogs])
+	if status := axiomStatus(err); status == http.StatusUnauthorized || status == http.StatusForbidden {
 		return err
 	}
 	return a.axiomCanQuery(ctx, cfg)
 }
 
 func (a *App) axiomCanQuery(ctx context.Context, cfg axiomCfg) error {
-	_, err := a.axiomQuery(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), nil)
+	_, err := a.axiomQuery(ctx, cfg, aplDataset(cfg.Dataset)+" | limit 1", float64(a.Now()-60_000), a.axiomUntil())
 	return err
 }
 
@@ -194,7 +196,7 @@ func (r axiomLogRow) line() domain.ServiceLogLine {
 func (a *App) axiomTail(ctx context.Context, cfg axiomCfg, serviceID string, n int) (domain.LogTail, error) {
 	apl := aplDataset(cfg.Dataset) + " | where service_id == " + aplLit(serviceID) +
 		" | sort by _time desc | limit " + strconv.Itoa(n) + " | project _time, message, stream, task, replica"
-	rows, err := axiomRowsAs[axiomLogRow](ctx, a, cfg, apl, nil, nil)
+	rows, err := axiomRowsAs[axiomLogRow](ctx, a, cfg, apl, float64(a.Now()-axiomQueryWindowMs), a.axiomUntil())
 	if err != nil {
 		return domain.LogTail{}, err
 	}
@@ -222,7 +224,7 @@ func sortLogReplicas(rs []domain.LogReplica) {
 type linesQuery struct {
 	N           int
 	Search      string
-	From, To    *float64
+	From, To    float64
 	OldestFirst bool
 }
 
@@ -311,15 +313,12 @@ type axiomJWTClaims struct {
 
 func axiomClaims(token string) (axiomJWTClaims, bool) {
 	parts := strings.Split(token, ".")
-	if len(parts) < 2 {
+	if len(parts) != 3 {
 		return axiomJWTClaims{}, false
 	}
-	segment := strings.TrimRight(parts[1], "=")
-	payload, err := base64.RawURLEncoding.DecodeString(segment)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		if payload, err = base64.RawStdEncoding.DecodeString(segment); err != nil {
-			return axiomJWTClaims{}, false
-		}
+		return axiomJWTClaims{}, false
 	}
 	var claims axiomJWTClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
@@ -356,20 +355,11 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 	}
 	orgs := make([]domain.AxiomOrg, len(infos))
 	for i, o := range infos {
-		d := override
-		if d == "" {
-			edge := ""
-			if o.DefaultEdgeDeployment != nil {
-				edge = *o.DefaultEdgeDeployment
-			} else if o.Region != nil {
-				edge = *o.Region
-			}
-			d = domain.AxiomDomains[0]
-			if strings.Contains(edge, "eu-") {
-				d = domain.AxiomDomains[1]
-			}
+		d := domain.AxiomDomains[0]
+		if strings.Contains(o.Edge, "eu-") {
+			d = domain.AxiomDomains[1]
 		}
-		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: d}
+		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: cmp.Or(override, d)}
 	}
 	return orgs, nil
 }
@@ -388,19 +378,16 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 			own = append(own, d.Name)
 		}
 	}
-	datasets := [][2]string{{domain.DatasetLogs, "Keel container logs"}, {domain.DatasetTraces, "Keel OpenTelemetry traces"}}
-	var missing [][2]string
-	for _, d := range datasets {
-		if !have[d[0]] {
-			missing = append(missing, d)
+	var missing []string
+	for _, name := range []string{domain.DatasetLogs, domain.DatasetTraces} {
+		if !have[name] {
+			missing = append(missing, name)
 		}
 	}
-	for _, d := range missing {
-		name, description := d[0], d[1]
-		if err := a.Axiom.CreateDataset(ctx, t, org.ID, name, description); err != nil {
-			return domain.LogSink{}, errors.New(datasetCapMessage(org, own, missing, have, name, err))
+	for i, name := range missing {
+		if err := a.Axiom.CreateDataset(ctx, t, org.ID, name, axiomDatasetDescriptions[name]); err != nil {
+			return domain.LogSink{}, errors.New(datasetCapMessage(org, own, missing[i:], err))
 		}
-		have[name] = true
 		own = append(own, name)
 	}
 	minted, err := a.Axiom.MintToken(ctx, t, org.ID, AxiomTokenRequest{
@@ -417,21 +404,12 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 	return domain.LogSink{Kind: domain.SinkKindAxiom, Domain: org.Domain, Dataset: domain.DatasetLogs, Traces: domain.DatasetTraces, Token: minted}, nil
 }
 
-var axiom400RE = regexp.MustCompile(`^Axiom 400\b`)
-
-func datasetCapMessage(org domain.AxiomOrg, own []string, missing [][2]string, have map[string]bool, name string, err error) string {
-	var left []string
-	for _, d := range missing {
-		if !have[d[0]] {
-			left = append(left, d[0])
-		}
-	}
+func datasetCapMessage(org domain.AxiomOrg, own, left []string, err error) string {
 	msg := err.Error()
-	if org.MaxDatasets != nil && axiom400RE.MatchString(msg) && float64(len(own)) >= *org.MaxDatasets {
-		limit := *org.MaxDatasets
-		return org.Name + " is at its Axiom plan's limit of " + strconv.FormatFloat(limit, 'f', -1, 64) + " datasets (" +
+	if org.MaxDatasets > 0 && axiomStatus(err) == http.StatusBadRequest && len(own) >= org.MaxDatasets {
+		return org.Name + " is at its Axiom plan's limit of " + strconv.Itoa(org.MaxDatasets) + " datasets (" +
 			strings.Join(own, ", ") + "). Keel needs " + strings.Join(left, " and ") + ": delete " +
-			strconv.FormatFloat(float64(len(own)+len(left))-limit, 'f', -1, 64) + " in Axiom or pick another org. (" + msg + ")"
+			strconv.Itoa(len(own)+len(left)-org.MaxDatasets) + " in Axiom or pick another org. (" + msg + ")"
 	}
-	return "Creating " + name + ": " + msg
+	return "Creating " + left[0] + ": " + msg
 }

@@ -17,10 +17,10 @@ type LogSink struct {
 }
 
 type AxiomOrg struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Domain      string   `json:"domain"`
-	MaxDatasets *float64 `json:"maxDatasets,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Domain      string `json:"domain"`
+	MaxDatasets int    `json:"maxDatasets,omitempty"`
 }
 
 var AxiomDomains = []string{"api.axiom.co", "api.eu.axiom.co"}

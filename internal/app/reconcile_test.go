@@ -146,21 +146,3 @@ func TestDeployErrorText(t *testing.T) {
 		t.Errorf("cut ascii: %d", len(got))
 	}
 }
-
-func TestDeployToFixed1(t *testing.T) {
-	for in, want := range map[float64]string{
-		0:      "0.0",
-		3.4:    "3.4",
-		1.25:   "1.3",
-		0.25:   "0.3",
-		1.15:   "1.1",
-		1.05:   "1.1",
-		9.96:   "10.0",
-		224.04: "224.0",
-		0.04:   "0.0",
-	} {
-		if got := deployToFixed1(in); got != want {
-			t.Errorf("toFixed1(%v) = %q, want %q", in, got, want)
-		}
-	}
-}

@@ -14,8 +14,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func obsStrp(s string) *string   { return &s }
-func obsF64p(f float64) *float64 { return &f }
+func obsStrp(s string) *string { return &s }
 
 func obsSinkOfOrg(t *testing.T, e *obsEnv, org string) *app.SinkRecord {
 	t.Helper()
@@ -221,7 +220,7 @@ func TestCompleteAxiomSignInSingleOrg(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 20_000)
 	ax := &obsFakeAxiom{clientID: "client-1", token: obsJWT(`{"aud":"mcp"}`), minted: "xaat-minted-ABCD",
-		orgs:     []app.AxiomOrgInfo{{ID: "acme-x1", Name: "Acme Axiom", DefaultEdgeDeployment: obsStrp("cloud.eu-central-1.aws"), MaxDatasets: obsF64p(3)}},
+		orgs:     []app.AxiomOrgInfo{{ID: "acme-x1", Name: "Acme Axiom", Edge: "cloud.eu-central-1.aws", MaxDatasets: 3}},
 		datasets: []app.AxiomDataset{{Name: "keel-logs"}, {Name: "otel-demo-traces", Shared: true}}}
 	e.app.Axiom = ax
 	state := obsStartSignIn(t, e, e.member)
@@ -294,7 +293,7 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 	ax.orgsErr = nil
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "This Axiom account has no organization")
 
-	ax.orgs = []app.AxiomOrgInfo{{ID: "o1", Name: "Free Org", MaxDatasets: obsF64p(3)}}
+	ax.orgs = []app.AxiomOrgInfo{{ID: "o1", Name: "Free Org", MaxDatasets: 3}}
 	ax.datasetsErr = &app.AxiomError{Status: 403}
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "Listing datasets: Axiom 403")
 	ax.datasetsErr = nil
@@ -340,8 +339,8 @@ func TestAxiomOrgPick(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 40_000)
 	orgs := []app.AxiomOrgInfo{
-		{ID: "o1", Name: "One", Region: obsStrp("us-east-1")},
-		{ID: "o2", Name: "Two", DefaultEdgeDeployment: obsStrp(""), Region: obsStrp("eu-west-1")},
+		{ID: "o1", Name: "One", Edge: "us-east-1"},
+		{ID: "o2", Name: "Two", Edge: "cloud.us-east-1.aws"},
 	}
 	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{"axiomDefaultOrg":"nope"}`), orgs: orgs, minted: "xaat-2"}
 	e.app.Axiom = ax
@@ -419,7 +418,7 @@ func TestAxiomOrgPick(t *testing.T) {
 func TestAxiomAPIOverride(t *testing.T) {
 	ctx := context.Background()
 	e := newObsEnv(t, 50_000)
-	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{}`), orgs: []app.AxiomOrgInfo{{ID: "o1", Name: "Mock", Region: obsStrp("eu-1")}}, minted: "xaat-3"}
+	ax := &obsFakeAxiom{clientID: "c", token: obsJWT(`{}`), orgs: []app.AxiomOrgInfo{{ID: "o1", Name: "Mock", Edge: "eu-1"}}, minted: "xaat-3"}
 	e.app.Axiom = ax
 	e.app.Config.AxiomAPIURL = "http://127.0.0.1:4318"
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {

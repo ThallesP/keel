@@ -8,7 +8,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func TestAgentPromptMatchesTypeScript(t *testing.T) {
+func TestAgentPrompt(t *testing.T) {
 	for file, args := range map[string][2]string{
 		"testdata/tracing_prompt_none.txt":    {"", ""},
 		"testdata/tracing_prompt_service.txt": {"api", "shop"},
@@ -28,7 +28,7 @@ func TestTracingEnv(t *testing.T) {
 	node := domain.Node{ID: "n1", Name: "api"}
 	env := domain.Environment{ID: "e/1", Name: "prod uction"}
 	deployed := tracingEnv("http://x/otlp", node, env, "keel_otlp_K", false)
-	want := [][2]string{
+	want := []envVar{
 		{"OTEL_EXPORTER_OTLP_ENDPOINT", "http://x/otlp"},
 		{"OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"},
 		{"OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer%20keel_otlp_K"},
@@ -42,13 +42,13 @@ func TestTracingEnv(t *testing.T) {
 		t.Fatalf("deployed env\n got %q\nwant %q", deployed, want)
 	}
 	local := tracingEnv("http://x/otlp", node, env, "keel_otlp_K", true)
-	if len(local) != 7 || local[0][0] != "OTEL_EXPORTER_OTLP_PROTOCOL" ||
-		local[3][1] != "keel.service_id=n1,keel.environment_id=e%2F1,deployment.environment.name=local" {
+	if len(local) != 7 || local[0].Key != "OTEL_EXPORTER_OTLP_PROTOCOL" ||
+		local[3].Value != "keel.service_id=n1,keel.environment_id=e%2F1,deployment.environment.name=local" {
 		t.Fatalf("local env %q", local)
 	}
-	for i, kv := range deployed {
-		if TracingVarOrder(kv[0]) != i {
-			t.Errorf("TracingVarOrder(%s) = %d", kv[0], TracingVarOrder(kv[0]))
+	for i, v := range deployed {
+		if TracingVarOrder(v.Key) != i {
+			t.Errorf("TracingVarOrder(%s) = %d", v.Key, TracingVarOrder(v.Key))
 		}
 	}
 	if TracingVarOrder("PATH") != -1 {

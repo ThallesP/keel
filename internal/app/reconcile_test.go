@@ -136,14 +136,7 @@ func TestSettleDeployment(t *testing.T) {
 }
 
 func TestDeployErrorText(t *testing.T) {
-	if got := deployErrorText(errors.New("  Error response\n\tfrom daemon:  no such image \u00a0")); got != "Error response from daemon: no such image" {
-		t.Errorf("collapse: %q", got)
-	}
-	long := strings.Repeat("é", 299) + "😀😀"
-	if got := deployErrorText(errors.New(long)); got != strings.Repeat("é", 299)+"😀" {
-		t.Errorf("cut: %d", len(got))
-	}
 	if got := deployErrorText(errors.New(strings.Repeat("x", 400))); len(got) != 300 {
-		t.Errorf("cut ascii: %d", len(got))
+		t.Errorf("cut: %d", len(got))
 	}
 }

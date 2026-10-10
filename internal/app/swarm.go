@@ -32,10 +32,9 @@ func (a *App) scheduleApply(req applyRequest) {
 	if q.running != nil && q.running.revision < req.revision {
 		q.running.cancel(errApplySuperseded)
 	}
-	key := fmt.Sprintf("apply:%s:%d", req.nodeID, rt.next())
 	rt.mu.Unlock()
 	if !draining {
-		a.Jobs.After(key, 0, func(ctx context.Context) { a.drainApplies(ctx, req.nodeID) })
+		a.Jobs.After("apply:"+req.nodeID, 0, func(ctx context.Context) { a.drainApplies(ctx, req.nodeID) })
 	}
 }
 
@@ -44,7 +43,7 @@ func (a *App) drainApplies(ctx context.Context, nodeID string) {
 	for {
 		rt.mu.Lock()
 		q := rt.applies[nodeID]
-		if q == nil || len(q.queued) == 0 || ctx.Err() != nil {
+		if len(q.queued) == 0 || ctx.Err() != nil {
 			delete(rt.applies, nodeID)
 			rt.mu.Unlock()
 			return
@@ -56,11 +55,6 @@ func (a *App) drainApplies(ctx context.Context, nodeID string) {
 		rt.mu.Unlock()
 		a.safeApply(applyCtx, req)
 		cancel(nil)
-		rt.mu.Lock()
-		if q.running != nil && q.running.revision == req.revision {
-			q.running = nil
-		}
-		rt.mu.Unlock()
 	}
 }
 
@@ -222,6 +216,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		fail(err)
 		return
 	}
+	text := "service updated · revision " + strconv.Itoa(in.desired.Revision)
 	if created {
 		_, wanted, err = a.wantedRevision(ctx, id)
 		if err != nil {
@@ -234,9 +229,6 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			}
 			return
 		}
-	}
-	text := "service updated · revision " + strconv.Itoa(in.desired.Revision)
-	if created {
 		text = "service created · " + strconv.Itoa(in.desired.Replicas) + " replica(s)"
 	}
 	moved := false

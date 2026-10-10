@@ -66,7 +66,7 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 		}
 		anyFailed = anyFailed || s.Status == domain.StepFailed
 		allDone = allDone && s.Status == domain.StepDone
-		allApplied = allApplied && s.Status != domain.StepPending && s.AppliedAt != nil
+		allApplied = allApplied && s.AppliedAt != nil
 	}
 	health := &next.Steps[len(next.Steps)-1]
 	switch {
@@ -81,16 +81,13 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 			text = "stopped"
 		}
 		appended = append(appended, domain.LogLine{At: now, Text: text})
-	default:
-		next.Status, next.FinishedAt = domain.DeploymentRunning, nil
-		if allApplied && health.Status == domain.StepPending {
-			health.Status, health.StartedAt = domain.StepRunning, new(now)
-		}
+	case allApplied && health.Status == domain.StepPending:
+		health.Status, health.StartedAt = domain.StepRunning, new(now)
 	}
 	return next, appended, next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps)
 }
 
-func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
+func reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
 	running, err := tx.RunningDeployments(environmentID)
 	if err != nil {
 		return err
@@ -117,7 +114,7 @@ func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) err
 		if err := tx.UpdateDeployment(next, appended); err != nil {
 			return err
 		}
-		org, err := deployOrgOf(tx, d.EnvironmentID)
+		org, err := tx.OrganizationOfEnvironment(d.EnvironmentID)
 		if err != nil {
 			return err
 		}
@@ -128,7 +125,7 @@ func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) err
 
 func (a *App) reconcileRunning(ctx context.Context, environmentID string) {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		return a.reconcile(tx, ch, environmentID, a.Now())
+		return reconcile(tx, ch, environmentID, a.Now())
 	})
 	if err != nil {
 		a.Log.Error("reconcile", "err", err)
@@ -144,7 +141,7 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 		if err != nil || d.Status != domain.DeploymentRunning {
 			return err
 		}
-		org, err := deployOrgOf(tx, d.EnvironmentID)
+		org, err := tx.OrganizationOfEnvironment(d.EnvironmentID)
 		if err != nil {
 			return err
 		}
@@ -195,8 +192,7 @@ func (a *App) recoverDeploy(ctx context.Context) {
 
 	var running []domain.Deployment
 	var redos []applyRequest
-	err := a.read(ctx, func(tx Tx) error {
-		var err error
+	err := a.read(ctx, func(tx Tx) (err error) {
 		if running, err = tx.RunningDeployments(""); err != nil {
 			return err
 		}

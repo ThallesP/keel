@@ -104,8 +104,11 @@ func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duratio
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
+		if err != nil {
+			return err
+		}
 		exists = n.Desired != nil
-		return err
+		return nil
 	})
 	if err != nil {
 		a.Log.Error("schedule observe", "node", id, "err", err)
@@ -121,7 +124,8 @@ func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duratio
 		rt.mu.Unlock()
 		return true
 	}
-	gen := rt.next()
+	rt.seq++
+	gen := rt.seq
 	rt.observe[id] = pendingScan{due: due, settle: settle, gen: gen}
 	rt.mu.Unlock()
 	a.Jobs.After(fmt.Sprintf("observe:%s:%d", id, gen), delay, func(ctx context.Context) {
@@ -158,7 +162,7 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 		if err != nil {
 			return err
 		}
-		return a.reconcile(tx, ch, envID, now)
+		return reconcile(tx, ch, envID, now)
 	})
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
@@ -209,7 +213,7 @@ func (a *App) observeAll(ctx context.Context) {
 				return err
 			}
 		}
-		return a.reconcile(tx, ch, "", now)
+		return reconcile(tx, ch, "", now)
 	})
 	if err != nil {
 		a.Log.Error("observe (full sweep)", "err", err)

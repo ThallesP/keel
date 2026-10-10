@@ -8,9 +8,8 @@ import (
 func TestAuthAttemptsWindow(t *testing.T) {
 	l := newAuthAttempts(3, time.Second)
 	steps := []struct {
-		key  string
-		at   int64
-		wait int64
+		key      string
+		at, wait int64
 	}{
 		{"a", 0, 0},
 		{"a", 100, 0},

@@ -134,7 +134,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute) ([]routeStatu
 	out := make([]routeStatus, 0, len(routes))
 	failed, err := a.loadProxy(ctx, routes)
 	if err != nil {
-		msg := compactText(err.Error(), 300)
+		msg := deployErrorText(err)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
 		for _, r := range routes {
 			out = append(out, routeStatus{r, domain.EndpointStatus{State: domain.EndpointFailed, Error: msg, At: at}})
@@ -275,9 +275,6 @@ func (a *App) setEndpointStatuses(ctx context.Context, statuses []routeStatus) e
 
 func environmentChanged(tx Tx, ch *Changes, environmentID string) error {
 	org, err := tx.OrganizationOfEnvironment(environmentID)
-	if errors.Is(err, ErrNoRow) {
-		return nil
-	}
 	if err != nil {
 		return err
 	}

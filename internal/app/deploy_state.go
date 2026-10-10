@@ -34,11 +34,6 @@ type runningApply struct {
 
 var errApplySuperseded = errors.New("superseded by a newer revision")
 
-func (r *deployRuntime) next() uint64 {
-	r.seq++
-	return r.seq
-}
-
 var (
 	deployComputeEnv = computeEnv
 	deployFollowPort = followPort

@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -39,20 +40,14 @@ func (j *fakeJobs) After(key string, delay time.Duration, fn func(context.Contex
 func (j *fakeJobs) Every(string, time.Duration, func(context.Context)) {}
 
 func (j *fakeJobs) next(by int64) *fakeJob {
-	idx := -1
-	for i, p := range j.pending {
-		if p.due > by {
-			continue
-		}
-		if idx < 0 || p.due < j.pending[idx].due {
-			idx = i
-		}
-	}
-	if idx < 0 {
+	if len(j.pending) == 0 {
 		return nil
 	}
-	p := j.pending[idx]
-	j.pending = slices.Delete(j.pending, idx, idx+1)
+	p := slices.MinFunc(j.pending, func(a, b *fakeJob) int { return cmp.Compare(a.due, b.due) })
+	if p.due > by {
+		return nil
+	}
+	j.pending = slices.DeleteFunc(j.pending, func(q *fakeJob) bool { return q == p })
 	return p
 }
 
@@ -66,9 +61,7 @@ func (j *fakeJobs) advance(d time.Duration) {
 			*j.clock = target
 			return
 		}
-		if p.due > *j.clock {
-			*j.clock = p.due
-		}
+		*j.clock = max(*j.clock, p.due)
 		p.fn(j.ctx)
 	}
 }

@@ -49,9 +49,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	names := make([]string, 0, len(affected))
 	for i := range affected {
 		n := &affected[i]
-		d := *n.Desired
-		d.Revision++
-		n.Desired = &d
+		n.Desired.Revision++
 		n.Dirty = false
 		n.ShippedAt = new(now)
 		n.ApplyError = ""
@@ -63,16 +61,14 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	}
 	steps = append(steps, domain.DeployStep{Label: healthStepLabel, Status: domain.StepPending})
 
-	word := opts.Verb
-	if word == "" {
-		switch {
-		case opts.Only != nil && opts.Refresh:
-			word = "redeploy"
-		case opts.Only != nil:
-			word = "deploy"
-		default:
-			word = "ship"
-		}
+	word := "ship"
+	switch {
+	case opts.Verb != "":
+		word = opts.Verb
+	case opts.Only != nil && opts.Refresh:
+		word = "redeploy"
+	case opts.Only != nil:
+		word = "deploy"
 	}
 	d := domain.Deployment{
 		ID:            domain.NewID(),
@@ -81,7 +77,6 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		Status:        domain.DeploymentRunning,
 		StartedAt:     now,
 		Steps:         steps,
-		Log:           []domain.LogLine{},
 	}
 	if err := tx.InsertDeployment(d); err != nil {
 		return "", err
@@ -151,7 +146,7 @@ func (a *App) GetDeployment(ctx context.Context, actor domain.Actor, id string) 
 }
 
 func (a *App) ListNodeDeployments(ctx context.Context, actor domain.Actor, nodeID string) ([]domain.Deployment, error) {
-	out := []domain.Deployment{}
+	var out []domain.Deployment
 	err := a.read(ctx, func(tx Tx) error {
 		scope, ok, err := ownedNode(tx, actor, nodeID)
 		if err != nil || !ok {
@@ -240,7 +235,7 @@ func (a *App) writeStep(ctx context.Context, deploymentID, nodeID string, change
 func deployPtr[T any](v T) *T { return &v }
 
 func (a *App) scheduleDeploymentTimeout(deploymentID string, delay time.Duration) {
-	a.Jobs.After("timeout:"+deploymentID, max(delay, 0), func(ctx context.Context) {
+	a.Jobs.After("timeout:"+deploymentID, delay, func(ctx context.Context) {
 		a.timeoutDeployment(ctx, deploymentID)
 	})
 }

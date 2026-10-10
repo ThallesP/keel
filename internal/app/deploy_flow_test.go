@@ -68,6 +68,7 @@ func TestShipOnly(t *testing.T) {
 	}{
 		{"only, no refresh", func(a, _ domain.Node) app.ShipOptions { return app.ShipOptions{Only: []string{a.ID}} }, "deploy api", ""},
 		{"only, refresh", func(a, _ domain.Node) app.ShipOptions { return app.ShipOptions{Only: []string{a.ID}, Refresh: true} }, "redeploy api", ""},
+		{"verb", func(a, _ domain.Node) app.ShipOptions { return app.ShipOptions{Only: []string{a.ID}, Verb: "stop"} }, "stop api", ""},
 		{"unknown and non-deployable ids are ignored", func(a, vol domain.Node) app.ShipOptions {
 			return app.ShipOptions{Only: []string{"nope", vol.ID, a.ID}}
 		}, "deploy api", ""},
@@ -98,14 +99,6 @@ func TestShipOnly(t *testing.T) {
 	}
 }
 
-func TestShipVerb(t *testing.T) {
-	w := newWorld(t)
-	a := w.addNode("api", shipped(1), replicas(0))
-	if d := w.deployment(w.ship(app.ShipOptions{Only: []string{a.ID}, Verb: "stop"})); d.Message != "stop api" {
-		t.Fatalf("message %q", d.Message)
-	}
-}
-
 func TestOrganizationIsolation(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
@@ -118,7 +111,7 @@ func TestOrganizationIsolation(t *testing.T) {
 		if d, err := w.app.LatestDeployment(ctx, actor, "env"); err != nil || d != nil {
 			t.Errorf("%+v LatestDeployment: %v %v", actor, d, err)
 		}
-		if ds, err := w.app.ListNodeDeployments(ctx, actor, a.ID); err != nil || ds == nil || len(ds) != 0 {
+		if ds, err := w.app.ListNodeDeployments(ctx, actor, a.ID); err != nil || len(ds) != 0 {
 			t.Errorf("%+v ListNodeDeployments: %v %v", actor, ds, err)
 		}
 	}

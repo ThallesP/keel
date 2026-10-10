@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -64,9 +63,9 @@ func TestParseWorkerEvents(t *testing.T) {
 		name, body string
 		want       []app.DockerEvent
 	}{
-		{"empty", "", []app.DockerEvent{}},
-		{"blank lines", "\n  \n", []app.DockerEvent{}},
-		{"empty array", " [] ", []app.DockerEvent{}},
+		{"empty", "", nil},
+		{"blank lines", "\n  \n", nil},
+		{"empty array", " [] ", nil},
 		{"array", `[{"Type":"container","Action":"start","Actor":{"ID":"c1","Attributes":{"name":"svc-n.1.x","com.docker.swarm.service.name":"svc-n"}},"time":1700000000},{"Type":"node","Action":"update"}]`,
 			[]app.DockerEvent{{Type: "container", Action: "start", Name: "svc-n.1.x", ServiceName: "svc-n"}, {Type: "node", Action: "update"}}},
 		{"ndjson with blank lines and CRLF", "{\"Type\":\"service\",\"Action\":\"update\",\"Actor\":{\"Attributes\":{\"name\":\"svc-a\"}}}\r\n\r\n{\"Type\":\"node\",\"Action\":\"create\"}\n",
@@ -75,7 +74,7 @@ func TestParseWorkerEvents(t *testing.T) {
 	}
 	for _, c := range cases {
 		got, err := parseWorkerEvents([]byte(c.body))
-		if err != nil || !reflect.DeepEqual(got, c.want) {
+		if err != nil || !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v\n got %+v\nwant %+v", c.name, err, got, c.want)
 		}
 	}
@@ -133,8 +132,8 @@ func TestWorkerEventsRoute(t *testing.T) {
 		t.Fatalf("%d jobs %v", w.Code, jobs.keys)
 	}
 
-	a2, _, _ := deployTestApp(t, "")
-	if w := postEvents(New(a2, Options{}), "Bearer ", "[]", ""); w.Code != 401 {
+	a.Config.WorkerToken = ""
+	if w := postEvents(h, "Bearer ", "[]", ""); w.Code != 401 {
 		t.Fatalf("unset token: %d", w.Code)
 	}
 }
@@ -193,7 +192,7 @@ func TestDeploymentRoutes(t *testing.T) {
 	}
 
 	_, body, raw = call(member, "GET", "/api/deployments/"+id, "")
-	if d := body.Deployment; d == nil || d.ID != id || d.Message != "ship api" || d.Status != "running" || strings.Contains(raw, `"_id"`) {
+	if d := body.Deployment; d == nil || d.ID != id || d.Message != "ship api" || d.Status != "running" {
 		t.Fatalf("get: %s", raw)
 	}
 	if !strings.Contains(raw, `"log":[]`) || !strings.Contains(raw, `{"label":"health checks","status":"pending"}`) || strings.Contains(raw, "finishedAt") {

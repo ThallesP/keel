@@ -15,12 +15,11 @@ type DeploySeams struct {
 }
 
 func UseDeploySeams(s DeploySeams) (restore func()) {
-	env, tracing, follow, sync := deployComputeEnv, deployWithTracing, deployFollowPort, deployProxySync
+	env, follow, sync := deployComputeEnv, deployFollowPort, deployProxySync
 	deployComputeEnv = s.ComputeEnv
-	deployWithTracing = func(_ *App, _ Tx, _ domain.Node, env map[string]string) (map[string]string, error) { return env, nil }
 	deployFollowPort = s.FollowPort
 	deployProxySync = func(*App) { s.ProxySync() }
 	return func() {
-		deployComputeEnv, deployWithTracing, deployFollowPort, deployProxySync = env, tracing, follow, sync
+		deployComputeEnv, deployFollowPort, deployProxySync = env, follow, sync
 	}
 }

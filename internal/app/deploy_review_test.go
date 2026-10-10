@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,10 +32,8 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 			t.Fatalf("step %d: %+v", i, s)
 		}
 	}
-	for _, line := range logTexts(d) {
-		if strings.HasPrefix(line, "error:") {
-			t.Fatalf("log: %q", logTexts(d))
-		}
+	if slices.ContainsFunc(logTexts(d), func(l string) bool { return strings.HasPrefix(l, "error:") }) {
+		t.Fatalf("log: %q", logTexts(d))
 	}
 	for _, n := range []domain.Node{w.node(a.ID), w.node(b.ID)} {
 		if n.ApplyError != "" {

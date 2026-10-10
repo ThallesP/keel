@@ -181,7 +181,7 @@ func (a *App) AcceptInvitation(ctx context.Context, actor domain.Actor, id strin
 		out = MyOrganization{ID: org.ID, Name: org.Name, Slug: org.Slug, Role: inv.Role}
 		return nil
 	})
-	if err == nil && a.Conns != nil {
+	if err == nil {
 		a.Conns.DisconnectUser(actor.UserID)
 	}
 	return out, err

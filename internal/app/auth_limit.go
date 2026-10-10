@@ -27,8 +27,6 @@ type authLimiters struct {
 	devicePoll  *authAttempts
 }
 
-func (a *App) limits() *authLimiters { return a.authLimits }
-
 func (a *App) limited(l *authAttempts, key string) error {
 	if wait := l.take(key, a.Now()); wait > 0 {
 		return &domain.RateLimitError{RetryAfterSeconds: (wait + 999) / 1000}

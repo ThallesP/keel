@@ -45,7 +45,10 @@ type Config struct {
 
 func New(a App) *App {
 	if a.Events == nil {
-		a.Events = noopPublisher{}
+		a.Events = noop{}
+	}
+	if a.Conns == nil {
+		a.Conns = noop{}
 	}
 	if a.Now == nil {
 		a.Now = func() int64 { return time.Now().UnixMilli() }
@@ -78,6 +81,8 @@ func (a *App) write(ctx context.Context, fn func(tx Tx, ch *Changes) error) erro
 	return nil
 }
 
-type noopPublisher struct{}
+type noop struct{}
 
-func (noopPublisher) Publish(string, []string) {}
+func (noop) Publish(string, []string) {}
+func (noop) DisconnectSession(string) {}
+func (noop) DisconnectUser(string)    {}

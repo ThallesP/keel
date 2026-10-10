@@ -31,7 +31,7 @@ func (a *App) StartDeviceLogin(ctx context.Context, clientID string, client Clie
 	if clientID != domain.DeviceClientID {
 		return DeviceStart{}, &domain.DeviceRefusal{Status: 400, Code: "invalid_client", Description: domain.MsgDeviceInvalidClient}
 	}
-	if err := a.limited(a.limits().deviceStart, client.IP); err != nil {
+	if err := a.limited(a.authLimits.deviceStart, client.IP); err != nil {
 		return DeviceStart{}, err
 	}
 	deviceCode, userCode := domain.NewSecret(25), domain.NewUserCode()
@@ -60,7 +60,7 @@ func (a *App) PollDeviceLogin(ctx context.Context, grantType, deviceCode, client
 	if grantType != domain.DeviceGrantType {
 		return DeviceToken{}, &domain.DeviceRefusal{Status: 400, Code: "unsupported_grant_type", Description: "Unsupported grant type"}
 	}
-	if err := a.limited(a.limits().devicePoll, client.IP); err != nil {
+	if err := a.limited(a.authLimits.devicePoll, client.IP); err != nil {
 		return DeviceToken{}, err
 	}
 	if clientID != domain.DeviceClientID {

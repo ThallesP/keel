@@ -141,7 +141,7 @@ func (a *App) SignUp(ctx context.Context, in SignUpInput) (SignedIn, error) {
 	if err := domain.ValidPassword(in.Password); err != nil {
 		return SignedIn{}, err
 	}
-	if err := a.limited(a.limits().perIP, in.Client.IP); err != nil {
+	if err := a.limited(a.authLimits.perIP, in.Client.IP); err != nil {
 		return SignedIn{}, err
 	}
 	err := a.read(ctx, func(tx Tx) error {
@@ -213,11 +213,11 @@ func (a *App) SignIn(ctx context.Context, email, password string, client ClientI
 	if !domain.ValidUserEmail(email) {
 		return SignedIn{}, domain.Invalid(domain.MsgInvalidEmail)
 	}
-	if err := a.limited(a.limits().perIP, client.IP); err != nil {
+	if err := a.limited(a.authLimits.perIP, client.IP); err != nil {
 		return SignedIn{}, err
 	}
 	key := client.IP + "\x00" + email
-	limiter := a.limits().signIn
+	limiter := a.authLimits.signIn
 	if err := a.limited(limiter, key); err != nil {
 		return SignedIn{}, err
 	}
@@ -252,7 +252,7 @@ func (a *App) SignOut(ctx context.Context, actor domain.Actor) error {
 		return nil
 	}
 	err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.AuthDeleteSession(actor.SessionID) })
-	if err == nil && a.Conns != nil {
+	if err == nil {
 		a.Conns.DisconnectSession(actor.SessionID)
 	}
 	return err

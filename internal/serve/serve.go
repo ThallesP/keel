@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -34,10 +35,7 @@ var (
 )
 
 func Env(key, def string) string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		return v
-	}
-	return def
+	return cmp.Or(strings.TrimSpace(os.Getenv(key)), def)
 }
 
 func ConfigFromEnv(version string) app.Config {
@@ -82,22 +80,24 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 
 	sched := jobs.New(log)
 	a := app.New(app.App{Store: store, Config: cfg, Log: log, Jobs: sched})
-
-	rt, err := realtime.New(realtime.Config{Authenticate: authenticator(a), SiteURL: cfg.SiteURL, Log: log})
+	closers, err := wireAdapters(a, log)
 	if err != nil {
-		stopJobs(sched, log)
+		return err
+	}
+	defer closeAdapters(closers, log)
+
+	rt, err := realtime.New(realtime.Config{
+		Authenticate: func(r *http.Request) (domain.Actor, error) {
+			return a.ResolveSession(r.Context(), transport.SessionToken(r))
+		},
+		SiteURL: cfg.SiteURL,
+		Log:     log,
+	})
+	if err != nil {
 		return fmt.Errorf("realtime: %w", err)
 	}
 	a.Events = rt
 	a.Conns = rt
-
-	closers, err := wireAdapters(a, log)
-	if err != nil {
-		stopJobs(sched, log)
-		shutdownRealtime(rt, log)
-		return err
-	}
-	defer closeAdapters(closers, log)
 
 	handler := transport.New(a, transport.Options{Web: opts.Web, WS: rt.Handler()})
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
@@ -110,19 +110,19 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 	recovered := make(chan struct{})
 	go func() {
 		defer close(recovered)
-		defer recoverPanic(log, "recovery pass")
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("keel serve: recovery pass panicked", "panic", r, "stack", string(debug.Stack()))
+			}
+		}()
 		a.Recover(recoverCtx)
 	}()
 
 	var serveErr error
 	select {
 	case <-ctx.Done():
-	case serveErr = <-errc:
-		if errors.Is(serveErr, http.ErrServerClosed) {
-			serveErr = nil
-		} else {
-			serveErr = fmt.Errorf("serve: %w", serveErr)
-		}
+	case err := <-errc:
+		serveErr = fmt.Errorf("serve: %w", err)
 	}
 
 	log.Info("keel serve: shutting down")
@@ -139,45 +139,17 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, opts Options,
 		log.Error("keel serve: recovery pass still running at shutdown")
 	}
 	jobsCtx, cancelJobs := context.WithDeadline(shutdown, deadline.Add(-jobsCancelGrace))
+	defer cancelJobs()
 	if err := sched.Stop(jobsCtx); err != nil {
 		log.Error("keel serve: jobs still running at shutdown, cancelled", "err", err)
 		if err := sched.Wait(shutdown); err != nil {
 			log.Error("keel serve: cancelled jobs did not return in time", "err", err)
 		}
 	}
-	cancelJobs()
-	shutdownRealtime(rt, log)
-	return serveErr
-}
-
-func authenticator(a *app.App) func(r *http.Request) (domain.Actor, error) {
-	return func(r *http.Request) (domain.Actor, error) {
-		token := transport.SessionToken(r)
-		if token == "" {
-			return domain.Actor{}, nil
-		}
-		return a.ResolveSession(r.Context(), token)
-	}
-}
-
-func stopJobs(s *jobs.Scheduler, log *slog.Logger) {
-	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
-	defer cancel()
-	if err := s.Stop(ctx); err != nil {
-		log.Error("keel serve: stop jobs", "err", err)
-	}
-}
-
-func shutdownRealtime(rt *realtime.Server, log *slog.Logger) {
-	ctx, cancel := context.WithTimeout(context.Background(), realtimeCloseTimeout)
-	defer cancel()
-	if err := rt.Shutdown(ctx); err != nil {
+	rtCtx, cancelRT := context.WithTimeout(context.Background(), realtimeCloseTimeout)
+	defer cancelRT()
+	if err := rt.Shutdown(rtCtx); err != nil {
 		log.Error("keel serve: realtime shutdown", "err", err)
 	}
-}
-
-func recoverPanic(log *slog.Logger, what string) {
-	if r := recover(); r != nil {
-		log.Error("keel serve: "+what+" panicked", "panic", r, "stack", string(debug.Stack()))
-	}
+	return serveErr
 }

@@ -60,7 +60,7 @@ func TestServeOn(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- serveOn(ctx, ln, cfg, Options{Version: cfg.Version, Web: web}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		done <- serveOn(ctx, ln, cfg, Options{Version: cfg.Version, Web: web}, slog.New(slog.DiscardHandler))
 	}()
 
 	get := func(path string) (*http.Response, string) {
@@ -173,7 +173,7 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- serveOn(ctx, ln, cfg, Options{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		done <- serveOn(ctx, ln, cfg, Options{}, slog.New(slog.DiscardHandler))
 	}()
 	waitUntil(t, "adapter built", func() bool {
 		fake.mu.Lock()
@@ -234,7 +234,7 @@ func TestWireAdaptersReleasesOnFailure(t *testing.T) {
 		{"broken", func(*app.App) (func() error, error) { return nil, io.ErrUnexpectedEOF }},
 	}
 	t.Cleanup(func() { adapters = saved })
-	_, err := wireAdapters(app.New(app.App{}), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, err := wireAdapters(app.New(app.App{}), slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "broken: unexpected EOF") {
 		t.Fatalf("err = %v", err)
 	}

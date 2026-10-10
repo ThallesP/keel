@@ -28,7 +28,9 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp?: ()
     validators: {
       onSubmit: z.object({
         email: z.email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
+        password: z
+          .string()
+          .refine((p) => Array.from(p).length >= 8, "Password must be at least 8 characters"),
       }),
     },
   });

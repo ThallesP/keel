@@ -194,6 +194,18 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvAxiomOverrides(t *testing.T) {
+	t.Setenv("KEEL_AXIOM_AUTH_URL", " http://127.0.0.1:9999/ ")
+	t.Setenv("KEEL_AXIOM_API_URL", "http://127.0.0.1:4318/")
+	if cfg := ConfigFromEnv(""); cfg.AxiomAuthURL != "" || cfg.AxiomAPIURL != "" {
+		t.Fatalf("overrides without KEEL_ALLOW_LOCAL_SINKS: %q %q", cfg.AxiomAuthURL, cfg.AxiomAPIURL)
+	}
+	t.Setenv("KEEL_ALLOW_LOCAL_SINKS", "1")
+	if cfg := ConfigFromEnv(""); cfg.AxiomAuthURL != "http://127.0.0.1:9999" || cfg.AxiomAPIURL != "http://127.0.0.1:4318" {
+		t.Fatalf("overrides: %q %q", cfg.AxiomAuthURL, cfg.AxiomAPIURL)
+	}
+}
+
 func TestWireAdaptersReleasesOnFailure(t *testing.T) {
 	first := &fakeAdapter{built: make(chan *app.App, 1)}
 	saved := adapters

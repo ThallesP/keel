@@ -171,7 +171,7 @@ func TestBeginAxiomSignIn(t *testing.T) {
 		t.Fatalf("PKCE: verifier %q org %q challenge %q", verifier, org, q.Get("code_challenge"))
 	}
 
-	e.app.Config.AllowLocalSinks, e.app.Config.AxiomAuthURL = true, "http://127.0.0.1:9999/"
+	e.app.Config.AxiomAuthURL = "http://127.0.0.1:9999"
 	raw2, err := e.app.BeginAxiomSignIn(ctx, e.member, redirect)
 	if err != nil {
 		t.Fatal(err)
@@ -411,18 +411,10 @@ func TestAxiomAPIOverride(t *testing.T) {
 	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
 		t.Fatal(err)
 	}
-	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "api.eu.axiom.co" {
-		t.Fatalf("domain %s", sink.Domain)
-	}
-	e.app.Config.AllowLocalSinks = true
-	ax.take()
-	if _, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code"); err != nil {
-		t.Fatal(err)
-	}
 	if sink := obsSinkOfOrg(t, e, "org"); sink.Domain != "http://127.0.0.1:4318" {
 		t.Fatalf("domain %s", sink.Domain)
 	}
-	if calls := ax.take(); !strings.HasPrefix(calls[1], "Orgs http://127.0.0.1:4318 ") {
+	if calls := ax.take(); !strings.HasPrefix(calls[2], "Orgs http://127.0.0.1:4318 ") {
 		t.Fatalf("calls %q", calls)
 	}
 }

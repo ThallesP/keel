@@ -229,10 +229,7 @@ func (a *App) axiomLines(ctx context.Context, sink domain.LogSink, serviceIDs []
 }
 
 func (a *App) axiomAuthURL() string {
-	if a.Config.AllowLocalSinks && a.Config.AxiomAuthURL != "" {
-		return strings.TrimRight(a.Config.AxiomAuthURL, "/")
-	}
-	return "https://authorization.axiom.co"
+	return cmp.Or(a.Config.AxiomAuthURL, "https://authorization.axiom.co")
 }
 
 func randomBase64URL(n int) string {
@@ -278,11 +275,7 @@ func axiomClaims(token string) axiomJWTClaims {
 }
 
 func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, error) {
-	override := ""
-	if a.Config.AllowLocalSinks {
-		override = a.Config.AxiomAPIURL
-	}
-	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: cmp.Or(override, domain.AxiomDomains[0]), Token: token})
+	infos, err := a.Axiom.Orgs(ctx, AxiomTarget{Domain: cmp.Or(a.Config.AxiomAPIURL, domain.AxiomDomains[0]), Token: token})
 	if err != nil {
 		a.Log.Warn("axiom: API rejected the sign-in token", "aud", string(axiomClaims(token).Audience), "err", err)
 		return nil, fmt.Errorf("%w (Axiom API rejected the sign-in token)", err)
@@ -293,7 +286,7 @@ func (a *App) axiomOrgs(ctx context.Context, token string) ([]domain.AxiomOrg, e
 		if strings.Contains(o.Edge, "eu-") {
 			region = domain.AxiomDomains[1]
 		}
-		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: cmp.Or(override, region)}
+		orgs[i] = domain.AxiomOrg{ID: o.ID, Name: o.Name, MaxDatasets: o.MaxDatasets, Domain: cmp.Or(a.Config.AxiomAPIURL, region)}
 	}
 	return orgs, nil
 }

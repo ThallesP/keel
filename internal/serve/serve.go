@@ -37,7 +37,7 @@ func Env(key, def string) string {
 }
 
 func ConfigFromEnv(version string) app.Config {
-	return app.Config{
+	cfg := app.Config{
 		Version:         version,
 		SiteURL:         strings.TrimRight(Env("KEEL_SITE_URL", ""), "/"),
 		WorkerToken:     Env("KEEL_WORKER_TOKEN", ""),
@@ -45,13 +45,17 @@ func ConfigFromEnv(version string) app.Config {
 		ACMECA:          Env("KEEL_ACME_CA", ""),
 		ACMEEmail:       Env("KEEL_ACME_EMAIL", ""),
 		OTLPURL:         strings.TrimRight(Env("KEEL_OTLP_URL", ""), "/"),
-		AxiomAuthURL:    Env("KEEL_AXIOM_AUTH_URL", ""),
-		AxiomAPIURL:     Env("KEEL_AXIOM_API_URL", ""),
+		AxiomAuthURL:    strings.TrimRight(Env("KEEL_AXIOM_AUTH_URL", ""), "/"),
+		AxiomAPIURL:     strings.TrimRight(Env("KEEL_AXIOM_API_URL", ""), "/"),
 		AllowLocalSinks: Env("KEEL_ALLOW_LOCAL_SINKS", "") == "1",
 		DataDir:         Env("KEEL_DATA_DIR", "/data"),
 		AgentImage:      Env("KEEL_AGENT_IMAGE", ""),
 		AgentControlURL: strings.TrimRight(Env("KEEL_AGENT_CONTROL_URL", ""), "/"),
 	}
+	if !cfg.AllowLocalSinks {
+		cfg.AxiomAuthURL, cfg.AxiomAPIURL = "", ""
+	}
+	return cfg
 }
 
 func Run(ctx context.Context, opts Options) error {

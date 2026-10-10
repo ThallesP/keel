@@ -266,7 +266,7 @@ func (a *app) whoamiCmd() *cobra.Command {
 			a.out.Result(id, func(w io.Writer) {
 				org := "none yet"
 				if o := id.Organization; o != nil {
-					org = o.Name + " (" + o.Role + ")"
+					org = o.Name + " (" + string(o.Role) + ")"
 				}
 				t := table(w)
 				fmt.Fprintf(t, "User\t%s (%s)\n", id.User.Email, id.User.Name)

@@ -63,7 +63,7 @@ func (c *Client) LoadApps(ctx context.Context, apps []byte) error {
 		return err
 	}
 	if status >= 300 {
-		return &app.ProxyRejected{Message: CaddyError(text)}
+		return &app.ProxyRejected{Message: caddyError(text)}
 	}
 	return nil
 }
@@ -74,7 +74,7 @@ func (c *Client) getJSON(ctx context.Context, path string, v any) error {
 		return err
 	}
 	if status >= 300 {
-		return errors.New(CaddyError(text))
+		return errors.New(caddyError(text))
 	}
 	return json.Unmarshal([]byte(text), v)
 }
@@ -110,7 +110,7 @@ func (c *Client) explain(err error) error {
 
 var loadingPrefix = regexp.MustCompile(`^(loading (new )?config: )+`)
 
-func CaddyError(text string) string {
+func caddyError(text string) string {
 	message := text
 	var body struct{ Error string }
 	if json.Unmarshal([]byte(text), &body) == nil && body.Error != "" {

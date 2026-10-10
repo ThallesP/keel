@@ -14,8 +14,8 @@ func TestShortHash(t *testing.T) {
 		"jd7f9g6h5k4m3n2p1q0r9s8t7v6w5x4y": "vrfoi4",
 	}
 	for in, want := range cases {
-		if got := ShortHash(in); got != want {
-			t.Errorf("ShortHash(%q) = %q, want %q", in, got, want)
+		if got := shortHash(in); got != want {
+			t.Errorf("shortHash(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

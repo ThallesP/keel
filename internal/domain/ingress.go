@@ -13,7 +13,7 @@ const MsgPortRange = "Port must be 1–65535"
 
 func IsHTTPPort(p int) bool { return p == 80 || p == 443 }
 
-func ShortHash(s string) string {
+func shortHash(s string) string {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	b := fmt.Sprintf("%06s", strconv.FormatUint(uint64(h.Sum32()), 36))
@@ -21,7 +21,7 @@ func ShortHash(s string) string {
 }
 
 func DefaultDomain(nodeID, name, ip string) string {
-	return name + "-" + ShortHash(nodeID) + "." + strings.ReplaceAll(ip, ".", "-") + ".sslip.io"
+	return name + "-" + shortHash(nodeID) + "." + strings.ReplaceAll(ip, ".", "-") + ".sslip.io"
 }
 
 var defaultDomainRE = regexp.MustCompile(`^(.+-([0-9a-z]{6}))\.(\d+-\d+-\d+-\d+)\.sslip\.io$`)
@@ -29,7 +29,7 @@ var defaultDomainRE = regexp.MustCompile(`^(.+-([0-9a-z]{6}))\.(\d+-\d+-\d+-\d+)
 func MovedDefaultDomain(nodeID, domainName, ip string) (string, bool) {
 	m := defaultDomainRE.FindStringSubmatch(domainName)
 	dashed := strings.ReplaceAll(ip, ".", "-")
-	if m == nil || m[2] != ShortHash(nodeID) || m[3] == dashed {
+	if m == nil || m[2] != shortHash(nodeID) || m[3] == dashed {
 		return "", false
 	}
 	return m[1] + "." + dashed + ".sslip.io", true

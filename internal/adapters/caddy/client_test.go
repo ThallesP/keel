@@ -129,8 +129,8 @@ func TestCaddyError(t *testing.T) {
 		`loading config: raw`:    "raw",
 	}
 	for in, want := range cases {
-		if got := CaddyError(in); got != want {
-			t.Errorf("CaddyError(%q) = %q, want %q", in, got, want)
+		if got := caddyError(in); got != want {
+			t.Errorf("caddyError(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

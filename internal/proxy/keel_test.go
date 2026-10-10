@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -62,7 +63,7 @@ func (rs *reports) wait(t *testing.T, n int) []certEvent {
 	}
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return append([]certEvent(nil), rs.got...)
+	return slices.Clone(rs.got)
 }
 
 func TestReporterHandle(t *testing.T) {

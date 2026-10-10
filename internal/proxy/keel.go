@@ -49,7 +49,7 @@ func serveHostAddrs(w http.ResponseWriter, r *http.Request) error {
 	return writeJSON(w, addrs)
 }
 
-type Cert struct {
+type cert struct {
 	State string `json:"state"`
 	Error string `json:"error,omitempty"`
 }
@@ -58,25 +58,25 @@ func serveCerts(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
 		return caddy.APIError{HTTPStatus: http.StatusMethodNotAllowed, Err: errors.New("method not allowed")}
 	}
-	out := map[string]Cert{}
+	out := map[string]cert{}
 	for _, name := range r.URL.Query()["name"] {
 		out[name] = certOf(name)
 	}
 	return writeJSON(w, out)
 }
 
-func certOf(name string) Cert {
+func certOf(name string) cert {
 	for _, c := range matchingCerts(name) {
 		if c.Leaf != nil && time.Now().Before(c.Leaf.NotAfter) {
-			return Cert{State: "ok"}
+			return cert{State: "ok"}
 		}
 	}
 	failuresMu.Lock()
 	defer failuresMu.Unlock()
 	if msg, ok := failures[name]; ok {
-		return Cert{State: "failed", Error: msg}
+		return cert{State: "failed", Error: msg}
 	}
-	return Cert{State: "pending"}
+	return cert{State: "pending"}
 }
 
 func matchingCerts(name string) (certs []certmagic.Certificate) {

@@ -22,11 +22,8 @@ import (
 )
 
 func TestRunServesAdminAndResumes(t *testing.T) {
-	dir := t.TempDir()
-	oldAutosave := caddy.ConfigAutosavePath
-	caddy.ConfigAutosavePath = filepath.Join(dir, "autosave.json")
-	t.Cleanup(func() { caddy.ConfigAutosavePath = oldAutosave })
-	sock := filepath.Join(dir, "admin.sock")
+	useAutosave(t)
+	sock := filepath.Join(t.TempDir(), "admin.sock")
 
 	stop := startEdge(t, Options{Socket: sock, Resume: true})
 	client := keelcaddy.New(sock, "")
@@ -40,11 +37,8 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 		t.Fatalf("host addrs outside a container: %v", err)
 	}
 
-	upstream := echoServer(t)
 	port := freePort(t)
-	apps := fmt.Sprintf(`{"layer4":{"servers":{"tcp-%d":{"listen":["tcp/127.0.0.1:%d"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["%s"]}]}]}]}}}}`,
-		port, port, upstream)
-	if err := client.LoadApps(ctx, []byte(apps)); err != nil {
+	if err := client.LoadApps(ctx, l4Apps(port, echoServer(t))); err != nil {
 		t.Fatal(err)
 	}
 	echoThrough(t, port)
@@ -70,11 +64,8 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 }
 
 func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
-	dir := t.TempDir()
-	oldAutosave := caddy.ConfigAutosavePath
-	caddy.ConfigAutosavePath = filepath.Join(dir, "autosave.json")
-	t.Cleanup(func() { caddy.ConfigAutosavePath = oldAutosave })
-	sock := filepath.Join(dir, "admin.sock")
+	useAutosave(t)
+	sock := filepath.Join(t.TempDir(), "admin.sock")
 	stale := fmt.Sprintf(`{"admin":{"listen":"unix/%s|0600"},"apps":{"layer4":{"servers":{"tcp-5432":{"listen":["tcp/192.0.2.1:5432"],"routes":[]}}}}}`, sock)
 	if err := os.WriteFile(caddy.ConfigAutosavePath, []byte(stale), 0o600); err != nil {
 		t.Fatal(err)
@@ -82,12 +73,10 @@ func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
 
 	stop := startEdge(t, Options{Socket: sock, Resume: true})
 	client := keelcaddy.New(sock, "")
-	upstream := echoServer(t)
 	port := freePort(t)
-	apps := fmt.Sprintf(`{"layer4":{"servers":{"tcp-%d":{"listen":["tcp/127.0.0.1:%d"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["%s"]}]}]}]}}}}`,
-		port, port, upstream)
+	apps := l4Apps(port, echoServer(t))
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		err := client.LoadApps(context.Background(), []byte(apps))
+		err := client.LoadApps(context.Background(), apps)
 		if err == nil {
 			break
 		}
@@ -97,6 +86,16 @@ func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
 	}
 	echoThrough(t, port)
 	stop()
+}
+
+func useAutosave(t *testing.T) {
+	old := caddy.ConfigAutosavePath
+	caddy.ConfigAutosavePath = filepath.Join(t.TempDir(), "autosave.json")
+	t.Cleanup(func() { caddy.ConfigAutosavePath = old })
+}
+
+func l4Apps(port int, upstream string) []byte {
+	return fmt.Appendf(nil, `{"layer4":{"servers":{"tcp-%d":{"listen":["tcp/127.0.0.1:%d"],"routes":[{"handle":[{"handler":"proxy","upstreams":[{"dial":["%s"]}]}]}]}}}}`, port, port, upstream)
 }
 
 func startEdge(t *testing.T, opts Options) (stop func()) {

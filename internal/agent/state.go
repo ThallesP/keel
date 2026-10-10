@@ -13,7 +13,8 @@ import (
 )
 
 type State struct {
-	path string
+	path    string
+	writeMu sync.Mutex
 
 	mu    sync.Mutex
 	data  stateFile
@@ -83,13 +84,16 @@ func (s *State) LogsSinceIDs() []string {
 }
 
 func (s *State) Flush() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.dirty {
+		s.mu.Unlock()
 		return nil
 	}
 	s.dirty = false
 	raw, _ := json.Marshal(s.data)
+	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}

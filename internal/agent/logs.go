@@ -38,7 +38,7 @@ type Shipper struct {
 
 	mu             sync.Mutex
 	nodeID         string
-	queues         map[domain.LogSink]*queue
+	queues         map[SinkConfig]*queue
 	queueByService map[string]*queue
 	sinceByService map[string]string
 	readSince      map[string]string
@@ -83,7 +83,7 @@ func NewShipper(docker Docker, state *State, log *slog.Logger, newSink SinkFacto
 func (s *Shipper) ApplyConfig(routes []SinkRoute) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	queues := map[domain.LogSink]*queue{}
+	queues := map[SinkConfig]*queue{}
 	byService := map[string]*queue{}
 	since := map[string]string{}
 	for _, r := range routes {
@@ -417,13 +417,13 @@ func (s *Shipper) Flush(ctx context.Context) {
 	}
 }
 
-func (s *Shipper) Close(wait time.Duration) {
+func (s *Shipper) Close() {
 	s.stopFollowing()
 	s.cancelSends()
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
-	waitAtMost(&s.followersWG, wait)
+	waitAtMost(&s.followersWG, time.Second)
 }
 
 func serviceIDOf(labels map[string]string) (string, bool) {

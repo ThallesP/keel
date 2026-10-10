@@ -15,20 +15,18 @@ import (
 )
 
 type Config struct {
-	URL          string
-	Token        string
-	StatePath    string
-	ConfigPoll   time.Duration
-	DockerSocket string
+	URL        string
+	Token      string
+	StatePath  string
+	ConfigPoll time.Duration
 }
 
 func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 	cfg := Config{
-		URL:          strings.TrimRight(getenv("KEEL_URL"), "/"),
-		Token:        getenv("KEEL_WORKER_TOKEN"),
-		StatePath:    cmp.Or(getenv("KEEL_STATE"), "/var/lib/keel-agent/state.json"),
-		ConfigPoll:   30 * time.Second,
-		DockerSocket: getenv("DOCKER_SOCKET"),
+		URL:        strings.TrimRight(getenv("KEEL_URL"), "/"),
+		Token:      getenv("KEEL_WORKER_TOKEN"),
+		StatePath:  cmp.Or(getenv("KEEL_STATE"), "/var/lib/keel-agent/state.json"),
+		ConfigPoll: 30 * time.Second,
 	}
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (the control plane's URL, e.g. http://100.64.0.1:8080)")
@@ -58,14 +56,14 @@ type Agent struct {
 	wake      chan struct{}
 }
 
-func New(cfg Config, docker Docker, controlPlane, ingest *http.Client, log *slog.Logger) *Agent {
+func New(cfg Config, docker Docker, controlPlane *http.Client, log *slog.Logger) *Agent {
 	a := &Agent{cfg: cfg, docker: docker, log: log, wake: make(chan struct{}, 1)}
 	a.state = LoadState(cfg.StatePath)
 	a.cp = NewControlPlane(cfg.URL, cfg.Token, controlPlane, log)
-	a.shipper = NewShipper(docker, a.state, log, NewSinkFactory(ingest, log), a.refreshConfig)
+	a.shipper = NewShipper(docker, a.state, log, NewSinkFactory(log), a.refreshConfig)
 	a.forwarder = &Forwarder{
 		Docker: docker, Poster: a.cp, State: a.state, Log: log,
-		OnContainer: a.shipper.OnContainerEvent,
+		OnContainer: a.shipper.OnContainerEvent, reconnect: 2 * time.Second,
 	}
 	return a
 }
@@ -96,7 +94,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	a.shipper.Flush(flushCtx)
 	cancel()
-	a.shipper.Close(time.Second)
+	a.shipper.Close()
 	waitAtMost(&wg, time.Second)
 	if err := a.state.Flush(); err != nil {
 		a.log.Error("writing the agent state failed", "err", err)
@@ -106,9 +104,9 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) pollConfig(ctx context.Context) {
 	for {
-		cfg, err := a.cp.FetchConfig(ctx)
+		sinks, err := a.cp.FetchConfig(ctx)
 		if err == nil {
-			a.shipper.ApplyConfig(cfg.Sinks)
+			a.shipper.ApplyConfig(sinks)
 			err = a.shipper.ReconcileFollowers(ctx)
 		}
 		if err != nil && ctx.Err() == nil {

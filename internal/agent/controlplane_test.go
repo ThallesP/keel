@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -12,8 +13,6 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/events"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type recordedPost struct {
@@ -60,31 +59,23 @@ func TestFetchConfig(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/worker/config" || r.Header.Get("Authorization") != "Bearer tok" {
 			w.WriteHeader(http.StatusUnauthorized)
-			io.WriteString(w, "unauthorized")
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"sinks":[{"serviceIds":["n1","n2"],"sink":{"kind":"axiom","domain":"api.axiom.co","dataset":"keel","traces":"keel-traces","token":"xaat-1","org":"acme"},"since":1759912345678},{"serviceIds":[],"sink":{"kind":"axiom","domain":"d","dataset":"x","token":"t"}}]}`)
 	}))
 	defer srv.Close()
 
 	cp, _, _ := newTestControlPlane(t, srv.URL)
-	cfg, err := cp.FetchConfig(context.Background())
+	sinks, err := cp.FetchConfig(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Sinks) != 2 {
-		t.Fatalf("sinks = %+v", cfg.Sinks)
+	want := []SinkRoute{
+		{ServiceIDs: []string{"n1", "n2"}, Sink: SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel", Token: "xaat-1"}, Since: 1759912345678},
+		{ServiceIDs: []string{}, Sink: SinkConfig{Kind: "axiom", Domain: "d", Dataset: "x", Token: "t"}},
 	}
-	s := cfg.Sinks[0]
-	if !slices.Equal(s.ServiceIDs, []string{"n1", "n2"}) || s.Since != 1759912345678 {
-		t.Errorf("route = %+v", s)
-	}
-	if s.Sink != (domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "keel", Traces: "keel-traces", Token: "xaat-1", Org: "acme"}) {
-		t.Errorf("sink = %+v", s.Sink)
-	}
-	if cfg.Sinks[1].Since != 0 {
-		t.Errorf("absent since = %d, want 0", cfg.Sinks[1].Since)
+	if !reflect.DeepEqual(sinks, want) {
+		t.Fatalf("sinks = %+v\nwant %+v", sinks, want)
 	}
 
 	cp.Token = "wrong"

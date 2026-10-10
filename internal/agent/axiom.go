@@ -10,20 +10,17 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type AxiomSink struct {
 	url   string
 	token string
-	http  *http.Client
 	log   *slog.Logger
 	sleep func(context.Context, time.Duration) error
 }
 
-func NewAxiomSink(cfg domain.LogSink, hc *http.Client, log *slog.Logger) *AxiomSink {
-	return &AxiomSink{url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token, http: hc, log: log, sleep: sleepCtx}
+func NewAxiomSink(cfg SinkConfig, log *slog.Logger) *AxiomSink {
+	return &AxiomSink{url: axiomIngestURL(cfg.Domain, cfg.Dataset), token: cfg.Token, log: log, sleep: sleepCtx}
 }
 
 func axiomIngestURL(domain, dataset string) string {
@@ -72,7 +69,7 @@ func (s *AxiomSink) post(ctx context.Context, body []byte) (int, string, error) 
 	}
 	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("Content-Type", "application/x-ndjson")
-	res, err := s.http.Do(req)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return 0, "", err
 	}

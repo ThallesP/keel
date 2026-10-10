@@ -3,10 +3,7 @@ package agent
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"time"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type LogEvent struct {
@@ -25,13 +22,13 @@ type Sink interface {
 	Send(ctx context.Context, events []LogEvent) bool
 }
 
-type SinkFactory func(cfg domain.LogSink) (Sink, bool)
+type SinkFactory func(cfg SinkConfig) (Sink, bool)
 
-func NewSinkFactory(hc *http.Client, log *slog.Logger) SinkFactory {
-	return func(cfg domain.LogSink) (Sink, bool) {
+func NewSinkFactory(log *slog.Logger) SinkFactory {
+	return func(cfg SinkConfig) (Sink, bool) {
 		if cfg.Kind != "axiom" {
 			return nil, false
 		}
-		return NewAxiomSink(cfg, hc, log), true
+		return NewAxiomSink(cfg, log), true
 	}
 }

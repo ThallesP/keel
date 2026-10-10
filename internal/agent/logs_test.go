@@ -8,16 +8,13 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 var (
-	sinkA = domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-a", Token: "xaat-aaaaaa"}
-	sinkB = domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-b", Token: "xaat-bbbbbb"}
+	sinkA = SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-a", Token: "xaat-aaaaaa"}
+	sinkB = SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "org-b", Token: "xaat-bbbbbb"}
 )
 
 func newTestShipper(t *testing.T, d *fakeDocker, ss *sinkSet) (*Shipper, *State, *syncBuffer) {
@@ -29,7 +26,7 @@ func newTestShipper(t *testing.T, d *fakeDocker, ss *sinkSet) (*Shipper, *State,
 	s.retryEvery = 5 * time.Millisecond
 	s.followRetry = 5 * time.Millisecond
 	s.nodeID = "node-1"
-	t.Cleanup(func() { s.Close(time.Second) })
+	t.Cleanup(s.Close)
 	return s, state, buf
 }
 
@@ -51,7 +48,7 @@ func (s *Shipper) lastRead(id string) string {
 	return s.readSince[id]
 }
 
-func (s *Shipper) queued(cfg domain.LogSink) (lines int, draining bool) {
+func (s *Shipper) queued(cfg SinkConfig) (lines int, draining bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	q := s.queues[cfg]
@@ -446,10 +443,8 @@ func TestShipperContainerEvents(t *testing.T) {
 	d := newFakeDocker()
 	ss := newSinkSet()
 	s, state, _ := newTestShipper(t, d, ss)
-	var mu sync.Mutex
 	refreshes := 0
-	s.refresh = func() { mu.Lock(); refreshes++; mu.Unlock() }
-	count := func() int { mu.Lock(); defer mu.Unlock(); return refreshes }
+	s.refresh = func() { refreshes++ }
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return now }
 	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n1"}, Sink: sinkA}})
@@ -461,17 +456,17 @@ func TestShipperContainerEvents(t *testing.T) {
 	unrouted := task('b', "n7", "1", "running")
 	s.OnContainerEvent("start", unrouted.ID, unrouted.Labels)
 	s.OnContainerEvent("start", unrouted.ID, unrouted.Labels)
-	if count() != 1 {
-		t.Fatalf("early polls = %d, want 1 (throttled to one per 5 s)", count())
+	if refreshes != 1 {
+		t.Fatalf("early polls = %d, want 1 (throttled to one per 5 s)", refreshes)
 	}
 	now = now.Add(6 * time.Second)
 	s.OnContainerEvent("start", unrouted.ID, unrouted.Labels)
-	if count() != 2 {
-		t.Fatalf("early polls = %d, want 2", count())
+	if refreshes != 2 {
+		t.Fatalf("early polls = %d, want 2", refreshes)
 	}
 	s.OnContainerEvent("start", "zzz", map[string]string{labelServiceName: "keel-agent"})
 	s.OnContainerEvent("die", routed.ID, routed.Labels)
-	if count() != 2 || len(d.calls()) != 1 {
+	if refreshes != 2 || len(d.calls()) != 1 {
 		t.Fatal("a non-svc start or a die did something")
 	}
 
@@ -565,7 +560,7 @@ func TestApplyConfigReusesSinks(t *testing.T) {
 	if ss.builds != 2 {
 		t.Fatalf("%d builds, want a new sink for the new token", ss.builds)
 	}
-	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: domain.LogSink{Kind: "clickhouse"}}})
+	s.ApplyConfig([]SinkRoute{{ServiceIDs: []string{"n9"}, Sink: SinkConfig{Kind: "clickhouse"}}})
 	if len(s.queues) != 0 {
 		t.Fatalf("an unknown sink kind was routed: %v", s.queues)
 	}
@@ -611,7 +606,7 @@ func TestShipperFlushAndClose(t *testing.T) {
 	if v, _ := state.LogsSince(c.ID); v != "1704067201.000000001" {
 		t.Fatalf("resume point after flush = %q", v)
 	}
-	s.Close(time.Second)
+	s.Close()
 	if f := s.following(); len(f) != 0 {
 		t.Fatalf("still following %v after Close", f)
 	}

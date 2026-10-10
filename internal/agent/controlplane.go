@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/events"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type ControlPlane struct {
@@ -27,35 +25,40 @@ func NewControlPlane(url, token string, hc *http.Client, log *slog.Logger) *Cont
 	return &ControlPlane{URL: url, Token: token, HTTP: hc, Log: log, sleep: sleepCtx}
 }
 
-type WorkerConfig struct {
-	Sinks []SinkRoute `json:"sinks"`
-}
-
 type SinkRoute struct {
-	ServiceIDs []string       `json:"serviceIds"`
-	Sink       domain.LogSink `json:"sink"`
-	Since      int64          `json:"since"`
+	ServiceIDs []string   `json:"serviceIds"`
+	Sink       SinkConfig `json:"sink"`
+	Since      int64      `json:"since"`
 }
 
-func (c *ControlPlane) FetchConfig(ctx context.Context) (WorkerConfig, error) {
+type SinkConfig struct {
+	Kind    string `json:"kind"`
+	Domain  string `json:"domain"`
+	Dataset string `json:"dataset"`
+	Token   string `json:"token"`
+}
+
+func (c *ControlPlane) FetchConfig(ctx context.Context) ([]SinkRoute, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+"/worker/config", nil)
 	if err != nil {
-		return WorkerConfig{}, err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return WorkerConfig{}, err
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return WorkerConfig{}, fmt.Errorf("config %d", res.StatusCode)
+		return nil, fmt.Errorf("config %d", res.StatusCode)
 	}
-	var cfg WorkerConfig
-	err = json.NewDecoder(res.Body).Decode(&cfg)
-	return cfg, err
+	var body struct {
+		Sinks []SinkRoute `json:"sinks"`
+	}
+	err = json.NewDecoder(res.Body).Decode(&body)
+	return body.Sinks, err
 }
 
 func (c *ControlPlane) PostEvents(ctx context.Context, evs []events.Message, resync bool) bool {

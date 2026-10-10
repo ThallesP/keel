@@ -14,12 +14,8 @@ type MobyDocker struct {
 	cli *client.Client
 }
 
-func NewMobyDocker(socket string) (*MobyDocker, error) {
-	opts := []client.Opt{client.FromEnv, client.WithHTTPRequestHook(readOnly)}
-	if socket != "" {
-		opts = append(opts, client.WithHost("unix://"+socket))
-	}
-	cli, err := client.New(opts...)
+func NewMobyDocker() (*MobyDocker, error) {
+	cli, err := client.New(client.FromEnv, client.WithHTTPRequestHook(readOnly))
 	if err != nil {
 		return nil, err
 	}

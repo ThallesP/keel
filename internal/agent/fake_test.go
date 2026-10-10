@@ -3,7 +3,6 @@ package agent
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -11,13 +10,10 @@ import (
 	"sync"
 
 	"github.com/moby/moby/api/types/events"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type fakeDocker struct {
 	mu          sync.Mutex
-	info        NodeInfo
 	infoErr     error
 	containers  []Container
 	afterList   func()
@@ -36,10 +32,12 @@ type logScript struct {
 }
 
 func newFakeDocker() *fakeDocker {
-	return &fakeDocker{info: NodeInfo{NodeID: "node-1", Name: "box"}, logs: map[string][]logScript{}}
+	return &fakeDocker{logs: map[string][]logScript{}}
 }
 
-func (d *fakeDocker) Info(context.Context) (NodeInfo, error) { return d.info, d.infoErr }
+func (d *fakeDocker) Info(context.Context) (NodeInfo, error) {
+	return NodeInfo{NodeID: "node-1", Name: "box"}, d.infoErr
+}
 
 func (d *fakeDocker) ListSwarmContainers(context.Context) ([]Container, error) {
 	d.mu.Lock()
@@ -70,7 +68,7 @@ func (d *fakeDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 	s := next(&scripts, logScript{})
 	d.logs[id] = scripts
 	d.mu.Unlock()
-	return &scriptedReader{ctx: ctx, data: s.data, end: s.end, chunk: cmp.Or(s.chunk, 7), closed: make(chan struct{})}, nil
+	return &scriptedReader{ctx: ctx, data: s.data, end: s.end, chunk: cmp.Or(s.chunk, 7)}, nil
 }
 
 func (d *fakeDocker) calls() []logCall {
@@ -127,12 +125,10 @@ func (s *fakeEvents) Next() (events.Message, error) {
 }
 
 type scriptedReader struct {
-	ctx    context.Context
-	data   []byte
-	end    error
-	chunk  int
-	closed chan struct{}
-	once   sync.Once
+	ctx   context.Context
+	data  []byte
+	end   error
+	chunk int
 }
 
 func (r *scriptedReader) Read(p []byte) (int, error) {
@@ -145,18 +141,11 @@ func (r *scriptedReader) Read(p []byte) (int, error) {
 	if r.end != nil {
 		return 0, r.end
 	}
-	select {
-	case <-r.ctx.Done():
-		return 0, r.ctx.Err()
-	case <-r.closed:
-		return 0, errors.New("read on closed body")
-	}
+	<-r.ctx.Done()
+	return 0, r.ctx.Err()
 }
 
-func (r *scriptedReader) Close() error {
-	r.once.Do(func() { close(r.closed) })
-	return nil
-}
+func (r *scriptedReader) Close() error { return nil }
 
 type fakeSink struct {
 	mu      sync.Mutex
@@ -197,14 +186,14 @@ func (s *fakeSink) messages() []string {
 
 type sinkSet struct {
 	mu     sync.Mutex
-	sinks  map[domain.LogSink]*fakeSink
+	sinks  map[SinkConfig]*fakeSink
 	builds int
 	setup  func(*fakeSink)
 }
 
-func newSinkSet() *sinkSet { return &sinkSet{sinks: map[domain.LogSink]*fakeSink{}} }
+func newSinkSet() *sinkSet { return &sinkSet{sinks: map[SinkConfig]*fakeSink{}} }
 
-func (ss *sinkSet) factory(cfg domain.LogSink) (Sink, bool) {
+func (ss *sinkSet) factory(cfg SinkConfig) (Sink, bool) {
 	if cfg.Kind != "axiom" {
 		return nil, false
 	}
@@ -219,7 +208,7 @@ func (ss *sinkSet) factory(cfg domain.LogSink) (Sink, bool) {
 	return s, true
 }
 
-func (ss *sinkSet) get(cfg domain.LogSink) *fakeSink {
+func (ss *sinkSet) get(cfg SinkConfig) *fakeSink {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	return ss.sinks[cfg]
@@ -254,7 +243,7 @@ func numbered(n int) []byte {
 
 func containerID(c byte) string { return strings.Repeat(string(c), 64) }
 
-func task(id byte, serviceID string, slot string, state string) Container {
+func task(id byte, serviceID, slot, state string) Container {
 	return Container{
 		ID:    containerID(id),
 		State: state,

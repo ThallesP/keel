@@ -71,24 +71,17 @@ func TestRelevant(t *testing.T) {
 
 type containerHook struct{ action, id string }
 
-func newTestForwarder(d *fakeDocker, p EventPoster, state *State) (*Forwarder, *syncBuffer, func() []containerHook) {
+func newTestForwarder(d *fakeDocker, p EventPoster, state *State) (*Forwarder, *syncBuffer, *[]containerHook) {
 	log, logs := testLogger()
-	var mu sync.Mutex
 	var hooks []containerHook
 	f := &Forwarder{
 		Docker: d, Poster: p, State: state, Log: log,
 		OnContainer: func(action, id string, _ map[string]string) {
-			mu.Lock()
-			defer mu.Unlock()
 			hooks = append(hooks, containerHook{action, id})
 		},
 		reconnect: time.Millisecond,
 	}
-	return f, logs, func() []containerHook {
-		mu.Lock()
-		defer mu.Unlock()
-		return slices.Clone(hooks)
-	}
+	return f, logs, &hooks
 }
 
 func runUntil(t *testing.T, f *Forwarder, cond func() bool) {
@@ -134,8 +127,8 @@ func TestForwarderStream(t *testing.T) {
 		t.Fatalf("posts = %+v\nwant %+v", got, want)
 	}
 	wantHooks := []containerHook{{"start", "c1"}, {"exec_start: sh", "c1"}, {"health_status: healthy", "c1"}, {"start", "c9"}}
-	if got := hooks(); !slices.Equal(got, wantHooks) {
-		t.Errorf("container hooks = %v, want %v", got, wantHooks)
+	if !slices.Equal(*hooks, wantHooks) {
+		t.Errorf("container hooks = %v, want %v", *hooks, wantHooks)
 	}
 	if s := d.sinces(); s[0] != "" || s[1] != "1704067201.000000000" {
 		t.Errorf("events since = %v", s)

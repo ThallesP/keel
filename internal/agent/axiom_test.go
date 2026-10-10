@@ -11,8 +11,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/ThallesP/keel/internal/domain"
 )
 
 type axiomServer struct {
@@ -52,7 +50,7 @@ func testEvents() []LogEvent {
 func newTestAxiom(t *testing.T, srv *httptest.Server) (*AxiomSink, *syncBuffer, *[]time.Duration) {
 	t.Helper()
 	log, buf := testLogger()
-	s := NewAxiomSink(domain.LogSink{Kind: "axiom", Domain: srv.URL, Dataset: "keel logs", Token: "xaat-secret"}, srv.Client(), log)
+	s := NewAxiomSink(SinkConfig{Kind: "axiom", Domain: srv.URL, Dataset: "keel logs", Token: "xaat-secret"}, log)
 	var sleeps []time.Duration
 	s.sleep = func(ctx context.Context, d time.Duration) error {
 		sleeps = append(sleeps, d)
@@ -154,11 +152,11 @@ func TestAxiomNetworkError(t *testing.T) {
 }
 
 func TestSinkFactory(t *testing.T) {
-	f := NewSinkFactory(http.DefaultClient, slog.New(slog.DiscardHandler))
-	if s, ok := f(domain.LogSink{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.(*AxiomSink).url != "https://api.axiom.co/v1/datasets/d/ingest" {
+	f := NewSinkFactory(slog.New(slog.DiscardHandler))
+	if s, ok := f(SinkConfig{Kind: "axiom", Domain: "api.axiom.co", Dataset: "d", Token: "t"}); !ok || s.(*AxiomSink).url != "https://api.axiom.co/v1/datasets/d/ingest" {
 		t.Fatalf("axiom sink = %+v, %v", s, ok)
 	}
-	if _, ok := f(domain.LogSink{Kind: "clickhouse"}); ok {
+	if _, ok := f(SinkConfig{Kind: "clickhouse"}); ok {
 		t.Fatal("unknown kind built a sink")
 	}
 }

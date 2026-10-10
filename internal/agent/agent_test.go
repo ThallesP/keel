@@ -17,7 +17,7 @@ import (
 	"github.com/moby/moby/api/types/events"
 )
 
-func TestConfigFromEnv(t *testing.T) {
+func TestConfigFrom(t *testing.T) {
 	dir := t.TempDir()
 	secret := filepath.Join(dir, "keel_worker_token")
 	if err := os.WriteFile(secret, []byte("  from-secret\n"), 0o600); err != nil {
@@ -38,9 +38,8 @@ func TestConfigFromEnv(t *testing.T) {
 		},
 		{
 			name: "overrides", secret: missing,
-			env: map[string]string{"KEEL_URL": "https://keel.example", "KEEL_WORKER_TOKEN": "tok", "KEEL_STATE": "/s/state.json",
-				"KEEL_CONFIG_POLL_MS": "1500", "DOCKER_SOCKET": "/run/docker.sock"},
-			want: Config{URL: "https://keel.example", Token: "tok", StatePath: "/s/state.json", ConfigPoll: 1500 * time.Millisecond, DockerSocket: "/run/docker.sock"},
+			env:  map[string]string{"KEEL_URL": "https://keel.example", "KEEL_WORKER_TOKEN": "tok", "KEEL_STATE": "/s/state.json", "KEEL_CONFIG_POLL_MS": "1500"},
+			want: Config{URL: "https://keel.example", Token: "tok", StatePath: "/s/state.json", ConfigPoll: 1500 * time.Millisecond},
 		},
 		{
 			name: "token from the Swarm secret", secret: secret,
@@ -105,7 +104,7 @@ func TestAgentRun(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	cfg := Config{URL: cp.URL, Token: "tok", StatePath: statePath, ConfigPoll: time.Hour}
 	log, logs := testLogger()
-	a := New(cfg, d, cp.Client(), axiom.Client(), log)
+	a := New(cfg, d, cp.Client(), log)
 	ctx, cancel := context.WithCancelCause(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- a.Run(ctx) }()
@@ -152,7 +151,7 @@ func TestAgentRunNeedsDocker(t *testing.T) {
 	d := newFakeDocker()
 	d.infoErr = errors.New("dial unix /var/run/docker.sock: connect: no such file or directory")
 	a := New(Config{URL: "http://127.0.0.1:1", Token: "tok", StatePath: filepath.Join(t.TempDir(), "s.json"), ConfigPoll: time.Hour},
-		d, http.DefaultClient, http.DefaultClient, slog.New(slog.DiscardHandler))
+		d, http.DefaultClient, slog.New(slog.DiscardHandler))
 	err := a.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "docker /info: dial unix") {
 		t.Fatalf("Run = %v", err)

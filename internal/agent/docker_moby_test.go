@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -76,12 +75,13 @@ func newTestMoby(t *testing.T) (*MobyDocker, *dockerAPI) {
 	api := &dockerAPI{}
 	srv := httptest.NewServer(api)
 	t.Cleanup(srv.Close)
-	cli, err := client.New(client.WithHost("tcp://"+strings.TrimPrefix(srv.URL, "http://")), client.WithHTTPRequestHook(readOnly))
+	t.Setenv("DOCKER_HOST", "tcp://"+srv.Listener.Addr().String())
+	d, err := NewMobyDocker()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cli.Close() })
-	return &MobyDocker{cli: cli}, api
+	t.Cleanup(func() { d.Close() })
+	return d, api
 }
 
 func filtersOf(t *testing.T, q url.Values) map[string]map[string]bool {
@@ -174,7 +174,8 @@ func TestMobyEvents(t *testing.T) {
 }
 
 func TestMobyEventsDockerDown(t *testing.T) {
-	d, err := NewMobyDocker(filepath.Join(t.TempDir(), "missing.sock"))
+	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "missing.sock"))
+	d, err := NewMobyDocker()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,36 +204,6 @@ func TestMobyReadOnly(t *testing.T) {
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		if readOnly(httptest.NewRequest(m, "/containers/c1", nil)) == nil {
 			t.Errorf("%s allowed", m)
-		}
-	}
-}
-
-func TestNewMobyDockerIsReadOnly(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "d.sock")
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Skipf("unix socket: %v", err)
-	}
-	api := &dockerAPI{}
-	srv := httptest.NewUnstartedServer(api)
-	srv.Listener = ln
-	srv.Start()
-	defer srv.Close()
-	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
-	d, err := NewMobyDocker(sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if info, err := d.Info(context.Background()); err != nil || info.NodeID != "swarm-node-1" {
-		t.Fatalf("info over the socket = %+v, %v", info, err)
-	}
-	if _, err := d.cli.ContainerRemove(context.Background(), "c1", client.ContainerRemoveOptions{}); err == nil || !strings.Contains(err.Error(), "read-only") {
-		t.Fatalf("remove = %v, want refused", err)
-	}
-	for _, r := range api.requests() {
-		if !strings.HasPrefix(r, "GET ") && !strings.HasPrefix(r, "HEAD /_ping") {
-			t.Fatalf("the daemon saw %s", r)
 		}
 	}
 }

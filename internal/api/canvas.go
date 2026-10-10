@@ -132,17 +132,9 @@ func NodeViewOf(n domain.Node, publicIP string) NodeView {
 	}
 	switch status {
 	case domain.StatusDeploying:
-		if n.ShippedAt == nil {
-			break
+		if n.ShippedAt != nil {
+			v.Deploy = &NodeDeploy{Step: domain.DeployingStep(n), StartedAt: *n.ShippedAt}
 		}
-		step := "starting"
-		switch {
-		case n.Observed == nil || n.Observed.Revision < n.Desired.Revision:
-			step = "pulling image"
-		case n.Observed.State == domain.ObservedUpdating:
-			step = "rolling out"
-		}
-		v.Deploy = &NodeDeploy{Step: step, StartedAt: *n.ShippedAt}
 	case domain.StatusStopped, domain.StatusStopping:
 		v.StoppedAt = n.ShippedAt
 	case domain.StatusDone:

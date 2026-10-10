@@ -50,7 +50,7 @@ func (a *App) IngestWorkerEvents(ctx context.Context, events []DockerEvent, resy
 			continue
 		}
 		seen[id] = true
-		scheduled := a.scheduleObserveFor(ctx, id, observeDebounce, 0)
+		scheduled, _ := a.scheduleObserve(ctx, id, observeDebounce, 0)
 		label := e.ServiceName
 		if label == "" {
 			label = e.Name

@@ -14,11 +14,6 @@ import (
 // Observation: Swarm → nodes.observed (convex/swarm.ts observeNode/observe/observeSwarmNodes,
 // nodesInternal.ts setObserved/scheduleObserve; docs/go/spec/swarm-worker.md §8).
 
-const (
-	deployLabelService  = "keel.service"
-	deployLabelRevision = "keel.revision"
-)
-
 // transientTaskStates: between "scheduled" and "running"; a container event follows within
 // seconds. `pending` (nothing can schedule it) is deliberately absent: that is the timeout's job.
 var transientTaskStates = map[string]bool{
@@ -29,7 +24,7 @@ var transientTaskStates = map[string]bool{
 // taskRevision is JavaScript's Number(labels["keel.revision"]): ok=false when the label is
 // missing or not a number (NaN never equals a revision). An empty label is 0, as in JS.
 func taskRevision(labels map[string]string) (int, bool) {
-	v, present := labels[deployLabelRevision]
+	v, present := labels["keel.revision"]
 	if !present {
 		return 0, false
 	}
@@ -129,9 +124,10 @@ func summarizeTasks(tasks []SwarmTask, svc *SwarmService, now int64) domain.Obse
 	default:
 		o.State = domain.ObservedOK
 	}
-	if len(failed) > 0 && failed[len(failed)-1].Err != "" {
+	switch {
+	case len(failed) > 0 && failed[len(failed)-1].Err != "":
 		o.Error = failed[len(failed)-1].Err
-	} else if rolledBack && svc != nil {
+	case rolledBack && svc != nil:
 		o.Error = svc.UpdateMessage
 	}
 	return o
@@ -153,21 +149,15 @@ func settlingTasks(tasks []SwarmTask, revision int) bool {
 // node that no longer exists it settles running deployments instead, so a deleted node's steps
 // fail with "node deleted". Called by: canvas (node delete), deploy.
 func (a *App) ScheduleObserve(nodeID string) {
-	ctx := context.Background()
-	if _, exists := a.scheduleObserve(ctx, nodeID, observeDebounce, 0); !exists {
+	if _, exists := a.scheduleObserve(context.Background(), nodeID, observeDebounce, 0); !exists {
 		a.Jobs.After("reconcile", 0, func(ctx context.Context) { a.reconcileRunning(ctx, "") })
 	}
 }
 
-// scheduleObserveFor schedules observeNode(id, settle) after delay unless a scan of the node is
+// scheduleObserve schedules observeNode(id, settle) after delay unless a scan of the node is
 // already due no later; a pending scan due later (a settle re-check) is replaced. Ids that are
-// not a node with desired (orphan services, a user's own containers) are ignored. True when a
-// scan was scheduled.
-func (a *App) scheduleObserveFor(ctx context.Context, id string, delay time.Duration, settle int) bool {
-	scheduled, _ := a.scheduleObserve(ctx, id, delay, settle)
-	return scheduled
-}
-
+// not a node with desired (orphan services, a user's own containers) are ignored: exists is false
+// for them.
 func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duration, settle int) (scheduled, exists bool) {
 	err := a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(id)
@@ -256,13 +246,13 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 	}
 	switch {
 	case settle < observeSettleMax && settlingTasks(tasks, observed.Revision):
-		a.scheduleObserveFor(ctx, id, observeSettleDelay, settle+1)
+		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
 	case svc != nil && updateInProgress(svc.UpdateState) && settle < observeUpdatingMax:
 		// A rolling update (start-first, then the UpdateConfig monitor window) outlasts the two
 		// settle re-checks. keel agent's "service update ... completed" event normally triggers
 		// the next scan; polling until Swarm says it is done means a deployment settles without
 		// an agent too (a fresh install before keel-agent runs, a dev serve).
-		a.scheduleObserveFor(ctx, id, observeSettleDelay, settle+1)
+		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
 	}
 }
 
@@ -275,12 +265,15 @@ func (a *App) observeAll(ctx context.Context) {
 	var nodes []domain.Node
 	err := a.read(ctx, func(tx Tx) error {
 		all, err := tx.AllNodes()
+		if err != nil {
+			return err
+		}
 		for _, n := range all {
 			if n.Desired != nil && n.Desired.Revision > 0 {
 				nodes = append(nodes, n)
 			}
 		}
-		return err
+		return nil
 	})
 	if err != nil {
 		a.Log.Error("observe (full sweep)", "err", err)
@@ -303,7 +296,7 @@ func (a *App) observeAll(ctx context.Context) {
 			for _, n := range nodes {
 				var own []SwarmTask
 				for _, t := range tasks {
-					if t.Labels[deployLabelService] == n.ID {
+					if t.Labels["keel.service"] == n.ID {
 						own = append(own, t)
 					}
 				}
@@ -348,10 +341,13 @@ func (a *App) observeServers(ctx context.Context) {
 			return nil
 		}
 		orgs, err := tx.DeployOrganizationIDs()
+		if err != nil {
+			return err
+		}
 		for _, org := range orgs {
 			ch.Add(org, "/api/environments")
 		}
-		return err
+		return nil
 	})
 	if err != nil {
 		a.Log.Error("observeServers", "err", err)
@@ -362,7 +358,7 @@ func (a *App) observeServers(ctx context.Context) {
 // converged, oneShot learned from the run. Returns the node's environment, "" when the node is
 // gone (a no-op). The canvas refetches only when something it shows changed: observed.at moves
 // on every scan.
-func (a *App) setObserved(tx Tx, ch *Changes, id string, observed domain.Observed) (string, error) {
+func (a *App) setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, error) {
 	n, err := tx.Node(id)
 	if errors.Is(err, ErrNoRow) {
 		return "", nil
@@ -371,23 +367,20 @@ func (a *App) setObserved(tx Tx, ch *Changes, id string, observed domain.Observe
 		return "", err
 	}
 	before := observedFace(n)
-	next := n
-	o := observed
-	next.Observed = &o
-	if domain.Converged(next.Desired, &o) && o.Revision > 0 {
-		r := o.Revision
-		next.DeployedRevision = &r
+	n.Observed = &o
+	if domain.Converged(n.Desired, &o) && o.Revision > 0 {
+		n.DeployedRevision = deployPtr(o.Revision)
 	}
 	switch {
 	case o.State == domain.ObservedCompleted:
-		next.OneShot = true
+		n.OneShot = true
 	case o.Running > 0:
-		next.OneShot = false
+		n.OneShot = false
 	}
-	if err := tx.UpdateNode(next); err != nil {
+	if err := tx.UpdateNode(n); err != nil {
 		return "", err
 	}
-	if observedFace(next) != before {
+	if observedFace(n) != before {
 		org, err := deployOrgOf(tx, n.EnvironmentID)
 		if err != nil {
 			return "", err

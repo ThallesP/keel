@@ -93,8 +93,7 @@ func (a *App) safeApply(ctx context.Context, req applyRequest) {
 
 // applyInput is what apply ships (nodesInternal.applyInput), or nil when the node is gone or
 // has no desired.
-type deployApplyInput struct {
-	name    string
+type applyInput struct {
 	desired domain.Desired
 	env     []string
 	oneShot bool
@@ -104,8 +103,8 @@ type deployApplyInput struct {
 	applied bool
 }
 
-func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*deployApplyInput, error) {
-	var in *deployApplyInput
+func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*applyInput, error) {
+	var in *applyInput
 	err := a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(req.nodeID)
 		if errors.Is(err, ErrNoRow) {
@@ -124,7 +123,7 @@ func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (*deployAppl
 		if env, err = deployWithTracing(a, tx, n, env); err != nil {
 			return err
 		}
-		in = &deployApplyInput{name: n.Name, desired: *n.Desired, env: deployEnvList(env), oneShot: n.OneShot}
+		in = &applyInput{desired: *n.Desired, env: deployEnvList(env), oneShot: n.OneShot}
 		if req.deploymentID == "" {
 			return nil
 		}
@@ -283,10 +282,11 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	if created {
 		// Deleted between the check and the create: the delete's remove already ran against
 		// nothing, so take back the service we just made.
-		if _, wanted, err := a.wantedRevision(ctx, id); err != nil {
+		if _, wanted, err = a.wantedRevision(ctx, id); err != nil {
 			fail(err)
 			return
-		} else if !wanted {
+		}
+		if !wanted {
 			if err := a.Swarm.RemoveService(ctx, id); err != nil {
 				fail(err)
 			}
@@ -343,7 +343,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	}
 	// Docker events drive observation from here; this scan lands after stepApplied even if the
 	// event burst of the create already went by. It coalesces with any scan they scheduled.
-	a.scheduleObserveFor(record, id, observeDebounce, 0)
+	a.scheduleObserve(record, id, observeDebounce, 0)
 }
 
 // applySuperseded: the node was shipped again since this apply was scheduled; the apply queued
@@ -429,8 +429,7 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 // collapsed to one space, trimmed, at most 300 UTF-16 units (swarm.ts errorText).
 func deployErrorText(err error) string {
 	fields := strings.FieldsFunc(err.Error(), deployIsJSSpace)
-	s := strings.Join(fields, " ")
-	return deployCutUTF16(s, 300)
+	return deployCutUTF16(strings.Join(fields, " "), 300)
 }
 
 // deployIsJSSpace is ECMAScript's \s: WhiteSpace and LineTerminator.

@@ -7,7 +7,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func rev(r string) map[string]string { return map[string]string{deployLabelRevision: r} }
+func rev(r string) map[string]string { return map[string]string{"keel.revision": r} }
 
 func task(r, desired, state string, mods ...func(*SwarmTask)) SwarmTask {
 	t := SwarmTask{DesiredState: desired, State: state, Labels: rev(r)}

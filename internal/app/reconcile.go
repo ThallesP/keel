@@ -119,16 +119,11 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 	}
 	switch {
 	case anyFailed:
-		next.Status = domain.DeploymentFailed
+		next.Status, next.FinishedAt = domain.DeploymentFailed, deployPtr(now)
 	case allDone:
-		next.Status = domain.DeploymentSuccess
+		next.Status, next.FinishedAt = domain.DeploymentSuccess, deployPtr(now)
 	default:
-		next.Status = domain.DeploymentRunning
-	}
-	if next.Status == domain.DeploymentRunning {
-		next.FinishedAt = nil
-	} else {
-		next.FinishedAt = deployPtr(now)
+		next.Status, next.FinishedAt = domain.DeploymentRunning, nil
 	}
 	changed = len(appended) > 0 || next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps) ||
 		!reflect.DeepEqual(next.FinishedAt, d.FinishedAt)

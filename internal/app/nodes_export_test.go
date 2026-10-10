@@ -32,20 +32,17 @@ func StubCanvasSeams(t testing.TB, s CanvasSeams) {
 	}
 }
 
-// CanvasComputeEnv runs the computeEnv and computeEnvList seams on a node.
-func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[string]string, list []string, err error) {
+// CanvasComputeEnv runs the computeEnv seam on a node.
+func (a *App) CanvasComputeEnv(ctx context.Context, nodeID string) (env map[string]string, err error) {
 	err = a.read(ctx, func(tx Tx) error {
 		n, err := tx.Node(nodeID)
 		if err != nil {
 			return err
 		}
-		if env, err = computeEnv(tx, n); err != nil {
-			return err
-		}
-		list, err = computeEnvList(tx, n)
+		env, err = computeEnv(tx, n)
 		return err
 	})
-	return env, list, err
+	return env, err
 }
 
 // RecoverCanvas runs the canvas part of the start-up pass alone (Recover also runs the other

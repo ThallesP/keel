@@ -156,7 +156,7 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 			}
 			out.Sources = append(out.Sources, src)
 			if suggest && !referenced[n.ID] {
-				if s, ok := connection(n, keys); ok && !taken[s.As] {
+				if s, ok := connectionSuggestion(n, keys); ok && !taken[s.As] {
 					out.Suggestions = append(out.Suggestions, s)
 				}
 			}
@@ -166,7 +166,7 @@ func (a *App) ReferenceableVariables(ctx context.Context, actor domain.Actor, no
 	return out, err
 }
 
-func connection(n domain.Node, keys []ReferenceKey) (ReferenceSuggestion, bool) {
+func connectionSuggestion(n domain.Node, keys []ReferenceKey) (ReferenceSuggestion, bool) {
 	for _, k := range keys {
 		if k.Provided && k.Key != "HOST" && k.Key != "PORT" {
 			return ReferenceSuggestion{NodeID: n.ID, Node: n.Name, Key: k.Key, As: k.As, Value: domain.RefText(n.Name, k.Key)}, true
@@ -300,7 +300,6 @@ func canvasRewriteReferences(tx Tx, node domain.Node, to func(oldKey string) (na
 
 // computeEnv is the node's container environment: its own variables with every reference
 // expanded (docs/go/spec/projects.md §5.4). Provided keys (DATABASE_URL, HOST, …) are not added.
-// The map loses the row order; computeEnvList keeps it (Swarm's Env order).
 func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
 	r, _, err := canvasResolver(tx, node.EnvironmentID)
 	if err != nil {
@@ -312,16 +311,6 @@ func computeEnv(tx Tx, node domain.Node) (map[string]string, error) {
 		env[row.Key] = r.Expand(node, row.Value).Resolved
 	}
 	return env, nil
-}
-
-// computeEnvList is computeEnv as `KEY=value` lines in row order (creation order), the order the
-// Swarm spec's Env takes.
-func computeEnvList(tx Tx, node domain.Node) ([]string, error) {
-	r, _, err := canvasResolver(tx, node.EnvironmentID)
-	if err != nil {
-		return nil, err
-	}
-	return r.Env(node), nil
 }
 
 // markReferrersDirty marks every node whose variables reference node, transitively, dirty

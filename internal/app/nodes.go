@@ -53,7 +53,7 @@ type CreatedNode struct {
 func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID string, in CreateNodeInput) (CreatedNode, error) {
 	var out CreatedNode
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		scope, err := canvasRequireEnvironment(tx, actor, environmentID)
+		scope, err := requireEnvironment(tx, actor, environmentID)
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			}
 			picked = &spec
 		}
-		image := ""
+		image := def.Image
 		switch {
 		case picked != nil:
 			image = picked.Image
@@ -91,15 +91,11 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			image = *in.Image
 		}
 		// Named after what runs (`nginx`, `api-server`), not the node kind (`service`).
-		runs := image
-		if runs == "" {
-			runs = def.Image
-		}
 		base := string(in.Engine)
 		if base == "" {
 			base = def.Name
-			if runs != "" {
-				base = domain.NameFromImage(runs, def.Name)
+			if image != "" {
+				base = domain.NameFromImage(image, def.Name)
 			}
 		}
 		taken := canvasNames(siblings)
@@ -124,21 +120,17 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 			if err != nil {
 				return err
 			}
-			d := &domain.Desired{Image: image, Replicas: 1, Port: port}
-			if d.Image == "" {
-				d.Image = def.Image
-			}
+			desired = &domain.Desired{Image: image, Replicas: 1, Port: port}
 			if replicas != nil {
-				d.Replicas = *replicas
+				desired.Replicas = *replicas
 			}
-			if d.Port == nil {
+			if desired.Port == nil {
 				p := def.Port
 				if picked != nil {
 					p = picked.Port
 				}
-				d.Port = &p
+				desired.Port = &p
 			}
-			desired = d
 		}
 		pos := domain.NextPosition(siblings)
 		if in.Position != nil {
@@ -334,19 +326,17 @@ func canvasSetConfig(tx Tx, node domain.Node, c domain.NodeConfig) (domain.Node,
 	}
 	cfg := node.Config
 	if c.SizeGb != nil {
-		cfg.SizeGb = canvasFloat(*c.SizeGb)
+		cfg.SizeGb = deployPtr(*c.SizeGb)
 	}
 	if c.Width != nil {
-		cfg.Width = canvasFloat(*c.Width)
+		cfg.Width = deployPtr(*c.Width)
 	}
 	if c.Height != nil {
-		cfg.Height = canvasFloat(*c.Height)
+		cfg.Height = deployPtr(*c.Height)
 	}
 	node.Config = cfg
 	return node, tx.CanvasUpdateNode(node)
 }
-
-func canvasFloat(f float64) *float64 { return &f }
 
 // canvasSetParent moves a node into a group ("" = out of it). Groups do not nest (the dashboard
 // renders parents before children by putting groups first). Without an explicit position the node
@@ -441,8 +431,7 @@ func (a *App) DuplicateNode(ctx context.Context, actor domain.Actor, id string) 
 			d := *n.Desired
 			d.Revision = 0
 			if d.Port != nil {
-				p := *d.Port
-				d.Port = &p
+				d.Port = deployPtr(*d.Port)
 			}
 			dup.Desired = &d
 		}
@@ -472,7 +461,7 @@ func canvasCopyConfig(c domain.NodeConfig) domain.NodeConfig {
 		if p == nil {
 			return nil
 		}
-		return canvasFloat(*p)
+		return deployPtr(*p)
 	}
 	return domain.NodeConfig{SizeGb: cp(c.SizeGb), Width: cp(c.Width), Height: cp(c.Height)}
 }

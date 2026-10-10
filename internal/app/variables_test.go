@@ -246,19 +246,16 @@ func TestCanvasComputeEnvSeam(t *testing.T) {
 	k.setVar(api, "Z_LAST_KEY_FIRST", "${{ postgres.DATABASE_URL }}")
 	k.setVar(api, "A", "${{ Z_LAST_KEY_FIRST }}!")
 
-	envMap, list, err := k.app.CanvasComputeEnv(k.ctx, api)
+	envMap, err := k.app.CanvasComputeEnv(k.ctx, api)
 	if err != nil {
 		t.Fatal(err)
 	}
 	url := "postgres://app:p%20w@svc-" + pg + ":5432/app"
-	if want := []string{"Z_LAST_KEY_FIRST=" + url, "A=" + url + "!"}; !reflect.DeepEqual(list, want) {
-		t.Errorf("env list %q, want %q (row order)", list, want)
-	}
 	if !reflect.DeepEqual(envMap, map[string]string{"Z_LAST_KEY_FIRST": url, "A": url + "!"}) {
 		t.Errorf("env map %v", envMap)
 	}
 	// A database's container gets its own rows only, not DATABASE_URL.
-	if pgEnv, _, _ := k.app.CanvasComputeEnv(k.ctx, pg); len(pgEnv) != 3 || pgEnv["DATABASE_URL"] != "" {
+	if pgEnv, _ := k.app.CanvasComputeEnv(k.ctx, pg); len(pgEnv) != 3 || pgEnv["DATABASE_URL"] != "" {
 		t.Errorf("pg env %v", pgEnv)
 	}
 

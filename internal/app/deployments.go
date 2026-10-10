@@ -74,8 +74,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		d.Revision++
 		n.Desired = &d
 		n.Dirty = false
-		shipped := now
-		n.ShippedAt = &shipped
+		n.ShippedAt = deployPtr(now)
 		n.ApplyError = ""
 		if err := tx.UpdateNode(*n); err != nil {
 			return "", err
@@ -124,7 +123,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 func (a *App) ShipEnvironment(ctx context.Context, actor domain.Actor, environmentID string, opts ShipOptions) (string, error) {
 	var id string
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		scope, err := deployRequireEnvironment(tx, actor, environmentID)
+		scope, err := requireEnvironment(tx, actor, environmentID)
 		if err != nil {
 			return err
 		}
@@ -135,24 +134,6 @@ func (a *App) ShipEnvironment(ctx context.Context, actor domain.Actor, environme
 		return "", err
 	}
 	return id, nil
-}
-
-// deployRequireEnvironment is requireEnvironment with the code the CLI branches on: a missing or
-// foreign environment is PROJECT_NOT_FOUND "Environment not found" (projects.md §2.1, cli-install.md
-// C1 row 8), not the generic NOT_FOUND the foundation's helper returns today. Signed out stays
-// NOT_AUTHENTICATED.
-func deployRequireEnvironment(tx Tx, actor domain.Actor, id string) (EnvScope, error) {
-	if err := actor.RequireUser(); err != nil {
-		return EnvScope{}, err
-	}
-	scope, ok, err := ownedEnvironment(tx, actor, id)
-	if err != nil {
-		return EnvScope{}, err
-	}
-	if !ok {
-		return EnvScope{}, domain.E(domain.CodeProjectNotFound, domain.MsgEnvironmentNotFound)
-	}
-	return scope, nil
 }
 
 // LatestDeployment is the environment's newest deployment, or nil when there is none or the

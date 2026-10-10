@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
@@ -45,7 +44,7 @@ func (a *App) axiomUntil() int64 { return a.Now() + 60_000 }
 func (a *App) axiomRows(ctx context.Context, sink domain.LogSink, apl string, from, to int64) ([]AxiomRow, error) {
 	rows, err := a.Axiom.Query(ctx, AxiomTarget{Domain: sink.Domain, Token: sink.Token},
 		AxiomQuery{APL: apl, StartTime: time.UnixMilli(from), EndTime: time.UnixMilli(to)})
-	if axiomStatus(err) == http.StatusBadRequest && strings.Contains(err.Error(), "invalid field") {
+	if axiomStatus(err) == 400 && strings.Contains(err.Error(), "invalid field") {
 		return nil, nil
 	}
 	return rows, err
@@ -127,7 +126,7 @@ var axiomDatasetDescriptions = map[string]string{
 
 func (a *App) axiomVerify(ctx context.Context, sink domain.LogSink, dataset string) error {
 	err := a.Axiom.CreateDataset(ctx, AxiomTarget{Domain: sink.Domain, Token: sink.Token}, "", dataset, axiomDatasetDescriptions[domain.DatasetLogs])
-	if status := axiomStatus(err); status == http.StatusUnauthorized || status == http.StatusForbidden {
+	if status := axiomStatus(err); status == 401 || status == 403 {
 		return err
 	}
 	return a.axiomCanQuery(ctx, sink, dataset)
@@ -324,7 +323,7 @@ func (a *App) axiomProvision(ctx context.Context, token string, org domain.Axiom
 }
 
 func datasetCapError(org domain.AxiomOrg, own, left []string, err error) error {
-	if org.MaxDatasets > 0 && axiomStatus(err) == http.StatusBadRequest && len(own) >= org.MaxDatasets {
+	if org.MaxDatasets > 0 && axiomStatus(err) == 400 && len(own) >= org.MaxDatasets {
 		return fmt.Errorf("%s is at its Axiom plan's limit of %d datasets (%s). Keel needs %s: delete %d in Axiom or pick another org. (%w)",
 			org.Name, org.MaxDatasets, strings.Join(own, ", "), strings.Join(left, " and "), len(own)+len(left)-org.MaxDatasets, err)
 	}

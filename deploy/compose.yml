@@ -34,7 +34,7 @@ services:
       KEEL_ACME_CA: ${KEEL_ACME_CA:-}
       # What containers and agents dial: the tailnet address, never the site URL (which may be a
       # name only browsers resolve). The SDK appends /v1/traces.
-      KEEL_OTLP_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}/otlp
+      KEEL_OTLP_URL: http://${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}/otlp
       # Where keel-proxy POSTs certificate reports. It dials from the host network namespace.
       KEEL_PROXY_REPORT_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}/proxy/events
       # serve creates and updates the keel-agent global service from the image it runs itself.
@@ -66,8 +66,6 @@ services:
       # certificates, ACME accounts and the last config survive restarts and upgrades.
       XDG_DATA_HOME: /data
       XDG_CONFIG_HOME: /config
-      KEEL_PROXY_REPORT_URL: http://${KEEL_ADDR:?}:${KEEL_WEB_PORT:-80}/proxy/events
-      KEEL_WORKER_TOKEN: ${KEEL_WORKER_TOKEN:?}
     volumes:
       - /proc/1/ns/net:/run/hostns/net:ro
       - proxy-admin:/run/keel-proxy

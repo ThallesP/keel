@@ -15,7 +15,7 @@ func TestCanvasListVariables(t *testing.T) {
 	env := k.project(canvasOrg, "Acme")
 	m := canvasMember(canvasOrg)
 	pg := k.create(env, app.CreateNodeInput{Type: domain.NodeDatabase})
-	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api", Port: new(8080.0)})
+	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Name: "api", Port: new(8080)})
 	k.exec(`UPDATE variables SET value = 'pw' WHERE node_id = ? AND key = 'POSTGRES_PASSWORD'`, pg)
 	k.setVar(api, "DATABASE_URL", "${{ postgres.DATABASE_URL }}?sslmode=disable")
 	k.setVar(api, "SELF", "port ${{ PORT }} on ${{ HOST }}")

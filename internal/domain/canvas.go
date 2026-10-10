@@ -3,7 +3,6 @@ package domain
 import (
 	"cmp"
 	"crypto/rand"
-	"math"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -147,20 +146,16 @@ func NextPosition(nodes []Node) Position {
 	return *at
 }
 
-func PortNumber(p *float64) (*int, error) {
-	return canvasIntNumber(p, 1, 65535, "Port must be 1–65535")
+func ValidPort(p *int) error {
+	if p != nil && (*p < 1 || *p > 65535) {
+		return Invalid("Port must be 1–65535")
+	}
+	return nil
 }
 
-func ReplicasNumber(r *float64) (*int, error) {
-	return canvasIntNumber(r, 0, 20, "Replicas must be 0–20")
-}
-
-func canvasIntNumber(p *float64, lo, hi float64, msg string) (*int, error) {
-	if p == nil {
-		return nil, nil
+func ValidReplicas(r *int) error {
+	if r != nil && (*r < 0 || *r > 20) {
+		return Invalid("Replicas must be 0–20")
 	}
-	if f := *p; f != math.Trunc(f) || f < lo || f > hi {
-		return nil, &Error{Code: CodeInvalidInput, Message: msg}
-	}
-	return new(int(*p)), nil
+	return nil
 }

@@ -27,7 +27,7 @@ type CreateNodeInput struct {
 	Position       *domain.Position
 	Image          *string
 	Engine         domain.Engine
-	Port, Replicas *float64
+	Port, Replicas *int
 	Deploy         bool
 }
 
@@ -83,20 +83,15 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 		if err := domain.ValidName(name); err != nil {
 			return err
 		}
-		replicas, err := domain.ReplicasNumber(in.Replicas)
-		if err != nil {
+		if err := domain.ValidReplicas(in.Replicas); err != nil {
 			return err
 		}
-		customPort, err := domain.PortNumber(in.Port)
-		if err != nil {
+		if err := domain.ValidPort(in.Port); err != nil {
 			return err
 		}
 		var desired *domain.Desired
 		if runtime {
-			desired = &domain.Desired{Image: image, Replicas: 1, Port: *cmp.Or(customPort, &port)}
-			if replicas != nil {
-				desired.Replicas = *replicas
-			}
+			desired = &domain.Desired{Image: image, Replicas: *cmp.Or(in.Replicas, new(1)), Port: *cmp.Or(in.Port, &port)}
 		}
 		pos := domain.NextPosition(siblings)
 		if in.Position != nil {
@@ -147,7 +142,7 @@ func (a *App) CreateNode(ctx context.Context, actor domain.Actor, environmentID 
 type NodeUpdate struct {
 	Name           *string
 	Image          *string
-	Port, Replicas *float64
+	Port, Replicas *int
 	Config         *domain.NodeConfig
 	ParentID       *string
 	Position       *domain.Position
@@ -226,18 +221,14 @@ func canvasSetDesired(node *domain.Node, u NodeUpdate) error {
 		}
 		node.Desired.Image = *u.Image
 	}
-	port, err := domain.PortNumber(u.Port)
-	if err != nil {
+	if err := domain.ValidPort(u.Port); err != nil {
 		return err
 	}
-	replicas, err := domain.ReplicasNumber(u.Replicas)
-	if err != nil {
+	if err := domain.ValidReplicas(u.Replicas); err != nil {
 		return err
 	}
-	node.Desired.Port = *cmp.Or(port, &node.Desired.Port)
-	if replicas != nil {
-		node.Desired.Replicas = *replicas
-	}
+	node.Desired.Port = *cmp.Or(u.Port, &node.Desired.Port)
+	node.Desired.Replicas = *cmp.Or(u.Replicas, &node.Desired.Replicas)
 	node.Dirty = true
 	return nil
 }

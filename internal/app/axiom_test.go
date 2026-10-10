@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"log/slog"
-	"math"
 	"strings"
 	"testing"
 )
@@ -18,7 +17,7 @@ func TestAPLLiteral(t *testing.T) {
 }
 
 func TestClampTail(t *testing.T) {
-	for in, want := range map[float64]int{200: 200, 200.9: 200, 0: 1, -5: 1, 1000: 1000, 1001: 1000, 5000: 1000, 0.5: 1, math.NaN(): 1} {
+	for in, want := range map[int]int{200: 200, 0: 1, -5: 1, 1000: 1000, 1001: 1000, 5000: 1000} {
 		if got := clampLogTail(in); got != want {
 			t.Errorf("clampTail(%v) = %d, want %d", in, got, want)
 		}

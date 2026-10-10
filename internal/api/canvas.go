@@ -153,8 +153,8 @@ type CreateNodeRequest struct {
 	Position *Position       `json:"position,omitempty" doc:"Omitted: right of the rightmost top-level node"`
 	Image    *string         `json:"image,omitempty" doc:"Services only" example:"nginx:alpine"`
 	Engine   domain.Engine   `json:"engine,omitempty" enum:"postgres,mysql,mongo,redis" doc:"Databases and caches: picks image and port"`
-	Port     *float64        `json:"port,omitempty" doc:"Container port, 1–65535"`
-	Replicas *float64        `json:"replicas,omitempty" doc:"0–20, default 1"`
+	Port     *int            `json:"port,omitempty" doc:"Container port, 1–65535"`
+	Replicas *int            `json:"replicas,omitempty" doc:"0–20, default 1"`
 	Deploy   bool            `json:"deploy,omitempty" doc:"Ship it right away (skipped when a deployment is already running)"`
 }
 
@@ -166,8 +166,8 @@ type CreatedNode struct {
 type UpdateNodeRequest struct {
 	Name     *string     `json:"name,omitempty" doc:"Rename; references to the node follow"`
 	Image    *string     `json:"image,omitempty" doc:"Runtime change (staged)"`
-	Port     *float64    `json:"port,omitempty" doc:"Runtime change (staged)"`
-	Replicas *float64    `json:"replicas,omitempty" doc:"Runtime change (staged)"`
+	Port     *int        `json:"port,omitempty" doc:"Runtime change (staged)"`
+	Replicas *int        `json:"replicas,omitempty" doc:"Runtime change (staged)"`
 	Config   *NodeConfig `json:"config,omitempty" doc:"Volume size, group box; omitted fields keep their value"`
 	ParentID *string     `json:"parentId,omitempty" doc:"A group's id, or \"\" for the top level; the node keeps its place unless position is given"`
 	Position *Position   `json:"position,omitempty" doc:"With parentId: the position inside the new parent"`

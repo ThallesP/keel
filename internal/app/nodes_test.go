@@ -27,12 +27,12 @@ func TestCanvasCreateNodeDefaults(t *testing.T) {
 		{app.CreateNodeInput{Type: domain.NodeService, Image: new("ghcr.io/acme/api-server:1.2")}, "api-server", &domain.Desired{Image: "ghcr.io/acme/api-server:1.2", Replicas: 1, Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 280}},
 		{app.CreateNodeInput{Type: domain.NodeDatabase}, "postgres", &domain.Desired{Image: "postgres:16", Replicas: 1, Port: 5432}, true, "POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB", domain.NodeConfig{}, domain.Position{X: 560}},
 		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMySQL}, "mysql", &domain.Desired{Image: "mysql:8", Replicas: 1, Port: 3306}, true, "MYSQL_ROOT_PASSWORD,MYSQL_USER,MYSQL_PASSWORD,MYSQL_DATABASE", domain.NodeConfig{}, domain.Position{X: 840}},
-		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018.0)}, "mongo", &domain.Desired{Image: "mongo:7", Replicas: 1, Port: 27018}, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
+		{app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineMongo, Port: new(27018)}, "mongo", &domain.Desired{Image: "mongo:7", Replicas: 1, Port: 27018}, true, "MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1120}},
 		{app.CreateNodeInput{Type: domain.NodeCache}, "redis", &domain.Desired{Image: "redis:7", Replicas: 1, Port: 6379}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1400}},
 		{app.CreateNodeInput{Type: domain.NodeCache, Engine: domain.EngineRedis}, "redis-2", &domain.Desired{Image: "redis:7", Replicas: 1, Port: 6379}, true, "REDIS_PASSWORD", domain.NodeConfig{}, domain.Position{X: 1680}},
 		{app.CreateNodeInput{Type: domain.NodeVolume}, "data", nil, false, "", domain.NodeConfig{SizeGb: new(10.0)}, domain.Position{X: 1960}},
 		{app.CreateNodeInput{Type: domain.NodeGroup, Position: &domain.Position{X: 5.5, Y: -3}}, "group", nil, false, "", domain.NodeConfig{Width: new(300.0), Height: new(180.0)}, domain.Position{X: 5.5, Y: -3}},
-		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0.0)}, "api", &domain.Desired{Image: "nginx:alpine", Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
+		{app.CreateNodeInput{Type: domain.NodeService, Name: "api", Replicas: new(0)}, "api", &domain.Desired{Image: "nginx:alpine", Port: 80}, true, "", domain.NodeConfig{}, domain.Position{X: 2240}},
 	}
 	var ids []string
 	for _, c := range cases {
@@ -76,18 +76,17 @@ func TestCanvasCreateNodeErrors(t *testing.T) {
 		code string
 		msg  string
 	}{
-		{"image on a database", app.CreateNodeInput{Type: domain.NodeDatabase, Image: new("postgres:15"), Port: new(1.5)}, domain.CodeInvalidInput, "Only services take a custom image"},
+		{"image on a database", app.CreateNodeInput{Type: domain.NodeDatabase, Image: new("postgres:15"), Port: new(0)}, domain.CodeInvalidInput, "Only services take a custom image"},
 		{"empty image is an image", app.CreateNodeInput{Type: domain.NodeService, Image: new("")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
-		{"port on a volume", app.CreateNodeInput{Type: domain.NodeVolume, Port: new(80.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
-		{"replicas on a group", app.CreateNodeInput{Type: domain.NodeGroup, Replicas: new(1.0)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
+		{"port on a volume", app.CreateNodeInput{Type: domain.NodeVolume, Port: new(80)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
+		{"replicas on a group", app.CreateNodeInput{Type: domain.NodeGroup, Replicas: new(1)}, domain.CodeInvalidInput, "This node type has no runtime settings"},
 		{"engine of another type", app.CreateNodeInput{Type: domain.NodeDatabase, Engine: domain.EngineRedis}, domain.CodeInvalidInput, "redis is not a database"},
 		{"engine on a service", app.CreateNodeInput{Type: domain.NodeService, Engine: domain.EnginePostgres}, domain.CodeInvalidInput, "postgres is not a service"},
 		{"bad image", app.CreateNodeInput{Type: domain.NodeService, Image: new("Nginx:Latest")}, domain.CodeInvalidInput, "Image must look like repo/name:tag"},
-		{"taken before invalid", app.CreateNodeInput{Type: domain.NodeService, Name: "nginx", Port: new(0.0)}, domain.CodeNameTaken, `"nginx" is already taken`},
+		{"taken before invalid", app.CreateNodeInput{Type: domain.NodeService, Name: "nginx", Port: new(0)}, domain.CodeNameTaken, `"nginx" is already taken`},
 		{"bad name", app.CreateNodeInput{Type: domain.NodeService, Name: "Api"}, domain.CodeInvalidInput, "Name: 1–40 chars, a-z 0-9 and - only"},
 		{"long name", app.CreateNodeInput{Type: domain.NodeService, Name: strings.Repeat("a", 41)}, domain.CodeInvalidInput, "Name: 1–40 chars, a-z 0-9 and - only"},
-		{"replicas before port", app.CreateNodeInput{Type: domain.NodeService, Replicas: new(21.0), Port: new(0.0)}, domain.CodeInvalidInput, "Replicas must be 0–20"},
-		{"fractional port", app.CreateNodeInput{Type: domain.NodeService, Port: new(80.5)}, domain.CodeInvalidInput, "Port must be 1–65535"},
+		{"replicas before port", app.CreateNodeInput{Type: domain.NodeService, Replicas: new(21), Port: new(0)}, domain.CodeInvalidInput, "Replicas must be 0–20"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -189,7 +188,7 @@ func TestCanvasSetDesired(t *testing.T) {
 	k.exec(`UPDATE nodes SET desired_revision = 3, desired_tracing = 1 WHERE id = ?`, redis)
 	k.clean(env)
 
-	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), redis, app.NodeUpdate{Port: new(6380.0), Replicas: new(2.0)})
+	err := k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), redis, app.NodeUpdate{Port: new(6380), Replicas: new(2)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,11 +206,11 @@ func TestCanvasSetDesired(t *testing.T) {
 
 	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), vol, app.NodeUpdate{Image: new("x")})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "This node type has no runtime settings")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Image: new("UPPER"), Port: new(0.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Image: new("UPPER"), Port: new(0)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Image must look like repo/name:tag")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Port: new(70000.0), Replicas: new(99.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Port: new(70000), Replicas: new(99)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Port must be 1–65535")
-	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("api-2"), Replicas: new(99.0)})
+	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), api, app.NodeUpdate{Name: new("api-2"), Replicas: new(99)})
 	canvasWantErr(t, err, domain.CodeInvalidInput, "Replicas must be 0–20")
 	if k.node(api).Name != "api" {
 		t.Error("rename kept after a failed update")
@@ -355,7 +354,7 @@ func TestCanvasDuplicateNode(t *testing.T) {
 func TestCanvasStartStop(t *testing.T) {
 	k := canvasSetup(t)
 	env := k.project(canvasOrg, "Acme")
-	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Replicas: new(3.0)})
+	api := k.create(env, app.CreateNodeInput{Type: domain.NodeService, Replicas: new(3)})
 	vol := k.create(env, app.CreateNodeInput{Type: domain.NodeVolume})
 	m := canvasMember(canvasOrg)
 

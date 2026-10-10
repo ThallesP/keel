@@ -89,33 +89,30 @@ func TestCanvasNextPosition(t *testing.T) {
 
 func TestCanvasPortAndReplicasNumbers(t *testing.T) {
 	ports := []struct {
-		in *float64
+		in *int
 		ok bool
-	}{{nil, true}, {new(80.0), true}, {new(80.5), false}, {new(0.0), false}, {new(1.0), true}, {new(65535.0), true}, {new(65536.0), false}, {new(-1.0), false}}
+	}{{nil, true}, {new(80), true}, {new(0), false}, {new(1), true}, {new(65535), true}, {new(65536), false}, {new(-1), false}}
 	for _, c := range ports {
-		_, err := PortNumber(c.in)
+		err := ValidPort(c.in)
 		if (err == nil) != c.ok {
-			t.Errorf("PortNumber(%v) err = %v", c.in, err)
+			t.Errorf("ValidPort(%v) err = %v", c.in, err)
 		}
 		if err != nil && err.Error() != "Port must be 1–65535" {
 			t.Errorf("port message %q", err)
 		}
 	}
 	reps := []struct {
-		in *float64
+		in *int
 		ok bool
-	}{{nil, true}, {new(0.0), true}, {new(20.0), true}, {new(21.0), false}, {new(1.5), false}, {new(-1.0), false}}
+	}{{nil, true}, {new(0), true}, {new(20), true}, {new(21), false}, {new(-1), false}}
 	for _, c := range reps {
-		_, err := ReplicasNumber(c.in)
+		err := ValidReplicas(c.in)
 		if (err == nil) != c.ok {
-			t.Errorf("ReplicasNumber(%v) err = %v", c.in, err)
+			t.Errorf("ValidReplicas(%v) err = %v", c.in, err)
 		}
 		if de, ok := errors.AsType[*Error](err); err != nil && (!ok || *de != (Error{Code: CodeInvalidInput, Message: "Replicas must be 0–20"})) {
 			t.Errorf("replicas error %q", err)
 		}
-	}
-	if p, _ := PortNumber(new(8080.0)); p == nil || *p != 8080 {
-		t.Errorf("PortNumber(8080) = %v", p)
 	}
 }
 

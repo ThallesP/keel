@@ -123,11 +123,11 @@ func TestSpanAttributes(t *testing.T) {
 	}
 	for _, c := range []struct {
 		row  string
-		want *float64
+		want *int
 	}{
-		{`{"attributes.http.response.status_code":503}`, new(503.0)},
-		{`{"attributes.custom":{"http.status_code":"404"}}`, new(404.0)},
-		{`{"attributes.http.response.status_code":null,"attributes.custom":{"http.status_code":"502"}}`, new(502.0)},
+		{`{"attributes.http.response.status_code":503}`, new(503)},
+		{`{"attributes.custom":{"http.status_code":"404"}}`, new(404)},
+		{`{"attributes.http.response.status_code":null,"attributes.custom":{"http.status_code":"502"}}`, new(502)},
 		{`{"attributes.http.response.status_code":"abc"}`, nil},
 		{`{"attributes.http.response.status_code":-5}`, nil},
 		{`{}`, nil},

@@ -252,8 +252,8 @@
           },
           "port": {
             "description": "Container port, 1–65535",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "position": {
             "$ref": "#/components/schemas/Position",
@@ -261,8 +261,8 @@
           },
           "replicas": {
             "description": "0–20, default 1",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "type": {
             "enum": [
@@ -869,8 +869,8 @@
           },
           "port": {
             "description": "Container port the proxy dials. Default: the node's port",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "protocol": {
             "description": "Default: http for a service, tcp for a database or cache",
@@ -883,8 +883,8 @@
           },
           "publicPort": {
             "description": "tcp/udp only: port on the control plane. Default: the container port when free, else the first free from 20000",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -2115,8 +2115,8 @@
         "additionalProperties": false,
         "properties": {
           "errors": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "p50": {
             "format": "double",
@@ -2140,12 +2140,12 @@
             ]
           },
           "requests": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "time": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -2162,8 +2162,8 @@
         "additionalProperties": false,
         "properties": {
           "bucketMs": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "buckets": {
             "description": "Every bucket, oldest first, empty ones included",
@@ -2173,8 +2173,8 @@
             "type": "array"
           },
           "from": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "source": {
             "enum": [
@@ -2186,8 +2186,8 @@
             "$ref": "#/components/schemas/TraceStats"
           },
           "to": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "traces": {
             "description": "Newest first, at most 100",
@@ -2212,8 +2212,8 @@
         "additionalProperties": false,
         "properties": {
           "errors": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "p50": {
             "format": "double",
@@ -2237,8 +2237,8 @@
             ]
           },
           "requests": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -2261,13 +2261,13 @@
             "type": "boolean"
           },
           "errors": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "httpStatus": {
-            "format": "double",
+            "format": "int64",
             "type": [
-              "number",
+              "integer",
               "null"
             ]
           },
@@ -2285,8 +2285,8 @@
             "type": "string"
           },
           "spans": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "start": {
             "format": "double",
@@ -2407,8 +2407,8 @@
             "type": "string"
           },
           "publicPort": {
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -2434,8 +2434,8 @@
           },
           "port": {
             "description": "Runtime change (staged)",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           },
           "position": {
             "$ref": "#/components/schemas/Position",
@@ -2443,8 +2443,8 @@
           },
           "replicas": {
             "description": "Runtime change (staged)",
-            "format": "double",
-            "type": "number"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -3252,8 +3252,8 @@
             "schema": {
               "default": 300,
               "description": "Newest lines, 1–1000 (clamped)",
-              "format": "double",
-              "type": "number"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],
@@ -4066,8 +4066,8 @@
             "schema": {
               "default": 200,
               "description": "Lines, 1–1000 (clamped)",
-              "format": "double",
-              "type": "number"
+              "format": "int64",
+              "type": "integer"
             }
           }
         ],

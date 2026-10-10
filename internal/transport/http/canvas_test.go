@@ -120,7 +120,7 @@ func TestCanvasHTTPNodes(t *testing.T) {
 	}
 
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "Bad"}, 422, "INVALID_INPUT", "Name: 1–40 chars, a-z 0-9 and - only")
-	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "port": 80.5}, 422, "INVALID_INPUT", "Port must be 1–65535")
+	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "port": 0}, 422, "INVALID_INPUT", "Port must be 1–65535")
 	c.problem("POST", "/api/environments/env/nodes", map[string]any{"type": "service", "name": "api"}, 409, "NAME_TAKEN", `"api" is already taken`)
 	c.problem("POST", "/api/environments/nope/nodes", map[string]any{"type": "service"}, 404, "PROJECT_NOT_FOUND", "Environment not found")
 	if status, _, raw := c.do("POST", "/api/environments/env/nodes", map[string]any{"type": "bogus"}); status != 422 || !strings.Contains(raw, `"code":"INVALID_INPUT"`) {

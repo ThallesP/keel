@@ -136,7 +136,7 @@ func TestSwarmIT(t *testing.T) {
 	env := call[api.ProjectBySlug](c, "GET", "/api/projects/by-slug/"+slug, nil).Project.Environment.ID
 
 	id = call[api.CreatedNode](c, "POST", "/api/environments/"+env+"/nodes", api.CreateNodeRequest{
-		Type: "service", Name: fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), Image: new("nginx:alpine"), Port: new(80.0), Deploy: true,
+		Type: "service", Name: fmt.Sprintf("web-%d", time.Now().UnixNano()%100000), Image: new("nginx:alpine"), Port: new(80), Deploy: true,
 	}).ID
 	if d := c.settle(env); d.Status != "success" {
 		t.Fatalf("first deploy: %+v", d)

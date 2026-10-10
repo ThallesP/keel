@@ -109,14 +109,14 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	buckets := make([]domain.TraceBucket, spec.Buckets)
 	for i := range buckets {
 		t := from + int64(i)*spec.BinMs
-		buckets[i] = domain.TraceBucket{Time: float64(t), TraceStats: byBucket[t]}
+		buckets[i] = domain.TraceBucket{Time: t, TraceStats: byBucket[t]}
 	}
 	stats := domain.TraceStats{}
 	if len(totals) > 0 {
 		stats = totals[0].stats()
 	}
 	return domain.TraceOverview{
-		Source: domain.LogSourceAxiom, From: float64(from), To: float64(to), BucketMs: float64(spec.BinMs),
+		Source: domain.LogSourceAxiom, From: from, To: to, BucketMs: spec.BinMs,
 		Stats: stats, Buckets: buckets, Traces: traces,
 	}, nil
 }

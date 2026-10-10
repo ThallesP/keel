@@ -71,13 +71,13 @@ func TestIngressExposeTCPAllocation(t *testing.T) {
 	if err != nil || *ep2b.PublicPort != 20000 {
 		t.Fatalf("again: %+v %v", ep2b, err)
 	}
-	_, err = e.expose(e.other, "pg3", app.ExposeInput{PublicPort: new(5432.0)})
+	_, err = e.expose(e.other, "pg3", app.ExposeInput{PublicPort: new(5432)})
 	igWantErr(t, err, domain.CodeConflict, "Port 5432/tcp is already used by postgres")
 	ep3, err := e.expose(e.other, "pg3", app.ExposeInput{})
 	if err != nil || *ep3.PublicPort != 20001 {
 		t.Fatalf("third: %+v %v", ep3, err)
 	}
-	ep4, err := e.expose(e.member, igPG, app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(443.0)})
+	ep4, err := e.expose(e.member, igPG, app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(443)})
 	if err != nil || *ep4.PublicPort != 443 || ep4.Protocol != domain.ProtocolUDP {
 		t.Fatalf("udp: %+v %v", ep4, err)
 	}
@@ -107,17 +107,16 @@ func TestIngressExposeErrors(t *testing.T) {
 	}{
 		{"volume", "vol", app.ExposeInput{}, domain.CodeInvalidInput, "Only services, databases and caches can be exposed"},
 		{"no port", "noport", app.ExposeInput{}, domain.CodeInvalidInput, "Set the service's port first"},
-		{"port 0", igAPI, app.ExposeInput{Port: new(0.0)}, domain.CodeInvalidInput, "Port must be 1–65535"},
-		{"port 70000", igAPI, app.ExposeInput{Port: new(70000.0)}, domain.CodeInvalidInput, "Port must be 1–65535"},
-		{"port 80.5", igAPI, app.ExposeInput{Port: new(80.5)}, domain.CodeInvalidInput, "Port must be 1–65535"},
-		{"http with public port", igAPI, app.ExposeInput{PublicPort: new(8443.0)}, domain.CodeInvalidInput, "HTTP is always served on 80 and 443"},
+		{"port 0", igAPI, app.ExposeInput{Port: new(0)}, domain.CodeInvalidInput, "Port must be 1–65535"},
+		{"port 70000", igAPI, app.ExposeInput{Port: new(70000)}, domain.CodeInvalidInput, "Port must be 1–65535"},
+		{"http with public port", igAPI, app.ExposeInput{PublicPort: new(8443)}, domain.CodeInvalidInput, "HTTP is always served on 80 and 443"},
 		{"bad domain", igAPI, app.ExposeInput{Domain: new("*.example.com")}, domain.CodeInvalidInput, "Domain must look like app.example.com"},
 		{"empty domain", igAPI, app.ExposeInput{Domain: new("")}, domain.CodeInvalidInput, "Domain must look like app.example.com"},
 		{"domain of another org's node", igAPI, app.ExposeInput{Domain: new("App.Example.com.")}, domain.CodeConflict, "app.example.com is already used by shop"},
 		{"tcp with domain", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, Domain: new("a.example.com")}, domain.CodeInvalidInput, "Only HTTP endpoints have a domain"},
-		{"tcp on 443", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(443.0)}, domain.CodeInvalidInput, "80 and 443 serve HTTP; pick another public port"},
-		{"tcp on 80", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(80.0)}, domain.CodeInvalidInput, "80 and 443 serve HTTP; pick another public port"},
-		{"public port 0", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(0.0)}, domain.CodeInvalidInput, "Port must be 1–65535"},
+		{"tcp on 443", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(443)}, domain.CodeInvalidInput, "80 and 443 serve HTTP; pick another public port"},
+		{"tcp on 80", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(80)}, domain.CodeInvalidInput, "80 and 443 serve HTTP; pick another public port"},
+		{"public port 0", igAPI, app.ExposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(0)}, domain.CodeInvalidInput, "Port must be 1–65535"},
 		{"missing node", "nope", app.ExposeInput{}, domain.CodeServiceNotFound, "Node not found"},
 	}
 	for _, c := range cases {
@@ -167,7 +166,7 @@ func TestIngressExposeReplaceAndPin(t *testing.T) {
 	if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new("b.example.com")}); err != nil {
 		t.Fatal(err)
 	}
-	ep, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new("a.example.com"), Port: new(9090.0)})
+	ep, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new("a.example.com"), Port: new(9090)})
 	if err != nil || ep.Port != 9090 || !ep.PinnedPort {
 		t.Fatalf("pinned: %+v %v", ep, err)
 	}
@@ -175,7 +174,7 @@ func TestIngressExposeReplaceAndPin(t *testing.T) {
 	if len(eps) != 2 || eps[0].Domain != "b.example.com" || eps[1].Domain != "a.example.com" || !eps[1].PinnedPort {
 		t.Fatalf("after replace: %+v", eps)
 	}
-	ep, err = e.expose(e.member, igAPI, app.ExposeInput{Domain: new("a.example.com"), Port: new(8080.0)})
+	ep, err = e.expose(e.member, igAPI, app.ExposeInput{Domain: new("a.example.com"), Port: new(8080)})
 	if err != nil || ep.PinnedPort {
 		t.Fatalf("unpinned: %+v %v", ep, err)
 	}
@@ -185,13 +184,13 @@ func TestIngressExposeLimit(t *testing.T) {
 	e := newIngressEnv(t)
 	e.node("game", igEnvA, domain.NodeService, "game", "game:1", 27015)
 	for p := 27015; p < 27025; p++ {
-		if _, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(float64(p))}); err != nil {
+		if _, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(p)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	_, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(27025.0)})
+	_, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(27025)})
 	igWantErr(t, err, domain.CodeInvalidInput, "At most 10 endpoints per node")
-	ep, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(27015.0), Port: new(27016.0)})
+	ep, err := e.expose(e.member, "game", app.ExposeInput{Protocol: domain.ProtocolUDP, PublicPort: new(27015), Port: new(27016)})
 	if err != nil || ep.Port != 27016 || len(e.endpoints("game")) != 10 {
 		t.Fatalf("replace at the limit: %+v %v", ep, err)
 	}
@@ -203,7 +202,7 @@ func TestIngressUnexpose(t *testing.T) {
 	for _, in := range []app.ExposeInput{
 		{},
 		{Domain: new("app.example.com")},
-		{Protocol: domain.ProtocolTCP, PublicPort: new(8080.0)},
+		{Protocol: domain.ProtocolTCP, PublicPort: new(8080)},
 	} {
 		if _, err := e.expose(e.member, igAPI, in); err != nil {
 			t.Fatal(err)
@@ -217,23 +216,23 @@ func TestIngressUnexpose(t *testing.T) {
 		{Protocol: domain.ProtocolTCP},
 		{Protocol: domain.ProtocolTCP, Domain: new("app.example.com")},
 		{Domain: new("app.example.com")},
-		{PublicPort: new(8080.0)},
+		{PublicPort: new(8080)},
 	}
 	for _, in := range partial {
 		igWantErr(t, e.app.Unexpose(e.ctx, e.member, igAPI, in), domain.CodeInvalidInput,
 			"Name the endpoint: protocol and domain (http) or public port")
 	}
 	for in, message := range map[app.UnexposeInput]string{
-		{Protocol: domain.ProtocolTCP, Domain: new("bad_domain"), PublicPort: new(1.0)}: "Domain must look like app.example.com",
-		{Protocol: domain.ProtocolHTTP, Domain: new("")}:                                "Domain must look like app.example.com",
-		{Protocol: domain.ProtocolTCP, PublicPort: new(8080.5)}:                         "Port must be 1–65535",
+		{Protocol: domain.ProtocolTCP, Domain: new("bad_domain"), PublicPort: new(1)}: "Domain must look like app.example.com",
+		{Protocol: domain.ProtocolHTTP, Domain: new("")}:                              "Domain must look like app.example.com",
+		{Protocol: domain.ProtocolTCP, PublicPort: new(70000)}:                        "Port must be 1–65535",
 	} {
 		igWantErr(t, e.app.Unexpose(e.ctx, e.member, igAPI, in), domain.CodeInvalidInput, message)
 	}
 
 	for _, in := range []app.UnexposeInput{
 		{Protocol: domain.ProtocolHTTP, Domain: new("nope.example.com")},
-		{Protocol: domain.ProtocolUDP, PublicPort: new(8080.0)},
+		{Protocol: domain.ProtocolUDP, PublicPort: new(8080)},
 	} {
 		if err := e.app.Unexpose(e.ctx, e.member, igAPI, in); err != nil {
 			t.Fatal(err)
@@ -253,7 +252,7 @@ func TestIngressUnexpose(t *testing.T) {
 	if !e.jobs.Pending("proxy:sync") || len(e.pub.take()) != 1 {
 		t.Fatal("unexpose did not sync or publish")
 	}
-	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(8080.0)}); err != nil {
+	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(8080)}); err != nil {
 		t.Fatal(err)
 	}
 	if eps := e.endpoints(igAPI); len(eps) != 1 {
@@ -269,7 +268,7 @@ func TestIngressUnexpose(t *testing.T) {
 		t.Fatalf("after make private: %+v", eps)
 	}
 	e.pub.take()
-	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(1.0)}); err != nil {
+	if err := e.app.Unexpose(e.ctx, e.member, igAPI, app.UnexposeInput{Protocol: domain.ProtocolTCP, PublicPort: new(1)}); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.pub.take(); len(got) != 0 {
@@ -317,7 +316,7 @@ func TestIngressFollowPort(t *testing.T) {
 	if _, err := e.expose(e.member, igAPI, app.ExposeInput{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new("admin.example.com"), Port: new(9000.0)}); err != nil {
+	if _, err := e.expose(e.member, igAPI, app.ExposeInput{Domain: new("admin.example.com"), Port: new(9000)}); err != nil {
 		t.Fatal(err)
 	}
 	eps := e.endpoints(igAPI)

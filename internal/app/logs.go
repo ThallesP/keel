@@ -7,14 +7,11 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func clampLogTail(tail float64) int {
-	if math.IsNaN(tail) {
-		return 1
-	}
-	return int(min(max(tail, 1), 1000))
+func clampLogTail(tail int) int {
+	return min(max(tail, 1), 1000)
 }
 
-func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID string, tail float64) (domain.LogTail, error) {
+func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID string, tail int) (domain.LogTail, error) {
 	var sink *domain.LogSink
 	err := a.read(ctx, func(tx Tx) error {
 		scope, err := requireNode(tx, actor, nodeID)
@@ -33,7 +30,7 @@ func (a *App) TailNodeLogs(ctx context.Context, actor domain.Actor, nodeID strin
 	return a.dockerTail(ctx, nodeID, clampLogTail(tail))
 }
 
-func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environmentID, search string, tail float64, rng domain.TimeRange) (domain.EnvironmentLogs, error) {
+func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environmentID, search string, tail int, rng domain.TimeRange) (domain.EnvironmentLogs, error) {
 	from := a.Now() - axiomQueryWindowMs
 	if rng != "" {
 		spec, ok := rng.Spec()

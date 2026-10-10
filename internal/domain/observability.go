@@ -141,37 +141,37 @@ type Span struct {
 }
 
 type TraceSummary struct {
-	TraceID    string   `json:"traceId"`
-	Name       string   `json:"name"`
-	Service    string   `json:"service"`
-	Kind       string   `json:"kind"`
-	Start      float64  `json:"start"`
-	Duration   float64  `json:"duration"`
-	HTTPStatus *float64 `json:"httpStatus" nullable:"true"`
-	Spans      float64  `json:"spans"`
-	Errors     float64  `json:"errors"`
-	Error      bool     `json:"error"`
-	Local      bool     `json:"local" doc:"Sent by keel run (deployment.environment.name=local)"`
+	TraceID    string  `json:"traceId"`
+	Name       string  `json:"name"`
+	Service    string  `json:"service"`
+	Kind       string  `json:"kind"`
+	Start      float64 `json:"start"`
+	Duration   float64 `json:"duration"`
+	HTTPStatus *int    `json:"httpStatus" nullable:"true"`
+	Spans      int     `json:"spans"`
+	Errors     int     `json:"errors"`
+	Error      bool    `json:"error"`
+	Local      bool    `json:"local" doc:"Sent by keel run (deployment.environment.name=local)"`
 }
 
 type TraceStats struct {
-	Requests float64  `json:"requests"`
-	Errors   float64  `json:"errors"`
+	Requests int      `json:"requests"`
+	Errors   int      `json:"errors"`
 	P50      *float64 `json:"p50" nullable:"true"`
 	P95      *float64 `json:"p95" nullable:"true"`
 	P99      *float64 `json:"p99" nullable:"true"`
 }
 
 type TraceBucket struct {
-	Time float64 `json:"time"`
+	Time int64 `json:"time"`
 	TraceStats
 }
 
 type TraceOverview struct {
 	Source   string         `json:"source" enum:"axiom"`
-	From     float64        `json:"from"`
-	To       float64        `json:"to"`
-	BucketMs float64        `json:"bucketMs"`
+	From     int64          `json:"from"`
+	To       int64          `json:"to"`
+	BucketMs int64          `json:"bucketMs"`
 	Stats    TraceStats     `json:"stats"`
 	Buckets  []TraceBucket  `json:"buckets" doc:"Every bucket, oldest first, empty ones included"`
 	Traces   []TraceSummary `json:"traces" doc:"Newest first, at most 100"`

@@ -10,15 +10,15 @@ import (
 
 type ExposeInput struct {
 	Protocol   domain.EndpointProtocol
-	Port       *float64
+	Port       *int
 	Domain     *string
-	PublicPort *float64
+	PublicPort *int
 }
 
 type UnexposeInput struct {
 	Protocol   domain.EndpointProtocol
 	Domain     *string
-	PublicPort *float64
+	PublicPort *int
 }
 
 var defaultProtocol = map[domain.NodeType]domain.EndpointProtocol{
@@ -48,12 +48,11 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			}
 		}
 		protocol := cmp.Or(in.Protocol, defaultProtocol[node.Type])
-		port, err := domain.PortNumber(in.Port)
-		if err != nil {
+		if err := domain.ValidPort(in.Port); err != nil {
 			return err
 		}
-		port = cmp.Or(port, &node.Desired.Port)
-		if *port == 0 {
+		port := *cmp.Or(in.Port, &node.Desired.Port)
+		if port == 0 {
 			return domain.Invalid("Set the service's port first")
 		}
 		ip := a.Config.PublicIP
@@ -66,7 +65,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			return err
 		}
 
-		wanted := domain.Endpoint{Protocol: protocol, Port: *port}
+		wanted := domain.Endpoint{Protocol: protocol, Port: port}
 		if protocol == domain.ProtocolHTTP {
 			if in.PublicPort != nil {
 				return domain.Invalid("HTTP is always served on 80 and 443")
@@ -87,7 +86,7 @@ func (a *App) Expose(ctx context.Context, actor domain.Actor, nodeID string, in 
 			if in.Domain != nil {
 				return domain.Invalid("Only HTTP endpoints have a domain")
 			}
-			public, err := pickPublicPort(protocol, *port, in.PublicPort, own, others)
+			public, err := pickPublicPort(protocol, port, in.PublicPort, own, others)
 			if err != nil {
 				return err
 			}
@@ -131,13 +130,13 @@ func (a *App) Unexpose(ctx context.Context, actor domain.Actor, nodeID string, i
 		if !all && (in.Protocol == "" || !named) {
 			return domain.Invalid("Name the endpoint: protocol and domain (http) or public port")
 		}
-		target := domain.Endpoint{Protocol: in.Protocol}
+		target := domain.Endpoint{Protocol: in.Protocol, PublicPort: in.PublicPort}
 		if in.Domain != nil {
 			if target.Domain, err = domain.ValidDomain(*in.Domain); err != nil {
 				return err
 			}
 		}
-		if target.PublicPort, err = domain.PortNumber(in.PublicPort); err != nil {
+		if err := domain.ValidPort(in.PublicPort); err != nil {
 			return err
 		}
 		node := scope.Node
@@ -161,9 +160,8 @@ func (a *App) ControlPlanePublicIP(actor domain.Actor) (string, error) {
 	return a.Config.PublicIP, nil
 }
 
-func pickPublicPort(protocol domain.EndpointProtocol, port int, requested *float64, own []domain.Endpoint, others []OwnedEndpoint) (int, error) {
-	public, err := domain.PortNumber(requested)
-	if err != nil {
+func pickPublicPort(protocol domain.EndpointProtocol, port int, public *int, own []domain.Endpoint, others []OwnedEndpoint) (int, error) {
+	if err := domain.ValidPort(public); err != nil {
 		return 0, err
 	}
 	if public != nil {

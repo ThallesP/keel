@@ -101,7 +101,7 @@ func TestIngressHTTPExpose(t *testing.T) {
 		t.Fatalf("got %d %s", status, body)
 	}
 
-	status, body = h.do("POST", "/api/nodes/pg/expose", `{"port": 80.5}`)
+	status, body = h.do("POST", "/api/nodes/pg/expose", `{"port": 70000}`)
 	h.problem(status, body, 422, domain.CodeInvalidInput, "Port must be 1–65535")
 	status, body = h.do("POST", "/api/nodes/j57a8x2kq3n4m5p6r7s8t9v0w1x2y3z4/expose", `{"protocol":"tcp","publicPort":15432}`)
 	h.problem(status, body, 409, domain.CodeConflict, "Port 15432/tcp is already used by postgres")

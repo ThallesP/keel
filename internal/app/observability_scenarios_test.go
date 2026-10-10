@@ -34,7 +34,7 @@ type obsScenarioArgs struct {
 	Search    string           `json:"search"`
 	ServiceID string           `json:"serviceId"`
 	TraceID   string           `json:"traceId"`
-	Tail      float64          `json:"tail"`
+	Tail      int              `json:"tail"`
 	At        float64          `json:"at"`
 }
 

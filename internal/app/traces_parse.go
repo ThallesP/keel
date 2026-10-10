@@ -61,8 +61,8 @@ func parseAxiomDuration(text string) (float64, error) {
 
 type axiomStatsRow struct {
 	Time     axiomTime      `json:"_time"`
-	Requests float64        `json:"requests"`
-	Errors   float64        `json:"errors"`
+	Requests int            `json:"requests"`
+	Errors   int            `json:"errors"`
 	P50      *axiomDuration `json:"p50"`
 	P95      *axiomDuration `json:"p95"`
 	P99      *axiomDuration `json:"p99"`
@@ -79,9 +79,9 @@ func (r axiomStatsRow) stats() domain.TraceStats {
 }
 
 type axiomTraceCountRow struct {
-	TraceID string  `json:"trace_id"`
-	Spans   float64 `json:"spans"`
-	Errors  float64 `json:"errors"`
+	TraceID string `json:"trace_id"`
+	Spans   int    `json:"spans"`
+	Errors  int    `json:"errors"`
 }
 
 type axiomRootRow struct {
@@ -197,12 +197,12 @@ func sortedAttributes(attributes map[string]string) []domain.Attribute {
 	return out
 }
 
-func httpStatusOf(attributes map[string]string) *float64 {
+func httpStatusOf(attributes map[string]string) *int {
 	status, err := strconv.Atoi(cmp.Or(attributes["http.response.status_code"], attributes["http.status_code"]))
 	if err != nil || status <= 0 {
 		return nil
 	}
-	return new(float64(status))
+	return &status
 }
 
 func axiomSpanOf(row AxiomRow) (domain.Span, error) {

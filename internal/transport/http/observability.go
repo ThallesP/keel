@@ -39,14 +39,14 @@ type (
 	obsLocalTracingEnvOut struct{ Body api.LocalTracingEnv }
 	obsTracingPromptOut   struct{ Body api.TracingPrompt }
 	obsTailNodeLogsIn     struct {
-		ID   string  `path:"id" doc:"Node id"`
-		Tail float64 `query:"tail" default:"200" doc:"Lines, 1–1000 (clamped)"`
+		ID   string `path:"id" doc:"Node id"`
+		Tail int    `query:"tail" default:"200" doc:"Lines, 1–1000 (clamped)"`
 	}
 	obsEnvironmentLogsIn struct {
-		ID     string  `path:"id" doc:"Environment id"`
-		Range  string  `query:"range" enum:"15m,1h,24h,7d" doc:"Only lines in this range (default: the last 30 days)"`
-		Search string  `query:"search" doc:"Only lines containing this (case-insensitive; first 200 characters)"`
-		Tail   float64 `query:"tail" default:"300" doc:"Newest lines, 1–1000 (clamped)"`
+		ID     string `path:"id" doc:"Environment id"`
+		Range  string `query:"range" enum:"15m,1h,24h,7d" doc:"Only lines in this range (default: the last 30 days)"`
+		Search string `query:"search" doc:"Only lines containing this (case-insensitive; first 200 characters)"`
+		Tail   int    `query:"tail" default:"300" doc:"Newest lines, 1–1000 (clamped)"`
 	}
 	obsAroundIn struct {
 		ID string  `path:"id" doc:"Environment id"`

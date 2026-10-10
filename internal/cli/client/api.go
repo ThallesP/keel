@@ -63,13 +63,7 @@ func (c *Client) Variables(ctx context.Context, serviceID string) ([]api.Variabl
 }
 
 func (c *Client) CreateService(ctx context.Context, environmentID, name, image string, port, replicas *int) (*Service, error) {
-	in := api.CreateNodeRequest{Type: "service", Name: name, Image: &image}
-	if port != nil {
-		in.Port = new(float64(*port))
-	}
-	if replicas != nil {
-		in.Replicas = new(float64(*replicas))
-	}
+	in := api.CreateNodeRequest{Type: "service", Name: name, Image: &image, Port: port, Replicas: replicas}
 	var created api.CreatedNode
 	if err := c.call(ctx, http.MethodPost, apiPath("/api/environments/%s/nodes", environmentID), nil, in, &created); err != nil {
 		return nil, err
@@ -126,7 +120,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 	}
 	out := &Traces{
 		Stats: TraceStats{
-			Requests: int(o.Stats.Requests), Errors: int(o.Stats.Errors),
+			Requests: o.Stats.Requests, Errors: o.Stats.Errors,
 			P50Ms: o.Stats.P50, P95Ms: o.Stats.P95, P99Ms: o.Stats.P99,
 		},
 		Traces: make([]TraceSummary, len(o.Traces)),
@@ -134,10 +128,7 @@ func (c *Client) Traces(ctx context.Context, environmentID, serviceID, since, se
 	for i, t := range o.Traces {
 		out.Traces[i] = TraceSummary{
 			TraceID: t.TraceID, Name: t.Name, Service: t.Service, Start: millis(int64(t.Start)), DurationMs: t.Duration,
-			Spans: int(t.Spans), Errors: int(t.Errors), Error: t.Error, Local: t.Local,
-		}
-		if t.HTTPStatus != nil {
-			out.Traces[i].HTTPStatus = new(int(*t.HTTPStatus))
+			HTTPStatus: t.HTTPStatus, Spans: t.Spans, Errors: t.Errors, Error: t.Error, Local: t.Local,
 		}
 	}
 	return out, nil

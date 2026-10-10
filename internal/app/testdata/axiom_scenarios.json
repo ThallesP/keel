@@ -139,7 +139,7 @@
     {
       "name": "tail",
       "call": "tail",
-      "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 200.9 },
+      "args": { "serviceId": "nodeapiaaaaaaaaaaaaa", "tail": 200 },
       "rules": [
         { "contains": "where service_id ==", "fields": ["_time", "message", "stream", "task", "replica"], "rows": [
           ["2026-10-08T12:00:05.987654321Z", "\u001b[31mred\u001b[0m", "stderr", "t2", 2],

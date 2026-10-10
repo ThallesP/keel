@@ -12,7 +12,7 @@ import {
   useSetVariable,
   type VariableRef,
   type VariableView,
-} from "@/api/gen";
+} from "@/gen/api";
 import { succeeded } from "@/lib/panel-write";
 
 import { Kbd } from "../../primitives";

@@ -34,8 +34,7 @@
     "builtin": true
   },
   "ignorePatterns": [
-    "**/src/api/gen/**",
-    "**/*.gen.ts"
+    "**/src/gen/**"
   ],
   "jsPlugins": [
     "./tools/oxlint/keel.js"

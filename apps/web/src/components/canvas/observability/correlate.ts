@@ -1,4 +1,4 @@
-import type { Attribute } from "@/api/gen";
+import type { Attribute } from "@/gen/api";
 import { stripAnsi } from "@/lib/ansi";
 
 // Log ↔ trace correlation, read side. Container lines carry no trace context of their own, but an

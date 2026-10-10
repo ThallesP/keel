@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { TraceStats } from "@/api/gen";
+import type { TraceStats } from "@/gen/api";
 
 import { formatCount, formatDuration } from "../../format";
 

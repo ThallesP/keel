@@ -1,4 +1,4 @@
-import type { TraceBucket } from "@/api/gen";
+import type { TraceBucket } from "@/gen/api";
 
 export const PAD_T = 8;
 export const PLOT_H = 96;

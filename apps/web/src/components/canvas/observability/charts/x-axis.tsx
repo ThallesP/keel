@@ -1,4 +1,4 @@
-import type { TraceBucket } from "@/api/gen";
+import type { TraceBucket } from "@/gen/api";
 
 import { tickLabel } from "./labels";
 import { BASE, type Band } from "./layout";

@@ -5,16 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-func projectOf(p db.Project) domain.Project {
+func projectOf(p sqlc.Project) domain.Project {
 	return domain.Project{ID: p.ID, OrganizationID: p.OrganizationID, Name: p.Name, Slug: p.Slug, CreatedAt: p.CreatedAt}
 }
 
-func environmentOf(e db.Environment) domain.Environment {
+func environmentOf(e sqlc.Environment) domain.Environment {
 	return domain.Environment{ID: e.ID, ProjectID: e.ProjectID, Name: e.Name, IsProduction: e.IsProduction != 0, CreatedAt: e.CreatedAt}
 }
 
@@ -40,7 +40,7 @@ func (t *tx) OrganizationOfEnvironment(environmentID string) (string, error) {
 }
 
 // nodeOf maps a row; endpoints are attached by the caller.
-func nodeOf(r db.Node) domain.Node {
+func nodeOf(r sqlc.Node) domain.Node {
 	n := domain.Node{
 		ID:               r.ID,
 		EnvironmentID:    r.EnvironmentID,
@@ -84,7 +84,7 @@ func nodeOf(r db.Node) domain.Node {
 	return n
 }
 
-func endpointOf(r db.Endpoint) domain.Endpoint {
+func endpointOf(r sqlc.Endpoint) domain.Endpoint {
 	return domain.Endpoint{
 		ID:         r.ID,
 		NodeID:     r.NodeID,
@@ -113,7 +113,7 @@ func (t *tx) Node(id string) (domain.Node, error) {
 	return n, nil
 }
 
-func attach(rows []db.Node, eps []db.Endpoint) []domain.Node {
+func attach(rows []sqlc.Node, eps []sqlc.Endpoint) []domain.Node {
 	byNode := map[string][]domain.Endpoint{}
 	for _, e := range eps {
 		byNode[e.NodeID] = append(byNode[e.NodeID], endpointOf(e))
@@ -151,8 +151,8 @@ func (t *tx) AllNodes() ([]domain.Node, error) {
 	return attach(rows, eps), nil
 }
 
-func nodeParams(n domain.Node) db.CoreInsertNodeParams {
-	p := db.CoreInsertNodeParams{
+func nodeParams(n domain.Node) sqlc.CoreInsertNodeParams {
+	p := sqlc.CoreInsertNodeParams{
 		ID:               n.ID,
 		EnvironmentID:    n.EnvironmentID,
 		Type:             string(n.Type),
@@ -198,7 +198,7 @@ func (t *tx) InsertNode(n domain.Node) error {
 }
 
 func (t *tx) UpdateNode(n domain.Node) error {
-	res, err := t.q.CoreUpdateNode(t.ctx, db.CoreUpdateNodeParams(nodeParams(n)))
+	res, err := t.q.CoreUpdateNode(t.ctx, sqlc.CoreUpdateNodeParams(nodeParams(n)))
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func (t *tx) ReplaceEndpoints(nodeID string, eps []domain.Endpoint) error {
 		if id == "" {
 			id = domain.NewID()
 		}
-		err := t.q.CoreInsertEndpoint(t.ctx, db.CoreInsertEndpointParams{
+		err := t.q.CoreInsertEndpoint(t.ctx, sqlc.CoreInsertEndpointParams{
 			ID:          id,
 			NodeID:      nodeID,
 			Ord:         int64(i),
@@ -253,5 +253,5 @@ func (t *tx) Setting(key string) (string, bool, error) {
 }
 
 func (t *tx) SetSetting(key, value string) error {
-	return t.q.CoreSetSetting(t.ctx, db.CoreSetSettingParams{Key: key, Value: value})
+	return t.q.CoreSetSetting(t.ctx, sqlc.CoreSetSettingParams{Key: key, Value: value})
 }

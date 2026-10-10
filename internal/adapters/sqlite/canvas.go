@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
 // Implements app.CanvasTx.
@@ -19,7 +19,7 @@ func canvasTaken(err error) error {
 	return err
 }
 
-func variablesOf(rows []db.Variable) []domain.Variable {
+func variablesOf(rows []sqlc.Variable) []domain.Variable {
 	out := make([]domain.Variable, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, domain.Variable{ID: r.ID, NodeID: r.NodeID, Key: r.Key, Value: r.Value, Secret: r.Secret != 0})
@@ -45,7 +45,7 @@ func (t *tx) CanvasProjects(organizationID string) ([]domain.Project, error) {
 }
 
 func (t *tx) CanvasProjectBySlug(organizationID, slug string) (domain.Project, error) {
-	p, err := t.q.CanvasGetProjectBySlug(t.ctx, db.CanvasGetProjectBySlugParams{OrganizationID: organizationID, Slug: slug})
+	p, err := t.q.CanvasGetProjectBySlug(t.ctx, sqlc.CanvasGetProjectBySlugParams{OrganizationID: organizationID, Slug: slug})
 	if err != nil {
 		return domain.Project{}, noRow(err)
 	}
@@ -53,7 +53,7 @@ func (t *tx) CanvasProjectBySlug(organizationID, slug string) (domain.Project, e
 }
 
 func (t *tx) CanvasInsertProject(p domain.Project) error {
-	return canvasTaken(t.q.CanvasInsertProject(t.ctx, db.CanvasInsertProjectParams{
+	return canvasTaken(t.q.CanvasInsertProject(t.ctx, sqlc.CanvasInsertProjectParams{
 		ID: p.ID, OrganizationID: p.OrganizationID, Name: p.Name, Slug: p.Slug, CreatedAt: p.CreatedAt,
 	}))
 }
@@ -71,7 +71,7 @@ func (t *tx) CanvasEnvironments(projectID string) ([]domain.Environment, error) 
 }
 
 func (t *tx) CanvasInsertEnvironment(e domain.Environment) error {
-	return t.q.CanvasInsertEnvironment(t.ctx, db.CanvasInsertEnvironmentParams{
+	return t.q.CanvasInsertEnvironment(t.ctx, sqlc.CanvasInsertEnvironmentParams{
 		ID: e.ID, ProjectID: e.ProjectID, Name: e.Name, IsProduction: b2i(e.IsProduction), CreatedAt: e.CreatedAt,
 	})
 }
@@ -107,13 +107,13 @@ func (t *tx) CanvasEnvironmentVariables(environmentID string) ([]domain.Variable
 }
 
 func (t *tx) CanvasInsertVariable(v domain.Variable) error {
-	return canvasTaken(t.q.CanvasInsertVariable(t.ctx, db.CanvasInsertVariableParams{
+	return canvasTaken(t.q.CanvasInsertVariable(t.ctx, sqlc.CanvasInsertVariableParams{
 		ID: v.ID, NodeID: v.NodeID, Key: v.Key, Value: v.Value, Secret: b2i(v.Secret),
 	}))
 }
 
 func (t *tx) CanvasUpdateVariable(v domain.Variable) error {
-	n, err := t.q.CanvasUpdateVariable(t.ctx, db.CanvasUpdateVariableParams{
+	n, err := t.q.CanvasUpdateVariable(t.ctx, sqlc.CanvasUpdateVariableParams{
 		ID: v.ID, Key: v.Key, Value: v.Value, Secret: b2i(v.Secret),
 	})
 	if err != nil {

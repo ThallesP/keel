@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { ensureDefaultProject } from "@/api/gen";
+import { ensureDefaultProject } from "@/gen/api";
 import { AuthShell } from "@/components/auth/shell";
 import { AuthForms } from "@/components/auth-forms";
 import Loader from "@/components/loader";

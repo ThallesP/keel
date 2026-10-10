@@ -7,7 +7,7 @@
 // A topic is a path prefix (`/api/environments/abc`); docs/go/ARCHITECTURE.md, "Realtime".
 import { type Query, QueryClient } from "@tanstack/react-query";
 
-import { type Me, getMeQueryKey, getMeQueryOptions } from "@/api/gen";
+import { type Me, getMeQueryKey, getMeQueryOptions } from "@/gen/api";
 
 /**
  * `meta` every query may carry. `realtime: false` opts a query out of every invalidation

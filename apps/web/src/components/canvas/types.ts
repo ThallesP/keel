@@ -5,7 +5,7 @@ import type {
   DeployStep as ApiDeployStep,
   EndpointView,
   NodeView,
-} from "@/api/gen";
+} from "@/gen/api";
 
 /**
  * `healthy | done | deploying | stopping | error | stopped | pending`, as the API derives it

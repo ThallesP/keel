@@ -8,8 +8,6 @@ dist
 build
 *.tsbuildinfo
 
-# Generated files
-apps/web/src/routeTree.gen.ts
 local.db
 local.db-*
 # keel serve's data dir in development (KEEL_DATA_DIR=./.keel)

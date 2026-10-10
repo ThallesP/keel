@@ -5,8 +5,8 @@ sql:
     queries: queries
     gen:
       go:
-        package: db
-        out: db
+        package: sqlc
+        out: ../../gen/sqlc
         emit_pointers_for_null_types: true
         emit_empty_slices: true
         emit_methods_with_db_argument: false

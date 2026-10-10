@@ -1,4 +1,4 @@
-# `src/api`: the dashboard's data layer
+# The dashboard's data layer
 
 The dashboard talks to `keel serve` over a same-origin JSON API under `/api` and one WebSocket
 (`/api/ws`) that only says "refetch these paths". Everything a component needs is a generated
@@ -6,7 +6,7 @@ hook; freshness, errors and the session are handled underneath.
 
 | Module           | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@/api/gen`      | **Generated** by Kubb from `openapi.json` (gitignored; `bun run api:generate`, which `dev`, `build` and `check-types` run first). One barrel: types under the server's names (`NodeView`, `EnvironmentLogLine`, `Span`, …), zod schemas (`…Schema`), fetch functions (`listNodes`), TanStack Query hooks (`useListNodes`, `useCreateNode`), keys and options (`listNodesQueryKey`, `listNodesQueryOptions`). Hook names are `use` + the operationId. Import types from here; a nullable read's item is `NonNullable<…>` where it is used. |
+| `@/gen/api`      | **Generated** by Kubb from `openapi.json` (gitignored; `bun run api:generate`, which `dev`, `build` and `check-types` run first). One barrel: types under the server's names (`NodeView`, `EnvironmentLogLine`, `Span`, …), zod schemas (`…Schema`), fetch functions (`listNodes`), TanStack Query hooks (`useListNodes`, `useCreateNode`), keys and options (`listNodesQueryKey`, `listNodesQueryOptions`). Hook names are `use` + the operationId. Import types from here; a nullable read's item is `NonNullable<…>` where it is used. |
 | `@/lib/api`      | `ApiError`, `isApiError`, `errorMessage`; `setupApiClient` (called once in `main.tsx`).                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `@/lib/session`  | `useSession`, `SessionGate`, `useAuth` (sign in / up / out, accept invitation, refresh).                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `@/lib/realtime` | `RealtimeProvider` (mounted in `main.tsx`), `useRealtimeStatus`, `useRealtime().reconnect`.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -18,7 +18,7 @@ The API reference is the server's `/api/docs`.
 ## Reading
 
 ```tsx
-import { useListNodes, useGetProjectBySlug, useGetDeployment } from "@/api/gen";
+import { useListNodes, useGetProjectBySlug, useGetDeployment } from "@/gen/api";
 
 const { data } = useListNodes({ path: { id: environmentId } });
 const nodes = data?.nodes ?? []; // arrays are typed `T[] | null` on the wire
@@ -80,7 +80,7 @@ const { data } = useGetTrace(
 ## Writing
 
 ```tsx
-import { useCreateNode, useDeleteNode } from "@/api/gen";
+import { useCreateNode, useDeleteNode } from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 
 const createNode = useCreateNode();

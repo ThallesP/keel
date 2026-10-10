@@ -2,7 +2,7 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
-import { useListNodes } from "@/api/gen";
+import { useListNodes } from "@/gen/api";
 import { Logo } from "@/components/logo";
 
 import { AccountMenu } from "./account-menu";

@@ -60,5 +60,4 @@ dev-dist
 .open-next
 
 !.env.schema
-/src/env.ts
-/src/api/gen/
+/src/gen/

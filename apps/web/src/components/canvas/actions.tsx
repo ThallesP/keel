@@ -17,7 +17,7 @@ import {
   type NodeList,
   type NodeView,
   type Position,
-} from "@/api/gen";
+} from "@/gen/api";
 import { CanvasOverlay } from "@/lib/canvas-overlay";
 
 import { useEnvironment } from "./environment";

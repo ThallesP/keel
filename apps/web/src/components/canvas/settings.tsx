@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { type LogSinkView, useDisconnectLogSink, useGetLogSink } from "@/api/gen";
+import { type LogSinkView, useDisconnectLogSink, useGetLogSink } from "@/gen/api";
 import { succeeded } from "@/lib/panel-write";
 import { useSession } from "@/lib/session";
 

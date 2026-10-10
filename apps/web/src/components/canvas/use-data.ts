@@ -4,7 +4,7 @@ import {
   type EnvironmentSummary,
   useGetEnvironmentSummary,
   useGetLatestDeployment,
-} from "@/api/gen";
+} from "@/gen/api";
 
 import { useEnvironment } from "./environment";
 import { toDeployment } from "./mapping";

@@ -1,4 +1,4 @@
-import type { Attribute } from "@/api/gen";
+import type { Attribute } from "@/gen/api";
 
 export function Pairs({ pairs }: { pairs: Attribute[] }) {
   return (

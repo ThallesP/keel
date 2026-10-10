@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
 // Implements app.DeployTx.
@@ -14,7 +14,7 @@ import (
 // deployLogCap: a deployment keeps its last 500 log lines (convex/deployments.ts MAX_LOG).
 const deployLogCap = 500
 
-func deploymentOf(r db.Deployment) domain.Deployment {
+func deploymentOf(r sqlc.Deployment) domain.Deployment {
 	return domain.Deployment{
 		ID:            r.ID,
 		EnvironmentID: r.EnvironmentID,
@@ -26,7 +26,7 @@ func deploymentOf(r db.Deployment) domain.Deployment {
 	}
 }
 
-func deployStepOf(r db.DeploymentStep) domain.DeployStep {
+func deployStepOf(r sqlc.DeploymentStep) domain.DeployStep {
 	return domain.DeployStep{
 		NodeID:     str(r.NodeID),
 		Label:      r.Label,
@@ -50,7 +50,7 @@ func (t *tx) deploySteps(id string) ([]domain.DeployStep, error) {
 }
 
 // deployFill attaches steps and, when withLog, the log.
-func (t *tx) deployFill(r db.Deployment, withLog bool) (domain.Deployment, error) {
+func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, error) {
 	d := deploymentOf(r)
 	steps, err := t.deploySteps(d.ID)
 	if err != nil {
@@ -65,7 +65,7 @@ func (t *tx) deployFill(r db.Deployment, withLog bool) (domain.Deployment, error
 	return d, nil
 }
 
-func (t *tx) deployFillAll(rows []db.Deployment, withLog bool) ([]domain.Deployment, error) {
+func (t *tx) deployFillAll(rows []sqlc.Deployment, withLog bool) ([]domain.Deployment, error) {
 	out := make([]domain.Deployment, 0, len(rows))
 	for _, r := range rows {
 		d, err := t.deployFill(r, withLog)
@@ -84,7 +84,7 @@ func (t *tx) HasRunningDeployment(environmentID string) (bool, error) {
 
 func (t *tx) insertSteps(id string, steps []domain.DeployStep) error {
 	for i, s := range steps {
-		err := t.q.DeployInsertStep(t.ctx, db.DeployInsertStepParams{
+		err := t.q.DeployInsertStep(t.ctx, sqlc.DeployInsertStepParams{
 			DeploymentID: id,
 			Idx:          int64(i),
 			NodeID:       nullStr(s.NodeID),
@@ -102,7 +102,7 @@ func (t *tx) insertSteps(id string, steps []domain.DeployStep) error {
 }
 
 func (t *tx) InsertDeployment(d domain.Deployment) error {
-	err := t.q.DeployInsert(t.ctx, db.DeployInsertParams{
+	err := t.q.DeployInsert(t.ctx, sqlc.DeployInsertParams{
 		ID:            d.ID,
 		EnvironmentID: d.EnvironmentID,
 		Sha:           nullStr(d.Sha),
@@ -134,7 +134,7 @@ func (t *tx) LatestDeployment(environmentID string) (domain.Deployment, error) {
 }
 
 func (t *tx) RecentDeployments(environmentID string, limit int) ([]domain.Deployment, error) {
-	rows, err := t.q.DeployListRecent(t.ctx, db.DeployListRecentParams{EnvironmentID: environmentID, Limit: int64(limit)})
+	rows, err := t.q.DeployListRecent(t.ctx, sqlc.DeployListRecentParams{EnvironmentID: environmentID, Limit: int64(limit)})
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (t *tx) DeploymentLog(id string) ([]domain.LogLine, error) {
 
 func (t *tx) RunningDeployments(environmentID string) ([]domain.Deployment, error) {
 	var (
-		rows []db.Deployment
+		rows []sqlc.Deployment
 		err  error
 	)
 	if environmentID == "" {
@@ -170,7 +170,7 @@ func (t *tx) RunningDeployments(environmentID string) ([]domain.Deployment, erro
 }
 
 func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) error {
-	n, err := t.q.DeployUpdate(t.ctx, db.DeployUpdateParams{ID: d.ID, Status: string(d.Status), FinishedAt: d.FinishedAt})
+	n, err := t.q.DeployUpdate(t.ctx, sqlc.DeployUpdateParams{ID: d.ID, Status: string(d.Status), FinishedAt: d.FinishedAt})
 	if err != nil {
 		return err
 	}
@@ -187,12 +187,12 @@ func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) er
 		return nil
 	}
 	for _, l := range appended {
-		err := t.q.DeployInsertLog(t.ctx, db.DeployInsertLogParams{DeploymentID: d.ID, At: l.At, NodeID: nullStr(l.NodeID), Text: l.Text})
+		err := t.q.DeployInsertLog(t.ctx, sqlc.DeployInsertLogParams{DeploymentID: d.ID, At: l.At, NodeID: nullStr(l.NodeID), Text: l.Text})
 		if err != nil {
 			return err
 		}
 	}
-	return t.q.DeployTrimLog(t.ctx, db.DeployTrimLogParams{DeploymentID: d.ID, Offset: deployLogCap})
+	return t.q.DeployTrimLog(t.ctx, sqlc.DeployTrimLogParams{DeploymentID: d.ID, Offset: deployLogCap})
 }
 
 func (t *tx) ClusterServers() (int, error) {
@@ -204,7 +204,7 @@ func (t *tx) ClusterServers() (int, error) {
 }
 
 func (t *tx) SetClusterServers(servers int, at int64) error {
-	return t.q.DeploySetCluster(t.ctx, db.DeploySetClusterParams{Servers: int64(servers), At: at})
+	return t.q.DeploySetCluster(t.ctx, sqlc.DeploySetClusterParams{Servers: int64(servers), At: at})
 }
 
 func (t *tx) DeployOrganizationIDs() ([]string, error) {

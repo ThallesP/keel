@@ -2,7 +2,7 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { Box, ChevronDown, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
-import { useCreateProject, useListProjects } from "@/api/gen";
+import { useCreateProject, useListProjects } from "@/gen/api";
 import { Palette, type PalettePage } from "@/components/palette";
 
 import { useEnvironment } from "./environment";

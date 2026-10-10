@@ -2,7 +2,7 @@ import { cn } from "@my-better-t-app/ui/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { type EnvironmentLogLine, useGetTrace } from "@/api/gen";
+import { type EnvironmentLogLine, useGetTrace } from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 
 import { useEnvironment } from "../../environment";

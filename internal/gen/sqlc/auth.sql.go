@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: auth.sql
 
-package db
+package sqlc
 
 import (
 	"context"

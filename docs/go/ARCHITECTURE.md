@@ -47,7 +47,7 @@ cmd/keel/        main.go → cli.Execute()
 - Schema: `internal/adapters/sqlite/migrations/NNNN_name.sql`, applied in order at start, tracked
   in `schema_migrations`. Additive only once released.
 - Queries: `sqlc` (`internal/adapters/sqlite/sqlc.yaml`), one `queries/<area>.sql` per area,
-  generated into `internal/adapters/sqlite/db/`. Run `sqlc generate` from `internal/adapters/sqlite`.
+  generated into `internal/gen/sqlc/`. Run `sqlc generate` from `internal/adapters/sqlite`.
 - IDs: `domain.NewID()`: 20 random lowercase base32 chars. Strings everywhere.
 - Times: unix milliseconds (`int64`) in the database, the domain and the JSON API (the dashboard
   compares them with `Date.now()`). The CLI prints RFC 3339.
@@ -136,7 +136,7 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 ## Dashboard
 
 - `apps/web` stays a Vite + React app. `kubb.config.ts` reads `../../openapi.json` and generates
-  `src/api/gen/` (types, zod schemas, fetch client, TanStack Query hooks).
+  `src/gen/api/` (types, zod schemas, fetch client, TanStack Query hooks).
 - Query keys: the first element is the resolved request path (`/api/environments/abc/canvas`),
   so invalidation topics match by prefix.
 - `src/lib/realtime.tsx`: the WebSocket provider. Components only call generated hooks.

@@ -1,4 +1,4 @@
-import { useGetLogSink } from "@/api/gen";
+import { useGetLogSink } from "@/gen/api";
 import Loader from "@/components/loader";
 
 import { PageHeader } from "../primitives";

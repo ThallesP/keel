@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useGetSignUpOpen } from "@/api/gen";
+import { useGetSignUpOpen } from "@/gen/api";
 import Loader from "@/components/loader";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";

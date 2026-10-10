@@ -1,7 +1,7 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
-import type { EnvironmentLogLine, TraceSummary } from "@/api/gen";
+import type { EnvironmentLogLine, TraceSummary } from "@/gen/api";
 import { AnsiText } from "@/lib/ansi";
 
 import { formatDuration, formatLogTime } from "../format";

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { useGetProjectBySlug } from "@/api/gen";
+import { useGetProjectBySlug } from "@/gen/api";
 import { Canvas } from "@/components/canvas/canvas";
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";

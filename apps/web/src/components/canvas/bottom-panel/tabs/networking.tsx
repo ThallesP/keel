@@ -8,7 +8,7 @@ import {
   exposeRequestSchema,
   useExposeNode,
   useGetControlPlane,
-} from "@/api/gen";
+} from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 import { formValues } from "@/lib/form";
 

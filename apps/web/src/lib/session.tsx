@@ -20,7 +20,7 @@ import {
   signIn as apiSignIn,
   signOut as apiSignOut,
   signUp as apiSignUp,
-} from "@/api/gen";
+} from "@/gen/api";
 
 import { isApiError } from "./api";
 import { cachedSession, markSignedOut, meQueryOptions, refreshSession } from "./query";

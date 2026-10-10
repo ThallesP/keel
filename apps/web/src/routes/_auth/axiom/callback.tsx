@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-import { useCompleteAxiomSignIn } from "@/api/gen";
+import { useCompleteAxiomSignIn } from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 import { takeAxiomReturn } from "@/lib/axiom-sign-in";
 

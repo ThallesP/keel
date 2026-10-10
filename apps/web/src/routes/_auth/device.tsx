@@ -4,7 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useApproveDevice, useClaimDeviceCode, useDenyDevice } from "@/api/gen";
+import { useApproveDevice, useClaimDeviceCode, useDenyDevice } from "@/gen/api";
 import { AuthShell } from "@/components/auth/shell";
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";

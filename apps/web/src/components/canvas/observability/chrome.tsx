@@ -2,7 +2,7 @@ import { getRouteApi } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useMemo } from "react";
 
-import { useListNodes } from "@/api/gen";
+import { useListNodes } from "@/gen/api";
 
 import { useEnvironment } from "../environment";
 

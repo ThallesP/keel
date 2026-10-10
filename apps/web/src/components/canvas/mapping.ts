@@ -1,4 +1,4 @@
-import type { Deployment as ApiDeployment, EndpointView, NodeView } from "@/api/gen";
+import type { Deployment as ApiDeployment, EndpointView, NodeView } from "@/gen/api";
 
 import { formatClock } from "./format";
 import type { CanvasNode, Deployment, RuntimeData } from "./types";

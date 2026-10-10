@@ -1,6 +1,6 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 
-import type { EnvironmentLogLine, Span } from "@/api/gen";
+import type { EnvironmentLogLine, Span } from "@/gen/api";
 import { AnsiText } from "@/lib/ansi";
 
 import { formatDuration } from "../../format";

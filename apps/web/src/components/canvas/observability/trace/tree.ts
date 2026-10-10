@@ -1,4 +1,4 @@
-import type { EnvironmentLogLine, Span } from "@/api/gen";
+import type { EnvironmentLogLine, Span } from "@/gen/api";
 
 import { traceRef } from "../correlate";
 

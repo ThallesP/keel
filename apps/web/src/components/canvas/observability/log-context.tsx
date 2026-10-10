@@ -6,7 +6,7 @@ import {
   type TraceSummary,
   useListLogsAround,
   useListTracesAround,
-} from "@/api/gen";
+} from "@/gen/api";
 import { stripAnsi } from "@/lib/ansi";
 import { errorMessage } from "@/lib/api";
 

@@ -643,7 +643,7 @@ Files: `use-synced-graph.ts`, `mapping.ts`, `canvas.tsx`, `actions.tsx`, `toolba
 
 | Piece | Path | Notes |
 | --- | --- | --- |
-| Generated API | `apps/web/src/api/gen/` from `kubb.config.ts` reading `../../openapi.json` | plugins: `@kubb/plugin-oas`, `@kubb/plugin-ts`, `@kubb/plugin-zod` (optional), `@kubb/plugin-client` (custom client, below), `@kubb/plugin-react-query` (hooks named from operationId: `useListNodes`, `useMoveNode`, …) |
+| Generated API | `apps/web/src/gen/api/` from `kubb.config.ts` reading `../../openapi.json` | plugins: `@kubb/plugin-oas`, `@kubb/plugin-ts`, `@kubb/plugin-zod` (optional), `@kubb/plugin-client` (custom client, below), `@kubb/plugin-react-query` (hooks named from operationId: `useListNodes`, `useMoveNode`, …) |
 | Fetch client | `apps/web/src/api/client.ts` (Kubb `importPath` for the client) | relative URLs, `credentials: "same-origin"`, JSON in/out; non-2xx → throw `ApiError {status, code, message, problem}` parsed from `application/problem+json`; reads the `Keel-Invalidate` header (9.3) |
 | Query client | `apps/web/src/lib/query.tsx` | `QueryClientProvider` in `main.tsx` replacing the Convex providers; global `QueryCache`/`MutationCache` `onError` handles 401 (section 3.2) |
 | Realtime | `apps/web/src/lib/realtime.tsx` | `centrifuge` client on `/api/ws`; on publication `{type: "invalidate", topics}` → batch 50 ms → invalidate matching keys; on (re)connect → invalidate everything live |

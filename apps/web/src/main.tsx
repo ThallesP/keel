@@ -10,7 +10,7 @@ import { createQueryClient } from "@/lib/query";
 import { RealtimeProvider } from "@/lib/realtime";
 
 import Loader from "./components/loader";
-import { routeTree } from "./routeTree.gen";
+import { routeTree } from "@/gen/route-tree";
 
 // Dashboard, API and WebSocket share this origin (keel serve; Vite proxies them in dev), so there
 // is nothing to configure at runtime: the client calls relative `/api/...` with the session cookie.

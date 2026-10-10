@@ -1,15 +1,15 @@
 package sqlite
 
 import (
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
 // Implements app.IngressTx.
 
 func (t *tx) IngressHasVariable(nodeID, key string) (bool, error) {
-	return t.q.IngressHasVariable(t.ctx, db.IngressHasVariableParams{NodeID: nodeID, Key: key})
+	return t.q.IngressHasVariable(t.ctx, sqlc.IngressHasVariableParams{NodeID: nodeID, Key: key})
 }
 
 func (t *tx) IngressOtherEndpoints(nodeID string) ([]app.OwnedEndpoint, error) {

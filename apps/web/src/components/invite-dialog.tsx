@@ -11,7 +11,7 @@ import { Label } from "@my-better-t-app/ui/components/label";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useCreateInvitation } from "@/api/gen";
+import { useCreateInvitation } from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 
 /**

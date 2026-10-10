@@ -3,30 +3,30 @@ package sqlite
 // Implements app.AuthTx.
 
 import (
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
-func authUserOf(u db.User) domain.User {
+func authUserOf(u sqlc.User) domain.User {
 	return domain.User{ID: u.ID, Email: u.Email, Name: u.Name, CreatedAt: u.CreatedAt}
 }
 
-func authSessionOf(s db.Session) domain.Session {
+func authSessionOf(s sqlc.Session) domain.Session {
 	return domain.Session{ID: s.ID, UserID: s.UserID, ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt,
 		UserAgent: s.UserAgent, IP: s.Ip}
 }
 
-func authMemberOf(m db.Member) domain.Member {
+func authMemberOf(m sqlc.Member) domain.Member {
 	return domain.Member{ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt}
 }
 
-func authInvitationOf(i db.Invitation) domain.Invitation {
+func authInvitationOf(i sqlc.Invitation) domain.Invitation {
 	return domain.Invitation{ID: i.ID, OrganizationID: i.OrganizationID, Email: i.Email, Role: i.Role,
 		Status: domain.InvitationStatus(i.Status), InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt}
 }
 
-func authDeviceCodeOf(d db.DeviceCode) domain.DeviceCode {
+func authDeviceCodeOf(d sqlc.DeviceCode) domain.DeviceCode {
 	return domain.DeviceCode{ID: d.ID, UserCode: d.UserCode, ClientID: d.ClientID, Status: domain.DeviceStatus(d.Status),
 		UserID: str(d.UserID), IntervalS: int(d.IntervalS), LastPolledAt: d.LastPolledAt, ExpiresAt: d.ExpiresAt,
 		CreatedAt: d.CreatedAt}
@@ -51,12 +51,12 @@ func (t *tx) AuthCredentials(email string) (app.Credentials, error) {
 }
 
 func (t *tx) AuthInsertUser(u domain.User, passwordHash string) error {
-	return t.q.AuthInsertUser(t.ctx, db.AuthInsertUserParams{ID: u.ID, Email: u.Email, Name: u.Name,
+	return t.q.AuthInsertUser(t.ctx, sqlc.AuthInsertUserParams{ID: u.ID, Email: u.Email, Name: u.Name,
 		PasswordHash: passwordHash, CreatedAt: u.CreatedAt, UpdatedAt: u.CreatedAt})
 }
 
 func (t *tx) AuthSetPasswordHash(userID, hash string, now int64) error {
-	return t.q.AuthSetPasswordHash(t.ctx, db.AuthSetPasswordHashParams{PasswordHash: hash, UpdatedAt: now, ID: userID})
+	return t.q.AuthSetPasswordHash(t.ctx, sqlc.AuthSetPasswordHashParams{PasswordHash: hash, UpdatedAt: now, ID: userID})
 }
 
 func (t *tx) AuthSession(tokenHash string) (domain.Session, error) {
@@ -68,12 +68,12 @@ func (t *tx) AuthSession(tokenHash string) (domain.Session, error) {
 }
 
 func (t *tx) AuthInsertSession(s domain.Session, tokenHash string) error {
-	return t.q.AuthInsertSession(t.ctx, db.AuthInsertSessionParams{ID: s.ID, TokenHash: tokenHash, UserID: s.UserID,
+	return t.q.AuthInsertSession(t.ctx, sqlc.AuthInsertSessionParams{ID: s.ID, TokenHash: tokenHash, UserID: s.UserID,
 		ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt, UpdatedAt: s.CreatedAt, UserAgent: s.UserAgent, Ip: s.IP})
 }
 
 func (t *tx) AuthExtendSession(id string, expiresAt, now int64) error {
-	return t.q.AuthExtendSession(t.ctx, db.AuthExtendSessionParams{ExpiresAt: expiresAt, UpdatedAt: now, ID: id})
+	return t.q.AuthExtendSession(t.ctx, sqlc.AuthExtendSessionParams{ExpiresAt: expiresAt, UpdatedAt: now, ID: id})
 }
 
 func (t *tx) AuthDeleteSession(id string) error { return t.q.AuthDeleteSession(t.ctx, id) }
@@ -93,7 +93,7 @@ func (t *tx) AuthOrganization(id string) (domain.Organization, error) {
 }
 
 func (t *tx) AuthInsertOrganization(o domain.Organization) error {
-	return t.q.AuthInsertOrganization(t.ctx, db.AuthInsertOrganizationParams{ID: o.ID, Name: o.Name, Slug: o.Slug, CreatedAt: o.CreatedAt})
+	return t.q.AuthInsertOrganization(t.ctx, sqlc.AuthInsertOrganizationParams{ID: o.ID, Name: o.Name, Slug: o.Slug, CreatedAt: o.CreatedAt})
 }
 
 func (t *tx) AuthMembership(userID string) (domain.Member, error) {
@@ -105,7 +105,7 @@ func (t *tx) AuthMembership(userID string) (domain.Member, error) {
 }
 
 func (t *tx) AuthInsertMember(m domain.Member) error {
-	return t.q.AuthInsertMember(t.ctx, db.AuthInsertMemberParams{ID: m.ID, OrganizationID: m.OrganizationID,
+	return t.q.AuthInsertMember(t.ctx, sqlc.AuthInsertMemberParams{ID: m.ID, OrganizationID: m.OrganizationID,
 		UserID: m.UserID, Role: m.Role, CreatedAt: m.CreatedAt})
 }
 
@@ -130,7 +130,7 @@ func (t *tx) AuthMembers(organizationID string) ([]app.MemberAccount, error) {
 }
 
 func (t *tx) AuthIsMemberByEmail(organizationID, email string) (bool, error) {
-	return t.q.AuthIsMemberByEmail(t.ctx, db.AuthIsMemberByEmailParams{OrganizationID: organizationID, Email: email})
+	return t.q.AuthIsMemberByEmail(t.ctx, sqlc.AuthIsMemberByEmailParams{OrganizationID: organizationID, Email: email})
 }
 
 func (t *tx) AuthInvitation(id string) (domain.Invitation, error) {
@@ -142,28 +142,28 @@ func (t *tx) AuthInvitation(id string) (domain.Invitation, error) {
 }
 
 func (t *tx) AuthInsertInvitation(inv domain.Invitation) error {
-	return t.q.AuthInsertInvitation(t.ctx, db.AuthInsertInvitationParams{ID: inv.ID, OrganizationID: inv.OrganizationID,
+	return t.q.AuthInsertInvitation(t.ctx, sqlc.AuthInsertInvitationParams{ID: inv.ID, OrganizationID: inv.OrganizationID,
 		Email: inv.Email, Role: inv.Role, Status: string(inv.Status), InviterID: inv.InviterID,
 		ExpiresAt: inv.ExpiresAt, CreatedAt: inv.CreatedAt})
 }
 
 func (t *tx) AuthSetInvitationStatus(id string, from, to domain.InvitationStatus) (bool, error) {
-	n, err := t.q.AuthSetInvitationStatus(t.ctx, db.AuthSetInvitationStatusParams{Status: string(to), ID: id, FromStatus: string(from)})
+	n, err := t.q.AuthSetInvitationStatus(t.ctx, sqlc.AuthSetInvitationStatusParams{Status: string(to), ID: id, FromStatus: string(from)})
 	return n > 0, err
 }
 
 func (t *tx) AuthCancelPendingInvitations(organizationID, email string, now int64) error {
-	return t.q.AuthCancelPendingInvitations(t.ctx, db.AuthCancelPendingInvitationsParams{OrganizationID: organizationID,
+	return t.q.AuthCancelPendingInvitations(t.ctx, sqlc.AuthCancelPendingInvitationsParams{OrganizationID: organizationID,
 		Email: email, ExpiresAt: now})
 }
 
 func (t *tx) AuthCountPendingInvitations(organizationID string, now int64) (int, error) {
-	n, err := t.q.AuthCountPendingInvitations(t.ctx, db.AuthCountPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
+	n, err := t.q.AuthCountPendingInvitations(t.ctx, sqlc.AuthCountPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
 	return int(n), err
 }
 
 func (t *tx) AuthPendingInvitations(organizationID string, now int64) ([]domain.Invitation, error) {
-	rows, err := t.q.AuthListPendingInvitations(t.ctx, db.AuthListPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
+	rows, err := t.q.AuthListPendingInvitations(t.ctx, sqlc.AuthListPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
 	if err != nil {
 		return nil, err
 	}
@@ -191,13 +191,13 @@ func (t *tx) AuthDeviceCodeByUserCode(userCode string) (domain.DeviceCode, error
 }
 
 func (t *tx) AuthInsertDeviceCode(dc domain.DeviceCode, deviceCodeHash string) error {
-	return t.q.AuthInsertDeviceCode(t.ctx, db.AuthInsertDeviceCodeParams{ID: dc.ID, DeviceCodeHash: deviceCodeHash,
+	return t.q.AuthInsertDeviceCode(t.ctx, sqlc.AuthInsertDeviceCodeParams{ID: dc.ID, DeviceCodeHash: deviceCodeHash,
 		UserCode: dc.UserCode, ClientID: dc.ClientID, Status: string(dc.Status), UserID: nullStr(dc.UserID),
 		IntervalS: int64(dc.IntervalS), LastPolledAt: dc.LastPolledAt, ExpiresAt: dc.ExpiresAt, CreatedAt: dc.CreatedAt})
 }
 
 func (t *tx) AuthSetDevicePolled(id string, at int64) error {
-	return t.q.AuthSetDevicePolled(t.ctx, db.AuthSetDevicePolledParams{LastPolledAt: &at, ID: id})
+	return t.q.AuthSetDevicePolled(t.ctx, sqlc.AuthSetDevicePolledParams{LastPolledAt: &at, ID: id})
 }
 
 func (t *tx) AuthDeleteDeviceCode(id string) error { return t.q.AuthDeleteDeviceCode(t.ctx, id) }
@@ -208,12 +208,12 @@ func (t *tx) AuthConsumeApprovedDeviceCode(id string) (bool, error) {
 }
 
 func (t *tx) AuthBindDeviceCode(id, userID string) (bool, error) {
-	n, err := t.q.AuthBindDeviceCode(t.ctx, db.AuthBindDeviceCodeParams{UserID: &userID, ID: id})
+	n, err := t.q.AuthBindDeviceCode(t.ctx, sqlc.AuthBindDeviceCodeParams{UserID: &userID, ID: id})
 	return n > 0, err
 }
 
 func (t *tx) AuthDecideDeviceCode(id string, status domain.DeviceStatus, userID string) (bool, error) {
-	n, err := t.q.AuthDecideDeviceCode(t.ctx, db.AuthDecideDeviceCodeParams{Status: string(status), UserID: &userID, ID: id})
+	n, err := t.q.AuthDecideDeviceCode(t.ctx, sqlc.AuthDecideDeviceCodeParams{Status: string(status), UserID: &userID, ID: id})
 	return n > 0, err
 }
 

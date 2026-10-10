@@ -3,7 +3,7 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useGetTracingPrompt } from "@/api/gen";
+import { useGetTracingPrompt } from "@/gen/api";
 
 /**
  * Copies the agent prompt (`GET /api/tracing/prompt`): a coding agent pastes it, instruments the

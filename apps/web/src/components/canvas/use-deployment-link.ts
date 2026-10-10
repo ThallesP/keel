@@ -1,7 +1,7 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
-import { useGetDeployment } from "@/api/gen";
+import { useGetDeployment } from "@/gen/api";
 
 import { toDeployment } from "./mapping";
 import type { Deployment } from "./types";

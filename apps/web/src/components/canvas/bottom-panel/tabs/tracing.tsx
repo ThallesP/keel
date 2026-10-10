@@ -1,7 +1,7 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { Lock } from "lucide-react";
 
-import { useGetNodeTracing, useSetNodeTracing } from "@/api/gen";
+import { useGetNodeTracing, useSetNodeTracing } from "@/gen/api";
 import { succeeded } from "@/lib/panel-write";
 
 import { CopyPrompt } from "../../copy-prompt";

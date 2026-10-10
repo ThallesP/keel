@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
 	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
 func (t *tx) LogSinkOf(organizationID string) (app.SinkRecord, error) {
@@ -29,7 +29,7 @@ func (t *tx) ReplaceLogSink(organizationID string, sink domain.LogSink, connecte
 	if err := t.q.ObsDeleteSink(t.ctx, organizationID); err != nil {
 		return err
 	}
-	return t.q.ObsInsertSink(t.ctx, db.ObsInsertSinkParams{
+	return t.q.ObsInsertSink(t.ctx, sqlc.ObsInsertSinkParams{
 		ID:             domain.NewID(),
 		OrganizationID: organizationID,
 		Kind:           sink.Kind,
@@ -86,14 +86,14 @@ func (t *tx) AxiomClientFor(redirectURI string) (string, error) {
 }
 
 func (t *tx) SaveAxiomClient(redirectURI, clientID string, now int64) error {
-	return t.q.ObsInsertAxiomClient(t.ctx, db.ObsInsertAxiomClientParams{RedirectUri: redirectURI, ClientID: clientID, CreatedAt: now})
+	return t.q.ObsInsertAxiomClient(t.ctx, sqlc.ObsInsertAxiomClientParams{RedirectUri: redirectURI, ClientID: clientID, CreatedAt: now})
 }
 
 func (t *tx) StartAxiomSignIn(s app.AxiomSignIn) error {
 	if err := t.q.ObsDeleteSignInsOfOrganization(t.ctx, s.OrganizationID); err != nil {
 		return err
 	}
-	return t.q.ObsInsertSignIn(t.ctx, db.ObsInsertSignInParams{
+	return t.q.ObsInsertSignIn(t.ctx, sqlc.ObsInsertSignInParams{
 		State: s.State, OrganizationID: s.OrganizationID, ClientID: s.ClientID, Verifier: s.Verifier,
 		RedirectUri: s.RedirectURI, CreatedAt: s.CreatedAt,
 	})
@@ -135,7 +135,7 @@ func (t *tx) StashAxiomPending(p app.AxiomPending) error {
 	if err != nil {
 		return err
 	}
-	return t.q.ObsUpsertPending(t.ctx, db.ObsUpsertPendingParams{
+	return t.q.ObsUpsertPending(t.ctx, sqlc.ObsUpsertPendingParams{
 		OrganizationID: p.OrganizationID, Token: p.Token, Orgs: string(b), CreatedAt: p.CreatedAt,
 	})
 }
@@ -154,7 +154,7 @@ func (t *tx) OTLPKeyOf(environmentID string) (string, error) {
 }
 
 func (t *tx) InsertOTLPKey(environmentID, key string, now int64) error {
-	return t.q.ObsInsertOTLPKey(t.ctx, db.ObsInsertOTLPKeyParams{EnvironmentID: environmentID, Key: key, CreatedAt: now})
+	return t.q.ObsInsertOTLPKey(t.ctx, sqlc.ObsInsertOTLPKeyParams{EnvironmentID: environmentID, Key: key, CreatedAt: now})
 }
 
 func (t *tx) OTLPKeyEnvironment(key string) (string, error) {

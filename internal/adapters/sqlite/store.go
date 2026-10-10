@@ -1,5 +1,5 @@
 // Package sqlite implements app.Store on SQLite (modernc.org/sqlite, pure Go). Schema in
-// migrations/, queries in queries/ (sqlc → db/). See docs/go/ARCHITECTURE.md, "Data".
+// migrations/, queries in queries/ (sqlc → internal/gen/sqlc). See docs/go/ARCHITECTURE.md, "Data".
 package sqlite
 
 import (
@@ -14,8 +14,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/ThallesP/keel/internal/adapters/sqlite/db"
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
 )
 
 //go:embed migrations/*.sql
@@ -120,7 +120,7 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 	}
 	// Also when fn panics: a job recovers and goes on, and the one write connection must come back.
 	defer sqlTx.Rollback() // after Commit: ErrTxDone, ignored
-	t := &tx{ctx: ctx, q: db.New(sqlTx), sql: sqlTx}
+	t := &tx{ctx: ctx, q: sqlc.New(sqlTx), sql: sqlTx}
 	if err := fn(t); err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 // tx implements app.Tx. Area methods live in <area>.go next to this file.
 type tx struct {
 	ctx context.Context
-	q   *db.Queries
+	q   *sqlc.Queries
 	sql *sql.Tx
 }
 

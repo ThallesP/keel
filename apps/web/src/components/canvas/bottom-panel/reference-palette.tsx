@@ -1,7 +1,7 @@
 import { Braces, Lock } from "lucide-react";
 import { useMemo, type RefObject } from "react";
 
-import type { ReferenceKey, ReferenceSource } from "@/api/gen";
+import type { ReferenceKey, ReferenceSource } from "@/gen/api";
 import { Palette, type PalettePage } from "@/components/palette";
 
 import { NodeTypeIcon } from "../nodes/icons";

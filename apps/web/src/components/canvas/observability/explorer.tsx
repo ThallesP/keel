@@ -9,7 +9,7 @@ import {
   type TraceOverview,
   useGetTraceOverview,
   useListEnvironmentLogs,
-} from "@/api/gen";
+} from "@/gen/api";
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";
 

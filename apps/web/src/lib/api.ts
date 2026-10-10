@@ -1,14 +1,14 @@
 // The generated fetch client's runtime configuration, and the error type every API call throws.
 //
 // The generated functions (`listNodes`, `signIn`, …) and hooks (`useListNodes`, …) all go through
-// one client (src/api/gen/.kubb/client.ts). setupApiClient, called once in main.tsx, makes it:
+// one client (src/gen/api/.kubb/client.ts). setupApiClient, called once in main.tsx, makes it:
 //   - same-origin with credentials (the HttpOnly `keel_session` cookie; no tokens in JS),
 //   - throw ApiError for any non-2xx answer (RFC 9457 problem: status, code, detail),
 //   - read-your-writes: a write's `Keel-Invalidate` topics are refetched before it resolves,
 //   - drop the session when an answer says the caller is no longer signed in (401).
 import type { QueryClient } from "@tanstack/react-query";
 
-import { type DeviceError, type Problem, client } from "@/api/gen";
+import { type DeviceError, type Problem, client } from "@/gen/api";
 
 import { cachedSession, invalidateTopics, markSignedOut, parseTopics } from "./query";
 

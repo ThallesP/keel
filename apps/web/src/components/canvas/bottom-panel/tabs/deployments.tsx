@@ -1,7 +1,7 @@
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useMemo } from "react";
 
-import { useListNodeDeployments } from "@/api/gen";
+import { useListNodeDeployments } from "@/gen/api";
 
 import { EndpointAddress } from "../../endpoint-address";
 import { formatElapsed, timeAgo } from "../../format";

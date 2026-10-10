@@ -1,7 +1,7 @@
 // The dashboard's API layer, generated from the Go server's OpenAPI document (`openapi.json` at
-// the repo root, `make openapi` refreshes it). Output: src/api/gen (gitignored, rebuilt by
+// the repo root, `make openapi` refreshes it). Output: src/gen/api (gitignored, rebuilt by
 // `bun run api:generate`, which dev, build and check-types run first). Hand-written glue lives in
-// src/lib/{api,query,realtime,session}.ts(x); src/api/README.md explains how to use it.
+// src/lib/{api,query,realtime,session}.ts(x); apps/web/README.md explains how to use it.
 import { adapterOas } from "@kubb/adapter-oas";
 import { pluginFetch } from "@kubb/plugin-fetch";
 import { pluginReactQuery } from "@kubb/plugin-react-query";
@@ -18,13 +18,13 @@ export default defineConfig({
     unknownType: "unknown",
     emptySchemaType: "unknown",
   }),
-  // One barrel, `@/api/gen`: types, zod schemas, fetch functions and hooks by name.
-  output: { path: "./src/api/gen", clean: true, barrel: { type: "named" } },
+  // One barrel, `@/gen/api`: types, zod schemas, fetch functions and hooks by name.
+  output: { path: "./src/gen/api", clean: true, barrel: { type: "named" } },
   plugins: [
     // Enums as literal unions (`status: "healthy" | "error" | …`), like the hand-written types.
     pluginTs({ output: { path: "./types" }, enum: { type: "inlineLiteral" } }),
     pluginZod({ output: { path: "./zod" } }),
-    // Same-origin fetch functions. Their runtime (src/api/gen/.kubb/client.ts) is configured once
+    // Same-origin fetch functions. Their runtime (src/gen/api/.kubb/client.ts) is configured once
     // at start by setupApiClient (src/lib/api.ts): credentials, ApiError, Keel-Invalidate.
     pluginFetch({ output: { path: "./clients" } }),
     pluginReactQuery({

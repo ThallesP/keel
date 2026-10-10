@@ -1,7 +1,7 @@
 import { useNodesState } from "@xyflow/react";
 import { useEffect, useSyncExternalStore } from "react";
 
-import { useListNodes } from "@/api/gen";
+import { useListNodes } from "@/gen/api";
 
 import { useCanvasActions } from "./actions";
 import { useEnvironment } from "./environment";

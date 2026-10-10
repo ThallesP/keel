@@ -36,7 +36,7 @@ COPY --from=prune /app/out/full/ .
 # packages only, so it comes straight from the build context.
 COPY openapi.json ./
 ENV NODE_ENV=production KUBB_DISABLE_TELEMETRY=1
-# varlock generates src/env.ts from .env.schema, while the app still has one.
+# varlock generates src/gen/env.ts from .env.schema, while the app still has one.
 RUN cd apps/web \
     && if [ -f .env.schema ]; then bun x varlock codegen; fi \
     && bun run build \

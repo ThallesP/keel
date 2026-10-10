@@ -1,4 +1,4 @@
-import type { Span } from "@/api/gen";
+import type { Span } from "@/gen/api";
 
 import { formatDuration } from "../../format";
 import { Pairs } from "./pairs";

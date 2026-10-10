@@ -8,7 +8,7 @@ cd "$(git rev-parse --show-toplevel)"
 baseline=.comments-baseline
 
 count() {
-  git ls-files '*.go' '*.ts' '*.tsx' ':!:**/src/api/gen/**' ':!:*.gen.ts' ':!:*.d.ts' ':!:apps/fumadocs/**' |
+  git ls-files '*.go' '*.ts' '*.tsx' ':!:**/src/gen/**' ':!:*.d.ts' ':!:apps/fumadocs/**' |
     while read -r f; do
       [ -f "$f" ] || continue
       head -5 "$f" | grep -qE 'Code generated|@generated' && continue

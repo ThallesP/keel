@@ -24,7 +24,7 @@ import {
   useState,
 } from "react";
 
-import type { Me } from "@/api/gen";
+import type { Me } from "@/gen/api";
 
 import { invalidateAll, invalidateTopics, markSignedOut, meQueryOptions } from "./query";
 

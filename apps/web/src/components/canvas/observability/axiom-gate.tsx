@@ -6,7 +6,7 @@ import {
   useCancelAxiomSignIn,
   useChooseAxiomOrg,
   useListPendingAxiomOrgs,
-} from "@/api/gen";
+} from "@/gen/api";
 import { errorMessage } from "@/lib/api";
 import { axiomRedirectUri, goToAxiom } from "@/lib/axiom-sign-in";
 

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -109,7 +110,7 @@ func TestCanvasPortAndReplicasNumbers(t *testing.T) {
 		if (err == nil) != c.ok {
 			t.Errorf("ReplicasNumber(%v) err = %v", c.in, err)
 		}
-		if err != nil && (err.Error() != "Replicas must be 0–20" || CodeOf(err) != CodeInvalidInput) {
+		if de, ok := errors.AsType[*Error](err); err != nil && (!ok || *de != (Error{Code: CodeInvalidInput, Message: "Replicas must be 0–20"})) {
 			t.Errorf("replicas error %q", err)
 		}
 	}
@@ -169,26 +170,6 @@ func TestCanvasRandomSecret(t *testing.T) {
 	}
 	if len(seen) < 50 {
 		t.Errorf("only %d distinct symbols", len(seen))
-	}
-}
-
-func TestCanvasUTF16LenAndTrimJS(t *testing.T) {
-	cases := map[string]int{"": 0, "abc": 3, "é": 1, "€": 1, "😀": 2, "a😀b": 4, string([]byte{0xff, 'a'}): 2}
-	for in, want := range cases {
-		if got := UTF16Len(in); got != want {
-			t.Errorf("UTF16Len(%q) = %d, want %d", in, got, want)
-		}
-	}
-	trims := map[string]string{
-		"  My API \t\n":       "My API",
-		"\ufeffx\u3000":       "x",
-		"\u0085x":             "\u0085x",
-		"\u00a0\u2028y\u200a": "y",
-	}
-	for in, want := range trims {
-		if got := TrimJS(in); got != want {
-			t.Errorf("TrimJS(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 

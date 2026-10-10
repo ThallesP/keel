@@ -90,10 +90,10 @@ func TestCanvasCreateNodeErrors(t *testing.T) {
 		{"fractional port", app.CreateNodeInput{Type: domain.NodeService, Port: new(80.5)}, domain.CodeInvalidInput, "Port must be 1–65535"},
 	}
 	for _, c := range cases {
-		_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, c.in)
-		if err == nil || domain.CodeOf(err) != c.code || err.Error() != c.msg {
-			t.Errorf("%s: %s %v, want %s %q", c.name, domain.CodeOf(err), err, c.code, c.msg)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			_, err := k.app.CreateNode(k.ctx, canvasMember(canvasOrg), env, c.in)
+			canvasWantErr(t, err, c.code, c.msg)
+		})
 	}
 	if nodes, _ := k.app.ListNodes(k.ctx, canvasMember(canvasOrg), env); len(nodes) != 1 {
 		t.Errorf("failed creates left %d nodes", len(nodes))
@@ -175,8 +175,6 @@ func TestCanvasRenameNode(t *testing.T) {
 	err = k.app.UpdateNode(k.ctx, canvasMember(canvasOrg), "nope", app.NodeUpdate{Name: new("x")})
 	canvasWantErr(t, err, domain.CodeServiceNotFound, "Node not found")
 }
-
-func canvasHas(list []string, s string) bool { return slices.Contains(list, s) }
 
 func TestCanvasSetDesired(t *testing.T) {
 	k := canvasSetup(t)

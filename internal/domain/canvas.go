@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf16"
 )
 
 type NodeDefault struct {
@@ -148,7 +147,7 @@ func NextPosition(nodes []Node) Position {
 }
 
 func PortNumber(p *float64) (*int, error) {
-	return canvasIntNumber(p, 1, 65535, MsgPortRange)
+	return canvasIntNumber(p, 1, 65535, "Port must be 1–65535")
 }
 
 func ReplicasNumber(r *float64) (*int, error) {
@@ -164,21 +163,3 @@ func canvasIntNumber(p *float64, lo, hi float64, msg string) (*int, error) {
 	}
 	return new(int(*p)), nil
 }
-
-func UTF16Len(s string) int {
-	n := 0
-	for _, r := range s {
-		n += utf16.RuneLen(r)
-	}
-	return n
-}
-
-func isJSSpace(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
-		return true
-	}
-	return r >= 0x2000 && r <= 0x200a
-}
-
-func TrimJS(s string) string { return strings.TrimFunc(s, isJSSpace) }

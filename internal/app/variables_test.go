@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -150,7 +151,7 @@ func TestCanvasSetVariable(t *testing.T) {
 	if !k.node(api).Dirty || !k.node(web).Dirty || !k.node(worker).Dirty {
 		t.Errorf("dirty api %v web %v worker %v", k.node(api).Dirty, k.node(web).Dirty, k.node(worker).Dirty)
 	}
-	if topics := k.pub.take(canvasOrg); !canvasHas(topics, "/api/nodes/"+worker) || !canvasHas(topics, "/api/environments/"+env) {
+	if topics := k.pub.take(canvasOrg); !slices.Contains(topics, "/api/nodes/"+worker) || !slices.Contains(topics, "/api/environments/"+env) {
 		t.Errorf("topics %v", topics)
 	}
 

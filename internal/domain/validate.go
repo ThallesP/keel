@@ -37,13 +37,6 @@ func ValidImage(image string) error {
 	return nil
 }
 
-func ValidPort(port *int) error {
-	if port != nil && (*port < 1 || *port > 65535) {
-		return Invalid(MsgPortRange)
-	}
-	return nil
-}
-
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
 func Slug(name string) string {

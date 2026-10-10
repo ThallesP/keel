@@ -2,8 +2,6 @@ package domain
 
 import "testing"
 
-func iptr(i int) *int { return &i }
-
 func TestDeriveStatus(t *testing.T) {
 	cases := []struct {
 		name string
@@ -17,7 +15,7 @@ func TestDeriveStatus(t *testing.T) {
 		{"healthy", Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: &Observed{Revision: 2, Running: 1, State: ObservedOK}}, StatusHealthy},
 		{"old revision", Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: &Observed{Revision: 1, Running: 1, State: ObservedOK}}, StatusDeploying},
 		{"crashloop", Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: &Observed{Revision: 2, State: ObservedCrashloop}}, StatusError},
-		{"one-shot done", Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: &Observed{Revision: 2, State: ObservedCompleted, Completed: iptr(1)}}, StatusDone},
+		{"one-shot done", Node{Desired: &Desired{Revision: 2, Replicas: 1}, Observed: &Observed{Revision: 2, State: ObservedCompleted, Completed: new(1)}}, StatusDone},
 		{"scaled to 0, running", Node{Desired: &Desired{Revision: 3, Replicas: 0}, Observed: &Observed{Revision: 3, Running: 1}}, StatusStopping},
 		{"scaled to 0, gone", Node{Desired: &Desired{Revision: 3, Replicas: 0}, Observed: &Observed{Revision: 0}}, StatusStopped},
 		{"scaled to 0, behind", Node{Desired: &Desired{Revision: 3, Replicas: 0}, Observed: &Observed{Revision: 2}}, StatusStopping},

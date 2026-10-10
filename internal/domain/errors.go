@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 const (
 	CodeNotAuthenticated     = "NOT_AUTHENTICATED"
@@ -53,11 +50,3 @@ var (
 	ErrNotAuthenticated = &Error{Code: CodeNotAuthenticated, Message: "Not authenticated"}
 	ErrNoOrganization   = &Error{Code: CodeNoOrganization, Message: MsgNoOrganization}
 )
-
-func CodeOf(err error) string {
-	var e *Error
-	if errors.As(err, &e) {
-		return e.Code
-	}
-	return CodeServerError
-}

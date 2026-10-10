@@ -232,8 +232,6 @@ func (a *App) writeStep(ctx context.Context, deploymentID, nodeID string, change
 	}
 }
 
-func deployPtr[T any](v T) *T { return &v }
-
 func (a *App) scheduleDeploymentTimeout(deploymentID string, delay time.Duration) {
 	a.Jobs.After("timeout:"+deploymentID, delay, func(ctx context.Context) {
 		a.timeoutDeployment(ctx, deploymentID)

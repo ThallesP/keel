@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-const MsgPortRange = "Port must be 1–65535"
-
 func IsHTTPPort(p int) bool { return p == 80 || p == 443 }
 
 func shortHash(s string) string {

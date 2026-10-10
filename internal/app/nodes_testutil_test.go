@@ -140,8 +140,7 @@ func (k *canvasKit) clean(env string) {
 
 func canvasWantErr(t *testing.T, err error, code, msg string) {
 	t.Helper()
-	var de *domain.Error
-	if !errors.As(err, &de) || *de != (domain.Error{Code: code, Message: msg}) {
+	if de, ok := errors.AsType[*domain.Error](err); !ok || *de != (domain.Error{Code: code, Message: msg}) {
 		t.Fatalf("error = %v, want %s %q", err, code, msg)
 	}
 }

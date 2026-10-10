@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -72,7 +73,8 @@ func TestValidDomain(t *testing.T) {
 		"bücher.example", max + "b",
 	}
 	for _, in := range bad {
-		if got, err := ValidDomain(in); err == nil || err.Error() != "Domain must look like app.example.com" || CodeOf(err) != CodeInvalidInput {
+		got, err := ValidDomain(in)
+		if de, ok := errors.AsType[*Error](err); !ok || *de != (Error{Code: CodeInvalidInput, Message: "Domain must look like app.example.com"}) {
 			t.Errorf("ValidDomain(%q) = %q, %v", in, got, err)
 		}
 	}

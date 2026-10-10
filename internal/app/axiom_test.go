@@ -43,7 +43,7 @@ func TestTruncateRunes(t *testing.T) {
 	}
 }
 
-func TestCompactDetail(t *testing.T) {
+func TestCompactText(t *testing.T) {
 	for in, want := range map[string]string{
 		"  {\"message\":\n\t\"forbidden\"}  ":               `{"message": "forbidden"}`,
 		"a\u00a0b\u2003c\u2028d":                            "a b c d",
@@ -53,8 +53,8 @@ func TestCompactDetail(t *testing.T) {
 		"   ":        "",
 		"a\xff\xfeb": "a\uFFFDb",
 	} {
-		if got := CompactDetail(in); got != want {
-			t.Errorf("CompactDetail(%q) = %q, want %q", in, got, want)
+		if got := CompactText(in, 200); got != want {
+			t.Errorf("CompactText(%q, 200) = %q, want %q", in, got, want)
 		}
 	}
 }

@@ -1,10 +1,8 @@
 package app
 
 import (
-	"errors"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -132,11 +130,5 @@ func TestSettleDeployment(t *testing.T) {
 	next, _, _ := settleDeployment(d, map[string]*domain.Node{"a": healthy}, now)
 	if h := next.Steps[1]; *h.StartedAt != 7 || *h.FinishedAt != now {
 		t.Errorf("health: %+v", h)
-	}
-}
-
-func TestDeployErrorText(t *testing.T) {
-	if got := deployErrorText(errors.New(strings.Repeat("x", 400))); len(got) != 300 {
-		t.Errorf("cut: %d", len(got))
 	}
 }

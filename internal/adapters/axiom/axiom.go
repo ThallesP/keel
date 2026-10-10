@@ -57,7 +57,7 @@ func (c *Client) call(ctx context.Context, t app.AxiomTarget, orgID, method, pat
 	defer res.Body.Close()
 	data, readErr := io.ReadAll(res.Body)
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, &app.AxiomError{Status: res.StatusCode, Detail: app.CompactDetail(string(data))}
+		return nil, &app.AxiomError{Status: res.StatusCode, Detail: app.CompactText(string(data), 200)}
 	}
 	if readErr != nil {
 		return nil, readErr

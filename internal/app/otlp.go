@@ -107,7 +107,7 @@ func (a *App) RelayTraces(ctx context.Context, r OTLPRequest) HTTPReply {
 	if res.Status >= 200 && res.Status < 300 {
 		return HTTPReply{Status: 200, ContentType: cmp.Or(res.ContentType, ctype), Body: res.Body}
 	}
-	detail := CompactDetail(string(res.Body))
+	detail := CompactText(string(res.Body), 200)
 	a.Log.Warn("otlp: Axiom rejected spans", "status", res.Status, "detail", detail)
 	if slices.Contains([]int{429, 502, 503, 504}, res.Status) {
 		return otlpText(res.Status, detail)

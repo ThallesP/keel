@@ -20,9 +20,7 @@ import (
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func CompactDetail(body string) string { return compactText(body, 200) }
-
-func compactText(text string, maxRunes int) string {
+func CompactText(text string, maxRunes int) string {
 	return truncateRunes(strings.Join(strings.Fields(strings.ToValidUTF8(text, "\uFFFD")), " "), maxRunes)
 }
 

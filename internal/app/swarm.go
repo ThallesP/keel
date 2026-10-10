@@ -149,7 +149,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 			a.Log.Warn("apply interrupted by shutdown", "node", id, "deployment", req.deploymentID, "err", err)
 			return
 		}
-		text := deployErrorText(err)
+		text := CompactText(err.Error(), 300)
 		a.setApplyError(record, id, text)
 		step(stepFailed, "error: "+text)
 	}
@@ -183,7 +183,7 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		case err == nil:
 			step(stepLog, fmt.Sprintf("pulled %s in %.1fs", image, float64(a.Now()-t0)/1000))
 		case cached:
-			step(stepLog, "pull failed ("+deployErrorText(err)+"), using cached image")
+			step(stepLog, "pull failed ("+CompactText(err.Error(), 300)+"), using cached image")
 		default:
 			fail(err)
 			return
@@ -320,5 +320,3 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 		a.reconcileRunning(ctx, "")
 	})
 }
-
-func deployErrorText(err error) string { return compactText(err.Error(), 300) }

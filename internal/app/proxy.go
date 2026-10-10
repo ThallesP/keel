@@ -134,7 +134,7 @@ func (a *App) applyProxy(ctx context.Context, routes []ProxyRoute) ([]routeStatu
 	out := make([]routeStatus, 0, len(routes))
 	failed, err := a.loadProxy(ctx, routes)
 	if err != nil {
-		msg := deployErrorText(err)
+		msg := CompactText(err.Error(), 300)
 		a.Log.Warn("keel-proxy sync failed", "err", msg)
 		for _, r := range routes {
 			out = append(out, routeStatus{r, domain.EndpointStatus{State: domain.EndpointFailed, Error: msg, At: at}})

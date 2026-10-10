@@ -145,6 +145,10 @@ with traces (TRACES_OFF otherwise).`,
 			if err != nil {
 				return err
 			}
+			if svc.Type != "service" {
+				return output.Errorf(output.CodeInvalidInput, "Pick a service: keel service list",
+					"%s is a %s; only services can be traced", svc.Name, svc.Type)
+			}
 			if err := s.api.SetTracing(ctx, svc.ID, on); err != nil {
 				return err
 			}

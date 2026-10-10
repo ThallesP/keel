@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -186,6 +190,41 @@ func TestJSONArg(t *testing.T) {
 	} {
 		if got := jsonArg(strings.Fields(args)); got != want {
 			t.Errorf("jsonArg(%q) = %v, want %v", args, got, want)
+		}
+	}
+}
+
+func TestTracingSwitchNamesANonService(t *testing.T) {
+	t.Setenv("KEEL_CONFIG_DIR", t.TempDir())
+	install := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/me":
+			w.Write([]byte(`{"user":{"id":"u","email":"a@keel.test","name":"A"},"organization":null}`))
+		case "/api/projects":
+			w.Write([]byte(`{"projects":[{"id":"p","name":"P","slug":"p","environments":[{"id":"e","name":"production","isProduction":true}]}]}`))
+		case "/api/environments/e/nodes":
+			w.Write([]byte(`{"nodes":[{"id":"n","type":"database","name":"postgres"}]}`))
+		default:
+			t.Errorf("%s %s reached the server", r.Method, r.URL.Path)
+			http.Error(w, "unexpected", http.StatusInternalServerError)
+		}
+	}))
+	t.Cleanup(install.Close)
+	t.Setenv("KEEL_URL", install.URL)
+	t.Setenv("KEEL_TOKEN", "tok")
+	t.Setenv("KEEL_PROJECT", "")
+
+	for _, on := range []bool{true, false} {
+		a := &app{out: &output.Printer{JSON: true, Out: &bytes.Buffer{}, Err: &bytes.Buffer{}}}
+		cmd := a.tracingSwitchCmd(on)
+		cmd.SetArgs([]string{"postgres"})
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		err := cmd.ExecuteContext(context.Background())
+		e, ok := err.(*output.Error)
+		if !ok || e.Code != output.CodeInvalidInput || e.Fix != "Pick a service: keel service list" ||
+			e.Message != "postgres is a database; only services can be traced" {
+			t.Errorf("on=%v: %#v", on, err)
 		}
 	}
 }

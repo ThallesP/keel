@@ -28,9 +28,9 @@ func tracingEnv(endpoint string, node domain.Node, env domain.Environment, key s
 	if local {
 		envName = "local"
 	}
-	resource := "keel.service_id=" + jsEncodeURIComponent(node.ID) +
-		",keel.environment_id=" + jsEncodeURIComponent(env.ID) +
-		",deployment.environment.name=" + jsEncodeURIComponent(envName)
+	resource := "keel.service_id=" + domain.EncodeURIComponent(node.ID) +
+		",keel.environment_id=" + domain.EncodeURIComponent(env.ID) +
+		",deployment.environment.name=" + domain.EncodeURIComponent(envName)
 	var out [][2]string
 	if !local {
 		out = append(out, [2]string{otelEndpoint, endpoint})

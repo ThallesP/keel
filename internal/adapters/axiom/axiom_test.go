@@ -36,7 +36,8 @@ func server(t *testing.T, handle func(w http.ResponseWriter, s seen)) (*httptest
 
 func TestQueryTabular(t *testing.T) {
 	srv, got := server(t, func(w http.ResponseWriter, _ seen) {
-		_, _ = w.Write([]byte(`{"tables":[{"fields":[{"name":"_time"},{"name":"2"},{"name":"obj"}],"columns":[["a","b"],[1,null],[{"z":1,"y":2}]]}]}`))
+		_, _ = w.Write([]byte(`{"format":"tabular","tables":[{"name":"0","fields":[{"name":"_time","type":"datetime"},{"name":"n"},{"name":"obj"}],` +
+			`"columns":[["a","b"],[1,null],[{"z":1,"y":[2]},"x"]]}]}`))
 	})
 	c := New()
 	rows, err := c.Query(context.Background(), app.AxiomTarget{Domain: srv.URL + "/", Token: "tok"}, app.AxiomQuery{APL: "['x'] | limit 1", StartTime: "s", EndTime: "e"})
@@ -52,17 +53,35 @@ func TestQueryTabular(t *testing.T) {
 	if !reflect.DeepEqual(body, map[string]string{"apl": "['x'] | limit 1", "startTime": "s", "endTime": "e"}) {
 		t.Fatalf("body %s", s.body)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("%d rows", len(rows))
+	want := []app.AxiomRow{
+		{"_time": json.RawMessage(`"a"`), "n": json.RawMessage(`1`), "obj": json.RawMessage(`{"z":1,"y":[2]}`)},
+		{"_time": json.RawMessage(`"b"`), "n": json.RawMessage(`null`), "obj": json.RawMessage(`"x"`)},
 	}
-	if keys := rows[0].Keys(); !reflect.DeepEqual(keys, []string{"2", "_time", "obj"}) {
-		t.Errorf("keys in JS order: %v", keys)
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("rows %q", rows)
 	}
-	if v, _ := rows[1].Get("obj"); v != nil {
-		t.Errorf("missing cell = %v, want null", v)
+}
+
+func TestQueryTabularShape(t *testing.T) {
+	var body string
+	srv, _ := server(t, func(w http.ResponseWriter, _ seen) { _, _ = w.Write([]byte(body)) })
+	c := New()
+	tgt := app.AxiomTarget{Domain: srv.URL, Token: "t"}
+	for _, empty := range []string{`{"tables":[{"fields":[{"name":"_time"}],"columns":[]}]}`, `{"tables":[{"fields":[{"name":"_time"}],"columns":[[]]}]}`} {
+		body = empty
+		if rows, err := c.Query(context.Background(), tgt, app.AxiomQuery{}); err != nil || len(rows) != 0 {
+			t.Errorf("%s: %v %v", empty, rows, err)
+		}
 	}
-	if v, _ := rows[0].Get("obj"); v.(*app.JSONObject).Keys()[0] != "z" {
-		t.Errorf("nested order lost")
+	for _, bad := range []string{
+		`{"tables":[{"fields":[{"name":"a"},{"name":"b"}],"columns":[[1,2],[3]]}]}`,
+		`{"tables":[{"fields":[{"name":"a"}],"columns":[[1],[2]]}]}`,
+		`{"tables":[{"fields":[{"name":5}],"columns":[[1]]}]}`,
+	} {
+		body = bad
+		if _, err := c.Query(context.Background(), tgt, app.AxiomQuery{}); err == nil {
+			t.Errorf("%s: no error", bad)
+		}
 	}
 }
 

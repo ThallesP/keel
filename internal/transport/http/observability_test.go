@@ -20,8 +20,8 @@ import (
 
 type obsFakeAxiom struct{ forward app.HTTPReply }
 
-func (obsFakeAxiom) Query(context.Context, app.AxiomTarget, app.AxiomQuery) ([]*app.JSONObject, error) {
-	return []*app.JSONObject{}, nil
+func (obsFakeAxiom) Query(context.Context, app.AxiomTarget, app.AxiomQuery) ([]app.AxiomRow, error) {
+	return []app.AxiomRow{}, nil
 }
 func (obsFakeAxiom) CreateDataset(context.Context, app.AxiomTarget, string, string, string) error {
 	return nil

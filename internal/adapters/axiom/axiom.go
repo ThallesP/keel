@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ type aplBody struct {
 	EndTime   string `json:"endTime"`
 }
 
-func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]*app.JSONObject, error) {
+func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]app.AxiomRow, error) {
 	data, err := c.call(ctx, t, "", http.MethodPost, "/v1/datasets/_apl?format=tabular",
 		aplBody{APL: q.APL, StartTime: q.StartTime, EndTime: q.EndTime})
 	if err != nil {
@@ -83,60 +84,37 @@ func (c *Client) Query(ctx context.Context, t app.AxiomTarget, q app.AxiomQuery)
 	return tabularRows(data)
 }
 
-func tabularRows(data []byte) ([]*app.JSONObject, error) {
-	v, err := app.DecodeJSON(data)
-	if err != nil {
+type tabularResult struct {
+	Tables []struct {
+		Fields []struct {
+			Name string `json:"name"`
+		} `json:"fields"`
+		Columns [][]json.RawMessage `json:"columns"`
+	} `json:"tables"`
+}
+
+func tabularRows(data []byte) ([]app.AxiomRow, error) {
+	var result tabularResult
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("Axiom query: %w", err)
 	}
-	doc, _ := v.(*app.JSONObject)
-	tables, _ := field(doc, "tables").([]any)
-	if len(tables) == 0 {
-		return []*app.JSONObject{}, nil
+	if len(result.Tables) == 0 || len(result.Tables[0].Columns) == 0 {
+		return []app.AxiomRow{}, nil
 	}
-	table, _ := tables[0].(*app.JSONObject)
-	fields, _ := field(table, "fields").([]any)
-	columns, _ := field(table, "columns").([]any)
-	count := 0
-	if len(columns) > 0 {
-		first, _ := columns[0].([]any)
-		count = len(first)
+	table := result.Tables[0]
+	count := len(table.Columns[0])
+	ragged := slices.ContainsFunc(table.Columns, func(column []json.RawMessage) bool { return len(column) != count })
+	if len(table.Columns) != len(table.Fields) || ragged {
+		return nil, errors.New("Axiom query: columns do not line up with fields")
 	}
-	rows := make([]*app.JSONObject, 0, count)
-	for i := 0; i < count; i++ {
-		row := app.NewJSONObject()
-		for c, f := range fields {
-			name := ""
-			if fo, ok := f.(*app.JSONObject); ok {
-				if n, ok := field(fo, "name").(string); ok {
-					name = n
-				} else {
-					name = jsKey(field(fo, "name"))
-				}
-			}
-			var val any
-			if c < len(columns) {
-				if col, ok := columns[c].([]any); ok && i < len(col) {
-					val = col[i]
-				}
-			}
-			row.Set(name, val)
+	rows := make([]app.AxiomRow, count)
+	for i := range rows {
+		rows[i] = app.AxiomRow{}
+		for c, field := range table.Fields {
+			rows[i][field.Name] = table.Columns[c][i]
 		}
-		rows = append(rows, row)
 	}
 	return rows, nil
-}
-
-func field(o *app.JSONObject, k string) any {
-	v, _ := o.Get(k)
-	return v
-}
-
-func jsKey(v any) string {
-	if v == nil {
-		return "undefined"
-	}
-	b, _ := json.Marshal(v)
-	return string(b)
 }
 
 type datasetBody struct {
@@ -156,30 +134,16 @@ func (c *Client) Datasets(ctx context.Context, t app.AxiomTarget, orgID string) 
 	}
 	var list []struct {
 		Name        string `json:"name"`
-		SharedByOrg any    `json:"sharedByOrg"`
+		SharedByOrg string `json:"sharedByOrg"`
 	}
 	if err := json.Unmarshal(data, &list); err != nil {
 		return nil, fmt.Errorf("Axiom datasets: %w", err)
 	}
 	out := make([]app.AxiomDataset, len(list))
 	for i, d := range list {
-		out[i] = app.AxiomDataset{Name: d.Name, Shared: truthy(d.SharedByOrg)}
+		out[i] = app.AxiomDataset{Name: d.Name, Shared: d.SharedByOrg != ""}
 	}
 	return out, nil
-}
-
-func truthy(v any) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return x
-	case float64:
-		return x != 0
-	case string:
-		return x != ""
-	}
-	return true
 }
 
 type capability struct {
@@ -204,18 +168,12 @@ func (c *Client) MintToken(ctx context.Context, t app.AxiomTarget, orgID string,
 		return "", err
 	}
 	var minted struct {
-		Token any `json:"token"`
+		Token string `json:"token"`
 	}
 	if err := json.Unmarshal(data, &minted); err != nil {
 		return "", fmt.Errorf("Axiom token: %w", err)
 	}
-	if s, ok := minted.Token.(string); ok {
-		return s, nil
-	}
-	if truthy(minted.Token) {
-		return fmt.Sprint(minted.Token), nil
-	}
-	return "", nil
+	return minted.Token, nil
 }
 
 func (c *Client) Orgs(ctx context.Context, t app.AxiomTarget) ([]app.AxiomOrgInfo, error) {
@@ -245,53 +203,63 @@ func (c *Client) Orgs(ctx context.Context, t app.AxiomTarget) ([]app.AxiomOrgInf
 	return out, nil
 }
 
-func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, body []byte) (int, *app.JSONObject, error) {
+type oauthReply struct {
+	ClientID         string `json:"client_id"`
+	AccessToken      string `json:"access_token"`
+	ErrorCode        string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+func (r oauthReply) failure(status int) *app.OAuthError {
+	return &app.OAuthError{Status: status, ErrorCode: r.ErrorCode, ErrorDescription: r.ErrorDescription}
+}
+
+func (c *Client) oauthPost(ctx context.Context, endpoint, contentType string, body []byte) (int, oauthReply, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return 0, nil, err
+		return 0, oauthReply{}, err
 	}
 	req.Header.Set("Content-Type", contentType)
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return 0, nil, err
+		return 0, oauthReply{}, err
 	}
 	defer res.Body.Close()
 	data, _ := io.ReadAll(res.Body)
-	v, err := app.DecodeJSON(data)
-	if err != nil {
-		return res.StatusCode, nil, nil
-	}
-	obj, _ := v.(*app.JSONObject)
-	return res.StatusCode, obj, nil
+	var reply oauthReply
+	_ = json.Unmarshal(data, &reply)
+	return res.StatusCode, reply, nil
 }
 
-func stringField(o *app.JSONObject, k string) string {
-	s, _ := field(o, k).(string)
-	return s
+type registerBody struct {
+	ClientName              string   `json:"client_name"`
+	GrantTypes              []string `json:"grant_types"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	ResponseTypes           []string `json:"response_types"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
 func (c *Client) RegisterClient(ctx context.Context, authURL, redirectURI string) (string, error) {
-	body, err := json.Marshal(map[string]any{
-		"client_name":                "Keel",
-		"redirect_uris":              []string{redirectURI},
-		"grant_types":                []string{"authorization_code"},
-		"response_types":             []string{"code"},
-		"token_endpoint_auth_method": "none",
+	body, err := json.Marshal(registerBody{
+		ClientName:              "Keel",
+		GrantTypes:              []string{"authorization_code"},
+		RedirectURIs:            []string{redirectURI},
+		ResponseTypes:           []string{"code"},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return "", err
 	}
-	status, obj, err := c.oauthPost(ctx, authURL+"/oauth2/register", "application/json", body)
+	status, reply, err := c.oauthPost(ctx, authURL+"/oauth2/register", "application/json", body)
 	if err != nil {
 		return "", err
 	}
-	id := stringField(obj, "client_id")
-	if status < 200 || status > 299 || id == "" {
-		return "", &app.OAuthError{Status: status, Body: obj}
+	if status < 200 || status > 299 || reply.ClientID == "" {
+		return "", reply.failure(status)
 	}
-	return id, nil
+	return reply.ClientID, nil
 }
 
 func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCodeExchange) (string, error) {
@@ -301,15 +269,14 @@ func (c *Client) ExchangeCode(ctx context.Context, authURL string, x app.AxiomCo
 	form.Set("code_verifier", x.Verifier)
 	form.Set("redirect_uri", x.RedirectURI)
 	form.Set("client_id", x.ClientID)
-	status, obj, err := c.oauthPost(ctx, authURL+"/oauth2/token", "application/x-www-form-urlencoded", []byte(form.Encode()))
+	status, reply, err := c.oauthPost(ctx, authURL+"/oauth2/token", "application/x-www-form-urlencoded", []byte(form.Encode()))
 	if err != nil {
 		return "", err
 	}
-	token := stringField(obj, "access_token")
-	if status < 200 || status > 299 || token == "" {
-		return "", &app.OAuthError{Status: status, Body: obj}
+	if status < 200 || status > 299 || reply.AccessToken == "" {
+		return "", reply.failure(status)
 	}
-	return token, nil
+	return reply.AccessToken, nil
 }
 
 func (c *Client) ForwardTraces(ctx context.Context, f app.OTLPForward) (app.HTTPReply, error) {

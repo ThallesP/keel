@@ -82,7 +82,7 @@ func (a *App) ConnectAxiom(ctx context.Context, actor domain.Actor, in ConnectAx
 			return "", nil, domain.Invalid(msgDataset)
 		}
 	}
-	token := domain.TrimJS(in.Token)
+	token := strings.TrimSpace(in.Token)
 	if len([]rune(token)) < 8 {
 		return "", nil, domain.Invalid(msgNotAToken)
 	}

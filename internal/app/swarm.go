@@ -377,8 +377,7 @@ func (a *App) ScheduleRemoveService(nodeID string) {
 }
 
 func deployErrorText(err error) string {
-	fields := strings.FieldsFunc(err.Error(), domain.IsJSSpace)
-	return jsSlice(strings.Join(fields, " "), 300)
+	return truncateRunes(strings.Join(strings.Fields(err.Error()), " "), 300)
 }
 
 func deployToFixed1(x float64) string {

@@ -14,7 +14,7 @@ type obsFakeAxiom struct {
 	calls []string
 
 	queryErr    func(t app.AxiomTarget, q app.AxiomQuery) error
-	queryRows   []*app.JSONObject
+	queryRows   []app.AxiomRow
 	createErr   map[string]error
 	datasets    []app.AxiomDataset
 	datasetsErr error
@@ -47,7 +47,7 @@ func (f *obsFakeAxiom) take() []string {
 	return out
 }
 
-func (f *obsFakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]*app.JSONObject, error) {
+func (f *obsFakeAxiom) Query(_ context.Context, t app.AxiomTarget, q app.AxiomQuery) ([]app.AxiomRow, error) {
 	f.record("Query %s %s %s", t.Domain, t.Token, q.APL)
 	if f.queryErr != nil {
 		if err := f.queryErr(t, q); err != nil {

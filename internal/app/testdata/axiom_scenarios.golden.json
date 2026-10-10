@@ -360,7 +360,7 @@
       ]
     },
     {
-      "name": "overview-24h-no-time-field",
+      "name": "overview-24h-no-totals",
       "result": {
         "source": "axiom",
         "from": 1791378000000,
@@ -943,7 +943,7 @@
             "task": "t0"
           },
           {
-            "time": 0,
+            "time": 1791460802000,
             "text": "12.5",
             "stream": "stdout",
             "task": "t1"
@@ -956,12 +956,12 @@
           },
           {
             "time": 1791460804000,
-            "text": "[object Object]",
+            "text": "{\"a\":1}",
             "stream": "stdout",
             "task": "t1"
           },
           {
-            "time": 1791460805987,
+            "time": 1791460805987.6543,
             "text": "\u001b[31mred\u001b[0m",
             "stream": "stderr",
             "task": "t2"
@@ -969,12 +969,12 @@
         ],
         "replicas": [
           {
-            "task": "t0",
+            "task": "T0",
             "slot": 0,
             "state": ""
           },
           {
-            "task": "T0",
+            "task": "t0",
             "slot": 0,
             "state": ""
           },
@@ -1155,10 +1155,6 @@
                 "value": "[\"a\",\"b\",null]"
               },
               {
-                "key": "big",
-                "value": "1e+21"
-              },
-              {
                 "key": "http.request.method",
                 "value": "GET"
               },
@@ -1169,10 +1165,6 @@
               {
                 "key": "http.route",
                 "value": "/users/:id"
-              },
-              {
-                "key": "tiny",
-                "value": "1.5e-7"
               }
             ],
             "resource": [
@@ -1217,11 +1209,6 @@
                 "time": 1791460800250,
                 "name": "7",
                 "attributes": []
-              },
-              {
-                "time": 0,
-                "name": "",
-                "attributes": []
               }
             ]
           },
@@ -1251,7 +1238,7 @@
               },
               {
                 "key": "http.method",
-                "value": "GET"
+                "value": "PUT"
               },
               {
                 "key": "x",
@@ -1334,10 +1321,6 @@
                 "value": "[\"a\",\"b\",null]"
               },
               {
-                "key": "big",
-                "value": "1e+21"
-              },
-              {
                 "key": "http.request.method",
                 "value": "GET"
               },
@@ -1348,10 +1331,6 @@
               {
                 "key": "http.route",
                 "value": "/users/:id"
-              },
-              {
-                "key": "tiny",
-                "value": "1.5e-7"
               }
             ],
             "resource": [
@@ -1395,11 +1374,6 @@
               {
                 "time": 1791460800250,
                 "name": "7",
-                "attributes": []
-              },
-              {
-                "time": 0,
-                "name": "",
                 "attributes": []
               }
             ]
@@ -1560,10 +1534,6 @@
           "value": "[\"a\",\"b\",null]"
         },
         {
-          "key": "big",
-          "value": "1e+21"
-        },
-        {
           "key": "http.request.method",
           "value": "GET"
         },
@@ -1574,10 +1544,6 @@
         {
           "key": "http.route",
           "value": "/users/:id"
-        },
-        {
-          "key": "tiny",
-          "value": "1.5e-7"
         }
       ],
       "resource": [
@@ -1621,11 +1587,6 @@
         {
           "time": 1791460800250,
           "name": "7",
-          "attributes": []
-        },
-        {
-          "time": 0,
-          "name": "",
           "attributes": []
         }
       ]
@@ -1675,7 +1636,7 @@
       "spanId": "c1",
       "parentId": "",
       "name": "work",
-      "service": "[object Object]",
+      "service": "",
       "kind": "",
       "start": 1791460800123.456,
       "duration": 93784500,
@@ -1683,6 +1644,14 @@
       "statusMessage": "",
       "scope": "nested-scope",
       "attributes": [
+        {
+          "key": "B",
+          "value": "b"
+        },
+        {
+          "key": "Z",
+          "value": "z"
+        },
         {
           "key": "_x",
           "value": "underscore"
@@ -1692,20 +1661,12 @@
           "value": "dotted"
         },
         {
-          "key": "B",
-          "value": "b"
-        },
-        {
           "key": "e",
           "value": "e"
         },
         {
           "key": "é",
           "value": "e-acute"
-        },
-        {
-          "key": "Z",
-          "value": "z"
         }
       ],
       "resource": [],
@@ -1731,21 +1692,6 @@
       "parentId": "",
       "name": "",
       "service": "",
-      "kind": "5",
-      "start": 0,
-      "duration": 0,
-      "status": "unset",
-      "statusMessage": "",
-      "scope": "",
-      "attributes": [],
-      "resource": [],
-      "events": []
-    },
-    {
-      "spanId": "",
-      "parentId": "",
-      "name": "",
-      "service": "via-nested",
       "kind": "",
       "start": 1791453601000,
       "duration": 0.000123456,

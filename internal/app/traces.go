@@ -54,7 +54,7 @@ func (a *App) traceScope(ctx context.Context, actor domain.Actor, environmentID 
 
 func aplRoots(dataset string, serviceIDs []string, search string) string {
 	match := ""
-	if term := domain.TrimJS(search); term != "" {
+	if term := strings.TrimSpace(search); term != "" {
 		match = ` | where name contains ` + aplLit(term) + ` or ensure_field("service.name", typeof(string)) contains ` + aplLit(term)
 	}
 	ids := make([]string, len(serviceIDs))
@@ -72,56 +72,37 @@ func (a *App) traceRequests(ctx context.Context, cfg axiomCfg, serviceIDs []stri
 	if err != nil {
 		return nil, err
 	}
+	out := make([]domain.TraceSummary, len(latest))
 	var ids []string
 	seen := map[string]bool{}
-	for _, r := range latest {
-		v, _ := r.Get("trace_id")
-		id := jsString(v)
-		if traceIDRE.MatchString(id) && !seen[id] {
-			seen[id] = true
-			ids = append(ids, aplLit(id))
-		}
-	}
-	type counts struct{ spans, errors float64 }
-	perTrace := map[string]counts{}
-	if len(ids) > 0 {
-		apl := aplDataset(cfg.Dataset) + " | where trace_id in (" + strings.Join(ids, ", ") + ") | extend failed = " + traceFailed +
-			" | summarize spans = count(), errors = countif(failed) by trace_id"
-		rows, err := a.axiomRows(ctx, cfg, apl, &from, nil)
+	for i, row := range latest {
+		summary, err := axiomTraceSummaryOf(row)
 		if err != nil {
 			return nil, err
 		}
-		for _, r := range rows {
-			id, _ := r.Get("trace_id")
-			s, _ := r.Get("spans")
-			e, _ := r.Get("errors")
-			perTrace[jsString(id)] = counts{jsNum(s), jsNum(e)}
+		out[i] = summary
+		if traceIDRE.MatchString(summary.TraceID) && !seen[summary.TraceID] {
+			seen[summary.TraceID] = true
+			ids = append(ids, aplLit(summary.TraceID))
 		}
 	}
-	out := make([]domain.TraceSummary, len(latest))
-	for i, r := range latest {
-		get := func(k string) any { v, _ := r.Get(k); return v }
-		traceID := jsString(get("trace_id"))
-		isErr := spanStatusOf(r) == "error"
-		s := domain.TraceSummary{
-			TraceID:    traceID,
-			Name:       jsString(get("name")),
-			Service:    jsString(rowPickValue(r, "service.name")),
-			Kind:       spanKindOf(get("kind")),
-			Start:      axiomTimeOf(get("_time")),
-			Duration:   durationOf(get("duration")),
-			HTTPStatus: spanHTTPStatus(r),
-			Spans:      1,
-			Error:      isErr,
-			Local:      rowPickValue(r, "resource.deployment.environment.name") == "local",
+	if len(ids) == 0 {
+		return out, nil
+	}
+	apl := aplDataset(cfg.Dataset) + " | where trace_id in (" + strings.Join(ids, ", ") + ") | extend failed = " + traceFailed +
+		" | summarize spans = count(), errors = countif(failed) by trace_id"
+	counts, err := axiomRowsAs[axiomTraceCountRow](ctx, a, cfg, apl, &from, nil)
+	if err != nil {
+		return nil, err
+	}
+	perTrace := map[string]axiomTraceCountRow{}
+	for _, c := range counts {
+		perTrace[c.TraceID] = c
+	}
+	for i := range out {
+		if c, ok := perTrace[out[i].TraceID]; ok {
+			out[i].Spans, out[i].Errors = c.Spans, c.Errors
 		}
-		if isErr {
-			s.Errors = 1
-		}
-		if c, ok := perTrace[traceID]; ok {
-			s.Spans, s.Errors = c.spans, c.errors
-		}
-		out[i] = s
 	}
 	return out, nil
 }
@@ -148,10 +129,10 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	cfg := *scope.traces
 	fromMs, toMs, count := domain.RangeWindow(rng, a.Now())
 	from, to := float64(fromMs), float64(toMs)
-	search = jsSlice(search, traceSearchMax)
+	search = truncateRunes(search, traceSearchMax)
 	matching := aplRoots(cfg.Dataset, ids, search)
 
-	totals, series := []*JSONObject{}, []*JSONObject{}
+	totals, series := []axiomStatsRow{}, []axiomStatsRow{}
 	traces := []domain.TraceSummary{}
 	if len(ids) > 0 {
 		var wg sync.WaitGroup
@@ -159,11 +140,11 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			totals, errs[0] = a.axiomRows(ctx, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats, &from, &to)
+			totals, errs[0] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats, &from, &to)
 		}()
 		go func() {
 			defer wg.Done()
-			series, errs[1] = a.axiomRows(ctx, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats+" by bin(_time, "+spec.Bin+")", &from, &to)
+			series, errs[1] = axiomRowsAs[axiomStatsRow](ctx, a, cfg, matching+" | extend failed = "+traceFailed+" | summarize "+traceStats+" by bin(_time, "+spec.Bin+")", &from, &to)
 		}()
 		go func() {
 			defer wg.Done()
@@ -180,14 +161,8 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	binMs := float64(spec.BinMs)
 	byBucket := map[float64]domain.TraceStats{}
 	for _, r := range series {
-		t, ok := r.Get("_time")
-		if !ok || t == nil {
-			if keys := r.Keys(); len(keys) > 0 {
-				t, _ = r.Get(keys[0])
-			}
-		}
-		bucket := math.Floor(axiomTimeOf(t)/binMs) * binMs
-		byBucket[bucket] = traceStatsOf(r)
+		bucket := math.Floor(float64(r.Time)/binMs) * binMs
+		byBucket[bucket] = r.stats()
 	}
 	buckets := make([]domain.TraceBucket, count)
 	for i := range buckets {
@@ -196,7 +171,7 @@ func (a *App) TraceOverview(ctx context.Context, actor domain.Actor, environment
 	}
 	stats := domain.TraceStats{}
 	if len(totals) > 0 {
-		stats = traceStatsOf(totals[0])
+		stats = totals[0].stats()
 	}
 	return domain.TraceOverview{
 		Source: domain.LogSourceAxiom, From: from, To: to, BucketMs: binMs,
@@ -228,8 +203,12 @@ func (a *App) GetTrace(ctx context.Context, actor domain.Actor, environmentID, t
 		if err != nil {
 			return domain.Trace{}, obsInvalid(err)
 		}
-		for _, r := range rows {
-			spans = append(spans, axiomSpanOf(r))
+		for _, row := range rows {
+			span, err := axiomSpanOf(row)
+			if err != nil {
+				return domain.Trace{}, obsInvalid(err)
+			}
+			spans = append(spans, span)
 		}
 	}
 	var from float64

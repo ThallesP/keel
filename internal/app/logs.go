@@ -52,7 +52,7 @@ func (a *App) EnvironmentLogs(ctx context.Context, actor domain.Actor, environme
 	if scope.Sink == nil || scope.Sink.Kind != domain.SinkKindAxiom {
 		return domain.EnvironmentLogs{}, domain.Invalid(msgNoLogStore)
 	}
-	q := linesQuery{N: clampLogTail(tail), Search: jsSlice(search, 200)}
+	q := linesQuery{N: clampLogTail(tail), Search: truncateRunes(search, 200)}
 	if rng != "" {
 		from, _, _ := domain.RangeWindow(rng, a.Now())
 		q.From = obsF64(float64(from))

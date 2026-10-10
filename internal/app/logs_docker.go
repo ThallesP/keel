@@ -2,9 +2,9 @@ package app
 
 import (
 	"encoding/binary"
-	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -12,21 +12,12 @@ import (
 
 const dockerTaskKey = "com.docker.swarm.task.id="
 
-var dockerStampMsRE = regexp.MustCompile(`(\.[0-9]{3})[0-9]+Z$`)
-
 func parseDockerLine(raw, stream string) domain.ServiceLogLine {
 	rest := raw
 	t := 0.0
-	space := strings.IndexByte(rest, ' ')
-	stamp := ""
-	if space > 0 {
-		stamp = rest[:space]
-	}
-	if strings.HasSuffix(stamp, "Z") {
-		if ms, ok := jsDateParse(dockerStampMsRE.ReplaceAllString(stamp, "${1}Z")); ok {
-			t = ms
-			rest = rest[space+1:]
-		}
+	stamp, text, hasText := strings.Cut(raw, " ")
+	if at, err := time.Parse(time.RFC3339Nano, stamp); hasText && err == nil {
+		t, rest = float64(at.UnixMilli()), text
 	}
 	task := ""
 	detailsEnd := strings.IndexByte(rest, ' ')

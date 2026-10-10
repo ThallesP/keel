@@ -170,8 +170,8 @@ func TestBeginAxiomSignIn(t *testing.T) {
 		q.Get("code_challenge_method") != "S256" || len(q.Get("state")) != 22 {
 		t.Fatalf("authorize URL %s", raw)
 	}
-	if !strings.Contains(raw, "?client_id=client-1&response_type=code&redirect_uri=https%3A%2F%2Fkeel.example.ts.net%2Faxiom%2Fcallback&scope=openid+profile+email&state=") {
-		t.Fatalf("parameter order/encoding: %s", raw)
+	if !strings.Contains(raw, "&redirect_uri=https%3A%2F%2Fkeel.example.ts.net%2Faxiom%2Fcallback&response_type=code&scope=openid+profile+email&state=") {
+		t.Fatalf("parameter encoding: %s", raw)
 	}
 	var verifier, org string
 	_ = e.store.DB().QueryRow(`SELECT verifier, organization_id FROM axiom_sign_ins WHERE state = ?`, q.Get("state")).Scan(&verifier, &org)
@@ -195,21 +195,12 @@ func TestBeginAxiomSignIn(t *testing.T) {
 		t.Fatalf("%d sign-ins in flight", n)
 	}
 
-	ax.clientID, ax.registerErr = "", &app.OAuthError{Status: 400, Body: obsObj(t, `{"error":"invalid_redirect_uri","error_description":""}`)}
+	ax.clientID, ax.registerErr = "", &app.OAuthError{Status: 400, ErrorCode: "invalid_redirect_uri"}
 	_, err = e.app.BeginAxiomSignIn(ctx, e.member, "http://10.0.0.1/axiom/callback")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: invalid_redirect_uri")
 	ax.registerErr = &app.OAuthError{Status: 502}
 	_, err = e.app.BeginAxiomSignIn(ctx, e.member, "http://10.0.0.2/axiom/callback")
 	obsWantCode(t, err, domain.CodeInvalidInput, "Axiom refused to register Keel: HTTP 502")
-}
-
-func obsObj(t *testing.T, s string) *app.JSONObject {
-	t.Helper()
-	v, err := app.DecodeJSON([]byte(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return v.(*app.JSONObject)
 }
 
 func obsJWT(claims string) string {
@@ -291,7 +282,7 @@ func TestCompleteAxiomSignInFailures(t *testing.T) {
 		_, err := e.app.CompleteAxiomSignIn(ctx, e.member, obsStartSignIn(t, e, e.member), "code")
 		return err
 	}
-	ax.exchangeErr = &app.OAuthError{Status: 400, Body: obsObj(t, `{"error":"invalid_grant","error_description":"code expired"}`)}
+	ax.exchangeErr = &app.OAuthError{Status: 400, ErrorCode: "invalid_grant", ErrorDescription: "code expired"}
 	obsWantCode(t, complete(), domain.CodeInvalidInput, "Axiom sign-in failed: code expired")
 	ax.exchangeErr = nil
 	ax.orgsErr = &app.AxiomError{Status: 401, Detail: "bad audience"}

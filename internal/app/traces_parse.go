@@ -1,144 +1,116 @@
 package app
 
 import (
-	"math"
+	"cmp"
+	"encoding/json"
+	"fmt"
+	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
 
-func rowPick(obj any, path string) (any, bool) {
-	switch obj.(type) {
-	case *JSONObject, []any:
-	default:
-		return nil, false
-	}
-	if v, ok := jsGet(obj, path); ok {
-		return v, true
-	}
-	i := strings.IndexByte(path, '.')
-	for i > 0 {
-		head := path[:i]
-		if hv, ok := jsGet(obj, head); ok {
-			if found, ok := rowPick(hv, path[i+1:]); ok {
-				return found, true
-			}
-		}
-		j := strings.IndexByte(path[i+1:], '.')
-		if j < 0 {
-			break
-		}
-		i = i + 1 + j
-	}
-	return nil, false
-}
-
-func rowPickValue(obj any, path string) any {
-	v, _ := rowPick(obj, path)
-	return v
-}
-
-func spanAttr(row *JSONObject, name string) any {
-	if v := rowPickValue(row, "attributes."+name); v != nil {
-		return v
-	}
-	return rowPickValue(row, "attributes.custom."+name)
-}
-
-var timeDigitsRE = regexp.MustCompile(`^[0-9]+$`)
-
-func axiomTimeOf(v any) float64 {
-	switch x := v.(type) {
-	case float64:
-		if x > 1e17 {
-			return x / 1e6
-		}
-		if x > 1e14 {
-			return x / 1e3
-		}
-		return x
-	case string:
-		if x == "" {
-			return 0
-		}
-		if timeDigitsRE.MatchString(x) {
-			return axiomTimeOf(jsNumber(x))
-		}
-		return axiomPreciseTime(x)
-	}
-	return 0
-}
+type axiomDuration float64
 
 var (
-	durationDecimalRE = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
-	durationUnitRE    = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)(ns|us|µs|μs|ms|h|m|s)`)
-	durationDotnetRE  = regexp.MustCompile(`^(?:([0-9]+)\.)?([0-9]+):([0-9]+):([0-9]+(?:\.[0-9]+)?)$`)
-	durationUnitMs    = map[string]float64{"ns": 1e-6, "us": 1e-3, "µs": 1e-3, "μs": 1e-3, "ms": 1, "s": 1000, "m": 60_000, "h": 3_600_000}
-	durationFloat     = func(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }
+	durationNanosRE  = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?$`)
+	durationDotnetRE = regexp.MustCompile(`^(?:([0-9]+)\.)?([0-9]+):([0-9]+):([0-9]+(?:\.[0-9]+)?)$`)
 )
 
-func durationOf(v any) float64 {
-	switch x := v.(type) {
-	case float64:
-		return x / 1e6
-	case string:
-		if x == "" {
-			return 0
-		}
-		if durationDecimalRE.MatchString(x) {
-			return durationFloat(x) / 1e6
-		}
-		total, matched := 0.0, false
-		for _, m := range durationUnitRE.FindAllStringSubmatch(x, -1) {
-			matched = true
-			total += durationFloat(m[1]) * durationUnitMs[m[2]]
-		}
-		if matched {
-			return total
-		}
-		t := durationDotnetRE.FindStringSubmatch(x)
-		if t == nil {
-			return 0
-		}
-		hours := durationFloat(t[1])*24 + durationFloat(t[2])
-		return (hours*3600 + durationFloat(t[3])*60 + durationFloat(t[4])) * 1000
-	}
-	return 0
-}
-
-func durationOrNull(v any) *float64 {
-	if v == nil || v == "" {
+func (d *axiomDuration) UnmarshalJSON(b []byte) error {
+	var nanos float64
+	if err := json.Unmarshal(b, &nanos); err == nil {
+		*d = axiomDuration(nanos / 1e6)
 		return nil
 	}
-	d := durationOf(v)
-	return &d
+	var text string
+	if err := json.Unmarshal(b, &text); err != nil {
+		return err
+	}
+	ms, err := parseAxiomDuration(text)
+	if err != nil {
+		return err
+	}
+	*d = axiomDuration(ms)
+	return nil
 }
 
-func traceStatsOf(r *JSONObject) domain.TraceStats {
-	get := func(k string) any { v, _ := r.Get(k); return v }
+func parseAxiomDuration(text string) (float64, error) {
+	if durationNanosRE.MatchString(text) {
+		nanos, err := strconv.ParseFloat(text, 64)
+		return nanos / 1e6, err
+	}
+	if d, err := time.ParseDuration(text); err == nil {
+		return float64(d) / 1e6, nil
+	}
+	m := durationDotnetRE.FindStringSubmatch(text)
+	if m == nil {
+		return 0, fmt.Errorf("Axiom duration %q: unknown format", text)
+	}
+	days, _ := strconv.ParseFloat(cmp.Or(m[1], "0"), 64)
+	hours, _ := strconv.ParseFloat(m[2], 64)
+	minutes, _ := strconv.ParseFloat(m[3], 64)
+	seconds, _ := strconv.ParseFloat(m[4], 64)
+	return ((days*24+hours)*3600 + minutes*60 + seconds) * 1000, nil
+}
+
+type axiomStatsRow struct {
+	Time     axiomTime      `json:"_time"`
+	Requests float64        `json:"requests"`
+	Errors   float64        `json:"errors"`
+	P50      *axiomDuration `json:"p50"`
+	P95      *axiomDuration `json:"p95"`
+	P99      *axiomDuration `json:"p99"`
+}
+
+func (r axiomStatsRow) stats() domain.TraceStats {
 	return domain.TraceStats{
-		Requests: jsNum(get("requests")),
-		Errors:   jsNum(get("errors")),
-		P50:      durationOrNull(get("p50")),
-		P95:      durationOrNull(get("p95")),
-		P99:      durationOrNull(get("p99")),
+		Requests: r.Requests,
+		Errors:   r.Errors,
+		P50:      (*float64)(r.P50),
+		P95:      (*float64)(r.P95),
+		P99:      (*float64)(r.P99),
 	}
 }
 
-func spanKindOf(v any) string {
-	k := strings.TrimPrefix(strings.ToLower(jsString(v)), "span_kind_")
-	if k == "unspecified" {
+type axiomTraceCountRow struct {
+	TraceID string  `json:"trace_id"`
+	Spans   float64 `json:"spans"`
+	Errors  float64 `json:"errors"`
+}
+
+type axiomSpanRow struct {
+	Time          axiomTime        `json:"_time"`
+	TraceID       string           `json:"trace_id"`
+	SpanID        string           `json:"span_id"`
+	ParentID      string           `json:"parent_span_id"`
+	Name          string           `json:"name"`
+	Kind          string           `json:"kind"`
+	Duration      axiomDuration    `json:"duration"`
+	Error         bool             `json:"error"`
+	StatusCode    string           `json:"status.code"`
+	StatusMessage string           `json:"status.message"`
+	Service       string           `json:"service.name"`
+	Scope         string           `json:"scope.name"`
+	Environment   string           `json:"resource.deployment.environment.name"`
+	Events        []axiomSpanEvent `json:"events"`
+}
+
+func (s axiomSpanRow) kind() string {
+	kind := strings.TrimPrefix(strings.ToLower(s.Kind), "span_kind_")
+	if kind == "unspecified" {
 		return ""
 	}
-	return k
+	return kind
 }
 
-func spanStatusOf(row *JSONObject) string {
-	code := strings.ToLower(jsString(rowPickValue(row, "status.code")))
-	if e, ok := rowPickValue(row, "error").(bool); (ok && e) || strings.Contains(code, "error") {
+func (s axiomSpanRow) status() string {
+	code := strings.ToLower(s.StatusCode)
+	if s.Error || strings.Contains(code, "error") {
 		return "error"
 	}
 	if strings.Contains(code, "ok") {
@@ -147,128 +119,127 @@ func spanStatusOf(row *JSONObject) string {
 	return "unset"
 }
 
-type attrMap struct {
-	keys []string
-	vals map[string]string
+type axiomSpanEvent struct {
+	Name           string                     `json:"name"`
+	Time           axiomTime                  `json:"time"`
+	Timestamp      axiomTime                  `json:"timestamp"`
+	UnderscoreTime axiomTime                  `json:"_time"`
+	TimeUnixNano   axiomTime                  `json:"timeUnixNano"`
+	Attributes     map[string]json.RawMessage `json:"attributes"`
 }
 
-func newAttrMap() *attrMap { return &attrMap{vals: map[string]string{}} }
-
-func (m *attrMap) set(k, v string) {
-	if _, ok := m.vals[k]; !ok {
-		m.keys = append(m.keys, k)
+func (e axiomSpanEvent) event() domain.SpanEvent {
+	attributes := map[string]string{}
+	for key, raw := range e.Attributes {
+		flattenAttribute(attributes, key, raw)
 	}
-	m.vals[k] = v
-}
-
-func spanAttrText(v any) string {
-	switch v.(type) {
-	case *JSONObject, []any:
-		return jsStringify(v)
-	}
-	return jsString(v)
-}
-
-func flattenAttrs(out *attrMap, key string, v any) {
-	if v == nil || v == "" {
-		return
-	}
-	if o, ok := v.(*JSONObject); ok {
-		for _, k := range o.Keys() {
-			child, _ := o.Get(k)
-			if key != "" {
-				flattenAttrs(out, key+"."+k, child)
-			} else {
-				flattenAttrs(out, k, child)
-			}
-		}
-		return
-	}
-	if key != "" {
-		out.set(key, spanAttrText(v))
+	return domain.SpanEvent{
+		Time:       float64(cmp.Or(e.Time, e.Timestamp, e.UnderscoreTime, e.TimeUnixNano)),
+		Name:       e.Name,
+		Attributes: sortedAttributes(attributes),
 	}
 }
 
-func sortedSpanAttributes(m *attrMap) []domain.Attribute {
-	out := make([]domain.Attribute, len(m.keys))
-	for i, k := range m.keys {
-		out[i] = domain.Attribute{Key: k, Value: m.vals[k]}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return localeCompare(out[i].Key, out[j].Key) < 0 })
-	return out
-}
-
-func collectAttrs(row *JSONObject, root string) []domain.Attribute {
-	out := newAttrMap()
-	for _, k := range row.Keys() {
-		v, _ := row.Get(k)
-		if k == root {
-			flattenAttrs(out, "", v)
-		} else if strings.HasPrefix(k, root+".") {
-			flattenAttrs(out, k[len(root)+1:], v)
-		}
-	}
-	unwrapped := newAttrMap()
-	for _, k := range out.keys {
-		unwrapped.set(strings.TrimPrefix(k, "custom."), out.vals[k])
-	}
-	return sortedSpanAttributes(unwrapped)
-}
-
-func spanEventsOf(v any) []domain.SpanEvent {
-	arr, ok := v.([]any)
-	if !ok {
-		return []domain.SpanEvent{}
-	}
-	out := []domain.SpanEvent{}
-	for _, e := range arr {
-		switch e.(type) {
-		case *JSONObject, []any:
-		default:
+func spanAttributes(row AxiomRow, root string) map[string]string {
+	attributes := map[string]string{}
+	for column, raw := range row {
+		key, ok := strings.CutPrefix(column, root+".")
+		if !ok {
 			continue
 		}
-		get := func(k string) any { x, _ := jsGet(e, k); return x }
-		t := get("time")
-		for _, k := range []string{"timestamp", "_time", "timeUnixNano"} {
-			if t != nil {
-				break
-			}
-			t = get(k)
+		if key == "custom" {
+			key = ""
 		}
-		attrs := newAttrMap()
-		flattenAttrs(attrs, "", get("attributes"))
-		out = append(out, domain.SpanEvent{Time: axiomTimeOf(t), Name: jsString(get("name")), Attributes: sortedSpanAttributes(attrs)})
+		flattenAttribute(attributes, key, raw)
+	}
+	return attributes
+}
+
+func flattenAttribute(attributes map[string]string, key string, raw json.RawMessage) {
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) == nil {
+		for child, value := range object {
+			if key != "" {
+				child = key + "." + child
+			}
+			flattenAttribute(attributes, child, value)
+		}
+		return
+	}
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		text = string(raw)
+	}
+	if key != "" && text != "" {
+		attributes[key] = text
+	}
+}
+
+func sortedAttributes(attributes map[string]string) []domain.Attribute {
+	out := make([]domain.Attribute, 0, len(attributes))
+	for _, key := range slices.Sorted(maps.Keys(attributes)) {
+		out = append(out, domain.Attribute{Key: key, Value: attributes[key]})
 	}
 	return out
 }
 
-func axiomSpanOf(r *JSONObject) domain.Span {
-	get := func(k string) any { v, _ := r.Get(k); return v }
-	return domain.Span{
-		SpanID:        jsString(get("span_id")),
-		ParentID:      jsString(get("parent_span_id")),
-		Name:          jsString(get("name")),
-		Service:       jsString(rowPickValue(r, "service.name")),
-		Kind:          spanKindOf(get("kind")),
-		Start:         axiomTimeOf(get("_time")),
-		Duration:      durationOf(get("duration")),
-		Status:        spanStatusOf(r),
-		StatusMessage: jsString(rowPickValue(r, "status.message")),
-		Scope:         jsString(rowPickValue(r, "scope.name")),
-		Attributes:    collectAttrs(r, "attributes"),
-		Resource:      collectAttrs(r, "resource"),
-		Events:        spanEventsOf(rowPickValue(r, "events")),
+func httpStatusOf(attributes map[string]string) *float64 {
+	text, ok := attributes["http.response.status_code"]
+	if !ok {
+		text = attributes["http.status_code"]
 	}
-}
-
-func spanHTTPStatus(r *JSONObject) *float64 {
-	v := spanAttr(r, "http.response.status_code")
-	if v == nil {
-		v = spanAttr(r, "http.status_code")
-	}
-	n := jsNumber(v)
-	if math.IsNaN(n) || math.IsInf(n, 0) || n <= 0 {
+	status, err := strconv.Atoi(text)
+	if err != nil || status <= 0 {
 		return nil
 	}
-	return &n
+	return obsF64(float64(status))
+}
+
+func axiomSpanOf(row AxiomRow) (domain.Span, error) {
+	var s axiomSpanRow
+	if err := row.decode(&s); err != nil {
+		return domain.Span{}, err
+	}
+	events := make([]domain.SpanEvent, len(s.Events))
+	for i, e := range s.Events {
+		events[i] = e.event()
+	}
+	return domain.Span{
+		SpanID:        s.SpanID,
+		ParentID:      s.ParentID,
+		Name:          s.Name,
+		Service:       s.Service,
+		Kind:          s.kind(),
+		Start:         float64(s.Time),
+		Duration:      float64(s.Duration),
+		Status:        s.status(),
+		StatusMessage: s.StatusMessage,
+		Scope:         s.Scope,
+		Attributes:    sortedAttributes(spanAttributes(row, "attributes")),
+		Resource:      sortedAttributes(spanAttributes(row, "resource")),
+		Events:        events,
+	}, nil
+}
+
+func axiomTraceSummaryOf(row AxiomRow) (domain.TraceSummary, error) {
+	var s axiomSpanRow
+	if err := row.decode(&s); err != nil {
+		return domain.TraceSummary{}, err
+	}
+	summary := domain.TraceSummary{
+		TraceID:    s.TraceID,
+		Name:       s.Name,
+		Service:    s.Service,
+		Kind:       s.kind(),
+		Start:      float64(s.Time),
+		Duration:   float64(s.Duration),
+		HTTPStatus: httpStatusOf(spanAttributes(row, "attributes")),
+		Spans:      1,
+		Error:      s.status() == "error",
+		Local:      s.Environment == "local",
+	}
+	if summary.Error {
+		summary.Errors = 1
+	}
+	return summary, nil
 }

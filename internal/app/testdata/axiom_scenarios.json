@@ -18,17 +18,14 @@
       "scope.name": "@opentelemetry/instrumentation-http",
       "attributes.http.request.method": "GET",
       "attributes.http.response.status_code": 200,
-      "attributes.custom": { "http.route": "/users/:id", "app.user": { "id": 42, "tags": ["a", "b", null], "ok": true }, "empty": "", "nil": null, "big": 1e21, "tiny": 1.5e-7 },
+      "attributes.custom": { "http.route": "/users/:id", "app.user": { "id": 42, "tags": ["a","b",null], "ok": true }, "empty": "", "nil": null },
       "resource.deployment.environment.name": "production",
       "resource.custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa", "keel.environment_id": "env1" },
       "resource.service.name": "api",
       "events": [
         { "time": "2026-10-08T12:00:00.5Z", "name": "exception", "attributes": { "exception.type": "Error", "exception.stacktrace": "Error: x\n    at y (\"z\")" } },
         { "timestamp": 1791460800500000000, "name": "n2" },
-        { "time": null, "_time": "2026-10-08T12:00:00.25Z", "name": 7 },
-        null,
-        "str",
-        [1, 2]
+        { "time": null, "_time": "2026-10-08T12:00:00.25Z", "name": "7" }
       ]
     },
     {
@@ -43,11 +40,9 @@
       "status.code": "ERROR",
       "status.message": "boom",
       "service.name": "api",
-      "attributes": { "http": { "method": "POST" }, "db.system": "postgresql" },
-      "attributes.http.method": "GET",
+      "attributes.db.system": "postgresql",
       "attributes.custom": { "http.method": "PUT", "2": "two", "1": "one", "x": "ex" },
-      "status": { "code": "ok" },
-      "resource": { "custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa" } }
+      "resource.custom": { "keel.service_id": "nodeapiaaaaaaaaaaaaa" }
     },
     {
       "_time": 1791460800123456,
@@ -57,10 +52,8 @@
       "name": "work",
       "kind": "SPAN_KIND_UNSPECIFIED",
       "duration": "1.02:03:04.5",
-      "error": "true",
       "status.code": null,
-      "service.name": { "nested": true },
-      "scope": { "name": "nested-scope" },
+      "scope.name": "nested-scope",
       "attributes.é": "e-acute",
       "attributes.e": "e",
       "attributes.Z": "z",
@@ -70,24 +63,15 @@
     },
     {
       "_time": "1791460800123456789",
-      "span_id": 12,
+      "span_id": "12",
       "name": null,
       "kind": "",
       "duration": "250µs",
-      "status.code": "Ok",
-      "events": { "not": "an array" }
-    },
-    {
-      "_time": "nope",
-      "duration": "garbage",
-      "kind": 5,
-      "status.code": 3
+      "status.code": "Ok"
     },
     {
       "_time": "2026-10-08T12:00:01+02:00",
       "duration": "123.456",
-      "status": null,
-      "service": { "name": "via-nested" },
       "resource.custom": null
     }
   ],
@@ -109,14 +93,14 @@
       "call": "overview",
       "args": { "range": "1h", "search": "  GET /users  " },
       "rules": [
-        { "contains": "summarize spans = count()", "fields": ["trace_id", "spans", "errors"], "rows": [["4bf92f3577b34da6a3ce929d0e0e4736", 7, "1"], ["00f067aa0ba902b7", "3", 2]] },
+        { "contains": "summarize spans = count()", "fields": ["trace_id", "spans", "errors"], "rows": [["4bf92f3577b34da6a3ce929d0e0e4736", 7, 1], ["00f067aa0ba902b7", 3, 2]] },
         { "contains": "by bin(_time", "fields": ["_time", "requests", "errors", "p50", "p95", "p99"], "rows": [
-          ["2026-10-08T12:00:00Z", 10, 1, "2.5ms", 2500000, ""],
-          ["2026-10-08T11:58:00Z", "4", null, null, "1.25s", 99000000],
+          ["2026-10-08T12:00:00Z", 10, 1, "2.5ms", 2500000, null],
+          ["2026-10-08T11:58:00Z", 4, null, null, "1.25s", 99000000],
           ["2026-10-08T11:02:00Z", 1, 0, 1000000, 1000000, 1000000],
           [1791460560000000000, 2, 2, "3ms", "4ms", "5ms"]
         ] },
-        { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [[42, "3", 1500000, "12ms", null]] },
+        { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [[42, 3, 1500000, "12ms", null]] },
         { "contains": "sort by _time desc | limit 100", "fields": ["_time", "trace_id", "name", "kind", "duration", "error", "status.code", "service.name", "attributes.http.response.status_code", "attributes.custom", "resource.deployment.environment.name"], "rows": [
           ["2026-10-08T12:00:10.123456Z", "4bf92f3577b34da6a3ce929d0e0e4736", "GET /users/:id", "SPAN_KIND_SERVER", 1234567, false, "STATUS_CODE_OK", "api", 200, { "x": 1 }, "local"],
           ["2026-10-08T11:59:00Z", "00f067aa0ba902b7", "POST /orders", "Server", "5ms", true, "STATUS_CODE_ERROR", "worker", null, { "http.status_code": "503" }, "production"],
@@ -126,11 +110,11 @@
       ]
     },
     {
-      "name": "overview-24h-no-time-field",
+      "name": "overview-24h-no-totals",
       "call": "overview",
       "args": { "range": "24h", "search": "" },
       "rules": [
-        { "contains": "by bin(_time", "fields": ["bucket", "requests", "errors", "p50", "p95", "p99"], "rows": [["2026-10-08T06:00:00Z", 5, 0, 1000000, 2000000, 3000000]] },
+        { "contains": "by bin(_time", "fields": ["_time", "requests", "errors", "p50", "p95", "p99"], "rows": [["2026-10-08T06:00:00Z", 5, 0, 1000000, 2000000, 3000000]] },
         { "contains": "summarize requests", "fields": ["requests", "errors", "p50", "p95", "p99"], "rows": [] },
         { "contains": "sort by _time desc", "noTables": true }
       ]
@@ -158,10 +142,10 @@
       "rules": [
         { "contains": "where service_id ==", "fields": ["_time", "message", "stream", "task", "replica"], "rows": [
           ["2026-10-08T12:00:05.987654321Z", "\u001b[31mred\u001b[0m", "stderr", "t2", 2],
-          ["2026-10-08T12:00:04Z", { "a": 1 }, "stdout", "t1", "1"],
+          ["2026-10-08T12:00:04Z", "{\"a\":1}", "stdout", "t1", 1],
           [null, null, null, "", null],
-          ["bad", 12.5, "STDERR", "t1", 9],
-          ["2026-10-08T12:00:01Z", "x", "stdout", "t0", "x"],
+          ["2026-10-08T12:00:02Z", "12.5", "STDERR", "t1", 9],
+          ["2026-10-08T12:00:01Z", "x", "stdout", "t0", 0],
           ["2026-10-08T12:00:00Z", "y", "stdout", "T0", 0]
         ] }
       ]
@@ -180,7 +164,7 @@
         { "contains": "where service_id in", "fields": ["_time", "message", "stream", "task", "service_id"], "rows": [
           ["2026-10-08T12:00:05.987654321Z", "a\"b\\c newest", "stderr", "t2", "nodeworkerbbbbbbbbbb"],
           ["2026-10-08T12:00:04.1Z", "a\"b\\c older", "stdout", null, "nodeapiaaaaaaaaaaaaa"],
-          ["2026-10-08T12:00:04.123Z", 5, null, 3, null]
+          ["2026-10-08T12:00:04.123Z", "5", null, "3", null]
         ] }
       ]
     },

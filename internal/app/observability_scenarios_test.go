@@ -225,7 +225,7 @@ func obsAsJSON(t *testing.T, v any) any {
 	return out
 }
 
-func TestAxiomScenariosMatchTypeScript(t *testing.T) {
+func TestAxiomScenarios(t *testing.T) {
 	var fx obsScenarioFixture
 	obsReadJSON(t, "testdata/axiom_scenarios.json", &fx)
 	var golden struct {

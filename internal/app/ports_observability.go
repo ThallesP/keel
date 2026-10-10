@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 
 	"github.com/ThallesP/keel/internal/domain"
@@ -62,8 +63,10 @@ type AxiomPending struct {
 	CreatedAt      int64
 }
 
+type AxiomRow map[string]json.RawMessage
+
 type Axiom interface {
-	Query(ctx context.Context, t AxiomTarget, q AxiomQuery) ([]*JSONObject, error)
+	Query(ctx context.Context, t AxiomTarget, q AxiomQuery) ([]AxiomRow, error)
 	CreateDataset(ctx context.Context, t AxiomTarget, orgID, name, description string) error
 	Datasets(ctx context.Context, t AxiomTarget, orgID string) ([]AxiomDataset, error)
 	MintToken(ctx context.Context, t AxiomTarget, orgID string, req AxiomTokenRequest) (string, error)
@@ -138,15 +141,17 @@ func (e *AxiomError) Error() string {
 }
 
 type OAuthError struct {
-	Status int
-	Body   *JSONObject
+	Status           int
+	ErrorCode        string
+	ErrorDescription string
 }
 
 func (e *OAuthError) Error() string {
-	for _, k := range []string{"error_description", "error"} {
-		if v, ok := e.Body.Get(k); ok && jsTruthy(v) {
-			return jsString(v)
-		}
+	if e.ErrorDescription != "" {
+		return e.ErrorDescription
+	}
+	if e.ErrorCode != "" {
+		return e.ErrorCode
 	}
 	return "HTTP " + strconv.Itoa(e.Status)
 }

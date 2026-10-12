@@ -1,0 +1,32 @@
+package app
+
+import "github.com/ThallesP/keel/internal/domain"
+
+func canvasInsertVariables(tx Tx, nodeID string, vars []domain.Variable) error {
+	for _, v := range vars {
+		v.ID, v.NodeID = domain.NewID(), nodeID
+		if err := tx.CanvasInsertVariable(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func canvasNames(nodes []domain.Node) map[string]bool {
+	taken := make(map[string]bool, len(nodes))
+	for _, n := range nodes {
+		taken[n.Name] = true
+	}
+	return taken
+}
+
+func canvasCreatedAt(now int64, siblings []domain.Node) int64 {
+	for _, n := range siblings {
+		now = max(now, n.CreatedAt+1)
+	}
+	return now
+}
+
+func canvasNameTaken(name string) error {
+	return domain.E(domain.CodeNameTaken, "\"%s\" is already taken", name)
+}

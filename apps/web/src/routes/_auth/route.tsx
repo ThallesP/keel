@@ -1,30 +1,30 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 
 import { AuthShell } from "@/components/auth/shell";
 import { AuthForms } from "@/components/auth-forms";
 import Loader from "@/components/loader";
+import { SessionGate } from "@/lib/session";
 
 export const Route = createFileRoute("/_auth")({
   component: AuthLayout,
 });
 
+/** Every route under it needs a session; signed out, the same URL shows the sign-in form. */
 function AuthLayout() {
   return (
-    <>
-      <Authenticated>
-        <Outlet />
-      </Authenticated>
-      <Unauthenticated>
-        <AuthShell>
-          <AuthForms />
-        </AuthShell>
-      </Unauthenticated>
-      <AuthLoading>
+    <SessionGate
+      loading={
         <div className="h-svh bg-canvas">
           <Loader />
         </div>
-      </AuthLoading>
-    </>
+      }
+      signedOut={
+        <AuthShell>
+          <AuthForms />
+        </AuthShell>
+      }
+    >
+      <Outlet />
+    </SessionGate>
   );
 }

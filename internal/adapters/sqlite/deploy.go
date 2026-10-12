@@ -1,0 +1,179 @@
+package sqlite
+
+import (
+	"database/sql"
+	"errors"
+
+	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/domain"
+	"github.com/ThallesP/keel/internal/gen/sqlc"
+)
+
+func (t *tx) deployFill(r sqlc.Deployment, withLog bool) (domain.Deployment, error) {
+	steps, err := t.q.DeployListSteps(t.ctx, r.ID)
+	if err != nil {
+		return domain.Deployment{}, err
+	}
+	d := domain.Deployment{
+		ID:            r.ID,
+		EnvironmentID: r.EnvironmentID,
+		Message:       r.Message,
+		Status:        domain.DeploymentStatus(r.Status),
+		StartedAt:     r.StartedAt,
+		FinishedAt:    r.FinishedAt,
+		Steps:         make([]domain.DeployStep, 0, len(steps)),
+	}
+	for _, s := range steps {
+		d.Steps = append(d.Steps, domain.DeployStep{
+			NodeID:     s.NodeID,
+			Label:      s.Label,
+			Status:     domain.StepStatus(s.Status),
+			StartedAt:  s.StartedAt,
+			AppliedAt:  s.AppliedAt,
+			FinishedAt: s.FinishedAt,
+		})
+	}
+	if withLog {
+		if d.Log, err = t.DeploymentLog(d.ID); err != nil {
+			return domain.Deployment{}, err
+		}
+	}
+	return d, nil
+}
+
+func (t *tx) deployFillAll(rows []sqlc.Deployment) ([]domain.Deployment, error) {
+	out := make([]domain.Deployment, 0, len(rows))
+	for _, r := range rows {
+		d, err := t.deployFill(r, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+func (t *tx) HasRunningDeployment(environmentID string) (bool, error) {
+	n, err := t.q.DeployHasRunning(t.ctx, environmentID)
+	return n > 0, err
+}
+
+func (t *tx) insertSteps(id string, steps []domain.DeployStep) error {
+	for i, s := range steps {
+		err := t.q.DeployInsertStep(t.ctx, sqlc.DeployInsertStepParams{
+			DeploymentID: id,
+			Idx:          int64(i),
+			NodeID:       s.NodeID,
+			Label:        s.Label,
+			Status:       string(s.Status),
+			StartedAt:    s.StartedAt,
+			AppliedAt:    s.AppliedAt,
+			FinishedAt:   s.FinishedAt,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *tx) InsertDeployment(d domain.Deployment) error {
+	err := t.q.DeployInsert(t.ctx, sqlc.DeployInsertParams{
+		ID:            d.ID,
+		EnvironmentID: d.EnvironmentID,
+		Message:       d.Message,
+		Status:        string(d.Status),
+		StartedAt:     d.StartedAt,
+		FinishedAt:    d.FinishedAt,
+	})
+	if err != nil {
+		return err
+	}
+	return t.insertSteps(d.ID, d.Steps)
+}
+
+func (t *tx) Deployment(id string) (domain.Deployment, error) {
+	r, err := t.q.DeployGet(t.ctx, id)
+	if err != nil {
+		return domain.Deployment{}, noRow(err)
+	}
+	return t.deployFill(r, true)
+}
+
+func (t *tx) LatestDeployment(environmentID string) (domain.Deployment, error) {
+	r, err := t.q.DeployLatest(t.ctx, environmentID)
+	if err != nil {
+		return domain.Deployment{}, noRow(err)
+	}
+	return t.deployFill(r, true)
+}
+
+func (t *tx) RecentDeployments(environmentID string, limit int) ([]domain.Deployment, error) {
+	rows, err := t.q.DeployListRecent(t.ctx, sqlc.DeployListRecentParams{EnvironmentID: environmentID, Limit: int64(limit)})
+	if err != nil {
+		return nil, err
+	}
+	return t.deployFillAll(rows)
+}
+
+func (t *tx) DeploymentLog(id string) ([]domain.LogLine, error) {
+	rows, err := t.q.DeployListLog(t.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.LogLine, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.LogLine{At: r.At, NodeID: r.NodeID, Text: r.Text})
+	}
+	return out, nil
+}
+
+func (t *tx) RunningDeployments(environmentID string) ([]domain.Deployment, error) {
+	rows, err := t.q.DeployListRunning(t.ctx, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	return t.deployFillAll(rows)
+}
+
+func (t *tx) UpdateDeployment(d domain.Deployment, appended []domain.LogLine) error {
+	n, err := t.q.DeployUpdate(t.ctx, sqlc.DeployUpdateParams{ID: d.ID, Status: string(d.Status), FinishedAt: d.FinishedAt})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return app.ErrNoRow
+	}
+	if err := t.q.DeployDeleteSteps(t.ctx, d.ID); err != nil {
+		return err
+	}
+	if err := t.insertSteps(d.ID, d.Steps); err != nil {
+		return err
+	}
+	if len(appended) == 0 {
+		return nil
+	}
+	for _, l := range appended {
+		err := t.q.DeployInsertLog(t.ctx, sqlc.DeployInsertLogParams{DeploymentID: d.ID, At: l.At, NodeID: l.NodeID, Text: l.Text})
+		if err != nil {
+			return err
+		}
+	}
+	return t.q.DeployTrimLog(t.ctx, sqlc.DeployTrimLogParams{DeploymentID: d.ID, Offset: 500})
+}
+
+func (t *tx) ClusterServers() (int, error) {
+	n, err := t.q.DeployGetCluster(t.ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return int(n), err
+}
+
+func (t *tx) SetClusterServers(servers int, at int64) error {
+	return t.q.DeploySetCluster(t.ctx, sqlc.DeploySetClusterParams{Servers: int64(servers), At: at})
+}
+
+func (t *tx) DeployOrganizationIDs() ([]string, error) {
+	return t.q.DeployListOrganizationIDs(t.ctx)
+}

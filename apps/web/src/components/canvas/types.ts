@@ -1,14 +1,17 @@
 import type { Node } from "@xyflow/react";
 
-/** Mirrors `NodeStatus` in `packages/backend/convex/status.ts`. `done`: one-shot image exited 0. */
-export type NodeStatus =
-  | "healthy"
-  | "done"
-  | "deploying"
-  | "stopping"
-  | "error"
-  | "stopped"
-  | "pending";
+import type {
+  Deployment as ApiDeployment,
+  DeployStep as ApiDeployStep,
+  EndpointView,
+  NodeView,
+} from "@/gen/api";
+
+/**
+ * `healthy | done | deploying | stopping | error | stopped | pending`, as the API derives it
+ * (`internal/domain/status.go`). `done`: one-shot image exited 0.
+ */
+export type NodeStatus = NodeView["status"];
 
 /** Live runtime fields shared by everything Swarm runs (service, database, cache). */
 export type RuntimeData = {
@@ -30,28 +33,12 @@ export type RuntimeData = {
   finishedAt?: number;
   /** Reachable from the internet through keel-proxy (at least one endpoint). */
   public: boolean;
-  endpoints: Endpoint[];
-};
-
-/** Mirrors `endpointView` in `packages/backend/convex/endpoints.ts`. */
-export type Endpoint = {
-  protocol: "http" | "tcp" | "udp";
-  /** Container port the proxy dials. */
-  port: number;
-  /** http only. */
-  domain?: string;
-  /** tcp / udp only: the port on the control plane. */
-  publicPort?: number;
-  /** `https://<domain>` or `<public IP>:<publicPort>`. */
-  address: string;
-  /** http `starting`: loaded, waiting for its certificate. */
-  state: "starting" | "live" | "failed";
-  error?: string;
+  endpoints: EndpointView[];
 };
 
 export type ServiceData = RuntimeData & {
   /** The first https endpoint, shown as the card's subtitle. */
-  http?: Endpoint;
+  http?: EndpointView;
 };
 
 export type DatabaseData = RuntimeData & {
@@ -81,7 +68,6 @@ export type VolumeNode = Node<VolumeData, "volume">;
 export type GroupNode = Node<GroupData, "group">;
 
 export type CanvasNode = ServiceNode | DatabaseNode | CacheNode | VolumeNode | GroupNode;
-export type CanvasNodeType = NonNullable<CanvasNode["type"]>;
 /** Everything except "group" — the shell-rendered nodes. */
 export type InfraNode = Exclude<CanvasNode, GroupNode>;
 export type InfraNodeType = NonNullable<InfraNode["type"]>;
@@ -90,7 +76,7 @@ export type RuntimeNode = Exclude<InfraNode, VolumeNode>;
 
 export type PanelTab = "deployments" | "variables" | "logs" | "settings";
 
-export type DeployStepStatus = "pending" | "running" | "done" | "failed";
+export type DeployStepStatus = ApiDeployStep["status"];
 
 export type DeployStep = {
   /** Empty string for the final "health checks" step. */
@@ -106,7 +92,7 @@ export type Deployment = {
   id: string;
   sha?: string;
   message: string;
-  status: "running" | "success" | "failed";
+  status: ApiDeployment["status"];
   startedAt: number;
   finishedAt?: number;
   steps: DeployStep[];

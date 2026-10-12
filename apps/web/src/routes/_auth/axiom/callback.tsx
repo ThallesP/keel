@@ -1,11 +1,10 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-import { errorMessage } from "@/components/canvas/errors";
+import { useCompleteAxiomSignIn } from "@/gen/api";
+import { errorMessage } from "@/lib/api";
 import { takeAxiomReturn } from "@/lib/axiom-sign-in";
 
 type Search = { code?: string; state?: string; error?: string; error_description?: string };
@@ -26,7 +25,8 @@ export const Route = createFileRoute("/_auth/axiom/callback")({
 function AxiomCallback() {
   const search = Route.useSearch();
   const navigate = useNavigate();
-  const signIn = useAction(api.logSinks.signInAxiom);
+  const { mutateAsync: signIn } = useCompleteAxiomSignIn();
+  // Exactly once: `state` is single-use on the server.
   const ran = useRef(false);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ function AxiomCallback() {
       void back();
       return;
     }
-    signIn({ state: search.state, code: search.code })
+    signIn({ body: { state: search.state, code: search.code } })
       .then((r) => {
         if (!r.choose) {
           toast.success(

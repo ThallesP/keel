@@ -1,8 +1,7 @@
-import type { ProjectLine } from "@my-better-t-app/backend/convex/logs";
-import type { TraceSummary } from "@my-better-t-app/backend/convex/traces";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
+import type { EnvironmentLogLine, TraceSummary } from "@/gen/api";
 import { AnsiText } from "@/lib/ansi";
 
 import { formatDuration, formatLogTime } from "../format";
@@ -17,9 +16,9 @@ import { type TraceRef, traceRef } from "./correlate";
 
 export type StreamEvent =
   | { kind: "request"; key: string; time: number; trace: TraceSummary }
-  | { kind: "log"; key: string; time: number; line: ProjectLine; ref: TraceRef | null };
+  | { kind: "log"; key: string; time: number; line: EnvironmentLogLine; ref: TraceRef | null };
 
-export const lineEvent = (line: ProjectLine, i: number): StreamEvent => ({
+export const lineEvent = (line: EnvironmentLogLine, i: number): StreamEvent => ({
   kind: "log",
   key: `l:${line.time}:${line.serviceId}:${i}`,
   time: line.time,
@@ -40,7 +39,7 @@ export const requestEvent = (trace: TraceSummary): StreamEvent => ({
  * merged stream stops at the later of the two cut-offs and says so (`since`).
  */
 export function mergeEvents(
-  lines: { items: ProjectLine[]; full: boolean } | null,
+  lines: { items: EnvironmentLogLine[]; full: boolean } | null,
   requests: { items: TraceSummary[]; full: boolean } | null,
 ): { events: StreamEvent[]; since: number | null } {
   const cutoffs: number[] = [];
@@ -66,6 +65,11 @@ function eventTime(ms: number) {
       ? ""
       : `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} `;
   return `${day}${formatLogTime(ms)}`;
+}
+
+function openTitle(e: StreamEvent) {
+  if (e.kind === "request") return "Open trace";
+  return e.ref ? "Open the trace this line names" : "Open the lines around this one";
 }
 
 export function EventStream({
@@ -98,13 +102,7 @@ export function EventStream({
             ref={focused ? focusRef : undefined}
             type="button"
             onClick={() => onOpen(e)}
-            title={
-              e.kind === "request"
-                ? "Open trace"
-                : e.ref
-                  ? "Open the trace this line names"
-                  : "Open the lines around this one"
-            }
+            title={openTitle(e)}
             className={cn(
               "flex h-[22px] w-max min-w-full items-center pr-5 text-left",
               focused ? "bg-primary-soft" : "hover:bg-surface-2",
@@ -159,7 +157,7 @@ function RequestText({ trace }: { trace: TraceSummary }) {
   );
 }
 
-function LineText({ line }: { line: ProjectLine }) {
+function LineText({ line }: { line: EnvironmentLogLine }) {
   return (
     <span className={line.stream === "stderr" ? "text-warning" : "text-muted-foreground"}>
       <AnsiText text={line.text} />

@@ -1,6 +1,4 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import { useQuery } from "convex/react";
-
+import { useGetLogSink } from "@/gen/api";
 import Loader from "@/components/loader";
 
 import { PageHeader } from "../primitives";
@@ -14,8 +12,8 @@ import { Explorer } from "./explorer";
  * tab in the bottom panel keeps working on Docker either way.
  */
 export function ObservabilityPage() {
-  const sink = useQuery(api.logSinks.get, {});
-  if (sink === undefined) {
+  const { data } = useGetLogSink();
+  if (data === undefined) {
     return (
       <div className="flex h-full flex-col bg-bg">
         <PageHeader title="Observability" />
@@ -25,6 +23,7 @@ export function ObservabilityPage() {
       </div>
     );
   }
+  const { sink } = data;
   if (sink?.kind !== "axiom") {
     return (
       <div className="flex h-full flex-col bg-bg">

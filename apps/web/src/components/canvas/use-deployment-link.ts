@@ -1,7 +1,7 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { getRouteApi } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
 import { useCallback, useMemo } from "react";
+
+import { useGetDeployment } from "@/gen/api";
 
 import { toDeployment } from "./mapping";
 import type { Deployment } from "./types";
@@ -31,6 +31,8 @@ export function useDeploymentLink() {
 
 /** The deployment named in the URL: undefined while loading, null when missing or not owned. */
 export function useLinkedDeployment(id: string | null): Deployment | null | undefined {
-  const doc = useQuery(api.deployments.get, id ? { id } : "skip");
-  return useMemo(() => (doc ? toDeployment(doc) : id ? doc : null), [doc, id]);
+  const { data } = useGetDeployment({ path: { id: id ?? "" } }, { query: { enabled: !!id } });
+  // No id: nothing linked (null), whatever an earlier id left in the cache.
+  const doc = id ? data?.deployment : null;
+  return useMemo(() => (doc ? toDeployment(doc) : doc), [doc]);
 }

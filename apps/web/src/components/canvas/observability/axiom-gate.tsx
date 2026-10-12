@@ -1,11 +1,15 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import { useAction, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  useBeginAxiomSignIn,
+  useCancelAxiomSignIn,
+  useChooseAxiomOrg,
+  useListPendingAxiomOrgs,
+} from "@/gen/api";
+import { errorMessage } from "@/lib/api";
 import { axiomRedirectUri, goToAxiom } from "@/lib/axiom-sign-in";
 
-import { attempt } from "../errors";
 import { formatDuration, formatLogTime } from "../format";
 import { Spinner } from "../primitives";
 import { route } from "./chrome";
@@ -34,8 +38,8 @@ export function AxiomGate() {
 
 /** Connected, but before traces existed: signing in again adds the traces dataset. */
 export function TracesBanner() {
-  const orgs = useQuery(api.logSinks.pendingOrgs, {});
-  if (orgs) {
+  const { data: orgs } = useListPendingAxiomOrgs({ query: { select: (p) => p.orgs } });
+  if (orgs?.length) {
     return (
       <div className="w-[380px] rounded-lg border border-line p-6">
         <AxiomSignIn title="" copy="" />
@@ -52,8 +56,6 @@ export function TracesBanner() {
     </div>
   );
 }
-
-// ── Backdrop ────────────────────────────────────────────────────────────────────────────────
 
 const SAMPLE = [
   ["api", "GET /v1/projects 200 12ms"],
@@ -114,8 +116,6 @@ function Backdrop() {
   );
 }
 
-// ── Sign in ─────────────────────────────────────────────────────────────────────────────────
-
 /**
  * Axiom's logo mark (axiom.co). The sign-in button wears Axiom's brand orange (`#de5820`, its
  * light-theme value) with this mark in white, like any third-party sign-in button; it is the one
@@ -135,13 +135,17 @@ export function AxiomMark({ size = 14 }: { size?: number }) {
 /** Starts the sign-in: Axiom's authorize page, then /axiom/callback back to this project. */
 function useSignIn() {
   const { projectId: slug } = route.useParams();
-  const begin = useAction(api.logSinks.beginAxiomSignIn);
+  const begin = useBeginAxiomSignIn();
   const [busy, setBusy] = useState(false);
   const signIn = async () => {
     setBusy(true);
-    const r = await attempt(begin({ redirectUri: axiomRedirectUri() }));
-    if (r) goToAxiom(r.url, { slug });
-    else setBusy(false);
+    try {
+      const { url } = await begin.mutateAsync({ body: { redirectUri: axiomRedirectUri() } });
+      goToAxiom(url, { slug });
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setBusy(false);
+    }
   };
   return { busy, signIn };
 }
@@ -168,20 +172,24 @@ export function SignInButton({ compact = false }: { compact?: boolean }) {
 
 /** The card: Sign in with Axiom, or the org picker while a sign-in with several orgs is pending. */
 function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
-  const orgs = useQuery(api.logSinks.pendingOrgs, {});
-  const chooseOrg = useAction(api.logSinks.chooseAxiomOrg);
-  const cancel = useMutation(api.logSinks.cancelAxiomSignIn);
+  const { data: orgs } = useListPendingAxiomOrgs({ query: { select: (p) => p.orgs } });
+  const chooseOrg = useChooseAxiomOrg();
+  const cancel = useCancelAxiomSignIn();
   const [busy, setBusy] = useState<string | null>(null);
 
   const pick = async (orgId: string) => {
     setBusy(orgId);
-    const r = await attempt(chooseOrg({ orgId }));
-    setBusy(null);
-    if (r)
+    try {
+      const r = await chooseOrg.mutateAsync({ body: { orgId } });
       toast.success(`Every project's logs and traces now go to Axiom · ${r.org} · ${r.dataset}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
   };
 
-  if (orgs) {
+  if (orgs?.length) {
     return (
       <>
         <h2 className="text-md font-semibold text-ink">Pick an Axiom organization</h2>
@@ -208,7 +216,9 @@ function AxiomSignIn({ title, copy }: { title: string; copy: string }) {
         <button
           type="button"
           disabled={busy !== null}
-          onClick={() => void attempt(cancel({}))}
+          onClick={() =>
+            cancel.mutate(undefined, { onError: (err) => void toast.error(errorMessage(err)) })
+          }
           className="mt-3 text-xs text-muted-foreground hover:text-ink"
         >
           Cancel

@@ -1,13 +1,12 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useGetTracingPrompt } from "@/gen/api";
+
 /**
- * Copies the agent prompt (convex/tracingPrompt.ts): a coding agent pastes it, instruments the
+ * Copies the agent prompt (`GET /api/tracing/prompt`): a coding agent pastes it, instruments the
  * repo with OpenTelemetry and checks it locally with `keel run` + `keel traces`. Names the service
  * (`nodeId`) or the project (`environmentId`) when given. `keel tracing prompt` prints the same.
  */
@@ -16,11 +15,15 @@ export function CopyPrompt({
   environmentId,
   className,
 }: {
-  nodeId?: Id<"nodes">;
-  environmentId?: Id<"environments">;
+  nodeId?: string;
+  environmentId?: string;
   className?: string;
 }) {
-  const prompt = useQuery(api.tracing.prompt, { nodeId, environmentId });
+  // Static text: fetched on mount, never invalidated by writes.
+  const { data: prompt } = useGetTracingPrompt(
+    { query: { nodeId, environmentId } },
+    { query: { meta: { realtime: false }, select: (p) => p.prompt } },
+  );
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     if (!prompt) return;

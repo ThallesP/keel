@@ -1,4 +1,3 @@
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { cn } from "@my-better-t-app/ui/lib/utils";
 import { ChevronRight } from "lucide-react";
 
@@ -32,7 +31,7 @@ export function StreamEmpty({
 }: {
   /** The range, e.g. "hour". */
   long: string;
-  environmentId: Id<"environments">;
+  environmentId: string;
   /** A new range is loading: dimmed, as the stream would be. */
   stale: boolean;
   className?: string;

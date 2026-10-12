@@ -1,0 +1,295 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/ThallesP/keel/internal/domain"
+)
+
+var transientTaskStates = map[string]bool{
+	"new": true, "allocated": true, "assigned": true, "accepted": true,
+	"preparing": true, "ready": true, "starting": true,
+}
+
+func summarizeTasks(tasks []SwarmTask, svc SwarmService, now int64) domain.Observed {
+	rolledBack := svc.UpdateState == "paused" || strings.HasPrefix(svc.UpdateState, "rollback")
+	revision := svc.Revision
+	for _, t := range tasks {
+		revision = max(revision, t.Revision)
+	}
+
+	o := domain.Observed{Revision: revision, At: now}
+	var live, failed, completed int
+	var pending bool
+	var finishedAt int64
+	for _, t := range tasks {
+		if t.Revision != revision {
+			continue
+		}
+		if t.DesiredState == "running" {
+			live++
+			pending = pending || t.State == "pending"
+		}
+		if t.DesiredState == "running" && t.State == "running" {
+			o.Running++
+		}
+		switch t.State {
+		case "failed", "rejected":
+			failed++
+			o.Error = t.Err
+		case "complete":
+			completed++
+			finishedAt = max(finishedAt, t.Timestamp)
+		}
+	}
+	if rolledBack && o.Error == "" {
+		o.Error = svc.UpdateMessage
+	}
+	oneShot := completed > 0 && live == 0 && failed == 0
+	if oneShot {
+		o.Completed, o.FinishedAt = completed, finishedAt
+	}
+	switch {
+	case rolledBack:
+		o.State = domain.ObservedFailed
+	case failed >= 5:
+		o.State = domain.ObservedCrashloop
+	case pending:
+		o.State = domain.ObservedPending
+	case svc.UpdateState == "updating" || o.Running < live:
+		o.State = domain.ObservedUpdating
+	case oneShot:
+		o.State = domain.ObservedCompleted
+	default:
+		o.State = domain.ObservedOK
+	}
+	return o
+}
+
+func settlingTasks(tasks []SwarmTask, revision int) bool {
+	return slices.ContainsFunc(tasks, func(t SwarmTask) bool {
+		return t.Revision == revision && t.DesiredState != "shutdown" && transientTaskStates[t.State]
+	})
+}
+
+func (a *App) ScheduleObserve(nodeID string) {
+	if !a.scheduleObserve(context.Background(), nodeID, observeDebounce, 0) {
+		a.Jobs.After("reconcile", 0, func(ctx context.Context) { a.reconcileRunning(ctx, "") })
+	}
+}
+
+func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duration, settle int) (exists bool) {
+	err := a.read(ctx, func(tx Tx) error {
+		n, err := tx.Node(id)
+		if errors.Is(err, ErrNoRow) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		exists = n.Desired != nil
+		return nil
+	})
+	if err != nil {
+		a.Log.Error("schedule observe", "node", id, "err", err)
+		return true
+	}
+	if !exists {
+		return false
+	}
+	rt := a.deploy
+	due := a.Now() + delay.Milliseconds()
+	rt.mu.Lock()
+	if p, ok := rt.observe[id]; ok && p.due <= due {
+		rt.mu.Unlock()
+		return true
+	}
+	rt.seq++
+	gen := rt.seq
+	rt.observe[id] = pendingScan{due: due, settle: settle, gen: gen}
+	rt.mu.Unlock()
+	a.Jobs.After(fmt.Sprintf("observe:%s:%d", id, gen), delay, func(ctx context.Context) {
+		a.runScheduledObserve(ctx, id, gen)
+	})
+	return true
+}
+
+func (a *App) runScheduledObserve(ctx context.Context, id string, gen uint64) {
+	rt := a.deploy
+	rt.mu.Lock()
+	p, ok := rt.observe[id]
+	if !ok || p.gen != gen {
+		rt.mu.Unlock()
+		return
+	}
+	delete(rt.observe, id)
+	rt.mu.Unlock()
+	a.observeNode(ctx, id, p.settle)
+}
+
+func (a *App) observeNode(ctx context.Context, id string, settle int) {
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	svc, tasks, err := a.Swarm.ObserveService(dctx, id)
+	cancel()
+	if err != nil {
+		a.Log.Error("observeNode", "node", id, "err", err)
+		return
+	}
+	now := a.Now()
+	observed := summarizeTasks(tasks, svc, now)
+	err = a.write(ctx, func(tx Tx, ch *Changes) error {
+		envID, err := setObserved(tx, ch, id, observed)
+		if err != nil {
+			return err
+		}
+		return reconcile(tx, ch, envID, now)
+	})
+	if err != nil {
+		a.Log.Error("observeNode", "node", id, "err", err)
+		return
+	}
+	settling := settle < 2 && settlingTasks(tasks, observed.Revision)
+	updating := settle < int(deployTimeout/observeSettleDelay) && (svc.UpdateState == "updating" || svc.UpdateState == "rollback_started")
+	if settling || updating {
+		a.scheduleObserve(ctx, id, observeSettleDelay, settle+1)
+	}
+}
+
+func (a *App) observeAll(ctx context.Context) {
+	var nodes []domain.Node
+	err := a.read(ctx, func(tx Tx) (err error) {
+		nodes, err = tx.AllNodes()
+		return err
+	})
+	if err != nil {
+		a.Log.Error("observe (full sweep)", "err", err)
+		return
+	}
+	nodes = slices.DeleteFunc(nodes, func(n domain.Node) bool { return n.Desired == nil || n.Desired.Revision == 0 })
+	if len(nodes) == 0 {
+		a.observeServers(ctx)
+		return
+	}
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	services, tasks, err := a.Swarm.ObserveServices(dctx)
+	cancel()
+	if err != nil {
+		a.Log.Error("observe (full sweep)", "err", err)
+		return
+	}
+	serviceByName := make(map[string]SwarmService, len(services))
+	for _, svc := range services {
+		serviceByName[svc.Name] = svc
+	}
+	tasksByNode := map[string][]SwarmTask{}
+	for _, t := range tasks {
+		tasksByNode[t.NodeID] = append(tasksByNode[t.NodeID], t)
+	}
+	now := a.Now()
+	err = a.write(ctx, func(tx Tx, ch *Changes) error {
+		for _, n := range nodes {
+			if _, err := setObserved(tx, ch, n.ID, summarizeTasks(tasksByNode[n.ID], serviceByName[n.ServiceName()], now)); err != nil {
+				return err
+			}
+		}
+		return reconcile(tx, ch, "", now)
+	})
+	if err != nil {
+		a.Log.Error("observe (full sweep)", "err", err)
+		return
+	}
+	a.observeServers(ctx)
+}
+
+func (a *App) observeServers(ctx context.Context) {
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	ready, err := a.Swarm.Servers(dctx)
+	cancel()
+	if err != nil {
+		a.Log.Error("observeServers", "err", err)
+		return
+	}
+	err = a.write(ctx, func(tx Tx, ch *Changes) error {
+		before, err := tx.ClusterServers()
+		if err != nil {
+			return err
+		}
+		if err := tx.SetClusterServers(ready, a.Now()); err != nil {
+			return err
+		}
+		if before == ready {
+			return nil
+		}
+		orgs, err := tx.DeployOrganizationIDs()
+		if err != nil {
+			return err
+		}
+		for _, org := range orgs {
+			ch.Add(org, "/api/environments")
+		}
+		return nil
+	})
+	if err != nil {
+		a.Log.Error("observeServers", "err", err)
+	}
+}
+
+func setObserved(tx Tx, ch *Changes, id string, o domain.Observed) (string, error) {
+	n, err := tx.Node(id)
+	if errors.Is(err, ErrNoRow) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	before := observedFace(n)
+	n.Observed = &o
+	if domain.Converged(n.Desired, &o) && o.Revision > 0 {
+		n.DeployedRevision = o.Revision
+	}
+	switch {
+	case o.State == domain.ObservedCompleted:
+		n.OneShot = true
+	case o.Running > 0:
+		n.OneShot = false
+	}
+	if err := tx.UpdateNode(n); err != nil {
+		return "", err
+	}
+	if observedFace(n) == before {
+		return n.EnvironmentID, nil
+	}
+	return n.EnvironmentID, environmentChanged(tx, ch, n.EnvironmentID)
+}
+
+type nodeFace struct {
+	status           domain.NodeStatus
+	running          int
+	deployedRevision int
+	err              string
+	step             string
+	finishedAt       int64
+}
+
+func observedFace(n domain.Node) nodeFace {
+	var o domain.Observed
+	if n.Observed != nil {
+		o = *n.Observed
+	}
+	f := nodeFace{status: domain.DeriveStatus(n), running: o.Running, deployedRevision: n.DeployedRevision, err: n.ApplyError}
+	if f.err == "" && f.status == domain.StatusError {
+		f.err = o.Error
+	}
+	if f.status == domain.StatusDeploying {
+		f.step = domain.DeployingStep(n)
+	}
+	if f.status == domain.StatusDone {
+		f.finishedAt = o.FinishedAt
+	}
+	return f
+}

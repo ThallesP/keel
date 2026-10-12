@@ -32,6 +32,11 @@ local.db
 local.db-*
 .data
 
-# Local Convex state, Keel install state
-**/.convex
-infra
+# Agent worktrees (full repo copies) and tool state
+.claude
+.agents
+
+# keel serve state (KEEL_DATA_DIR in dev: make dev) and local binaries
+.keel
+**/keel.db*
+bin

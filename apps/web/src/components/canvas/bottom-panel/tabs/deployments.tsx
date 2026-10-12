@@ -1,11 +1,11 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { cn } from "@my-better-t-app/ui/lib/utils";
-import { useQuery } from "convex/react";
 import { useMemo } from "react";
+
+import { useListNodeDeployments } from "@/gen/api";
 
 import { EndpointAddress } from "../../endpoint-address";
 import { formatElapsed, timeAgo } from "../../format";
-import { asNodeId, toDeployment } from "../../mapping";
+import { toDeployment } from "../../mapping";
 import { SectionLabel } from "../../primitives";
 import { statusLabel } from "../../status";
 import { useCanvasDispatch } from "../../store";
@@ -17,6 +17,11 @@ import { PanelMain, PanelRow, PanelSidebar } from "../panel-frame";
 import { StepIcon } from "../step-icon";
 
 const isErrorLine = (text: string) => /error:|crash loop|timed out|node deleted/.test(text);
+
+function lineTone(text: string, last: boolean) {
+  if (isErrorLine(text)) return "danger";
+  return last ? "ink" : "muted";
+}
 
 type Pill = { label: string; tone: "success" | "primary" | "danger" | "muted" };
 
@@ -100,6 +105,15 @@ function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
       <span className={cn("max-w-1/2 shrink-0 truncate", error && "text-danger")} title={error}>
         {error ?? statusLabel[node.data.status]}
       </span>
+    </div>
+  );
+}
+
+function Empty({ node, now, text }: { node: InfraNode; now: number; text: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <MetaStrip node={node} now={now} />
+      <p className="px-5 py-4 text-xs text-faint">{text}</p>
     </div>
   );
 }
@@ -212,7 +226,7 @@ function Detail({ d, now }: { d: Deployment; now: number }) {
         lines={d.log.map((text, i) => ({
           key: `${d.id}:${i}`,
           text,
-          tone: isErrorLine(text) ? "danger" : i === d.log.length - 1 ? "ink" : "muted",
+          tone: lineTone(text, i === d.log.length - 1),
         }))}
       />
     </PanelMain>
@@ -223,21 +237,19 @@ export function DeploymentsTab({ node }: { node: InfraNode }) {
   const dispatch = useCanvasDispatch();
   const link = useDeploymentLink();
   const now = useNow();
-  const docs = useQuery(api.deployments.listForNode, { nodeId: asNodeId(node.id) });
-  const rows = useMemo(() => (docs ?? []).map(toDeployment), [docs]);
+  // Newest first; live while a deploy runs (log lines, step icons) through realtime invalidation.
+  const { data: docs } = useListNodeDeployments({ path: { id: node.id } });
+  const rows = useMemo(() => (docs ?? []).map((d) => toDeployment(d)), [docs]);
   const [current, ...history] = rows;
   // Selection is the URL (`?deployment=`), so a row is a link and a reload keeps it.
   const selected = rows.find((r) => r.id === link.deploymentId) ?? current;
 
-  const empty = (text: string) => (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <MetaStrip node={node} now={now} />
-      <p className="px-5 py-4 text-xs text-faint">{text}</p>
-    </div>
-  );
-  if (node.type === "volume") return empty("Volumes are not deployed on their own.");
+  if (node.type === "volume") {
+    return <Empty node={node} now={now} text="Volumes are not deployed on their own." />;
+  }
   if (!current || !selected) {
-    return empty(docs === undefined ? "Loading…" : "No deployments yet. Press Deploy on the node.");
+    const text = docs === undefined ? "Loading…" : "No deployments yet. Press Deploy on the node.";
+    return <Empty node={node} now={now} text={text} />;
   }
 
   return (

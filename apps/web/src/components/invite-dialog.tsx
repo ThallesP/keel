@@ -11,39 +11,37 @@ import { Label } from "@my-better-t-app/ui/components/label";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
+import { useCreateInvitation } from "@/gen/api";
+import { errorMessage } from "@/lib/api";
 
 /**
  * Account → Invite people. Creates an organization invitation for an email and shows the link
  * to hand over; nothing is mailed. The link opens `/invite/$invitationId`, where that email can
- * create its account (sign-up is otherwise closed) or, if it already has one, join.
+ * create its account (sign-up is otherwise closed) or, if it already has one, join. The
+ * invitation is for the caller's organization (the server reads it from the session).
  */
 export function InviteDialog({
   open,
   onOpenChange,
-  organizationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  organizationId: string;
 }) {
   const [email, setEmail] = useState("");
   const [link, setLink] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { mutateAsync: createInvitation, isPending } = useCreateInvitation();
 
   const create = async () => {
-    setBusy(true);
-    const { data, error } = await authClient.organization.inviteMember({
-      email: email.trim(),
-      role: "member",
-      organizationId,
-    });
-    setBusy(false);
-    if (error || !data) {
-      toast.error(error?.message ?? "Could not create the invite");
+    let id: string;
+    try {
+      ({ id } = await createInvitation({
+        body: { email: email.trim(), role: "member" },
+      }));
+    } catch (err) {
+      toast.error(errorMessage(err) || "Could not create the invite");
       return;
     }
-    setLink(`${window.location.origin}/invite/${data.id}`);
+    setLink(`${window.location.origin}/invite/${id}`);
   };
 
   const copy = async () => {
@@ -110,8 +108,8 @@ export function InviteDialog({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
             />
-            <Button type="submit" disabled={busy || email.trim() === ""} className="self-end">
-              {busy ? "Creating…" : "Create invite link"}
+            <Button type="submit" disabled={isPending || email.trim() === ""} className="self-end">
+              {isPending ? "Creating…" : "Create invite link"}
             </Button>
           </form>
         )}

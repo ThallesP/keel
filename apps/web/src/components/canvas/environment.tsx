@@ -1,9 +1,8 @@
-import type { Id } from "@my-better-t-app/backend/convex/_generated/dataModel";
 import { createContext, useContext, type ReactNode } from "react";
 
 export type EnvironmentScope = {
-  projectId: Id<"projects">;
-  environmentId: Id<"environments">;
+  projectId: string;
+  environmentId: string;
   environmentName: string;
   projectName: string;
 };

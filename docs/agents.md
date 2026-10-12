@@ -180,8 +180,8 @@ approvals:    { runId, nodeId, question, status: "pending"|"approved"|"denied",
 4. Agent tabs in the bottom panel: Overview form, Tools list, Runs list + trace view. Build the trace view with fixture data from the format above.
 5. Add agent modal (three cards + CLI footer). Wire "From a repo" first if hosted runtime is undecided.
 6. Approvals: node-inline buttons + status bar count. Slack later.
-7. Convex: `runs`, `traceEvents`, `approvals` tables; `runs.list`, `traces.stream`, `approvals.decide`.
-8. CLI / MCP last; it is a thin client over the same Convex functions.
+7. Backend (`keel serve`): `runs`, `trace_events`, `approvals` tables (a new migration in `internal/adapters/sqlite/migrations/`); use cases in `internal/app` and `/api` routes to list runs, read a run's trace (refetched on its realtime topic while it runs) and decide an approval. Was planned as Convex `runs.list`, `traces.stream`, `approvals.decide`.
+8. CLI / MCP last; it is a thin client over the same HTTP API.
 
 ## Reference
 

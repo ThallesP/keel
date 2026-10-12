@@ -1,4 +1,3 @@
-import { api } from "@my-better-t-app/backend/convex/_generated/api";
 import { Button } from "@my-better-t-app/ui/components/button";
 import {
   Dialog,
@@ -8,11 +7,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@my-better-t-app/ui/components/dialog";
-import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { attempt } from "./errors";
+import { type LogSinkView, useDisconnectLogSink, useGetLogSink } from "@/gen/api";
+import { succeeded } from "@/lib/panel-write";
+import { useSession } from "@/lib/session";
+
 import { AxiomMark, SignInButton } from "./observability/axiom-gate";
 import { PageHeader, Spinner } from "./primitives";
 
@@ -39,8 +40,9 @@ export function SettingsPage() {
  * in with Axiom lands back on Observability, where a pending org picker shows.
  */
 function ObservabilitySettings() {
-  const sink = useQuery(api.logSinks.get, {});
-  const organization = useQuery(api.organizations.current);
+  // undefined while loading, null when the organization logs to Docker only.
+  const { data: sink } = useGetLogSink({ query: { select: (s) => s.sink } });
+  const { organization } = useSession();
   const [confirming, setConfirming] = useState(false);
   const projects = organization ? `every project in ${organization.name}` : "every project";
 
@@ -51,40 +53,56 @@ function ObservabilitySettings() {
         Where the logs and traces of {projects} go.
       </p>
       <div className="mt-3 rounded-lg border border-line">
-        {sink === undefined ? (
-          <div className="flex h-14 items-center justify-center">
-            <Spinner />
-          </div>
-        ) : sink?.kind === "axiom" ? (
-          <>
-            <div className="flex h-14 items-center gap-2.5 px-4">
-              <AxiomMark size={16} />
-              <span className="text-sm font-medium text-ink">Axiom</span>
-              {sink.org && (
-                <span className="min-w-0 truncate text-sm text-muted-foreground">{sink.org}</span>
-              )}
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className="ml-auto flex h-7 shrink-0 items-center rounded-md border border-line px-2.5 text-2xs text-ink hover:border-danger hover:text-danger"
-              >
-                Disconnect…
-              </button>
-            </div>
-            <Dataset label="Logs" name={sink.dataset} />
-            <Dataset label="Traces" name={sink.traces} />
-          </>
-        ) : (
-          <div className="flex h-14 items-center justify-between gap-3 px-4">
-            <span className="text-xs text-muted-foreground">
-              Not connected: logs come from Docker, and there are no traces.
-            </span>
-            <SignInButton compact />
-          </div>
-        )}
+        <Connection sink={sink} onDisconnect={() => setConfirming(true)} />
       </div>
       <DisconnectDialog open={confirming} onOpenChange={setConfirming} projects={projects} />
     </section>
+  );
+}
+
+function Connection({
+  sink,
+  onDisconnect,
+}: {
+  sink: LogSinkView | undefined;
+  onDisconnect: () => void;
+}) {
+  if (sink === undefined) {
+    return (
+      <div className="flex h-14 items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+  if (sink?.kind !== "axiom") {
+    return (
+      <div className="flex h-14 items-center justify-between gap-3 px-4">
+        <span className="text-xs text-muted-foreground">
+          Not connected: logs come from Docker, and there are no traces.
+        </span>
+        <SignInButton compact />
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="flex h-14 items-center gap-2.5 px-4">
+        <AxiomMark size={16} />
+        <span className="text-sm font-medium text-ink">Axiom</span>
+        {sink.org && (
+          <span className="min-w-0 truncate text-sm text-muted-foreground">{sink.org}</span>
+        )}
+        <button
+          type="button"
+          onClick={onDisconnect}
+          className="ml-auto flex h-7 shrink-0 items-center rounded-md border border-line px-2.5 text-2xs text-ink hover:border-danger hover:text-danger"
+        >
+          Disconnect…
+        </button>
+      </div>
+      <Dataset label="Logs" name={sink.dataset} />
+      <Dataset label="Traces" name={sink.traces} />
+    </>
   );
 }
 
@@ -117,12 +135,9 @@ function DisconnectDialog({
   onOpenChange: (open: boolean) => void;
   projects: string;
 }) {
-  const disconnect = useMutation(api.logSinks.disconnect);
-  const [busy, setBusy] = useState(false);
+  const { mutateAsync: disconnect, isPending } = useDisconnectLogSink();
   const confirm = async () => {
-    setBusy(true);
-    const ok = (await attempt(disconnect({}).then(() => true))) === true;
-    setBusy(false);
+    const ok = await succeeded(disconnect(undefined));
     if (!ok) return;
     onOpenChange(false);
     toast("Axiom disconnected for every project");
@@ -141,7 +156,7 @@ function DisconnectDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => void confirm()}>
+          <Button variant="destructive" disabled={isPending} onClick={() => void confirm()}>
             Disconnect
           </Button>
         </DialogFooter>

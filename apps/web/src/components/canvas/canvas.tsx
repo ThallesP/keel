@@ -17,6 +17,7 @@ import { CanvasActionsProvider, useCanvasActions } from "./actions";
 import { BottomPanel } from "./bottom-panel/panel";
 import { Controls } from "./controls";
 import { EnvironmentProvider, type EnvironmentScope } from "./environment";
+import { LogsPage } from "./logs/page";
 import { ObservabilityPage } from "./observability/page";
 import { nodeTypes } from "./nodes";
 import { Rail } from "./rail";
@@ -136,9 +137,15 @@ function Panel() {
 
 const route = getRouteApi("/_auth/p/$projectId");
 
+const views = {
+  observability: <ObservabilityPage />,
+  logs: <LogsPage />,
+  settings: <SettingsPage />,
+};
+
 /**
  * Full-bleed project canvas: topbar / rail + flow + bottom panel / status bar. Rail views other
- * than the canvas (`?view=observability`, `?view=settings`) cover the flow and panel; the flow
+ * than the canvas (`?view=observability`, `?view=logs`, `?view=settings`) cover the flow and panel; the flow
  * stays mounted underneath so coming back keeps the viewport.
  */
 export function Canvas({ scope }: { scope: EnvironmentScope }) {
@@ -159,11 +166,7 @@ export function Canvas({ scope }: { scope: EnvironmentScope }) {
                     </div>
                     <Panel />
                   </div>
-                  {view !== undefined && (
-                    <div className="absolute inset-0 z-20">
-                      {view === "settings" ? <SettingsPage /> : <ObservabilityPage />}
-                    </div>
-                  )}
+                  {view !== undefined && <div className="absolute inset-0 z-20">{views[view]}</div>}
                 </main>
               </div>
               <StatusBar />

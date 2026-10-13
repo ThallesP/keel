@@ -15,7 +15,9 @@ One thing does run on every node: `keel-agent`, a Swarm **global service** runni
 - **Events** (`internal/agent/events.go`): streams that node's `docker events` to `POST /worker/events`, one JSON array per event (see [`observe`](#observe--swarm-to-observed)). `scope=local` events (container start/die) are only visible on the daemon that runs the container, and observation must be event-driven, not polled.
 - **Logs** (`internal/agent/logs.go`): follows every `svc-*` container's stdout/stderr and ships it to its organization's log sink, when one is configured. Config comes from `GET /worker/config`, polled every 30s. See [`logs.md`](./logs.md).
 
-Anything that needs to run on the node itself (metrics, exec into a container, volume rsync in [`volumes.md`](./volumes.md)) goes into this agent rather than a new service. It replaced the 60-line `docker:cli` shell forwarder (`infra/events-sidecar`, removed 2026-09-20) because a shell script could not follow logs, batch, or resume per container.
+It also samples CPU, memory and network of every `svc-*` container and the server's own CPU, memory and disk every 15 s (`internal/agent/metrics.go`, [`metrics.md`](./metrics.md)).
+
+Anything else that needs to run on the node itself (exec into a container, volume rsync in [`volumes.md`](./volumes.md)) goes into this agent rather than a new service. It replaced the 60-line `docker:cli` shell forwarder (`infra/events-sidecar`, removed 2026-09-20) because a shell script could not follow logs, batch, or resume per container.
 
 Let Swarm pick nodes. No custom scheduler, no resource reservations for v1. `Placement.Constraints` exists for pinning if a user drags a service onto a specific node on the canvas, and that is the extent of it.
 
@@ -247,7 +249,6 @@ Cross-node choreography (rolling a revision across pinned nodes one at a time, h
 ## Not doing in v1
 
 - Custom scheduler or resource reservations. Swarm decides placement.
-- Per-node metrics. `keel agent` (`internal/agent`) is where they go when the canvas needs CPU/RAM graphs; today it forwards events and ships logs.
 - Adopt unmanaged containers.
 - Manager HA.
 

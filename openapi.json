@@ -338,6 +338,22 @@
         ],
         "type": "object"
       },
+      "Dashboard": {
+        "additionalProperties": false,
+        "properties": {
+          "panels": {
+            "description": "In page order",
+            "items": {
+              "$ref": "#/components/schemas/Panel"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "panels"
+        ],
+        "type": "object"
+      },
       "DefaultProject": {
         "additionalProperties": false,
         "properties": {
@@ -382,6 +398,36 @@
         "required": [
           "at",
           "text"
+        ],
+        "type": "object"
+      },
+      "DeployMark": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "success",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "message",
+          "status"
         ],
         "type": "object"
       },
@@ -1209,6 +1255,110 @@
         ],
         "type": "object"
       },
+      "MetricsBucket": {
+        "additionalProperties": false,
+        "properties": {
+          "cpuCores": {
+            "description": "Average cores in use, every replica summed; null when nothing ran",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "memoryBytes": {
+            "description": "Peak memory in use, every replica summed",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rxBytesPerSec": {
+            "description": "Average bytes received per second",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "txBytesPerSec": {
+            "description": "Average bytes sent per second",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "time",
+          "cpuCores",
+          "memoryBytes",
+          "rxBytesPerSec",
+          "txBytesPerSec"
+        ],
+        "type": "object"
+      },
+      "MetricsOverview": {
+        "additionalProperties": false,
+        "properties": {
+          "bucketMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deployments": {
+            "description": "Ships started in range, oldest first",
+            "items": {
+              "$ref": "#/components/schemas/DeployMark"
+            },
+            "type": "array"
+          },
+          "from": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "servers": {
+            "description": "Servers running the environment's services in the last minute",
+            "items": {
+              "$ref": "#/components/schemas/ServerUsage"
+            },
+            "type": "array"
+          },
+          "services": {
+            "description": "Services with at least one sample in range",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMetrics"
+            },
+            "type": "array"
+          },
+          "to": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Every service in scope summed per sample, then per bucket; empty buckets included",
+            "items": {
+              "$ref": "#/components/schemas/MetricsBucket"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "bucketMs",
+          "total",
+          "services",
+          "servers",
+          "deployments"
+        ],
+        "type": "object"
+      },
       "NodeConfig": {
         "additionalProperties": false,
         "properties": {
@@ -1418,6 +1568,47 @@
           "name",
           "slug",
           "role"
+        ],
+        "type": "object"
+      },
+      "Panel": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 32,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "cpu",
+              "memory",
+              "network",
+              "requests",
+              "latency",
+              "logs",
+              "servers"
+            ],
+            "type": "string"
+          },
+          "nodeId": {
+            "description": "Only this service; empty for every service",
+            "type": "string"
+          },
+          "search": {
+            "description": "logs: only lines containing this",
+            "type": "string"
+          },
+          "wide": {
+            "description": "Spans the page's two columns",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "nodeId",
+          "search",
+          "wide"
         ],
         "type": "object"
       },
@@ -1769,6 +1960,68 @@
         ],
         "type": "object"
       },
+      "ServerUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "description": "When this sample was taken",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cpuCores": {
+            "description": "Cores in use on the whole server",
+            "format": "double",
+            "type": "number"
+          },
+          "cpus": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "diskBytes": {
+            "description": "Used on the disk that holds Docker's data",
+            "format": "int64",
+            "type": "integer"
+          },
+          "diskTotalBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "memoryBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "memoryTotalBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeIds": {
+            "description": "The environment's services running on it",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "at",
+          "cpus",
+          "cpuCores",
+          "memoryBytes",
+          "memoryTotalBytes",
+          "diskBytes",
+          "diskTotalBytes",
+          "nodeIds"
+        ],
+        "type": "object"
+      },
       "ServiceLogLine": {
         "additionalProperties": false,
         "properties": {
@@ -1797,6 +2050,26 @@
           "text",
           "stream",
           "task"
+        ],
+        "type": "object"
+      },
+      "ServiceMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "buckets": {
+            "description": "Every bucket, oldest first, empty ones included",
+            "items": {
+              "$ref": "#/components/schemas/MetricsBucket"
+            },
+            "type": "array"
+          },
+          "nodeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "buckets"
         ],
         "type": "object"
       },
@@ -3105,6 +3378,100 @@
         ]
       }
     },
+    "/api/environments/{id}/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The Observability page's panels (the default layout until someone changes it)",
+        "tags": [
+          "metrics"
+        ]
+      },
+      "put": {
+        "operationId": "saveDashboard",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Dashboard"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the Observability page's panels",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
     "/api/environments/{id}/deployments": {
       "post": {
         "description": "Without `only`, ships every node with staged changes. With `only`, deploys exactly those nodes (`refresh` pulls their images again). One deployment runs per environment at a time.",
@@ -3337,6 +3704,74 @@
         "summary": "Every service's lines within 30 s of a moment (Axiom only)",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/environments/{id}/metrics": {
+      "get": {
+        "operationId": "getMetrics",
+        "parameters": [
+          {
+            "description": "Environment id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Environment id",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "range",
+            "required": true,
+            "schema": {
+              "enum": [
+                "15m",
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only this service",
+            "explode": false,
+            "in": "query",
+            "name": "nodeId",
+            "schema": {
+              "description": "Only this service",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsOverview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "CPU, memory and network of the environment's services, its servers and its Ships over a range",
+        "tags": [
+          "metrics"
         ]
       }
     },

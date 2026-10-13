@@ -1,5 +1,6 @@
 import { ChartCard } from "./chart-card";
 import { DataTable } from "./data-table";
+import { DeployMarks } from "./deploy-marks";
 import { Grid } from "./grid";
 import { HitColumns } from "./hit-columns";
 import { rangeLabel } from "./labels";
@@ -17,7 +18,7 @@ function column(x: number, y: number, w: number, h: number, rounded: boolean) {
   return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
 }
 
-export function RequestsChart({ buckets, bucketMs, hover, onHover }: ChartProps) {
+export function RequestsChart({ buckets, bucketMs, hover, onHover, marks = [] }: ChartProps) {
   const [ref, width] = useWidth();
   const max = countMax(Math.max(0, ...buckets.map((b) => b.requests)));
   const ticks = max % 2 === 0 ? [0, max / 2, max] : [0, max];
@@ -73,6 +74,9 @@ export function RequestsChart({ buckets, bucketMs, hover, onHover }: ChartProps)
             })}
             <XAxis x={x} buckets={buckets} bucketMs={bucketMs} />
             <HitColumns x={x} count={buckets.length} onHover={onHover} />
+            {buckets[0] && (
+              <DeployMarks x={x} start={buckets[0].time} bucketMs={bucketMs} marks={marks} />
+            )}
           </svg>
         )}
         {hovered && hover !== null && (

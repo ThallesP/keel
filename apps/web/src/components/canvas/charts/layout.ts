@@ -1,4 +1,4 @@
-import type { TraceBucket } from "@/gen/api";
+import type { DeployMark, TraceBucket } from "@/gen/api";
 
 export const PAD_T = 8;
 export const PLOT_H = 96;
@@ -15,6 +15,7 @@ export type ChartProps = {
   bucketMs: number;
   hover: Hover;
   onHover: (i: Hover) => void;
+  marks?: DeployMark[];
 };
 
 export function band(width: number, count: number) {

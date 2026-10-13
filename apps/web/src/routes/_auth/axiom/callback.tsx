@@ -38,7 +38,7 @@ function AxiomCallback() {
         ? navigate({
             to: "/p/$projectId",
             params: { projectId: from.slug },
-            search: { view: "observability" },
+            search: { view: "logs" },
             replace: true,
           })
         : navigate({ to: "/", replace: true });

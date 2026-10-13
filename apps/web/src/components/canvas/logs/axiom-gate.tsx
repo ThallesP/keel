@@ -16,7 +16,7 @@ import { route } from "./chrome";
 
 /**
  * Sign in with Axiom: one sign-in sets up both the logs and the traces dataset, for every project
- * of the organization (docs/logs.md). Without a sink the Observability page is a gate, the card
+ * of the organization (docs/logs.md). Without a sink the Logs page is a gate, the card
  * drawn over a blurred fake stream. A sink connected before traces existed has no traces dataset;
  * the page carries a banner that runs the same sign-in again.
  */

@@ -29,7 +29,7 @@ func (a *app) runCmd() *cobra.Command {
 		Short: "Run a local command with a service's variables and tracing",
 		Long: `Run a command on this machine with the service's variables, and with tracing variables
 that send its OpenTelemetry spans to Keel tagged deployment.environment.name=local. keel traces
-<service> shows them, as does the Observability page. The way to try instrumentation before it
+<service> shows them, as does the Logs page. The way to try instrumentation before it
 ships (keel tracing prompt).
 
 Variables already set in this shell win. Variables that point at a service inside the cluster

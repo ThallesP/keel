@@ -32,6 +32,12 @@ type Cluster struct {
 	At      int64
 }
 
+type Dashboard struct {
+	EnvironmentID string
+	Panels        string
+	UpdatedAt     int64
+}
+
 type Deployment struct {
 	ID            string
 	EnvironmentID string
@@ -174,6 +180,29 @@ type Project struct {
 	Name           string
 	Slug           string
 	CreatedAt      int64
+}
+
+type ServerMetric struct {
+	ServerID         string
+	Name             string
+	At               int64
+	Cpus             int64
+	CpuCores         float64
+	MemoryBytes      int64
+	MemoryTotalBytes int64
+	DiskBytes        int64
+	DiskTotalBytes   int64
+}
+
+type ServiceMetric struct {
+	NodeID        string
+	Task          string
+	ServerID      string
+	At            int64
+	CpuCores      float64
+	MemoryBytes   int64
+	RxBytesPerSec float64
+	TxBytesPerSec float64
 }
 
 type Session struct {

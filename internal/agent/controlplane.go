@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/events"
+
+	"github.com/ThallesP/keel/internal/api"
 )
 
 type ControlPlane struct {
@@ -98,4 +100,29 @@ func (c *ControlPlane) postEventsOnce(ctx context.Context, body []byte, resync b
 	_, _ = io.Copy(io.Discard, res.Body)
 	res.Body.Close()
 	return res.StatusCode, nil
+}
+
+func (c *ControlPlane) PostMetrics(ctx context.Context, report api.MetricsReport) error {
+	body, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/worker/metrics", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("metrics %d", res.StatusCode)
+	}
+	return nil
 }

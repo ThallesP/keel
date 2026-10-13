@@ -6,7 +6,7 @@ import { useListNodes } from "@/gen/api";
 
 import { useEnvironment } from "../environment";
 
-// Pieces the Observability page's views share: the search field, service names.
+// Pieces the Logs page's views share: the search field, service names.
 
 export const route = getRouteApi("/_auth/p/$projectId");
 
@@ -36,15 +36,17 @@ export function SearchField({
 
 /** One muted hue per service so interleaved lines read apart. Never the accent. */
 const SERVICE_TONES = [
-  "text-[#5c5f9a]",
-  "text-[#4f7a5c]",
-  "text-[#8a5f3c]",
-  "text-[#8a4f6e]",
-  "text-[#3c7a8a]",
-  "text-[#8a7a3c]",
+  { tone: "text-[#5c5f9a]", color: "#5c5f9a" },
+  { tone: "text-[#4f7a5c]", color: "#4f7a5c" },
+  { tone: "text-[#8a5f3c]", color: "#8a5f3c" },
+  { tone: "text-[#8a4f6e]", color: "#8a4f6e" },
+  { tone: "text-[#3c7a8a]", color: "#3c7a8a" },
+  { tone: "text-[#8a7a3c]", color: "#8a7a3c" },
 ] as const;
 
-export type ServiceLabel = { text: string; tone: string };
+const UNKNOWN_TONE = { tone: "text-faint", color: "var(--color-faint)" };
+
+export type ServiceLabel = { text: string; tone: string; color: string };
 
 /**
  * Names and tones of the environment's services. Log lines name a service by node id; spans by
@@ -61,15 +63,15 @@ export function useServices() {
     const byId = new Map<string, ServiceLabel>();
     const byName = new Map<string, ServiceLabel>();
     (nodes ?? []).forEach((n, i) => {
-      const label = { text: n.name, tone: SERVICE_TONES[i % SERVICE_TONES.length] ?? "text-faint" };
+      const label = { text: n.name, ...(SERVICE_TONES[i % SERVICE_TONES.length] ?? UNKNOWN_TONE) };
       byId.set(n.id, label);
       byName.set(n.name, label);
     });
     return {
       ofLine: (id: string): ServiceLabel =>
-        byId.get(id) ?? { text: id.slice(0, 8), tone: "text-faint" },
+        byId.get(id) ?? { text: id.slice(0, 8), ...UNKNOWN_TONE },
       ofSpan: (name: string): ServiceLabel =>
-        byName.get(name) ?? { text: name, tone: "text-faint" },
+        byName.get(name) ?? { text: name, ...UNKNOWN_TONE },
     };
   }, [nodes]);
 }

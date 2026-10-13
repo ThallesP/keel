@@ -29,8 +29,8 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
   const { enabled } = tracing;
   const blocked = tracing.traces !== "on" && !enabled;
   const note = {
-    off: "Sign in with Axiom on Observability first: spans need somewhere to go.",
-    old: "This Axiom connection predates traces: Sign in with Axiom again on Observability.",
+    off: "Sign in with Axiom on Logs first: spans need somewhere to go.",
+    old: "This Axiom connection predates traces: Sign in with Axiom again on Logs.",
     on: enabled
       ? "Keel sets these on the next Ship. Your own variables win."
       : "Have your coding agent instrument the repo with the prompt, then turn this on and Ship.",

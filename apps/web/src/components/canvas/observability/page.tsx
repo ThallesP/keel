@@ -1,36 +1,48 @@
-import { useGetLogSink } from "@/gen/api";
+import { useQueryErrorResetBoundary } from "@tanstack/react-query";
+import { Suspense, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+
 import Loader from "@/components/loader";
+import { errorMessage } from "@/lib/api";
 
 import { PageHeader } from "../primitives";
-import { AxiomGate } from "./axiom-gate";
-import { Explorer } from "./explorer";
+import { RangePicker, type TimeRange } from "../time-range";
+import { Dashboard } from "./dashboard";
 
-/**
- * The rail's Observability page (`?view=observability`): requests and logs of the whole
- * environment in one stream, each row one click from its trace. Reads the organization's Axiom
- * sink, so without one it is a gate with Sign in with Axiom (docs/logs.md). The per-service Logs
- * tab in the bottom panel keeps working on Docker either way.
- */
 export function ObservabilityPage() {
-  const { data } = useGetLogSink();
-  if (data === undefined) {
-    return (
-      <div className="flex h-full flex-col bg-bg">
-        <PageHeader title="Observability" />
-        <div className="flex min-h-0 flex-1 flex-col">
-          <Loader />
-        </div>
+  const [range, setRange] = useState<TimeRange>("1h");
+  const [editing, setEditing] = useState(false);
+  const { reset } = useQueryErrorResetBoundary();
+  return (
+    <div className="flex h-full flex-col bg-bg">
+      <PageHeader title="Observability">
+        <RangePicker value={range} onChange={setRange} />
+        <button
+          type="button"
+          aria-pressed={editing}
+          onClick={() => setEditing(!editing)}
+          className="flex h-7 items-center rounded-md border border-line px-2.5 text-2xs text-muted-foreground hover:text-ink aria-pressed:border-primary aria-pressed:text-primary"
+        >
+          {editing ? "Done" : "Customize"}
+        </button>
+      </PageHeader>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={({ error, resetErrorBoundary }) => (
+            <p className="px-5 py-4 text-xs text-danger">
+              {errorMessage(error)}{" "}
+              <button type="button" className="underline" onClick={resetErrorBoundary}>
+                Retry
+              </button>
+            </p>
+          )}
+        >
+          <Suspense fallback={<Loader />}>
+            <Dashboard range={range} editing={editing} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
-    );
-  }
-  const { sink } = data;
-  if (sink?.kind !== "axiom") {
-    return (
-      <div className="flex h-full flex-col bg-bg">
-        <PageHeader title="Observability" />
-        <AxiomGate />
-      </div>
-    );
-  }
-  return <Explorer sink={sink} />;
+    </div>
+  );
 }

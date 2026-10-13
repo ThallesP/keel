@@ -21,6 +21,7 @@ type fakeDocker struct {
 	logCalls    []logCall
 	streams     []fakeEvents
 	eventsSince []string
+	stats       map[string]ContainerStats
 }
 
 type logCall struct{ id, since string }
@@ -69,6 +70,25 @@ func (d *fakeDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 	d.logs[id] = scripts
 	d.mu.Unlock()
 	return &scriptedReader{ctx: ctx, data: s.data, end: s.end, chunk: cmp.Or(s.chunk, 7)}, nil
+}
+
+func (d *fakeDocker) ContainerStats(_ context.Context, id string) (ContainerStats, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	s, ok := d.stats[id]
+	if !ok {
+		return ContainerStats{}, fmt.Errorf("no such container: %s", id)
+	}
+	return s, nil
+}
+
+func (d *fakeDocker) setStats(id string, s ContainerStats) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stats == nil {
+		d.stats = map[string]ContainerStats{}
+	}
+	d.stats[id] = s
 }
 
 func (d *fakeDocker) calls() []logCall {

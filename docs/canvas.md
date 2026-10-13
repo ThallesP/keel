@@ -45,7 +45,7 @@ Desktop, 1440 × 900 reference. Everything is `display: flex`.
 
 Left: logo glyph + wordmark, `/`, project name + chevron, `/`, environment pill (status dot + name + chevron). Right: **Ship** button (primary, `⌘↵` hint), avatar.
 
-The project name (or `P` anywhere) opens the project switcher, a `Palette` (`components/palette.tsx`, like `+ Add`): every project of the organization, type to filter, ↵ switches; the page you are on (canvas or Observability) is kept, an open deployment or trace is dropped. Its last row, New project, takes a name (type → ↵) and creates the project with a production environment (`projects.create`), then opens its canvas.
+The project name (or `P` anywhere) opens the project switcher, a `Palette` (`components/palette.tsx`, like `+ Add`): every project of the organization, type to filter, ↵ switches; the page you are on (canvas, Observability or Logs) is kept, an open deployment or trace is dropped. Its last row, New project, takes a name (type → ↵) and creates the project with a production environment (`projects.create`), then opens its canvas.
 
 Ship button states:
 
@@ -58,7 +58,7 @@ Ship button states:
 
 ### Rail (52px)
 
-Icon-only vertical nav. Top: Canvas (active), Observability (requests and logs in one stream, see [`logs.md`](./logs.md)), Metrics, Variables. Bottom: Settings (`?view=settings`: what is set once and rarely touched, kept off the daily pages; so far the organization's Axiom connection, its datasets and **Disconnect…** behind a confirmation, since it turns Axiom off for every project). Active item gets `--color-primary-soft` background and primary icon. 32 × 32 hit targets, 6px gap.
+Icon-only vertical nav. Top: Canvas (active), Observability (panels of metrics, requests and logs, see [`metrics.md`](./metrics.md)), Logs (requests and logs in one stream, see [`logs.md`](./logs.md)), Variables. Bottom: Settings (`?view=settings`: what is set once and rarely touched, kept off the daily pages; so far the organization's Axiom connection, its datasets and **Disconnect…** behind a confirmation, since it turns Axiom off for every project). Active item gets `--color-primary-soft` background and primary icon. 32 × 32 hit targets, 6px gap.
 
 ### Canvas
 
@@ -276,7 +276,7 @@ Order matters: shell → edges → panel → data → deploy.
 ## Out of scope for v1
 
 - Agents, tools, runs, traces, approvals → `agents.md`
-- Metrics tab and live traffic edges
+- Live traffic edges
 - Templates / marketplace
 - Multi-environment diff view
 - Blueprint dark theme
@@ -286,7 +286,7 @@ Order matters: shell → edges → panel → data → deploy.
 
 `components/auth/shell.tsx`, used by `routes/index.tsx`, `_auth/route.tsx`, `invite.$invitationId.tsx` and `_auth/device.tsx`. Two columns from `lg` up, the form alone below that. Left, on the canvas ground: the definition of _keel_ (the first timber laid when a ship is built), then the plate from `plate.tsx`: Steve Jobs's "Real artists ship." and three dated beats of the year after it (the Carmel retreat, the final build, the signatures inside the case), sourced from folklore.org (credited in the component comment, not on the page). "No one who bought one would ever see them" is a hidden link to `/humans.txt` (`apps/web/public/humans.txt`, served as a file by Vite and nginx alike): the inside of this case, signed by whoever laid the keel. Plain Inter for the words; mono only for the IPA. No drawing, no animation. The first-account sign-up is headed "Lay the keel"; sign-in stays "Welcome back", invites "Join {org}". One nautical turn per page, not a theme.
 
-Each quiet surface gets its own reference, never a repeat: the auth pages have "Real artists ship."; Observability's empty and error states (`observability/lamp.tsx`: a lamp and the moth) have the Harvard Mark II logbook (the first "bug"). Reserved for the next one (owner's pick, 2026-10-05): the Dropbox launch thread on Hacker News, already built as `DropboxThread` in `plate.tsx`. Pick a new one after that; things from the indie-hacker / solo-founder world land best.
+Each quiet surface gets its own reference, never a repeat: the auth pages have "Real artists ship."; the Logs page's empty and error states (`logs/lamp.tsx`: a lamp and the moth) have the Harvard Mark II logbook (the first "bug"). Reserved for the next one (owner's pick, 2026-10-05): the Dropbox launch thread on Hacker News, already built as `DropboxThread` in `plate.tsx`. Pick a new one after that; things from the indie-hacker / solo-founder world land best.
 
 ## Reference
 

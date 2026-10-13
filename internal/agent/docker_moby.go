@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 )
@@ -86,4 +88,33 @@ func (d *MobyDocker) ContainerLogs(ctx context.Context, id, since string) (io.Re
 		opts.Tail = "0"
 	}
 	return d.cli.ContainerLogs(ctx, id, opts)
+}
+
+func (d *MobyDocker) ContainerStats(ctx context.Context, id string) (ContainerStats, error) {
+	res, err := d.cli.ContainerStats(ctx, id, client.ContainerStatsOptions{})
+	if err != nil {
+		return ContainerStats{}, err
+	}
+	defer res.Body.Close()
+	var s container.StatsResponse
+	if err := json.NewDecoder(res.Body).Decode(&s); err != nil {
+		return ContainerStats{}, err
+	}
+	out := ContainerStats{Read: s.Read, CPUNanos: s.CPUStats.CPUUsage.TotalUsage, MemoryBytes: memoryInUse(s.MemoryStats)}
+	for _, n := range s.Networks {
+		out.RxBytes += n.RxBytes
+		out.TxBytes += n.TxBytes
+	}
+	return out, nil
+}
+
+func memoryInUse(m container.MemoryStats) uint64 {
+	inactive, ok := m.Stats["inactive_file"]
+	if !ok {
+		inactive = m.Stats["total_inactive_file"]
+	}
+	if inactive > m.Usage {
+		return m.Usage
+	}
+	return m.Usage - inactive
 }

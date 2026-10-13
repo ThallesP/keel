@@ -11,7 +11,7 @@ type Search = { code?: string; state?: string; error?: string; error_description
 
 const str = (x: unknown) => (typeof x === "string" ? x : undefined);
 
-/** Axiom's OAuth redirect lands here; the code goes to the control plane, then back to Observability. */
+/** Axiom's OAuth redirect lands here; the code goes to the control plane, then back to Logs. */
 export const Route = createFileRoute("/_auth/axiom/callback")({
   component: AxiomCallback,
   validateSearch: (s: Record<string, unknown>): Search => ({

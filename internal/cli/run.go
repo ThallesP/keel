@@ -68,7 +68,7 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 					strings.Join(skipped, ", "), plural(len(skipped), "it points", "they point"), plural(len(skipped), "it", "them"))
 			}
 			if tracing == nil {
-				a.out.Warn("no tracing variables: %s (open Observability in %s)", reason, s.inst.URL)
+				a.out.Warn("no tracing variables: %s (open Logs in %s)", reason, s.inst.URL)
 			} else {
 				a.out.Progress("%s: tracing to %s as deployment.environment.name=local; keel traces %s shows the requests", svc.Name, endpoint, svc.Name)
 			}

@@ -18,7 +18,9 @@ export function useDashboard() {
   const {
     data: { panels },
   } = useGetDashboardSuspense({ path });
-  const { mutateAsync: saveDashboard } = useSaveDashboard();
+  const { mutateAsync: saveDashboard } = useSaveDashboard({
+    mutation: { scope: { id: `dashboard:${environmentId}` } },
+  });
 
   const save = async (next: Panel[]) => {
     const queryKey = getDashboardSuspenseQueryKey({ path });

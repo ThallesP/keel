@@ -30,37 +30,45 @@ func (t *tx) InsertServerSample(s domain.ServerSample) error {
 }
 
 func (t *tx) ServiceBuckets(q app.BucketQuery) ([]app.ServiceBucketRow, error) {
+	if q.Hourly {
+		rows, err := t.q.MetricsServiceBucketsHourly(t.ctx, sqlc.MetricsServiceBucketsHourlyParams{
+			BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, NodeID: q.NodeID, FromMs: q.From, ToMs: q.To,
+		})
+		return bucketRows(rows, func(r sqlc.MetricsServiceBucketsHourlyRow) app.ServiceBucketRow {
+			return app.ServiceBucketRow{NodeID: r.NodeID, Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes, RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec}
+		}), err
+	}
 	rows, err := t.q.MetricsServiceBuckets(t.ctx, sqlc.MetricsServiceBucketsParams{
 		BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, NodeID: q.NodeID, FromMs: q.From, ToMs: q.To,
 	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]app.ServiceBucketRow, len(rows))
-	for i, r := range rows {
-		out[i] = app.ServiceBucketRow{
-			NodeID: r.NodeID, Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes,
-			RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec,
-		}
-	}
-	return out, nil
+	return bucketRows(rows, func(r sqlc.MetricsServiceBucketsRow) app.ServiceBucketRow {
+		return app.ServiceBucketRow{NodeID: r.NodeID, Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes, RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec}
+	}), err
 }
 
 func (t *tx) TotalBuckets(q app.BucketQuery) ([]app.ServiceBucketRow, error) {
+	if q.Hourly {
+		rows, err := t.q.MetricsTotalBucketsHourly(t.ctx, sqlc.MetricsTotalBucketsHourlyParams{
+			BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, NodeID: q.NodeID, FromMs: q.From, ToMs: q.To,
+		})
+		return bucketRows(rows, func(r sqlc.MetricsTotalBucketsHourlyRow) app.ServiceBucketRow {
+			return app.ServiceBucketRow{Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes, RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec}
+		}), err
+	}
 	rows, err := t.q.MetricsTotalBuckets(t.ctx, sqlc.MetricsTotalBucketsParams{
 		BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, NodeID: q.NodeID, FromMs: q.From, ToMs: q.To,
 	})
-	if err != nil {
-		return nil, err
-	}
+	return bucketRows(rows, func(r sqlc.MetricsTotalBucketsRow) app.ServiceBucketRow {
+		return app.ServiceBucketRow{Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes, RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec}
+	}), err
+}
+
+func bucketRows[R any](rows []R, row func(R) app.ServiceBucketRow) []app.ServiceBucketRow {
 	out := make([]app.ServiceBucketRow, len(rows))
 	for i, r := range rows {
-		out[i] = app.ServiceBucketRow{
-			Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes,
-			RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec,
-		}
+		out[i] = row(r)
 	}
-	return out, nil
+	return out
 }
 
 func (t *tx) RecentPlacements(environmentID string, since int64) ([]app.Placement, error) {
@@ -75,8 +83,8 @@ func (t *tx) RecentPlacements(environmentID string, since int64) ([]app.Placemen
 	return out, nil
 }
 
-func (t *tx) LatestServerSample(serverID string) (domain.ServerSample, error) {
-	r, err := t.q.MetricsLatestServer(t.ctx, serverID)
+func (t *tx) LatestServerSample(serverID string, since int64) (domain.ServerSample, error) {
+	r, err := t.q.MetricsLatestServer(t.ctx, sqlc.MetricsLatestServerParams{ServerID: serverID, At: since})
 	if err != nil {
 		return domain.ServerSample{}, noRow(err)
 	}
@@ -99,11 +107,18 @@ func (t *tx) DeployMarks(environmentID string, from, to int64) ([]domain.DeployM
 	return out, nil
 }
 
-func (t *tx) PruneMetrics(before int64) error {
-	if err := t.q.MetricsPruneServices(t.ctx, before); err != nil {
+func (t *tx) RollupMetrics(since int64) error {
+	return t.q.MetricsRollupHours(t.ctx, since)
+}
+
+func (t *tx) PruneMetrics(rawBefore, hourlyBefore int64) error {
+	if err := t.q.MetricsPruneServices(t.ctx, rawBefore); err != nil {
 		return err
 	}
-	return t.q.MetricsPruneServers(t.ctx, before)
+	if err := t.q.MetricsPruneServers(t.ctx, rawBefore); err != nil {
+		return err
+	}
+	return t.q.MetricsPruneHourly(t.ctx, hourlyBefore)
 }
 
 func (t *tx) DashboardOf(environmentID string) ([]domain.Panel, error) {

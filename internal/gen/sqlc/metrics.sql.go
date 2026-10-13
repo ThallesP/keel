@@ -85,11 +85,16 @@ func (q *Queries) MetricsInsertService(ctx context.Context, arg MetricsInsertSer
 }
 
 const metricsLatestServer = `-- name: MetricsLatestServer :one
-SELECT server_id, name, at, cpus, cpu_cores, memory_bytes, memory_total_bytes, disk_bytes, disk_total_bytes FROM server_metrics WHERE server_id = ? ORDER BY at DESC LIMIT 1
+SELECT server_id, name, at, cpus, cpu_cores, memory_bytes, memory_total_bytes, disk_bytes, disk_total_bytes FROM server_metrics WHERE server_id = ? AND at >= ? ORDER BY at DESC LIMIT 1
 `
 
-func (q *Queries) MetricsLatestServer(ctx context.Context, serverID string) (ServerMetric, error) {
-	row := q.db.QueryRowContext(ctx, metricsLatestServer, serverID)
+type MetricsLatestServerParams struct {
+	ServerID string
+	At       int64
+}
+
+func (q *Queries) MetricsLatestServer(ctx context.Context, arg MetricsLatestServerParams) (ServerMetric, error) {
+	row := q.db.QueryRowContext(ctx, metricsLatestServer, arg.ServerID, arg.At)
 	var i ServerMetric
 	err := row.Scan(
 		&i.ServerID,
@@ -166,6 +171,15 @@ func (q *Queries) MetricsNodeExists(ctx context.Context, id string) (int64, erro
 	return count, err
 }
 
+const metricsPruneHourly = `-- name: MetricsPruneHourly :exec
+DELETE FROM service_metrics_hourly WHERE hour < ?
+`
+
+func (q *Queries) MetricsPruneHourly(ctx context.Context, hour int64) error {
+	_, err := q.db.ExecContext(ctx, metricsPruneHourly, hour)
+	return err
+}
+
 const metricsPruneServers = `-- name: MetricsPruneServers :exec
 DELETE FROM server_metrics WHERE at < ?
 `
@@ -223,6 +237,39 @@ func (q *Queries) MetricsRecentPlacements(ctx context.Context, arg MetricsRecent
 		return nil, err
 	}
 	return items, nil
+}
+
+const metricsRollupHours = `-- name: MetricsRollupHours :exec
+INSERT INTO service_metrics_hourly (node_id, hour, cpu_cores, memory_bytes, rx_bytes_per_sec, tx_bytes_per_sec)
+SELECT
+  node_id,
+  CAST(at / 3600000 AS INTEGER) * 3600000 AS hour,
+  CAST(AVG(cpu_cores) AS REAL),
+  CAST(MAX(memory_bytes) AS REAL),
+  CAST(AVG(rx_bytes_per_sec) AS REAL),
+  CAST(AVG(tx_bytes_per_sec) AS REAL)
+FROM (
+  SELECT
+    node_id,
+    at,
+    SUM(cpu_cores) AS cpu_cores,
+    SUM(memory_bytes) AS memory_bytes,
+    SUM(rx_bytes_per_sec) AS rx_bytes_per_sec,
+    SUM(tx_bytes_per_sec) AS tx_bytes_per_sec
+  FROM service_metrics
+  WHERE at >= ?1
+  GROUP BY node_id, at
+)
+WHERE true
+GROUP BY node_id, hour
+ON CONFLICT (node_id, hour) DO UPDATE SET
+  cpu_cores = excluded.cpu_cores, memory_bytes = excluded.memory_bytes,
+  rx_bytes_per_sec = excluded.rx_bytes_per_sec, tx_bytes_per_sec = excluded.tx_bytes_per_sec
+`
+
+func (q *Queries) MetricsRollupHours(ctx context.Context, sinceMs int64) error {
+	_, err := q.db.ExecContext(ctx, metricsRollupHours, sinceMs)
+	return err
 }
 
 const metricsServiceBuckets = `-- name: MetricsServiceBuckets :many
@@ -305,6 +352,76 @@ func (q *Queries) MetricsServiceBuckets(ctx context.Context, arg MetricsServiceB
 	return items, nil
 }
 
+const metricsServiceBucketsHourly = `-- name: MetricsServiceBucketsHourly :many
+SELECT
+  h.node_id,
+  CAST(h.hour / ?1 AS INTEGER) * ?1 AS bucket,
+  CAST(AVG(h.cpu_cores) AS REAL) AS cpu_cores,
+  CAST(MAX(h.memory_bytes) AS REAL) AS memory_bytes,
+  CAST(AVG(h.rx_bytes_per_sec) AS REAL) AS rx_bytes_per_sec,
+  CAST(AVG(h.tx_bytes_per_sec) AS REAL) AS tx_bytes_per_sec
+FROM service_metrics_hourly h
+JOIN nodes n ON n.id = h.node_id
+WHERE n.environment_id = ?2
+  AND (CAST(?3 AS TEXT) = '' OR h.node_id = ?3)
+  AND h.hour >= ?4 AND h.hour < ?5
+GROUP BY h.node_id, bucket
+ORDER BY h.node_id, bucket
+`
+
+type MetricsServiceBucketsHourlyParams struct {
+	BinMs         int64
+	EnvironmentID string
+	NodeID        string
+	FromMs        int64
+	ToMs          int64
+}
+
+type MetricsServiceBucketsHourlyRow struct {
+	NodeID        string
+	Bucket        int64
+	CpuCores      float64
+	MemoryBytes   float64
+	RxBytesPerSec float64
+	TxBytesPerSec float64
+}
+
+func (q *Queries) MetricsServiceBucketsHourly(ctx context.Context, arg MetricsServiceBucketsHourlyParams) ([]MetricsServiceBucketsHourlyRow, error) {
+	rows, err := q.db.QueryContext(ctx, metricsServiceBucketsHourly,
+		arg.BinMs,
+		arg.EnvironmentID,
+		arg.NodeID,
+		arg.FromMs,
+		arg.ToMs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricsServiceBucketsHourlyRow{}
+	for rows.Next() {
+		var i MetricsServiceBucketsHourlyRow
+		if err := rows.Scan(
+			&i.NodeID,
+			&i.Bucket,
+			&i.CpuCores,
+			&i.MemoryBytes,
+			&i.RxBytesPerSec,
+			&i.TxBytesPerSec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const metricsTotalBuckets = `-- name: MetricsTotalBuckets :many
 SELECT
   CAST(at / ?1 AS INTEGER) * ?1 AS bucket,
@@ -361,6 +478,82 @@ func (q *Queries) MetricsTotalBuckets(ctx context.Context, arg MetricsTotalBucke
 	items := []MetricsTotalBucketsRow{}
 	for rows.Next() {
 		var i MetricsTotalBucketsRow
+		if err := rows.Scan(
+			&i.Bucket,
+			&i.CpuCores,
+			&i.MemoryBytes,
+			&i.RxBytesPerSec,
+			&i.TxBytesPerSec,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricsTotalBucketsHourly = `-- name: MetricsTotalBucketsHourly :many
+SELECT
+  CAST(hour / ?1 AS INTEGER) * ?1 AS bucket,
+  CAST(AVG(cpu_cores) AS REAL) AS cpu_cores,
+  CAST(MAX(memory_bytes) AS REAL) AS memory_bytes,
+  CAST(AVG(rx_bytes_per_sec) AS REAL) AS rx_bytes_per_sec,
+  CAST(AVG(tx_bytes_per_sec) AS REAL) AS tx_bytes_per_sec
+FROM (
+  SELECT
+    h.hour AS hour,
+    SUM(h.cpu_cores) AS cpu_cores,
+    SUM(h.memory_bytes) AS memory_bytes,
+    SUM(h.rx_bytes_per_sec) AS rx_bytes_per_sec,
+    SUM(h.tx_bytes_per_sec) AS tx_bytes_per_sec
+  FROM service_metrics_hourly h
+  JOIN nodes n ON n.id = h.node_id
+  WHERE n.environment_id = ?2
+    AND (CAST(?3 AS TEXT) = '' OR h.node_id = ?3)
+    AND h.hour >= ?4 AND h.hour < ?5
+  GROUP BY h.hour
+)
+GROUP BY bucket
+ORDER BY bucket
+`
+
+type MetricsTotalBucketsHourlyParams struct {
+	BinMs         int64
+	EnvironmentID string
+	NodeID        string
+	FromMs        int64
+	ToMs          int64
+}
+
+type MetricsTotalBucketsHourlyRow struct {
+	Bucket        int64
+	CpuCores      float64
+	MemoryBytes   float64
+	RxBytesPerSec float64
+	TxBytesPerSec float64
+}
+
+func (q *Queries) MetricsTotalBucketsHourly(ctx context.Context, arg MetricsTotalBucketsHourlyParams) ([]MetricsTotalBucketsHourlyRow, error) {
+	rows, err := q.db.QueryContext(ctx, metricsTotalBucketsHourly,
+		arg.BinMs,
+		arg.EnvironmentID,
+		arg.NodeID,
+		arg.FromMs,
+		arg.ToMs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricsTotalBucketsHourlyRow{}
+	for rows.Next() {
+		var i MetricsTotalBucketsHourlyRow
 		if err := rows.Scan(
 			&i.Bucket,
 			&i.CpuCores,

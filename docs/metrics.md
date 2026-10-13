@@ -29,7 +29,13 @@ It posts one report per tick to `POST /worker/metrics` (worker bearer, at most 1
 
 ## Storage
 
-SQLite, migration `0002_metrics.sql`: `service_metrics` (one row per task per tick), `server_metrics` (one row per server per tick). Kept 7 days (`domain.MetricsRetention`, the longest range the page offers), pruned hourly by the `metrics.prune` job. No rollups: at 15 s, a service with one replica is ~40k rows a week, and a range query reads one service's index range.
+SQLite, migration `0002_metrics.sql`:
+
+- `service_metrics`: one row per task per tick, kept 3 hours (`domain.RawRetention`). The 15m and 1h ranges read it.
+- `service_metrics_hourly`: per service per hour, replicas summed per tick, then the hour's average CPU and network and peak memory. The `metrics.rollup` job rewrites the current and previous hour from raw samples every minute, so the newest bucket lags at most a minute. Kept 7 days (`domain.MetricsRetention`, the longest range the page offers). The 24h and 7d ranges, whose buckets are whole hours, read only this: 20 services over 7 days is ~3k rows instead of ~800k raw ones (1.3 s per query on raw, measured in review).
+- `server_metrics`: one row per server per tick, kept 3 hours; only the latest sample of the last minute is ever read.
+
+The `metrics.prune` job runs hourly. The dashboard polls 15m and 1h every 15 s, 24h and 7d every minute.
 
 Why not the log sink: metrics have to work before anyone connects Axiom, and the control plane already has a database. Why not Prometheus or OpenTelemetry metrics: one more service to run for four numbers; `OTEL_METRICS_EXPORTER` stays `none`.
 
@@ -39,7 +45,7 @@ Why not the log sink: metrics have to work before anyone connects Axiom, and the
 
 - `services[].buckets[]`: replicas summed per tick, then per bucket the **average** CPU and network and the **peak** memory (a spike is what gets a container killed). Only services with samples in range; empty buckets are `null`, drawn as gaps.
 - `total[]`: the same over every service in scope (the Network panel draws it as In and Out).
-- `servers[]`: servers that ran one of the environment's services in the last minute, with their latest host sample and the services on them. Servers are listed per environment, not per install, so one organization never sees another's machines.
+- `servers[]`: servers that ran one of the environment's services in the last minute and sent a host sample in that minute, with that sample and the services on them. Servers are listed per environment, not per install, so one organization never sees another's machines.
 - `deployments[]`: Ships started in range, drawn as dashed marks on every time chart (red when failed).
 
 ## Panels

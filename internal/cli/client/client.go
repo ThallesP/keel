@@ -121,7 +121,7 @@ func withFix(code, msg, webURL string, h http.Header) *output.Error {
 	case output.CodeServiceNotFound:
 		fix = "keel service list"
 	case output.CodeTracesOff:
-		fix = "Open Observability in the dashboard (" + webURL + ") and Sign in with Axiom"
+		fix = "Open Logs in the dashboard (" + webURL + ") and Sign in with Axiom"
 	case output.CodeProjectNotFound:
 		fix = "keel project list"
 	case output.CodeNameTaken:

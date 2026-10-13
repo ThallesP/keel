@@ -23,7 +23,7 @@ export function AddPanel({ onAdd }: { onAdd: (panel: Panel) => void }) {
             key={k.kind}
             onClick={() =>
               onAdd({
-                id: crypto.randomUUID().slice(0, 8),
+                id: Math.random().toString(36).slice(2, 10),
                 kind: k.kind,
                 nodeId: "",
                 search: "",

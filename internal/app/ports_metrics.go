@@ -9,9 +9,10 @@ type MetricsTx interface {
 	ServiceBuckets(q BucketQuery) ([]ServiceBucketRow, error)
 	TotalBuckets(q BucketQuery) ([]ServiceBucketRow, error)
 	RecentPlacements(environmentID string, since int64) ([]Placement, error)
-	LatestServerSample(serverID string) (domain.ServerSample, error)
+	LatestServerSample(serverID string, since int64) (domain.ServerSample, error)
 	DeployMarks(environmentID string, from, to int64) ([]domain.DeployMark, error)
-	PruneMetrics(before int64) error
+	RollupMetrics(since int64) error
+	PruneMetrics(rawBefore, hourlyBefore int64) error
 
 	DashboardOf(environmentID string) ([]domain.Panel, error)
 	SaveDashboard(environmentID string, panels []domain.Panel, now int64) error
@@ -23,6 +24,7 @@ type BucketQuery struct {
 	From          int64
 	To            int64
 	BinMs         int64
+	Hourly        bool
 }
 
 type ServiceBucketRow struct {

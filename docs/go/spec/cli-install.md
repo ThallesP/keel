@@ -350,7 +350,7 @@ Applied to every Convex call and to transport errors from discovery/auth. Order 
 | 4 | `"A deployment is already running"` | `DEPLOYMENT_RUNNING` | `A deployment is already running in this environment` | `keel deployment get --wait` |
 | 5 | `"Nothing to ship"` | `NOTHING_TO_SHIP` | `Nothing to ship: no service has staged changes` | `Stage a change first (keel var set …), or redeploy: keel redeploy <service>` |
 | 6 | `"Node not found"` | `SERVICE_NOT_FOUND` | `Service not found` | `keel service list` |
-| 7 | `"Connect Axiom to see traces"` or `"Sign in with Axiom again to turn on traces"` | `TRACES_OFF` | the server message | `Open Observability in the dashboard (<url>) and Sign in with Axiom` |
+| 7 | `"Connect Axiom to see traces"` or `"Sign in with Axiom again to turn on traces"` | `TRACES_OFF` | the server message | `Open Logs in the dashboard (<url>) and Sign in with Axiom` |
 | 8 | `"Environment not found"` | `PROJECT_NOT_FOUND` | `Environment not found` | `keel project list` |
 | 9 | prefix `Project "` and suffix `" already exists` | `NAME_TAKEN` | the server message | `Pick another name, or use it: keel link <slug between the quotes>` |
 | 10 | suffix `" is already taken` | `NAME_TAKEN` | the server message | `Pick another name; keel service list shows the taken ones` |
@@ -428,8 +428,8 @@ etc. are defined in A11.
 - `deployment get --wait` on an already `failed` deployment → await → `DEPLOYMENT_FAILED`
   (non-zero). Without `--wait` a failed deployment prints with exit 0.
 - `tracing status` human: `Tracing for <svc>: on|off[ (staged changes; keel ship <svc> deploys them)]`;
-  store `off` → `Nowhere to send spans yet: open Observability in the dashboard and Sign in with Axiom`;
-  `old` → `This Axiom connection predates traces: Sign in with Axiom again on Observability`;
+  store `off` → `Nowhere to send spans yet: open Logs in the dashboard and Sign in with Axiom`;
+  `old` → `This Axiom connection predates traces: Sign in with Axiom again on Logs`;
   when enabled, a table `KEY VALUE [(replaced by the service's own variables)]`.
 - `whoami` human table: `User  email (name)`, `Organization  name (role)` or `none yet`, `Instance  name  url`.
 - `status` human: `Project slug · env`, `Instance`, `Servers N`, `Staged N service(s) → keel ship` or `nothing`, `Last deploy status · message · <ago>`, blank line, services table `NAME TYPE STATUS IMAGE REPLICAS URL` (`status (staged)` when dirty, `-` for empty, `running/replicas`).
@@ -469,7 +469,7 @@ loop: first iteration immediate, then every 1s
   shell or service already set `OTEL_EXPORTER_OTLP_ENDPOINT` or
   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` (the ingest key only goes to Keel's endpoint).
 - Warnings (stderr): skipped keys → `warning: left out A, B: it points|they point inside the cluster; set it|them in this shell to run against something reachable`; no tracing →
-  `warning: no tracing variables: <reason> (open Observability in <url>)`; with tracing →
+  `warning: no tracing variables: <reason> (open Logs in <url>)`; with tracing →
   progress `<svc>: tracing to <endpoint> as deployment.environment.name=local; keel traces <svc> shows the requests`.
 - Exec: `exec.LookPath(argv[0])` failure or `Start` failure → `USAGE "Can't run <cmd>: <err>"`, fix
   `Check the command after --`. stdin/stdout/stderr inherited.

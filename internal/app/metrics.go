@@ -61,7 +61,10 @@ func (a *App) MetricsOverview(ctx context.Context, actor domain.Actor, environme
 		if nodeID != "" && !slices.Contains(ids, nodeID) {
 			return domain.E(domain.CodeServiceNotFound, domain.MsgNodeNotFound)
 		}
-		q := BucketQuery{EnvironmentID: environmentID, NodeID: nodeID, From: from, To: to, BinMs: spec.BinMs}
+		q := BucketQuery{
+			EnvironmentID: environmentID, NodeID: nodeID, From: from, To: to, BinMs: spec.BinMs,
+			Hourly: spec.BinMs >= time.Hour.Milliseconds(),
+		}
 		rows, err := tx.ServiceBuckets(q)
 		if err != nil {
 			return err
@@ -152,7 +155,7 @@ func serverUsage(tx Tx, environmentID, nodeID string, since int64) ([]domain.Ser
 	}
 	out := []domain.ServerUsage{}
 	for _, id := range order {
-		s, err := tx.LatestServerSample(id)
+		s, err := tx.LatestServerSample(id, since)
 		if errors.Is(err, ErrNoRow) {
 			continue
 		}
@@ -169,13 +172,26 @@ func serverUsage(tx Tx, environmentID, nodeID string, since int64) ([]domain.Ser
 }
 
 func (a *App) recoverMetrics(ctx context.Context) {
+	a.rollupMetrics(ctx)
 	a.pruneMetrics(ctx)
+	a.Jobs.Every("metrics.rollup", time.Minute, a.rollupMetrics)
 	a.Jobs.Every("metrics.prune", time.Hour, a.pruneMetrics)
 }
 
+func (a *App) rollupMetrics(ctx context.Context) {
+	hour := time.Hour.Milliseconds()
+	since := (a.Now()/hour - 1) * hour
+	err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.RollupMetrics(since) })
+	if err != nil {
+		a.Log.Error("metrics: roll up the last hours", "err", err)
+	}
+}
+
 func (a *App) pruneMetrics(ctx context.Context) {
-	before := a.Now() - domain.MetricsRetention.Milliseconds()
-	err := a.write(ctx, func(tx Tx, _ *Changes) error { return tx.PruneMetrics(before) })
+	now := a.Now()
+	err := a.write(ctx, func(tx Tx, _ *Changes) error {
+		return tx.PruneMetrics(now-domain.RawRetention.Milliseconds(), now-domain.MetricsRetention.Milliseconds())
+	})
 	if err != nil {
 		a.Log.Error("metrics: prune old samples", "err", err)
 	}

@@ -70,8 +70,7 @@ export function useServices() {
     return {
       ofLine: (id: string): ServiceLabel =>
         byId.get(id) ?? { text: id.slice(0, 8), ...UNKNOWN_TONE },
-      ofSpan: (name: string): ServiceLabel =>
-        byName.get(name) ?? { text: name, ...UNKNOWN_TONE },
+      ofSpan: (name: string): ServiceLabel => byName.get(name) ?? { text: name, ...UNKNOWN_TONE },
     };
   }, [nodes]);
 }

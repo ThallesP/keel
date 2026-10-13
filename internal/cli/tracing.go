@@ -104,7 +104,7 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 				fmt.Fprintf(w, "Tracing for %s: %s\n", svc.Name, state)
 				switch tracing.Store {
 				case domain.TracesOff:
-					fmt.Fprintln(w, "Nowhere to send spans yet: open Observability in the dashboard and Sign in with Axiom")
+					fmt.Fprintln(w, "Nowhere to send spans yet: open Logs in the dashboard and Sign in with Axiom")
 				case domain.TracesOld:
 					fmt.Fprintln(w, "This Axiom connection predates traces: Sign in with Axiom again on Logs")
 				}

@@ -9,6 +9,7 @@ import (
 const (
 	MetricsInterval  = 15 * time.Second
 	MetricsRetention = 7 * 24 * time.Hour
+	RawRetention     = 3 * time.Hour
 	PlacementWindow  = time.Minute
 )
 

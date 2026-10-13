@@ -42,7 +42,7 @@ The Keel CLI is `keel`. Check it with `keel whoami`. If it is missing or not log
 2. Make a few requests to it: a page, an API route, one that touches the database or another service if it has one, and one that fails if you can.
 3. Run `keel traces api --since 15m --json`. Spans are batched for up to 5 seconds, so retry for about 30 seconds. You should see your requests with `"local": true`, route-shaped names (`GET /users/:id`, not `GET`, except for paths no route matches), the right status, and child spans for database and outgoing calls (`"spans"` above 1).
 4. Check that a log line written during one of those requests carries the same `trace_id`.
-5. If nothing arrives, check that the SDK actually started (the variable was set when it initialized, and the preload was loaded), that the exporter is OTLP/HTTP protobuf, and that the process did not exit before flushing. If `keel traces` fails with `TRACES_OFF`, the Keel organization has no traces store yet: ask me to open Observability in the dashboard and sign in with Axiom. Do not move on until your requests show up.
+5. If nothing arrives, check that the SDK actually started (the variable was set when it initialized, and the preload was loaded), that the exporter is OTLP/HTTP protobuf, and that the process did not exit before flushing. If `keel traces` fails with `TRACES_OFF`, the Keel organization has no traces store yet: ask me to open Logs in the dashboard and sign in with Axiom. Do not move on until your requests show up.
 
 ## Turn it on in Keel
 

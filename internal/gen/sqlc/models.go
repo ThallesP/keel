@@ -205,6 +205,15 @@ type ServiceMetric struct {
 	TxBytesPerSec float64
 }
 
+type ServiceMetricsHourly struct {
+	NodeID        string
+	Hour          int64
+	CpuCores      float64
+	MemoryBytes   float64
+	RxBytesPerSec float64
+	TxBytesPerSec float64
+}
+
 type Session struct {
 	ID        string
 	TokenHash string

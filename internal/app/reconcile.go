@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
@@ -87,7 +86,7 @@ func settleDeployment(d domain.Deployment, nodes map[string]*domain.Node, now in
 	return next, appended, next.Status != d.Status || !reflect.DeepEqual(next.Steps, d.Steps)
 }
 
-func reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
+func (a *App) reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
 	running, err := tx.RunningDeployments(environmentID)
 	if err != nil {
 		return err
@@ -119,20 +118,23 @@ func reconcile(tx Tx, ch *Changes, environmentID string, now int64) error {
 			return err
 		}
 		deploymentChanged(ch, org, next)
+		if next.Status != domain.DeploymentRunning {
+			a.deploymentSettled(ch, next.ID)
+		}
 	}
 	return nil
 }
 
 func (a *App) reconcileRunning(ctx context.Context, environmentID string) {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
-		return reconcile(tx, ch, environmentID, a.Now())
+		return a.reconcile(tx, ch, environmentID, a.Now())
 	})
 	if err != nil {
 		a.Log.Error("reconcile", "err", err)
 	}
 }
 
-func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
+func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) error {
 	err := a.write(ctx, func(tx Tx, ch *Changes) error {
 		d, err := tx.Deployment(deploymentID)
 		if errors.Is(err, ErrNoRow) {
@@ -185,52 +187,11 @@ func (a *App) timeoutDeployment(ctx context.Context, deploymentID string) {
 	if err != nil {
 		a.Log.Error("deployment timeout", "deployment", deploymentID, "err", err)
 	}
+	return err
 }
 
-func (a *App) recoverDeploy(ctx context.Context) {
+func (a *App) recoverDeploy(context.Context) {
 	a.Jobs.After("observe:all", 0, a.observeAll)
-
-	var running []domain.Deployment
-	var redos []applyRequest
-	err := a.read(ctx, func(tx Tx) (err error) {
-		if running, err = tx.RunningDeployments(""); err != nil {
-			return err
-		}
-		for _, d := range running {
-			for _, s := range d.Steps {
-				if s.NodeID == "" || s.Status.Finished() || s.AppliedAt != 0 {
-					continue
-				}
-				n, err := tx.Node(s.NodeID)
-				if errors.Is(err, ErrNoRow) {
-					continue
-				}
-				if err != nil {
-					return err
-				}
-				if n.Desired == nil {
-					continue
-				}
-				redos = append(redos, applyRequest{
-					nodeID:       n.ID,
-					deploymentID: d.ID,
-					revision:     n.Desired.Revision,
-					pull:         strings.HasPrefix(d.Message, "redeploy "),
-				})
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		a.Log.Error("recover deployments", "err", err)
-	}
-	now := a.Now()
-	for _, d := range running {
-		a.scheduleDeploymentTimeout(d.ID, deployTimeout-time.Duration(now-d.StartedAt)*time.Millisecond)
-	}
-	for _, r := range redos {
-		a.scheduleApply(r)
-	}
 	if a.Config.AgentImage != "" {
 		a.Jobs.After("agent", 0, a.ensureAgent)
 	}

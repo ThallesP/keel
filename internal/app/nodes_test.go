@@ -428,8 +428,11 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if !k.node(api).Dirty || !k.node(web).Dirty {
 		t.Error("referrers not staged")
 	}
-	if want := []string{"proxy:sync", "remove:" + pg, "reconcile"}; !slices.Equal(k.jobs.order, want) {
+	if want := []string{"proxy:sync", "reconcile"}; !slices.Equal(k.jobs.order, want) {
 		t.Errorf("after commit: jobs %v, want %v", k.jobs.order, want)
+	}
+	if run, err := k.store.Workflows().GetRun(k.ctx, "remove:"+pg); err != nil || run.Workflow != "remove" {
+		t.Errorf("remove run: %+v %v", run, err)
 	}
 	if topics := k.pub.take(canvasOrg); !slices.Equal(topics, []string{"/api/environments/" + env, "/api/nodes/", "/api/nodes/" + pg}) {
 		t.Errorf("topics %v", topics)
@@ -445,8 +448,11 @@ func TestCanvasRemoveNode(t *testing.T) {
 	if n := k.node(vol); n.ParentID != "" || n.Position != (domain.Position{X: 105, Y: 206}) {
 		t.Errorf("child %q at %+v", n.ParentID, n.Position)
 	}
-	if len(k.jobs.order) != 3 {
+	if len(k.jobs.order) != 2 {
 		t.Errorf("group delete scheduled work: %v", k.jobs.order)
+	}
+	if _, err := k.store.Workflows().GetRun(k.ctx, "remove:"+group); err == nil {
+		t.Error("a group delete started a removal")
 	}
 	for _, id := range []string{"nope", pg} {
 		if err := k.app.RemoveNode(k.ctx, m, id); err != nil {

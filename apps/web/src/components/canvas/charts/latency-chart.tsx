@@ -1,11 +1,13 @@
-import { formatDuration } from "../../format";
+import { formatDuration } from "../format";
 import { ChartCard } from "./chart-card";
 import { DataTable } from "./data-table";
+import { DeployMarks } from "./deploy-marks";
 import { Grid } from "./grid";
 import { HitColumns } from "./hit-columns";
 import { rangeLabel } from "./labels";
 import { BASE, band, type ChartProps, HEIGHT, niceMax, PAD_T, PLOT_H } from "./layout";
 import { LegendKey } from "./legend-key";
+import { Series } from "./series";
 import { Tooltip } from "./tooltip";
 import { TooltipRow } from "./tooltip-row";
 import { useWidth } from "./use-width";
@@ -17,7 +19,7 @@ const LEGEND = ["p50", "p95", "p99"] as const;
 
 const axisDuration = (ms: number) => formatDuration(ms).replace(/\.0+(?=[^\d.])/, "");
 
-export function LatencyChart({ buckets, bucketMs, hover, onHover }: ChartProps) {
+export function LatencyChart({ buckets, bucketMs, hover, onHover, marks = [] }: ChartProps) {
   const [ref, width] = useWidth();
   const top = Math.max(0, ...buckets.map((b) => b.p99 ?? b.p95 ?? b.p50 ?? 0));
   const max = niceMax(top);
@@ -86,6 +88,9 @@ export function LatencyChart({ buckets, bucketMs, hover, onHover }: ChartProps) 
             )}
             <XAxis x={x} buckets={buckets} bucketMs={bucketMs} />
             <HitColumns x={x} count={buckets.length} onHover={onHover} />
+            {buckets[0] && (
+              <DeployMarks x={x} start={buckets[0].time} bucketMs={bucketMs} marks={marks} />
+            )}
           </svg>
         )}
         {hovered && hover !== null && (
@@ -103,37 +108,5 @@ export function LatencyChart({ buckets, bucketMs, hover, onHover }: ChartProps) 
         )}
       </div>
     </ChartCard>
-  );
-}
-
-function Series({ color, points }: { color: string; points: ([number, number] | null)[] }) {
-  const runs: [number, number][][] = [];
-  let run: [number, number][] = [];
-  for (const p of points) {
-    if (p) run.push(p);
-    else if (run.length) {
-      runs.push(run);
-      run = [];
-    }
-  }
-  if (run.length) runs.push(run);
-  return (
-    <g>
-      {runs.map((r) =>
-        r.length === 1 ? (
-          <circle key={r[0]![0]} cx={r[0]![0]} cy={r[0]![1]} r={2.5} fill={color} />
-        ) : (
-          <path
-            key={r[0]![0]}
-            d={r.map(([px, py], i) => `${i ? "L" : "M"}${px},${py}`).join("")}
-            fill="none"
-            stroke={color}
-            strokeWidth={2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ),
-      )}
-    </g>
   );
 }

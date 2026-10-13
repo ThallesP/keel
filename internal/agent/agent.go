@@ -8,10 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ThallesP/keel/internal/api"
+	"github.com/ThallesP/keel/internal/domain"
 )
 
 type Config struct {
@@ -19,6 +23,7 @@ type Config struct {
 	Token      string
 	StatePath  string
 	ConfigPoll time.Duration
+	Metrics    time.Duration
 }
 
 func configFrom(getenv func(string) string, secretPath string) (Config, error) {
@@ -27,6 +32,7 @@ func configFrom(getenv func(string) string, secretPath string) (Config, error) {
 		Token:      getenv("KEEL_WORKER_TOKEN"),
 		StatePath:  cmp.Or(getenv("KEEL_STATE"), "/var/lib/keel-agent/state.json"),
 		ConfigPoll: 30 * time.Second,
+		Metrics:    domain.MetricsInterval,
 	}
 	if cfg.URL == "" {
 		return Config{}, errors.New("KEEL_URL is required (the control plane's URL, e.g. http://100.64.0.1:8080)")
@@ -53,6 +59,7 @@ type Agent struct {
 	cp        *ControlPlane
 	shipper   *Shipper
 	forwarder *Forwarder
+	sampler   *Sampler
 	wake      chan struct{}
 }
 
@@ -64,6 +71,10 @@ func New(cfg Config, docker Docker, controlPlane *http.Client, log *slog.Logger)
 	a.forwarder = &Forwarder{
 		Docker: docker, Poster: a.cp, State: a.state, Log: log,
 		OnContainer: a.shipper.OnContainerEvent, reconnect: 2 * time.Second,
+	}
+	a.sampler = &Sampler{
+		Docker: docker, Post: a.cp.PostMetrics, Log: log, Every: cfg.Metrics,
+		Host: func() (Host, error) { return readHost(filepath.Dir(cfg.StatePath)) },
 	}
 	return a
 }
@@ -81,12 +92,14 @@ func (a *Agent) Run(ctx context.Context) error {
 		return fmt.Errorf("docker /info: %w", err)
 	}
 	a.shipper.nodeID = cmp.Or(me.NodeID, me.Name)
+	a.sampler.server = api.MetricsServer{ID: a.shipper.nodeID, Name: me.Name}
 	a.log.Info("keel agent", "node", me.NodeID, "name", me.Name)
 
 	var wg sync.WaitGroup
 	wg.Go(func() { a.state.RunWriter(ctx, time.Second, a.log) })
 	wg.Go(func() { a.pollConfig(ctx) })
 	wg.Go(func() { a.forwarder.Run(ctx) })
+	wg.Go(func() { a.sampler.Run(ctx) })
 
 	<-ctx.Done()
 	a.log.Info("keel agent: shutting down", "cause", context.Cause(ctx))

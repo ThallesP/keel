@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { CopyPrompt } from "../copy-prompt";
 
 /**
- * The Observability page with nothing to show, drawn as a hanging lamp and a moth. Empty range:
+ * The Logs page with nothing to show, drawn as a hanging lamp and a moth. Empty range:
  * the lamp is lit, now and then flickering like a bad bulb, and the moth flutters around it,
  * always facing the light; nothing else came. Failed: the lamp is out, the moth rests on the
  * shade, and the error says why. The moth is the one the Harvard Mark II's operators pulled out

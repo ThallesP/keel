@@ -33,7 +33,7 @@ export function ProjectSwitcher() {
 
   // Memoized: the palette starts over whenever `root` changes.
   const root = useMemo<PalettePage>(() => {
-    const go = (slug: string, search: { view?: "observability" | "settings" } = {}) =>
+    const go = (slug: string, search: { view?: "observability" | "logs" | "settings" } = {}) =>
       void navigate({ to: "/p/$projectId", params: { projectId: slug }, search });
     const newProject: PalettePage = {
       title: "New project",

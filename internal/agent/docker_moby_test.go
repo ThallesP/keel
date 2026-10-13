@@ -15,7 +15,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 )
@@ -42,6 +44,10 @@ func (a *dockerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"Name":"box","Swarm":{"NodeID":"swarm-node-1"}}`)
 	case path == "/containers/json":
 		io.WriteString(w, `[{"Id":"c1","Labels":{"com.docker.swarm.service.name":"svc-n1"},"State":"exited"}]`)
+	case path == "/containers/c1/stats":
+		io.WriteString(w, `{"read":"2024-01-01T00:00:15Z","cpu_stats":{"cpu_usage":{"total_usage":3000000000}},`+
+			`"memory_stats":{"usage":104857600,"stats":{"inactive_file":4857600}},`+
+			`"networks":{"eth0":{"rx_bytes":1000,"tx_bytes":200},"eth1":{"rx_bytes":24,"tx_bytes":56}}}`)
 	case path == "/containers/c1/logs":
 		w.Write(frame(1, "2024-01-01T00:00:01Z hi\n"))
 	case path == "/events":
@@ -204,6 +210,40 @@ func TestMobyReadOnly(t *testing.T) {
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
 		if readOnly(httptest.NewRequest(m, "/containers/c1", nil)) == nil {
 			t.Errorf("%s allowed", m)
+		}
+	}
+}
+
+func TestMobyContainerStats(t *testing.T) {
+	d, api := newTestMoby(t)
+	got, err := d.ContainerStats(context.Background(), "c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ContainerStats{Read: time.Date(2024, 1, 1, 0, 0, 15, 0, time.UTC), CPUNanos: 3e9, MemoryBytes: 100_000_000, RxBytes: 1024, TxBytes: 256}
+	if !got.Read.Equal(want.Read) || got.CPUNanos != want.CPUNanos || got.MemoryBytes != want.MemoryBytes || got.RxBytes != want.RxBytes || got.TxBytes != want.TxBytes {
+		t.Fatalf("stats = %+v\nwant  %+v", got, want)
+	}
+	q := api.queries("GET /containers/c1/stats")
+	if len(q) != 1 || q[0].Get("stream") != "false" || q[0].Get("one-shot") != "true" {
+		t.Fatalf("stats queries = %v", q)
+	}
+}
+
+func TestMemoryInUse(t *testing.T) {
+	tests := []struct {
+		name string
+		m    container.MemoryStats
+		want uint64
+	}{
+		{"cgroup v2", container.MemoryStats{Usage: 100, Stats: map[string]uint64{"inactive_file": 30}}, 70},
+		{"cgroup v1", container.MemoryStats{Usage: 100, Stats: map[string]uint64{"total_inactive_file": 40}}, 60},
+		{"no page cache stat", container.MemoryStats{Usage: 100}, 100},
+		{"cache above usage", container.MemoryStats{Usage: 10, Stats: map[string]uint64{"inactive_file": 30}}, 10},
+	}
+	for _, tt := range tests {
+		if got := memoryInUse(tt.m); got != tt.want {
+			t.Errorf("%s: %d, want %d", tt.name, got, tt.want)
 		}
 	}
 }

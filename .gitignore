@@ -30,7 +30,7 @@ local.db-*
 .DS_Store
 
 # Logs
-logs
+/logs
 .evlog/
 *.log
 npm-debug.log*

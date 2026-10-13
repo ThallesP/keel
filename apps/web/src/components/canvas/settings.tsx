@@ -14,7 +14,7 @@ import { type LogSinkView, useDisconnectLogSink, useGetLogSink } from "@/gen/api
 import { succeeded } from "@/lib/panel-write";
 import { useSession } from "@/lib/session";
 
-import { AxiomMark, SignInButton } from "./observability/axiom-gate";
+import { AxiomMark, SignInButton } from "./logs/axiom-gate";
 import { PageHeader, Spinner } from "./primitives";
 
 /**
@@ -37,7 +37,7 @@ export function SettingsPage() {
 
 /**
  * The organization's sink (docs/logs.md): Axiom with its org and datasets, or Docker only. Sign
- * in with Axiom lands back on Observability, where a pending org picker shows.
+ * in with Axiom lands back on Logs, where a pending org picker shows.
  */
 function ObservabilitySettings() {
   // undefined while loading, null when the organization logs to Docker only.

@@ -13,19 +13,21 @@ import type { CanvasNode, InfraNode, PanelTab } from "../types";
 import { PanelFrame } from "./panel-frame";
 import { DeploymentsTab } from "./tabs/deployments";
 import { LogsTab } from "./tabs/logs";
+import { MetricsTab } from "./tabs/metrics";
 import { SettingsTab } from "./tabs/settings";
 import { VariablesTab } from "./tabs/variables";
 
 const tabs: { id: PanelTab; label: string }[] = [
   { id: "deployments", label: "Deployments" },
+  { id: "metrics", label: "Metrics" },
   { id: "variables", label: "Variables" },
   { id: "logs", label: "Logs" },
   { id: "settings", label: "Settings" },
 ];
 
-/** Settings holds networking (everything Swarm runs) and tracing (services); volumes have neither. */
+/** Settings (networking, tracing) and Metrics are for what Swarm runs; volumes have neither. */
 const tabsFor = (node: InfraNode) =>
-  node.type === "volume" ? tabs.filter((t) => t.id !== "settings") : tabs;
+  node.type === "volume" ? tabs.filter((t) => t.id !== "settings" && t.id !== "metrics") : tabs;
 
 function metaFor(node: InfraNode): string {
   switch (node.type) {
@@ -44,6 +46,8 @@ function TabContent({ node, tab }: { node: InfraNode; tab: PanelTab }) {
   switch (tab) {
     case "deployments":
       return <DeploymentsTab node={node} />;
+    case "metrics":
+      return node.type === "volume" ? null : <MetricsTab node={node} />;
     case "variables":
       return <VariablesTab node={node} />;
     case "logs":

@@ -9,7 +9,7 @@ contract every package follows. The porting specs it implements live in `docs/go
 | ------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `keel serve`             | control plane, container `keel` (compose)           | HTTP API + WebSocket + embedded dashboard + SQLite + Swarm driver (Docker socket) + jobs     |
 | `keel proxy`             | control plane, container `proxy` (compose)          | Embedded Caddy + caddy-l4 + the keel plugin (was `apps/proxy`). No Docker socket, ever. Linux builds without `-tags keel_noproxy` only. |
-| `keel agent`             | every Swarm node, global service `keel-agent`       | Docker events forwarder + log shipper (was `apps/worker`). Read-only Docker socket.          |
+| `keel agent`             | every Swarm node, global service `keel-agent`       | Docker events forwarder + log shipper + metrics sampler (was `apps/worker`). Read-only Docker socket. |
 | `keel openapi`           | build time                                          | Prints the OpenAPI 3.1 document (`openapi.json` at the repo root is its committed output).   |
 | `keel login`, `ship`, …  | anyone's laptop / agent                             | The CLI (was `apps/cli`), contract unchanged: `apps/cli/README.md` → `docs/cli.md`.          |
 
@@ -122,7 +122,7 @@ HTTP status and writes RFC 9457 `application/problem+json` with the extra field 
 - Auth: cookie `keel_session` (dashboard, HttpOnly, SameSite=Lax, Secure on https) or
   `Authorization: Bearer <session token>` (CLI). Middleware resolves `domain.Actor`; handlers
   pass it to `app`. Same origin for dashboard, API and WebSocket: no CORS.
-- Raw (non-Huma) routes: `POST /worker/events`, `GET /worker/config`, `POST /proxy/events`
+- Raw (non-Huma) routes: `POST /worker/events`, `GET /worker/config`, `POST /worker/metrics`, `POST /proxy/events`
   (bearer `KEEL_WORKER_TOKEN`), `POST /otlp/v1/traces` (environment ingest key). They skip
   session resolution and read the bearer once (`bearerToken`); the worker and proxy routes
   answer plain text (`writeText`).
@@ -145,6 +145,7 @@ the shapes move together.
   token, org?},"since":<ms>}]}`, one entry per organization sink with every deployable node of
   that organization and when the sink was connected. The agent reads `kind`, `domain`, `dataset` and
   `token` of the sink. Polled every 30 s.
+- `POST /worker/metrics`: one sample report per 15 s tick (shape in `docs/metrics.md`, `api.MetricsReport`), at most 1 MiB; no `server.id` or `at` is `400 bad report`. `200 ok` → `IngestMetrics`.
 - `POST /proxy/events`: `{event: "cert_obtained"|"cert_failed", name, error?}`, at most 256 KiB;
   anything else is `400 bad report`.
 

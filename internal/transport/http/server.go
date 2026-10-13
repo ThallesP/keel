@@ -77,6 +77,7 @@ func (s *Server) Register(h huma.API) {
 	s.registerDeploy(h)
 	s.registerObservability(h)
 	s.registerIngress(h)
+	s.registerMetrics(h)
 }
 
 func OpenAPI(version string) *huma.OpenAPI {
@@ -90,6 +91,7 @@ func (s *Server) registerRaw(mux *http.ServeMux) {
 	s.registerDeployRaw(mux)
 	s.registerObservabilityRaw(mux)
 	s.registerIngressRaw(mux)
+	s.registerMetricsRaw(mux)
 	if s.opts.WS != nil {
 		mux.Handle("GET /api/ws", s.opts.WS)
 	}

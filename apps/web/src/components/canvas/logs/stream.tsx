@@ -9,7 +9,7 @@ import { useServices } from "./chrome";
 import { type TraceRef, traceRef } from "./correlate";
 
 /**
- * The Observability page's one stream: log lines and requests (root spans) interleaved by time.
+ * The Logs page's one stream: log lines and requests (root spans) interleaved by time.
  * Every row opens something: a request its trace; a line the trace it names, or else the lines
  * around it. Mono 11px, `white-space: pre`, never wraps; scrolls sideways like any log.
  */

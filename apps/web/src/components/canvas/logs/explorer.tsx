@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 
 import {
   type EnvironmentLogLine,
-  type GetTraceOverviewQuery,
   type LogSinkView,
   type TraceOverview,
   useGetTraceOverview,
@@ -13,16 +12,18 @@ import {
 import Loader from "@/components/loader";
 import { errorMessage } from "@/lib/api";
 
+import type { Hover } from "../charts/layout";
+import { LatencyChart } from "../charts/latency-chart";
+import { RequestsChart } from "../charts/requests-chart";
+import { StatRow } from "../charts/stat-row";
 import { CopyPrompt } from "../copy-prompt";
 import { useEnvironment } from "../environment";
 import { formatTimestamp } from "../format";
 import { PageHeader, SectionLabel } from "../primitives";
+import { Segmented } from "../segmented";
+import { RANGES, RangePicker, type TimeRange } from "../time-range";
 import { useDebounced } from "../use-debounced";
 import { TracesBanner } from "./axiom-gate";
-import type { Hover } from "./charts/layout";
-import { LatencyChart } from "./charts/latency-chart";
-import { RequestsChart } from "./charts/requests-chart";
-import { StatRow } from "./charts/stat-row";
 import { route, SearchField } from "./chrome";
 import { StreamEmpty, StreamError } from "./lamp";
 import { LogContext } from "./log-context";
@@ -30,22 +31,14 @@ import { EventStream, mergeEvents, type StreamEvent } from "./stream";
 import { TraceDetail } from "./trace/trace-detail";
 
 /**
- * The Observability page with a sink: requests and logs in one place (ClickStack-style, no
+ * The Logs page with a sink: requests and logs in one place (ClickStack-style, no
  * separate tabs). On top, request rate, errors and latency from the traces; below, one stream of
  * log lines and requests. A row opens full screen: a request, or a line that names a trace, as
  * the trace waterfall with its log lines inline (`&trace=<id>`); any other line as the lines
  * around it plus the requests of that minute (`&around=<ms>`).
  */
 
-type TimeRange = GetTraceOverviewQuery["range"];
 type Sink = NonNullable<LogSinkView>;
-
-const RANGES: { id: TimeRange; label: string; long: string }[] = [
-  { id: "15m", label: "15m", long: "15 minutes" },
-  { id: "1h", label: "1h", long: "hour" },
-  { id: "24h", label: "24h", long: "24 hours" },
-  { id: "7d", label: "7d", long: "7 days" },
-];
 
 type Kind = "all" | "requests" | "logs";
 const KINDS: { id: Kind; label: string }[] = [
@@ -90,7 +83,7 @@ export function Explorer({ sink }: { sink: Sink }) {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <PageHeader title="Observability">
+      <PageHeader title="Logs">
         {!detail && (
           <>
             <Segmented options={KINDS} value={kind} onChange={setKind} label="Show" />
@@ -99,13 +92,7 @@ export function Explorer({ sink }: { sink: Sink }) {
               onChange={setSearch}
               placeholder="Filter requests and logs"
             />
-            <Segmented
-              options={RANGES.map((r) => ({ ...r, title: `Last ${r.long}` }))}
-              value={range}
-              onChange={setRange}
-              label="Time range"
-              mono
-            />
+            <RangePicker value={range} onChange={setRange} />
           </>
         )}
       </PageHeader>
@@ -131,45 +118,6 @@ export function Explorer({ sink }: { sink: Sink }) {
         onOpen={open}
       />
     </div>
-  );
-}
-
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-  label,
-  mono = false,
-}: {
-  options: { id: T; label: string; title?: string }[];
-  value: T;
-  onChange: (value: T) => void;
-  label: string;
-  mono?: boolean;
-}) {
-  return (
-    <span
-      className="flex h-7 items-center rounded-md border border-line p-0.5"
-      role="group"
-      aria-label={label}
-    >
-      {options.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          aria-pressed={o.id === value}
-          title={o.title}
-          onClick={() => onChange(o.id)}
-          className={cn(
-            "h-full rounded-sm px-2 text-2xs",
-            mono && "font-mono",
-            o.id === value ? "bg-surface-2 text-ink" : "text-muted-foreground hover:text-ink",
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </span>
   );
 }
 

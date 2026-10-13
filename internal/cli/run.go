@@ -29,7 +29,7 @@ func (a *app) runCmd() *cobra.Command {
 		Short: "Run a local command with a service's variables and tracing",
 		Long: `Run a command on this machine with the service's variables, and with tracing variables
 that send its OpenTelemetry spans to Keel tagged deployment.environment.name=local. keel traces
-<service> shows them, as does the Observability page. The way to try instrumentation before it
+<service> shows them, as does the Logs page. The way to try instrumentation before it
 ships (keel tracing prompt).
 
 Variables already set in this shell win. Variables that point at a service inside the cluster
@@ -68,7 +68,7 @@ stdin, stdout and stderr are the command's; keel exits with its exit code.`,
 					strings.Join(skipped, ", "), plural(len(skipped), "it points", "they point"), plural(len(skipped), "it", "them"))
 			}
 			if tracing == nil {
-				a.out.Warn("no tracing variables: %s (open Observability in %s)", reason, s.inst.URL)
+				a.out.Warn("no tracing variables: %s (open Logs in %s)", reason, s.inst.URL)
 			} else {
 				a.out.Progress("%s: tracing to %s as deployment.environment.name=local; keel traces %s shows the requests", svc.Name, endpoint, svc.Name)
 			}

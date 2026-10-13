@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { TraceStats } from "@/gen/api";
 
-import { formatCount, formatDuration } from "../../format";
+import { formatCount, formatDuration } from "../format";
 
 const latency = (ms: number | null) => (ms === null ? "—" : formatDuration(ms));
 

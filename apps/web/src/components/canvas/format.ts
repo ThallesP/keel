@@ -59,3 +59,29 @@ export function formatTimestamp(ms: number, now = Date.now()): string {
   if (d.toDateString() === new Date(now).toDateString()) return time;
   return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
 }
+
+export function formatBytes(bytes: number): string {
+  const units = ["B", "kB", "MB", "GB", "TB"];
+  const exp = Math.min(
+    units.length - 1,
+    Math.max(0, Math.floor(Math.log10(Math.max(1, bytes)) / 3)),
+  );
+  const value = bytes / 1000 ** exp;
+  return `${value >= 100 || exp === 0 ? Math.round(value) : value.toFixed(1)} ${units[exp]}`;
+}
+
+export function formatCores(cores: number): string {
+  if (cores === 0) return "0";
+  if (cores < 0.01) return "<0.01";
+  return cores < 10 ? cores.toFixed(2) : cores.toFixed(1);
+}
+
+export function formatBytesShort(bytes: number): string {
+  const units = ["", "k", "M", "G", "T"];
+  const exp = Math.min(
+    units.length - 1,
+    Math.max(0, Math.floor(Math.log10(Math.max(1, bytes)) / 3)),
+  );
+  const value = bytes / 1000 ** exp;
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}${units[exp]}`;
+}

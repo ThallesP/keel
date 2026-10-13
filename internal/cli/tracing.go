@@ -17,7 +17,7 @@ func (a *app) tracingCmd() *cobra.Command {
 		Short: "Set up OpenTelemetry tracing for a service",
 		Long: `Tracing is a per-service switch. On, Keel gives the service the standard OTEL_* variables
 on the next ship, so any OpenTelemetry SDK in it sends spans to Keel; keel traces and the
-Observability page show them. The code side is an agent's job: keel tracing prompt prints
+Logs page show them. The code side is an agent's job: keel tracing prompt prints
 instructions for a coding agent, including how to check the result locally with keel run.`,
 	}
 	cmd.AddCommand(a.tracingPromptCmd(), a.tracingStatusCmd(),
@@ -104,9 +104,9 @@ func (a *app) tracingStatusCmd() *cobra.Command {
 				fmt.Fprintf(w, "Tracing for %s: %s\n", svc.Name, state)
 				switch tracing.Store {
 				case domain.TracesOff:
-					fmt.Fprintln(w, "Nowhere to send spans yet: open Observability in the dashboard and Sign in with Axiom")
+					fmt.Fprintln(w, "Nowhere to send spans yet: open Logs in the dashboard and Sign in with Axiom")
 				case domain.TracesOld:
-					fmt.Fprintln(w, "This Axiom connection predates traces: Sign in with Axiom again on Observability")
+					fmt.Fprintln(w, "This Axiom connection predates traces: Sign in with Axiom again on Logs")
 				}
 				if !tracing.Enabled {
 					return

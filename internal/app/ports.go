@@ -22,6 +22,7 @@ type Tx interface {
 	DeployTx
 	ObservabilityTx
 	IngressTx
+	MetricsTx
 }
 
 type CoreTx interface {

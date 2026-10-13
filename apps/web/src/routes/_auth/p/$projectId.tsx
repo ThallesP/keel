@@ -7,22 +7,20 @@ import { errorMessage } from "@/lib/api";
 
 /**
  * `?deployment=<id>` opens the deploy drawer for that deployment; the URL is shareable.
- * `?view=observability` is the rail's Observability page instead of the canvas (the older
- * `?view=logs` lands there too). On it, `&trace=<id>` opens one trace full screen, and
- * `&around=<epoch ms>` the log lines around a moment (a line that names no trace).
- * `?view=settings` is the rail's Settings page.
+ * `?view=observability` is the rail's Observability page instead of the canvas, `?view=logs` its
+ * Logs page. On Logs, `&trace=<id>` opens one trace full screen, and `&around=<epoch ms>` the log
+ * lines around a moment (a line that names no trace). `?view=settings` is the rail's Settings page.
  */
 type Search = {
   deployment?: string;
-  view?: "observability" | "settings";
+  view?: "observability" | "logs" | "settings";
   trace?: string;
   around?: number;
 };
 
 const VIEWS = new Map<string, Search["view"]>([
   ["observability", "observability"],
-  ["logs", "observability"],
-  ["traces", "observability"],
+  ["logs", "logs"],
   ["settings", "settings"],
 ]);
 

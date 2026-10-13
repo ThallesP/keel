@@ -74,7 +74,7 @@ export type InfraNodeType = NonNullable<InfraNode["type"]>;
 /** Nodes Swarm runs: service | database | cache. */
 export type RuntimeNode = Exclude<InfraNode, VolumeNode>;
 
-export type PanelTab = "deployments" | "variables" | "logs" | "settings";
+export type PanelTab = "deployments" | "metrics" | "variables" | "logs" | "settings";
 
 export type DeployStepStatus = ApiDeployStep["status"];
 

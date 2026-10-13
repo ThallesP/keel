@@ -1,5 +1,3 @@
-import type { TraceBucket } from "@/gen/api";
-
 import { tickLabel } from "./labels";
 import { BASE, type Band } from "./layout";
 
@@ -9,7 +7,7 @@ export function XAxis({
   bucketMs,
 }: {
   x: Band;
-  buckets: TraceBucket[];
+  buckets: { time: number }[];
   bucketMs: number;
 }) {
   const n = buckets.length;

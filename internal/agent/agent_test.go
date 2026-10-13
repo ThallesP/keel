@@ -34,22 +34,22 @@ func TestConfigFrom(t *testing.T) {
 		{
 			name: "defaults", secret: missing,
 			env:  map[string]string{"KEEL_URL": "http://100.64.0.1:3211//", "KEEL_WORKER_TOKEN": "tok"},
-			want: Config{URL: "http://100.64.0.1:3211", Token: "tok", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second},
+			want: Config{URL: "http://100.64.0.1:3211", Token: "tok", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, Metrics: 15 * time.Second},
 		},
 		{
 			name: "overrides", secret: missing,
 			env:  map[string]string{"KEEL_URL": "https://keel.example", "KEEL_WORKER_TOKEN": "tok", "KEEL_STATE": "/s/state.json", "KEEL_CONFIG_POLL_MS": "1500"},
-			want: Config{URL: "https://keel.example", Token: "tok", StatePath: "/s/state.json", ConfigPoll: 1500 * time.Millisecond},
+			want: Config{URL: "https://keel.example", Token: "tok", StatePath: "/s/state.json", ConfigPoll: 1500 * time.Millisecond, Metrics: 15 * time.Second},
 		},
 		{
 			name: "token from the Swarm secret", secret: secret,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_CONFIG_POLL_MS": "abc"},
-			want: Config{URL: "http://x", Token: "from-secret", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second},
+			want: Config{URL: "http://x", Token: "from-secret", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, Metrics: 15 * time.Second},
 		},
 		{
 			name: "env token wins over the secret", secret: secret,
 			env:  map[string]string{"KEEL_URL": "http://x", "KEEL_WORKER_TOKEN": "env", "KEEL_CONFIG_POLL_MS": "0"},
-			want: Config{URL: "http://x", Token: "env", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second},
+			want: Config{URL: "http://x", Token: "env", StatePath: "/var/lib/keel-agent/state.json", ConfigPoll: 30 * time.Second, Metrics: 15 * time.Second},
 		},
 		{
 			name: "no url", secret: secret, env: map[string]string{"KEEL_WORKER_TOKEN": "tok"},

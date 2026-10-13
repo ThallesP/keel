@@ -30,6 +30,11 @@ jobs:
             exit 1
           fi
       - run: go vet ./...
+      - name: Durable workflows
+        run: |
+          # Lints workflow code and compares it with durable.lock, so a change that would stall
+          # runs in flight fails here (github.com/ThallesP/durable, skills/durable-workflows).
+          go tool durablecheck ./...
       - name: No comments in Go
         run: go run ./tools/nocomments $(go list -f '{{.Dir}}' ./...)
       - run: go test ./...

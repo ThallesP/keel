@@ -83,8 +83,8 @@ A dashed rounded rect (`1px dashed #B9C4E6`, 14px radius, 3% primary tint) with 
 │ ● Online                             │   ← status line, sans 12px, status color
 ├──────────────────────────────────────┤
 │ ▭ footer strip (mono 11, optional)   │   ← e.g. attached volume, later
-└──────────────────────────────────────┘┐
- └──────────────────────────────────────┘   ← replica sheets, one per extra copy, at most two
+└──────────────────────────────────────┘
+  └──────────────────────────────────┘     ← replica sheets, centred, one per extra copy, at most two
  handles: 9px circles, 1.5px border, centered at y=34 (name line)
 ```
 
@@ -96,7 +96,7 @@ Railway-style: the icon says what the node is, so there is no `Service · Docker
 - **Selected**: border `1.5px --color-primary`, ring `0 0 0 3px rgba(31,75,255,.14)`, handles switch to primary border.
 - Icon tile: 26px, 7px radius, `#F0F2F5` background, 14px stroke icon in `--color-ink`.
 - Status line glyph: 6px dot, green healthy, blue deploying (pulsing), red error, grey stopped, grey outline pending. Always one dot.
-- **Replicas** (`NodeShell` `replicas`/`running`): the card is a stack of copies. 2 replicas draw one sheet behind it (offset 6px), 3 or more draw two (6px and 12px), never more. Sheets are the card's own background and border, no content. Past three the stack can't say how many, so the status line adds a faint mono `×N` (`● Online ×8`). On a crash with copies missing the back sheet turns dashed danger and the line says `Crashed · 2 of 3 up`. The exact `running/desired` count stays in the panel. Single-replica nodes, volumes and groups have no stack.
+- **Replicas** (`NodeShell` `replicas`/`running`): the card is a stack of copies. 2 replicas draw one sheet behind it, 3 or more draw two, never more. Sheets stay centred under the card and peek out below it: the first 8px narrower on each side and 5px lower, the second 16px and 10px. Sheets are the card's own background and border, no content. Past three the stack can't say how many, so the status line adds a faint mono `×N` (`● Online ×8`). On a crash with copies missing the back sheet turns dashed danger and the line says `Crashed · 2 of 3 up`. The exact `running/desired` count stays in the panel. Single-replica nodes, volumes and groups have no stack.
 
 ### Types (v1)
 

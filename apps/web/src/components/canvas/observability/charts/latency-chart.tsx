@@ -11,7 +11,11 @@ import { TooltipRow } from "./tooltip-row";
 import { useWidth } from "./use-width";
 import { XAxis } from "./x-axis";
 
-const RAMP = { p50: "#86a0ff", p95: "var(--color-primary)", p99: "#0d2585" } as const;
+const RAMP = {
+  p50: "var(--latency-p50)",
+  p95: "var(--color-primary)",
+  p99: "var(--latency-p99)",
+} as const;
 const PERCENTILES = ["p99", "p95", "p50"] as const;
 const LEGEND = ["p50", "p95", "p99"] as const;
 

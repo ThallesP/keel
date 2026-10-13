@@ -25,6 +25,7 @@
     "anser": "^2.3.5",
     "centrifuge": "^5.7.4",
     "lucide-react": "catalog:",
+    "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-error-boundary": "^6.1.6",

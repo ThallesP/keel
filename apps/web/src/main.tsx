@@ -3,6 +3,7 @@ import "@fontsource-variable/jetbrains-mono";
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
+import { ThemeProvider } from "next-themes";
 import ReactDOM from "react-dom/client";
 
 import { setupApiClient } from "@/lib/api";
@@ -25,9 +26,11 @@ const router = createRouter({
   context: { queryClient },
   Wrap: function WrapComponent({ children }: { children: React.ReactNode }) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <RealtimeProvider>{children}</RealtimeProvider>
-      </QueryClientProvider>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+        <QueryClientProvider client={queryClient}>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     );
   },
 });

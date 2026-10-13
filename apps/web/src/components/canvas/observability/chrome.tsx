@@ -36,12 +36,12 @@ export function SearchField({
 
 /** One muted hue per service so interleaved lines read apart. Never the accent. */
 const SERVICE_TONES = [
-  "text-[#5c5f9a]",
-  "text-[#4f7a5c]",
-  "text-[#8a5f3c]",
-  "text-[#8a4f6e]",
-  "text-[#3c7a8a]",
-  "text-[#8a7a3c]",
+  "text-tone-indigo",
+  "text-tone-green",
+  "text-tone-brown",
+  "text-tone-plum",
+  "text-tone-teal",
+  "text-tone-olive",
 ] as const;
 
 export type ServiceLabel = { text: string; tone: string };

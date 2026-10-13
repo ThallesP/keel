@@ -195,7 +195,9 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
   --color-warning: #d99a00;
   --color-warning-soft: #fff4d6;
   --color-danger: #e23d3d;
+  --color-danger-strong: #c93333;
   --color-danger-soft: #fde8e8;
+  --color-on-danger-soft: #b32626;
   --color-ink-dark: #0a1a4a; /* blueprint theme ground */
   --color-blueprint: #0f2a7a; /* blueprint theme canvas */
 
@@ -217,11 +219,11 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
 
 Type rules: Inter for UI, JetBrains Mono for anything machine-ish (ids, domains, metrics, logs, kbd hints). Headings 600 weight with `-0.02em` tracking. Uppercase section labels are 11px / 600 / `0.06em`. Nothing below 10px, and 10px only inside chips.
 
-Mood word: **hypertext**. Pure white ground, hyperlink blue accent. Not navy, not gradients.
+Mood word: **hypertext**. Hyperlink blue accent on a white ground (light) or a near-black graphite one (dark, the default). Not navy, not gradients.
 
-### Blueprint dark (optional theme)
+### Dark (default theme)
 
-Same layout, ground `--color-ink-dark`, canvas `--color-blueprint` with a 24px line grid at 7% white. Nodes are ground-coloured with 28% white borders; the selected node inverts to a white card. Use as a theme toggle or marketing only. Do not build it before light mode is done.
+Dark is the default; Light and System are the other picks, in the avatar menu (`account-menu.tsx`). `next-themes` puts `dark` or `light` on `<html>` and stores the pick in `localStorage.theme`; an inline script in `apps/web/index.html` applies it before the first paint, so neither theme flashes the other. The `.dark` block in `globals.css` gives every token above a dark value, so components never branch on the theme: anything that needs a colour reads a token. Layering, darkest first: canvas `#0b0d12` (React Flow's pane is pointed at `--color-canvas` in `canvas.css`), then page and chrome `--background`, then cards and floating surfaces `--color-bg` `#151a23`, lines `#252b36`. The accent brightens to `#4d6dff` for contrast and `--color-primary-strong` stays the darker blue under white text (Shipping pill, hover). Theme-aware colours that are not Tailwind tokens live as plain variables next to them: `--ansi-*` (terminal colours in log lines), `--latency-p50`/`--latency-p99` (the latency chart ramp, inverted in dark so p99 stays the loudest). Service and replica hues in log streams are `--color-tone-{indigo,green,brown,plum,teal,olive}`.
 
 ## React Flow mapping
 
@@ -281,7 +283,6 @@ Order matters: shell → edges → panel → data → deploy.
 - Metrics tab and live traffic edges
 - Templates / marketplace
 - Multi-environment diff view
-- Blueprint dark theme
 - Mobile / tablet layouts
 
 ## Auth pages (sign-in, first account, invites, CLI approval)

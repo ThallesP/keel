@@ -34,12 +34,12 @@ function useServiceLogs(nodeId: string, enabled: boolean) {
 
 /** One muted hue per replica so interleaved lines read apart. Never the accent. */
 const REPLICA_TONES = [
-  "text-[#4f7a5c]",
-  "text-[#8a5f3c]",
-  "text-[#5c5f9a]",
-  "text-[#8a4f6e]",
-  "text-[#3c7a8a]",
-  "text-[#8a7a3c]",
+  "text-tone-green",
+  "text-tone-brown",
+  "text-tone-indigo",
+  "text-tone-plum",
+  "text-tone-teal",
+  "text-tone-olive",
 ] as const;
 
 /** task id → `r<slot>` label. Tasks Swarm has already pruned fall back to a short id. */

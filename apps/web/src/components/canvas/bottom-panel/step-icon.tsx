@@ -21,6 +21,6 @@ export function StepIcon({ status }: { status: DeployStepStatus }) {
     case "running":
       return <Spinner size={14} />;
     case "pending":
-      return <span className="m-1 size-2 rounded-full border-[1.5px] border-[#C4CAD4]" />;
+      return <span className="m-1 size-2 rounded-full border-[1.5px] border-faint/50" />;
   }
 }

@@ -4,9 +4,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@my-better-t-app/ui/components/dropdown-menu";
+import { useTheme } from "next-themes";
 import { useState } from "react";
 
 import { InviteDialog } from "@/components/invite-dialog";
@@ -18,6 +21,7 @@ import { attempt } from "./errors";
 export function AccountMenu() {
   const { user, organization } = useSession();
   const auth = useAuth();
+  const { theme, setTheme } = useTheme();
   const [inviting, setInviting] = useState(false);
   return (
     <>
@@ -37,6 +41,15 @@ export function AccountMenu() {
                 </span>
               )}
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-2xs font-normal text-muted-foreground">
+              Theme
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+              <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             {organization && (
               <DropdownMenuItem onClick={() => setInviting(true)}>Invite people…</DropdownMenuItem>

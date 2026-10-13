@@ -310,7 +310,7 @@ Notes: a node whose Swarm service vanished out of band gets `observed.revision =
 
 `EndpointView`: `{protocol, port, domain?, publicPort?, address, state, error?}` with `address = "https://<domain>"` (http) or `"<KEEL_PUBLIC_IP or literally <public IP>>:<publicPort>"` (tcp/udp), `state = status.state`, `error = status.error`.
 
-UI mapping (client side, for reference): healthy `●●● Online`, done `✓ Completed 4s ago`, deploying `● Deploying · <step> <elapsed>`, error `Crashed` + error pill, stopping `Stopping…`, stopped `Stopped 2h ago`, pending `○ Not deployed`. Node toolbar per status: pending → Deploy; healthy/error → Redeploy, Stop (+ Restart in ⋯); done → Run again (+ Redeploy in ⋯); stopped → Start; deploying/stopping → none. Expose offered when status ≠ pending.
+UI mapping (client side, for reference): healthy `● Online` (replicas are a stack of sheets behind the card), done `✓ Completed 4s ago`, deploying `● Deploying · <step> <elapsed>`, error `Crashed` + error pill, stopping `Stopping…`, stopped `Stopped 2h ago`, pending `○ Not deployed`. Node toolbar per status: pending → Deploy; healthy/error → Redeploy, Stop (+ Restart in ⋯); done → Run again (+ Redeploy in ⋯); stopped → Start; deploying/stopping → none. Expose offered when status ≠ pending.
 
 ---
 

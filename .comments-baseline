@@ -26,7 +26,7 @@
 2 apps/web/src/components/canvas/nodes/icons.tsx
 14 apps/web/src/components/canvas/nodes/node-shell.tsx
 8 apps/web/src/components/canvas/nodes/node-toolbar.tsx
-10 apps/web/src/components/canvas/nodes/runtime-line.tsx
+5 apps/web/src/components/canvas/nodes/runtime-line.tsx
 5 apps/web/src/components/canvas/nodes/service-node.tsx
 1 apps/web/src/components/canvas/nodes/volume-node.tsx
 1 apps/web/src/components/canvas/not-wired.ts

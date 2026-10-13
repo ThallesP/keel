@@ -48,7 +48,8 @@ jobs:
           fi
 
   # keel serve + keel agent in one test process against the runner's own fresh Swarm: deploy,
-  # ship a variable change, stop, start, redeploy, delete (internal/serve/swarm_it_test.go).
+  # ship a variable change, stop, start, redeploy, delete, and a deploy that keel serve restarts
+  # in the middle of (internal/serve/swarm_it_test.go).
   swarm:
     runs-on: ubuntu-24.04
     steps:

@@ -23,7 +23,7 @@ function RootComponent() {
     <>
       <HeadContent />
       <Outlet />
-      <Toaster richColors theme="light" />
+      <Toaster richColors />
       <TanStackRouterDevtools position="bottom-right" />
     </>
   );

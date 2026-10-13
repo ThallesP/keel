@@ -40,7 +40,7 @@ function Line({ status, children }: { status: NodeStatus; children: React.ReactN
 function ErrorPill({ id, error }: { id: string; error?: string }) {
   const dispatch = useCanvasDispatch();
   return (
-    <span className="flex items-center gap-2 rounded-md bg-danger-soft px-[9px] py-[6px] font-mono text-2xs text-[#B32626]">
+    <span className="flex items-center gap-2 rounded-md bg-danger-soft px-[9px] py-[6px] font-mono text-2xs text-on-danger-soft">
       <span className="min-w-0 flex-1 truncate">{error ?? "crashed"}</span>
       <button
         type="button"

@@ -69,7 +69,7 @@ Icon-only vertical nav. Top: Canvas (active), Observability (requests and logs i
 
 ### Groups
 
-A dashed rounded rect (`1px dashed #B9C4E6`, 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
+A dashed rounded rect (`1px dashed --color-group-line`, 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
 
 ## Nodes
 
@@ -187,17 +187,20 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
   --color-line: #e3e6eb;
   --color-dot: #d5d9e0;
   --color-primary: #1f4bff;
+  --color-primary-fill: #1f4bff;
   --color-primary-strong: #1539cc;
   --color-primary-soft: #e9eeff;
+  --color-on-primary-soft: #1f4bff;
   --color-on-primary: #ffffff;
   --color-success: #12a150;
   --color-success-soft: #e4f6ea;
   --color-warning: #d99a00;
   --color-warning-soft: #fff4d6;
   --color-danger: #e23d3d;
+  --color-danger-strong: #c93333;
   --color-danger-soft: #fde8e8;
-  --color-ink-dark: #0a1a4a; /* blueprint theme ground */
-  --color-blueprint: #0f2a7a; /* blueprint theme canvas */
+  --color-on-danger-soft: #b32626;
+  --color-group-line: #b9c4e6;
 
   --font-sans: "Inter Variable", Inter, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -217,11 +220,11 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
 
 Type rules: Inter for UI, JetBrains Mono for anything machine-ish (ids, domains, metrics, logs, kbd hints). Headings 600 weight with `-0.02em` tracking. Uppercase section labels are 11px / 600 / `0.06em`. Nothing below 10px, and 10px only inside chips.
 
-Mood word: **hypertext**. Pure white ground, hyperlink blue accent. Not navy, not gradients.
+Mood word: **hypertext**. Hyperlink blue accent on a white ground (light) or a near-black graphite one (dark, the default). Not navy, not gradients.
 
-### Blueprint dark (optional theme)
+### Dark (default theme)
 
-Same layout, ground `--color-ink-dark`, canvas `--color-blueprint` with a 24px line grid at 7% white. Nodes are ground-coloured with 28% white borders; the selected node inverts to a white card. Use as a theme toggle or marketing only. Do not build it before light mode is done.
+Dark is the default; Light and System are the other picks, in the avatar menu (`account-menu.tsx`). `next-themes` puts `dark` or `light` on `<html>` and stores the pick in `localStorage.theme`; an inline script in `apps/web/index.html` applies it before the first paint, so neither theme flashes the other. The `.dark` block in `globals.css` gives every token above a dark value, so components never branch on the theme: anything that needs a colour reads a token. Layering, darkest first: canvas `#0b0d12` (React Flow's pane is pointed at `--color-canvas` in `canvas.css`), then page and chrome `--background`, then cards and floating surfaces `--color-bg` `#151a23`, lines `#252b36`. The accent splits so both uses pass WCAG AA: `--primary` (links, text, rings, chart lines) brightens to `#5a7aff` (4.7:1 on cards), and solid fills under white text use `--color-primary-fill` (`bg-primary-fill`: buttons, Ship, checkboxes, waterfall bars), `#3a58e8` (5.6:1); hover and the Shipping pill use the darker `--color-primary-strong`; text on `primary-soft` chips (rail, Deploying pill, ref chips, `req` badges) uses `--color-on-primary-soft`, `#7d95ff` in dark (5.6:1). In light all three are `#1f4bff`. Theme-aware colours that are not Tailwind tokens live as plain variables next to them: `--ansi-*` (terminal colours in log lines), `--latency-p50`/`--latency-p99` (the latency chart ramp, inverted in dark so p99 stays the loudest), `--lamp-shade`/`--lamp-rim-off` (Observability's lamp, lighter graphite in dark so the shade doesn't vanish). Service and replica hues in log streams are `--color-tone-{indigo,green,brown,plum,teal,olive}`.
 
 ## React Flow mapping
 
@@ -281,7 +284,6 @@ Order matters: shell → edges → panel → data → deploy.
 - Metrics tab and live traffic edges
 - Templates / marketplace
 - Multi-environment diff view
-- Blueprint dark theme
 - Mobile / tablet layouts
 
 ## Auth pages (sign-in, first account, invites, CLI approval)

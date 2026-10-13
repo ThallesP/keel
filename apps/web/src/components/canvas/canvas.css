@@ -4,6 +4,10 @@
   font-family: var(--font-sans);
 }
 
+.dark .react-flow {
+  --xy-background-color: var(--color-canvas);
+}
+
 .react-flow__node-group {
   padding: 0;
   text-align: left;

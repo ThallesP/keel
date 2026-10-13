@@ -143,7 +143,7 @@ function SpanBar({ span, start, total }: { span: Span; start: number; total: num
       <span
         className={cn(
           "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-sm",
-          failed ? "bg-danger" : "bg-primary",
+          failed ? "bg-danger" : "bg-primary-fill",
         )}
         style={{ left: `${left}%`, width: `max(2px, ${width}%)` }}
       />

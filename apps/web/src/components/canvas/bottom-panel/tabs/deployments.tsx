@@ -27,7 +27,7 @@ type Pill = { label: string; tone: "success" | "primary" | "danger" | "muted" };
 
 const pillTone = {
   success: "bg-success-soft text-success",
-  primary: "bg-primary-soft text-primary",
+  primary: "bg-primary-soft text-on-primary-soft",
   danger: "bg-danger-soft text-danger",
   muted: "bg-surface-2 text-muted-foreground",
 } as const;

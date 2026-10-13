@@ -4,25 +4,25 @@ import Anser from "anser";
 import type { AnsiRequest, AnsiResponse, AnsiSegment } from "./ansi";
 
 /**
- * Terminal colors re-tuned for the light canvas: the 16 standard ones arrive as anser's
- * default RGB and land on Keel tones dark enough to read at 11px. 256/truecolor pass through.
+ * The 16 standard terminal colors land on `--ansi-*` (globals.css), tuned to read at 11px in
+ * either theme. 256/truecolor pass through.
  */
 const PALETTE: Record<string, string> = {
   "0, 0, 0": "var(--color-ink)",
-  "187, 0, 0": "#c62f2f",
-  "0, 187, 0": "#178a48",
-  "187, 187, 0": "#9a6c00",
-  "0, 0, 187": "#2f55c9",
-  "187, 0, 187": "#9b3fa8",
-  "0, 187, 187": "#1b7f8f",
+  "187, 0, 0": "var(--ansi-red)",
+  "0, 187, 0": "var(--ansi-green)",
+  "187, 187, 0": "var(--ansi-yellow)",
+  "0, 0, 187": "var(--ansi-blue)",
+  "187, 0, 187": "var(--ansi-magenta)",
+  "0, 187, 187": "var(--ansi-cyan)",
   "255,255,255": "var(--color-ink)",
   "85, 85, 85": "var(--color-faint)",
-  "255, 85, 85": "#c62f2f",
-  "0, 255, 0": "#178a48",
-  "255, 255, 85": "#9a6c00",
-  "85, 85, 255": "#2f55c9",
-  "255, 85, 255": "#9b3fa8",
-  "85, 255, 255": "#1b7f8f",
+  "255, 85, 85": "var(--ansi-red)",
+  "0, 255, 0": "var(--ansi-green)",
+  "255, 255, 85": "var(--ansi-yellow)",
+  "85, 85, 255": "var(--ansi-blue)",
+  "255, 85, 255": "var(--ansi-magenta)",
+  "85, 255, 255": "var(--ansi-cyan)",
   "255, 255, 255": "var(--color-ink)",
 };
 

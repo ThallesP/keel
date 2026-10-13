@@ -4,8 +4,9 @@
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
-/* Light only. Keep the class-based variant so `dark:` utilities inside shadcn
-   components never fire from the OS preference. */
+/* Dark is the default theme, light and system are options (next-themes sets the class on
+   <html>, index.html sets it before the first paint). Class-based so `dark:` follows the
+   user's pick, not the OS preference. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -34,6 +35,75 @@
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
   --radius: 6px;
+  --ansi-red: #c62f2f;
+  --ansi-green: #178a48;
+  --ansi-yellow: #9a6c00;
+  --ansi-blue: #2f55c9;
+  --ansi-magenta: #9b3fa8;
+  --ansi-cyan: #1b7f8f;
+  --latency-p50: #86a0ff;
+  --latency-p99: #0d2585;
+  --lamp-shade: #1f2633;
+  --lamp-rim-off: #2b3240;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #11141b;
+  --foreground: #e7eaf0;
+  --card: #151a23;
+  --card-foreground: #e7eaf0;
+  --popover: #161a24;
+  --popover-foreground: #e7eaf0;
+  --primary: #5a7aff;
+  --primary-foreground: #ffffff;
+  --secondary: #1b2029;
+  --secondary-foreground: #e7eaf0;
+  --muted: #1b2029;
+  --muted-foreground: #8b94a3;
+  --accent: #19224a;
+  --accent-foreground: #e7eaf0;
+  --destructive: #f05454;
+  --border: #252b36;
+  --input: #2a303c;
+  --ring: #5a7aff;
+  --ansi-red: #ff6b6b;
+  --ansi-green: #3fcf7f;
+  --ansi-yellow: #e5b53a;
+  --ansi-blue: #7b97ff;
+  --ansi-magenta: #d28be0;
+  --ansi-cyan: #4fc3d4;
+  --latency-p50: #2b42b0;
+  --latency-p99: #c9d3ff;
+  --lamp-shade: #454e5f;
+  --lamp-rim-off: #5b6577;
+
+  --color-bg: #151a23;
+  --color-canvas: #0b0d12;
+  --color-surface-2: #1b2029;
+  --color-ink: #e7eaf0;
+  --color-faint: #5f6878;
+  --color-line: #252b36;
+  --color-dot: #232833;
+  --color-primary-fill: #3a58e8;
+  --color-primary-strong: #2f4cd4;
+  --color-primary-soft: #19224a;
+  --color-on-primary-soft: #7d95ff;
+  --color-success: #2fbf71;
+  --color-success-soft: #10291c;
+  --color-warning: #e5ab1f;
+  --color-warning-soft: #2b2310;
+  --color-danger: #f05454;
+  --color-danger-strong: #d64545;
+  --color-danger-soft: #2e1517;
+  --color-on-danger-soft: #ff8a8a;
+  --color-tone-indigo: #9a9ee0;
+  --color-tone-green: #86b896;
+  --color-tone-brown: #c99a72;
+  --color-tone-plum: #c78aa8;
+  --color-tone-teal: #78b6c6;
+  --color-tone-olive: #c4b26e;
+  --color-group-line: #2c3656;
 }
 @theme inline {
   --font-sans: "Inter Variable", sans-serif;
@@ -81,17 +151,26 @@
   --color-faint: #8a93a1;
   --color-line: #e3e6eb;
   --color-dot: #d5d9e0;
+  --color-primary-fill: #1f4bff;
   --color-primary-strong: #1539cc;
   --color-primary-soft: #e9eeff;
+  --color-on-primary-soft: #1f4bff;
   --color-on-primary: #ffffff;
   --color-success: #12a150;
   --color-success-soft: #e4f6ea;
   --color-warning: #d99a00;
   --color-warning-soft: #fff4d6;
   --color-danger: #e23d3d;
+  --color-danger-strong: #c93333;
   --color-danger-soft: #fde8e8;
-  --color-ink-dark: #0a1a4a;
-  --color-blueprint: #0f2a7a;
+  --color-on-danger-soft: #b32626;
+  --color-tone-indigo: #5c5f9a;
+  --color-tone-green: #4f7a5c;
+  --color-tone-brown: #8a5f3c;
+  --color-tone-plum: #8a4f6e;
+  --color-tone-teal: #3c7a8a;
+  --color-tone-olive: #8a7a3c;
+  --color-group-line: #b9c4e6;
   --text-2xs: 11px;
   --text-2xs--line-height: 14px;
 }

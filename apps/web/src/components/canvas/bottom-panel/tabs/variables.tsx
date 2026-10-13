@@ -153,7 +153,7 @@ function Editor({
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="flex h-[22px] shrink-0 items-center gap-1 rounded-xs px-1.5 font-sans text-2xs font-medium text-primary hover:bg-primary-soft"
+          className="flex h-[22px] shrink-0 items-center gap-1 rounded-xs px-1.5 font-sans text-2xs font-medium text-primary hover:bg-primary-soft hover:text-on-primary-soft"
         >
           <Braces size={11} strokeWidth={1.8} aria-hidden />
           Reference
@@ -168,7 +168,7 @@ function Editor({
         className={cn(
           "flex size-7 shrink-0 items-center justify-center rounded-sm border",
           secret
-            ? "border-primary/40 bg-primary-soft text-primary"
+            ? "border-primary/40 bg-primary-soft text-on-primary-soft"
             : "border-line text-faint hover:bg-surface-2 hover:text-ink",
         )}
       >
@@ -178,7 +178,7 @@ function Editor({
         type="button"
         disabled={!valid}
         onClick={() => void submit()}
-        className="flex h-7 shrink-0 items-center gap-1.5 rounded-sm bg-primary px-2.5 text-2xs font-medium text-on-primary hover:bg-primary-strong disabled:bg-surface-2 disabled:text-faint"
+        className="flex h-7 shrink-0 items-center gap-1.5 rounded-sm bg-primary-fill px-2.5 text-2xs font-medium text-on-primary hover:bg-primary-strong disabled:bg-surface-2 disabled:text-faint"
       >
         {initial ? "Save" : "Add"}
         <Kbd className="text-current opacity-70">↵</Kbd>
@@ -216,7 +216,7 @@ function RefChip({ reference, jump }: { reference: VariableRef; jump: () => void
         "inline-flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5 align-middle font-mono text-[10px]",
         missing
           ? "bg-danger-soft text-danger line-through decoration-danger/50"
-          : "bg-primary-soft text-primary hover:bg-primary/15",
+          : "bg-primary-soft text-on-primary-soft hover:bg-primary/15",
         !(nodeId && node) && "cursor-default",
       )}
     >
@@ -345,7 +345,7 @@ export function VariablesTab({ node }: { node: InfraNode }) {
               key={s.nodeId}
               type="button"
               onClick={() => void save()(s.as, s.value, false)}
-              className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-primary"
+              className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-on-primary-soft"
             >
               <Plus size={10} strokeWidth={2} aria-hidden />
               {s.node}.{s.key}

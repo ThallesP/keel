@@ -13,6 +13,7 @@ export const CacheNode = memo(function CacheNode({ id, data, selected }: NodePro
       name={data.name}
       subtitle={data.engine}
       status={data.status}
+      replicas={data.replicas}
       selected={selected}
     >
       <RuntimeLine id={id} data={data} />

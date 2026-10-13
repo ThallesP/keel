@@ -7,6 +7,8 @@ import type { InfraNodeType, NodeStatus } from "../types";
 import { IconTile } from "./icons";
 import { NodeToolbar } from "./node-toolbar";
 
+export const STACK_DEPTH = 3;
+
 type Props = {
   id: string;
   type: InfraNodeType;
@@ -14,6 +16,7 @@ type Props = {
   /** Under the name, muted: domain, image, engine. Omit for a one-line header. */
   subtitle?: React.ReactNode;
   status: NodeStatus;
+  replicas?: number;
   selected: boolean;
   /** Status line(s). */
   children: React.ReactNode;
@@ -24,21 +27,45 @@ type Props = {
 /**
  * The one shell every infra node uses. Railway-style: icon + name (+ subtitle) header, a status
  * line in the body, optional footer strip. The icon carries the type; there is no kind label
- * and no corner status dot — the status line's dots do that job.
+ * and no corner status dot — the status line's dot does that job.
  */
-export function NodeShell({ id, type, name, subtitle, status, selected, children, footer }: Props) {
+export function NodeShell({
+  id,
+  type,
+  name,
+  subtitle,
+  status,
+  replicas = 1,
+  selected,
+  children,
+  footer,
+}: Props) {
   const { renamingId, setRenamingId } = useRenaming();
+  const sheets = Math.min(replicas, STACK_DEPTH) - 1;
   return (
     <div
       className={cn(
         "relative flex w-[220px] flex-col rounded-[10px] border bg-bg",
-        "shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]",
+        sheets > 0
+          ? "shadow-[0_1px_2px_rgba(11,18,32,0.05)]"
+          : "shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]",
         status === "error" ? "border-danger" : "border-line",
         status === "pending" && "border-dashed",
         selected &&
           "border-primary shadow-[0_0_0_0.5px_var(--color-primary),0_0_0_3px_rgba(31,75,255,0.14),0_4px_14px_rgba(11,18,32,0.06)]",
       )}
     >
+      {Array.from({ length: sheets }, (_, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute -inset-px rounded-[10px] border border-line bg-bg",
+            i === 0 ? "-z-10 translate-y-1" : "-z-20 translate-y-2",
+            status === "pending" && "border-dashed",
+          )}
+        />
+      ))}
       <NodeToolbar nodeId={id} visible={selected} />
       <div className="flex items-start gap-2.5 px-3.5 pt-3">
         <IconTile type={type} />

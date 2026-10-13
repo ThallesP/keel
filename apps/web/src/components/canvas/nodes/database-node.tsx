@@ -17,6 +17,7 @@ export const DatabaseNode = memo(function DatabaseNode({
       name={data.name}
       subtitle={data.engine}
       status={data.status}
+      replicas={data.replicas}
       selected={selected}
     >
       <RuntimeLine id={id} data={data} />

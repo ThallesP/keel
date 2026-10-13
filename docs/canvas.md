@@ -80,44 +80,46 @@ A dashed rounded rect (`1px dashed #B9C4E6`, 14px radius, 3% primary tint) with 
 │ [icon 26px]  name (13/600)           │   ← header, padding 12 14 0
 │              subtitle (11, muted)    │      domain / image / engine, optional
 │                                      │
-│ ●●● Online                           │   ← status line, sans 12px, status color
+│ ● Online                             │   ← status line, sans 12px, status color
 ├──────────────────────────────────────┤
 │ ▭ footer strip (mono 11, optional)   │   ← e.g. attached volume, later
 └──────────────────────────────────────┘
+└──────────────────────────────────────┘   ← replica sheets, full width, 4px apart, at most two
  handles: 9px circles, 1.5px border, centered at y=34 (name line)
 ```
 
-Railway-style: the icon says what the node is, so there is no `Service · Docker` kind label and no corner status dot. Status is one line in the body whose leading glyph doubles as the replica count.
+Railway-style: the icon says what the node is, so there is no `Service · Docker` kind label and no corner status dot. Status is one line in the body; replicas are drawn, not counted (below).
 
 - Width: 220px (infra) / 242px (things with chips, see agents.md).
 - Background `--color-bg`, border `1px solid --color-line`, radius 10px.
 - Shadow: `0 1px 2px rgba(11,18,32,.05), 0 4px 12px rgba(11,18,32,.04)`.
 - **Selected**: border `1.5px --color-primary`, ring `0 0 0 3px rgba(31,75,255,.14)`, handles switch to primary border.
 - Icon tile: 26px, 7px radius, `#F0F2F5` background, 14px stroke icon in `--color-ink`.
-- Status line glyph: 6px dot, green healthy, blue deploying (pulsing), red error, grey stopped, grey outline pending. Runtime nodes with `replicas > 1` show one dot per replica (`●●○` = 2 of 3 running, capped at 6); never a `2/3 replicas` text line on the card.
+- Status line glyph: 6px dot, green healthy, blue deploying (pulsing), red error, grey stopped, grey outline pending. Always one dot.
+- **Replicas** (`NodeShell` `replicas`): the card is a stack of copies. 2 replicas draw one sheet behind it, 3 or more draw two, never more. Sheets are full width, straight down, 4px apart (4px and 8px below the card), like a deck seen from the side. A stacked card keeps only its hairline shadow; the soft one would smear over the sheets. Sheets are the card's own background and border, no content. Past three the stack can't say how many, so the status line adds a faint mono `×N` (`● Online ×8`). A never-shipped (`pending`) card's sheets are dashed like the card. Crashes don't count copies on the card: `running` only counts the newest revision's tasks, so after a rolled-back Ship it would say none are up while the old spec still serves. The exact count stays in the panel. Single-replica nodes, volumes and groups have no stack.
 
 ### Types (v1)
 
-| type       | icon          | subtitle                                                          | body lines                                                               | handles                   |
-| ---------- | ------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------- |
-| `service`  | `< >`         | domain if public, else the image in mono (`ghcr.io/acme/api:1.2`) | status line. Port and replica counts live in the panel, not on the card. | target left, source right |
-| `database` | cylinder      | `Postgres 16`                                                     | status line                                                              | target left               |
-| `cache`    | stacked rects | `Redis 7`                                                         | status line                                                              | target left               |
-| `volume`   | disk          | `10 GB`                                                           | `○ Not mounted`                                                          | target left               |
+| type       | icon          | subtitle                                                          | body lines                                                    | handles                   |
+| ---------- | ------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------- |
+| `service`  | `< >`         | domain if public, else the image in mono (`ghcr.io/acme/api:1.2`) | status line. Port lives in the panel; replicas are the stack. | target left, source right |
+| `database` | cylinder      | `Postgres 16`                                                     | status line                                                   | target left               |
+| `cache`    | stacked rects | `Redis 7`                                                         | status line                                                   | target left               |
+| `volume`   | disk          | `10 GB`                                                           | `○ Not mounted`                                               | target left               |
 
 Add more later (queue, cron, static site). Every type is the same shell with a different icon and body. Do not invent a new shell per type.
 
 ### Node states
 
-| state     | status line                                                                                               | border           |
-| --------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
-| healthy   | `●●● Online` (success)                                                                                    | default          |
-| done      | `✓ Completed 4s ago` (success; one-shot image, nothing running)                                           | default          |
-| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses)                                                    | default          |
-| error     | `●○○ Crashed` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
-| stopping  | `● Stopping…` (faint, dot pulses)                                                                         | default          |
-| stopped   | `● Stopped 2h ago` (faint)                                                                                | default          |
-| pending   | `○ Not deployed` (faint)                                                                                  | dashed           |
+| state     | status line                                                                                             | border           |
+| --------- | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| healthy   | `● Online` (success), `×N` past three replicas                                                          | default          |
+| done      | `✓ Completed 4s ago` (success; one-shot image, nothing running)                                         | default          |
+| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses)                                                  | default          |
+| error     | `● Crashed` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
+| stopping  | `● Stopping…` (faint, dot pulses)                                                                       | default          |
+| stopped   | `● Stopped 2h ago` (faint)                                                                              | default          |
+| pending   | `○ Not deployed` (faint)                                                                                | dashed           |
 
 ## Variable references (replaces edges)
 

@@ -293,7 +293,7 @@ Notes:
 - The manager's image cache decides "cached". On multi-server clusters, other servers' Swarm executors pull the tag themselves when their task starts.
 - `nodes.remove` deletes the row **before** scheduling `swarm.remove` (same transaction), so `stillWanted()` is authoritative.
 
-> **Go now:** the pull time is `fmt.Sprintf("%.1f")`, not `toFixed(1)`; applies of one node run in order through a per-node queue on `App`, and a newer revision cancels a running older apply (`superseded by revision N`).
+> **Go now:** the pull time is `fmt.Sprintf("%.1f")`, not `toFixed(1)`; each apply is a durable `apply` run (`internal/app/swarm.go`), started by the deployment's `deploy` run. Applies of one node run in order (`durable.Concurrency(1)` partitioned by node), and a newer revision cancels a running older apply (`superseded by revision N`). An apply cut off by shutdown is not saved and runs again on the next start.
 
 ### 6.2 `createOrUpdate(spec) → created:boolean`
 
@@ -344,6 +344,8 @@ They patch even when the deployment is no longer `running` (e.g. after a timeout
 ### 6.6 `remove` (internal action)
 
 `{ id }` → `DELETE /services/svc-<id>`, 404 ignored, other errors thrown (logged by the runtime, not retried). Scheduled by `nodes.remove` only when the deleted node had `desired`, together with `reconcile.run` (and `proxy.sync` if it had endpoints). `nodes.remove` also cancels the pending `observeScheduled`.
+
+> **Go now:** a durable `remove` run (`runRemove`, `internal/app/swarm.go`) created in `RemoveNode`'s transaction, so a restart cannot lose it; other errors are logged and retried (8 attempts, backoff from 2 s). The reconcile comes from `RemoveNode`'s `ScheduleObserve`, which also drops the node's pending scan.
 
 ### 6.7 `removeLegacyTunnels` (internal action)
 
@@ -625,6 +627,8 @@ patch(d, {steps, log: slice(-500), status: failed, finishedAt: now})
 ```
 
 Covers: task `pending` (no server can schedule it), a pull that hangs, a container that never emits an event. It is the only timer in the deploy path. **Durable**: must survive a control-plane restart (§18).
+
+> **Go now:** the timer is the `deploy` run's `durable.Await("settled", 5 min)`, whose deadline is saved when the run reaches it (right after it starts the applies, not at `startedAt`). `reconcile` and `patchStep` signal `settled` when the deployment leaves `running`; on timeout the run calls `timeoutDeployment`.
 
 ### 10.4 Timeline reference (dev box)
 
@@ -1022,7 +1026,7 @@ Bind `nodes.list`, `environments.summary`, `deployments.latest`, `deployments.li
 | `db.normalizeId` rejects foreign ids | Unknown `svc-<x>` ids are ignored (no error). |
 | `_creationTime` float ms | `since` in `worker.config` stays epoch **milliseconds** (number, may be fractional). |
 
-> **Go now:** no jobs table. Jobs live in memory (`internal/adapters/jobs`) and the recovery pass, itself a job queued at start (`Jobs.After("recover", 0, a.Recover)`), re-derives them: (a), (b), (c) and (e) above, plus `keel-agent`; there is no (d).
+> **Go now:** `apply`, `remove` and `timeoutDeployment` are durable workflow runs (`github.com/ThallesP/durable` on `keel.db`, `internal/app/workflows.go`) created in the triggering transaction, which is the jobs table this row asks for. Everything else is an in-memory job (`internal/adapters/jobs`), and the start-up pass, itself a job (`Jobs.After("recover", 0, a.Recover)`), does (a) and (e) above, plus `keel-agent`; (b) and (c) are the engine resuming its runs; there is no (d).
 
 Docker access stays internal: no HTTP route ever takes a raw image/command/mount; images are validated by the regex in §2.1.
 

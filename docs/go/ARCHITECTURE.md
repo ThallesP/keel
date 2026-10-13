@@ -7,7 +7,7 @@ contract every package follows. The porting specs it implements live in `docs/go
 
 | Command                  | Runs where                                          | What it is                                                                                   |
 | ------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `keel serve`             | control plane, container `keel` (compose)           | HTTP API + WebSocket + embedded dashboard + SQLite + Swarm driver (Docker socket) + jobs     |
+| `keel serve`             | control plane, container `keel` (compose)           | HTTP API + WebSocket + embedded dashboard + SQLite + Swarm driver (Docker socket) + jobs + workflows |
 | `keel proxy`             | control plane, container `proxy` (compose)          | Embedded Caddy + caddy-l4 + the keel plugin (was `apps/proxy`). No Docker socket, ever. Linux builds without `-tags keel_noproxy` only. |
 | `keel agent`             | every Swarm node, global service `keel-agent`       | Docker events forwarder + log shipper (was `apps/worker`). Read-only Docker socket.          |
 | `keel openapi`           | build time                                          | Prints the OpenAPI 3.1 document (`openapi.json` at the repo root is its committed output).   |
@@ -40,13 +40,24 @@ cmd/keel/        main.go → cli.Execute(ctx, web.Dist()): the dashboard FS ride
 
 - `domain` never imports `app`, `adapters`, `transport`, `api`.
 - `app` never imports `adapters`, `transport`, `api`, `net/http`, `database/sql`, Docker SDK.
-- Only `adapters/sqlite` imports a SQL driver. Only `adapters/swarm` and `agent` import the Docker SDK.
+  It does import `github.com/ThallesP/durable` (the workflow engine; its core package does no
+  I/O), directly and not behind a port: `durablecheck` lints and locks workflow code by its
+  `durable.Step`/`Await`/`Register` calls, so a port in between would blind the upgrade gate.
+- Only `adapters/sqlite` imports a SQL driver (and `durable/sqlitestore`). Only `adapters/swarm`
+  and `agent` import the Docker SDK.
 - Interfaces are defined by the consumer (in `app`), small, one file per area.
 
 ## Data
 
 - SQLite, pure Go driver `modernc.org/sqlite`, WAL, `foreign_keys=ON`, `busy_timeout=5000`.
   One write connection (writes serialize, `BEGIN IMMEDIATE`), a read pool. File: `$KEEL_DATA_DIR/keel.db`.
+- Workflow runs live in the same file: `sqlite.Open` hands the write connection to
+  `durable/sqlitestore`, which creates `durable_runs`, `durable_steps` and `durable_signals`
+  itself (not in `migrations/`). The engine's writes queue behind Keel's on that one connection,
+  so the two never meet as `SQLITE_BUSY`; the flip side is that nothing may call the engine
+  (`Start`, `Signal`, `Cancel`) inside `a.write`, it would wait for the connection the
+  transaction holds. A run that must exist together with a row is created in that row's
+  transaction instead (`tx.StartRun`, below).
 - Schema: `internal/adapters/sqlite/migrations/NNNN_name.sql`, applied in order at start, tracked
   in `schema_migrations`. Additive only once released.
 - Queries: `sqlc` (`internal/adapters/sqlite/sqlc.yaml`), one `queries/<area>.sql` per area,
@@ -76,25 +87,47 @@ func (a *App) RenameNode(ctx context.Context, actor domain.Actor, id string, nam
 - `a.read` / `a.write` wrap `Store.Read` / `Store.Write`. `write` publishes the collected
   `Changes` after commit and then runs their `AfterCommit` funcs (a crash in between loses only
   an invalidation; clients refetch everything on reconnect).
-- Runtime state lives on `App`, in fields `app.New` sets: the observe debounce and the per-node
-  apply queues (`deploy`), the proxy sync state (`ingress`), the auth rate limiters
-  (`authLimits`). None of it is a package variable. `New` also defaults `Events` and `Conns` to
-  no-ops, `Now` and `Log`, so a spec-only `App` (`keel openapi`) is built the same way.
+- Runtime state lives on `App`, in fields `app.New` sets: the observe debounce, the applies
+  running in this process (so a newer revision can cancel them) and the deploy timeout
+  (`deploy`), the proxy sync state (`ingress`), the auth rate limiters (`authLimits`), the
+  registered workflows (`flows`). None of it is a package variable. `New` also defaults `Events`
+  and `Conns` to no-ops, `Now`, `Log` and `Workflows` (an engine on `memstore` that never runs),
+  so a spec-only `App` (`keel openapi`) is built the same way.
 - `Tx` is the composite of per-area interfaces (`ProjectsTx`, `NodesTx`, …) declared in
   `app/ports_<area>.go` and implemented in `adapters/sqlite/<area>.go`.
 - Long work (Docker, Axiom, Caddy) happens outside the transaction: read, release, call out,
   write the outcome. Never hold the write lock across a network call.
-- Background work (Convex `scheduler.runAfter`, crons) goes through the `Jobs` port:
+- Work that must happen even if `keel serve` restarts halfway, or that waits for something, is a
+  durable workflow (`github.com/ThallesP/durable`): an `App` method `func(durable.Context, In)
+  (Out, error)` whose steps are saved in SQLite, so a restart replays it and skips what already
+  finished. All of them are registered in `app/workflows.go`:
+  - `deploy` (`runDeploy`, run `deploy:<deployment>`): starts one `apply` per node, then
+    `durable.Await`s `settled` with the 5-minute deploy timeout as the await's timeout, and fails
+    the deployment if it expires. `reconcile` and `patchStep` signal `settled` after the commit
+    that takes the deployment out of `running`.
+  - `apply` (`runApply`, run `apply:<deployment>:<node>`): one node's apply, `Concurrency(1)`
+    partitioned by node, so applies of a node run one at a time in order. A newer revision cancels
+    an older apply running in this process (`supersedeApply`). An apply cut off by shutdown
+    returns an error, so durable does not save it and runs it again on the next start.
+  - `remove` (`runRemove`, run `remove:<node>`): removes a deleted node's Swarm service, retried.
+
+  A run that belongs to a row is created in the row's transaction (`startRun(a, tx, ch, wf, id,
+  in)` → `tx.StartRun`, then `Workflows.Wake` after commit): `beginDeployment` and `RemoveNode`
+  never commit a row without its run. `serve` runs the engine with its shutdown context and waits
+  for it before closing the database. Changing a workflow follows the `durable-workflows` skill;
+  `go tool durablecheck ./...` (in `make test` and CI) fails on replay hazards and on any change
+  `durable.lock` does not record.
+- Everything else in the background (Convex `scheduler.runAfter`, crons) goes through the `Jobs`
+  port: coalesced, re-derivable work (observe scans and sweeps, proxy syncs) and periodic work.
   `After(key, delay, fn)` coalesces by key (a pending job with the same key wins; a negative
   delay runs at once), `Every(name, interval, fn)` runs `fn` on each tick, never overlapping
   itself. `Stop` starts nothing new, waits for running jobs and cancels them at its deadline.
-- The recovery pass is a job too: once its listener serves, `serve` queues
+- The start-up pass is a job too: once its listener serves, `serve` queues
   `Jobs.After("recover", 0, a.Recover)`. `Recover` runs three parts, each recovering its own
-  panic: deploy (the full observe sweep and server count, re-arm deployment timeouts, re-queue
-  applies that never reached Swarm, `keel-agent` when `KEEL_AGENT_IMAGE` is set), ingress (move
-  default domains to `KEEL_PUBLIC_IP`, proxy sync, the 2-minute resync) and observability (purge
-  expired Axiom sign-ins, then every minute). That replaces durable scheduling until workflows
-  land.
+  panic: deploy (the full observe sweep and server count, `keel-agent` when `KEEL_AGENT_IMAGE` is
+  set), ingress (move default domains to `KEEL_PUBLIC_IP`, proxy sync, the 2-minute resync) and
+  observability (purge expired Axiom sign-ins, then every minute). Deployments, applies and
+  removals in flight are not its business: the engine resumes them.
 
 ## Errors
 
@@ -201,11 +234,14 @@ the shapes move together.
 ## Testing
 
 - `domain`: plain table tests. `app`: against the real SQLite adapter on a temp file (fast, no
-  mocks) plus hand-written fakes for Swarm/Proxy/Axiom ports. Adapters: real SQLite; Swarm against
-  a Docker-in-Docker Swarm in CI, never the dev box's shared Swarm.
-- `go vet ./...`, `gofmt`, `go run ./tools/nocomments` (no comments in Go), `go test ./...` and
-  `openapi.json` matching `keel openapi` must pass (`ci.yml`, `make test`). `bun run check-types`
-  + `bun run build` in `apps/web` must pass.
+  mocks) plus hand-written fakes for Swarm/Proxy/Axiom ports. Workflows run on a real engine over
+  that same file (`world.start`, `world.flush` waits until no run is due); a test that needs a
+  timeout shortens it (`SetDeployTimeoutForTest`) instead of faking time, and a restart is a new
+  `App` and engine on the same file. Adapters: real SQLite; Swarm against a Docker-in-Docker Swarm
+  in CI, never the dev box's shared Swarm.
+- `go vet ./...`, `go tool durablecheck ./...`, `gofmt`, `go run ./tools/nocomments` (no
+  comments in Go), `go test ./...` and `openapi.json` matching `keel openapi` must pass
+  (`ci.yml`, `make test`). `bun run check-types` + `bun run build` in `apps/web` must pass.
 
 ## Building an area (implementation guide)
 

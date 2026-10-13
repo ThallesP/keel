@@ -91,7 +91,7 @@ Downtime is the final pass plus container boot. The warm loop makes the final pa
 
 ### Steps as a control-plane workflow
 
-There is no durable workflow engine in `keel serve` yet: jobs are in memory and die with the process ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Use cases"). So each step must be recorded in the `migrations` row before it runs, and the start-up `Recover` pass must resume or abort a migration from its `step`. `awaitEvent` below means: wait until observe (`internal/app/observe.go`) records that state (it was the Convex workflow primitive).
+A migration is a durable workflow, like `deploy` ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Use cases"): each step below is a `durable.Step` whose outcome is saved, so a restart of `keel serve` resumes at the step that was running instead of starting over. `awaitEvent` below is a `durable.Await` that observe (`internal/app/observe.go`) signals once it records that state (it was the Convex workflow primitive). The `migrations` row stays what the canvas reads.
 
 ```
 migrateVolume(volumeId, toNodeId)

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"time"
 
+	"github.com/ThallesP/durable/sqlitestore"
 	_ "modernc.org/sqlite"
 
 	"github.com/ThallesP/keel/internal/app"
@@ -19,8 +20,9 @@ import (
 var migrations embed.FS
 
 type Store struct {
-	w *sql.DB
-	r *sql.DB
+	w     *sql.DB
+	r     *sql.DB
+	flows *sqlitestore.Store
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -44,8 +46,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		s.Close()
 		return nil, fmt.Errorf("migrate %s: %w", path, err)
 	}
+	if s.flows, err = sqlitestore.New(ctx, w); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("workflow tables in %s: %w", path, err)
+	}
 	return s, nil
 }
+
+func (s *Store) Workflows() *sqlitestore.Store { return s.flows }
 
 func (s *Store) Close() error {
 	return errors.Join(s.w.Close(), s.r.Close())
@@ -108,15 +116,17 @@ func (s *Store) run(ctx context.Context, pool *sql.DB, opts *sql.TxOptions, fn f
 		return err
 	}
 	defer sqlTx.Rollback()
-	if err := fn(&tx{ctx: ctx, q: sqlc.New(sqlTx)}); err != nil {
+	if err := fn(&tx{ctx: ctx, q: sqlc.New(sqlTx), sql: sqlTx, flows: s.flows}); err != nil {
 		return err
 	}
 	return sqlTx.Commit()
 }
 
 type tx struct {
-	ctx context.Context
-	q   *sqlc.Queries
+	ctx   context.Context
+	q     *sqlc.Queries
+	sql   *sql.Tx
+	flows *sqlitestore.Store
 }
 
 func noRow(err error) error {

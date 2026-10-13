@@ -3,6 +3,7 @@ module github.com/ThallesP/keel
 go 1.27.1
 
 require (
+	github.com/ThallesP/durable v0.1.1-0.20261013012228-639d7ff3ef8d
 	github.com/caddyserver/caddy/v2 v2.11.7
 	github.com/caddyserver/certmagic v0.25.6
 	github.com/centrifugal/centrifuge v0.39.3
@@ -196,10 +197,12 @@ require (
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb // indirect
 	golang.org/x/crypto/x509roots/fallback v0.0.0-20260929172509-b39ff6d641ec // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
+	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v1.0.1 // indirect
 	google.golang.org/api v0.298.0 // indirect
@@ -217,3 +220,5 @@ require (
 
 // The JS workspace lives in the same tree: never walk its dependencies for ./... patterns.
 ignore node_modules
+
+tool github.com/ThallesP/durable/cmd/durablecheck

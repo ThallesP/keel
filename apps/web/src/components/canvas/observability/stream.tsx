@@ -114,7 +114,7 @@ export function EventStream({
             <span className={cn("w-28 shrink-0 truncate pr-3", service.tone)}>{service.text}</span>
             <span className="w-12 shrink-0">
               {e.kind === "request" ? (
-                <span className="rounded-sm bg-primary-soft px-1 text-[10px] text-primary">
+                <span className="rounded-sm bg-primary-soft px-1 text-[10px] text-on-primary-soft">
                   req
                 </span>
               ) : (

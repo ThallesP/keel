@@ -96,7 +96,7 @@ function Backdrop() {
             <div key={i} className="text-ink">
               <span className="pr-4 text-faint">{time}</span>
               <span className="inline-block w-24 pr-3 text-tone-indigo">{svc}</span>
-              <span className="mr-3 rounded-sm bg-primary-soft px-1 text-primary">req</span>
+              <span className="mr-3 rounded-sm bg-primary-soft px-1 text-on-primary-soft">req</span>
               {name}
               <span className="pl-3 text-faint">{formatDuration(ms)}</span>
             </div>

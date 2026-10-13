@@ -168,7 +168,7 @@ function Editor({
         className={cn(
           "flex size-7 shrink-0 items-center justify-center rounded-sm border",
           secret
-            ? "border-primary/40 bg-primary-soft text-primary"
+            ? "border-primary/40 bg-primary-soft text-on-primary-soft"
             : "border-line text-faint hover:bg-surface-2 hover:text-ink",
         )}
       >
@@ -216,7 +216,7 @@ function RefChip({ reference, jump }: { reference: VariableRef; jump: () => void
         "inline-flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5 align-middle font-mono text-[10px]",
         missing
           ? "bg-danger-soft text-danger line-through decoration-danger/50"
-          : "bg-primary-soft text-primary hover:bg-primary/15",
+          : "bg-primary-soft text-on-primary-soft hover:bg-primary/15",
         !(nodeId && node) && "cursor-default",
       )}
     >

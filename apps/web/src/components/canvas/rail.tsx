@@ -19,7 +19,7 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
       className={cn(
         "flex size-8 items-center justify-center rounded-md",
         active
-          ? "bg-primary-soft text-primary"
+          ? "bg-primary-soft text-on-primary-soft"
           : "text-muted-foreground hover:bg-surface-2 hover:text-ink",
       )}
     >

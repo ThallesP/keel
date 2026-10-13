@@ -88,6 +88,7 @@
   --color-primary-fill: #3a58e8;
   --color-primary-strong: #2f4cd4;
   --color-primary-soft: #19224a;
+  --color-on-primary-soft: #7d95ff;
   --color-success: #2fbf71;
   --color-success-soft: #10291c;
   --color-warning: #e5ab1f;
@@ -153,6 +154,7 @@
   --color-primary-fill: #1f4bff;
   --color-primary-strong: #1539cc;
   --color-primary-soft: #e9eeff;
+  --color-on-primary-soft: #1f4bff;
   --color-on-primary: #ffffff;
   --color-success: #12a150;
   --color-success-soft: #e4f6ea;

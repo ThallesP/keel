@@ -153,7 +153,7 @@ function Editor({
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="flex h-[22px] shrink-0 items-center gap-1 rounded-xs px-1.5 font-sans text-2xs font-medium text-primary hover:bg-primary-soft"
+          className="flex h-[22px] shrink-0 items-center gap-1 rounded-xs px-1.5 font-sans text-2xs font-medium text-primary hover:bg-primary-soft hover:text-on-primary-soft"
         >
           <Braces size={11} strokeWidth={1.8} aria-hidden />
           Reference
@@ -345,7 +345,7 @@ export function VariablesTab({ node }: { node: InfraNode }) {
               key={s.nodeId}
               type="button"
               onClick={() => void save()(s.as, s.value, false)}
-              className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-primary"
+              className="flex h-[22px] items-center gap-1 rounded-sm border border-dashed border-line px-1.5 font-mono text-[10px] text-muted-foreground hover:border-primary hover:bg-primary-soft hover:text-on-primary-soft"
             >
               <Plus size={10} strokeWidth={2} aria-hidden />
               {s.node}.{s.key}

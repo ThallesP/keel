@@ -55,7 +55,6 @@ export const ServiceNode = memo(function ServiceNode({
       subtitle={<Subtitle data={data} />}
       status={data.status}
       replicas={data.replicas}
-      running={data.running}
       selected={selected}
     >
       <RuntimeLine id={id} data={data} />

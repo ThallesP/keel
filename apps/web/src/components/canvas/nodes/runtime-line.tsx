@@ -6,6 +6,7 @@ import { statusDotClass } from "../status";
 import { useCanvasDispatch } from "../store";
 import type { NodeStatus, RuntimeData } from "../types";
 import { useNow } from "../use-now";
+import { STACK_DEPTH } from "./node-shell";
 
 const tone: Record<NodeStatus, string> = {
   healthy: "text-success",
@@ -52,11 +53,6 @@ function ErrorPill({ id, error }: { id: string; error?: string }) {
   );
 }
 
-/**
- * Railway-style status line: `● Online`, `● Deploying · pulling 12s`, `✓ Completed 4s ago`,
- * `● Stopped 2h ago`, `○ Not deployed`. Errors add a pill with a Logs link. Replicas are the stack
- * behind the card (NodeShell); a count shows only past three, or as `2 of 3 up` on a crash.
- */
 export function RuntimeLine({ id, data }: { id: string; data: RuntimeData }) {
   const now = useNow();
   switch (data.status) {
@@ -64,7 +60,7 @@ export function RuntimeLine({ id, data }: { id: string; data: RuntimeData }) {
       return (
         <Line status="healthy">
           Online
-          {data.replicas > 3 && (
+          {data.replicas > STACK_DEPTH && (
             <span className="pl-1.5 font-mono text-2xs text-faint">×{data.replicas}</span>
           )}
         </Line>
@@ -97,10 +93,7 @@ export function RuntimeLine({ id, data }: { id: string; data: RuntimeData }) {
     case "error":
       return (
         <>
-          <Line status="error">
-            Crashed
-            {data.replicas > 1 ? ` · ${data.running} of ${data.replicas} up` : ""}
-          </Line>
+          <Line status="error">Crashed</Line>
           <ErrorPill id={id} error={data.error} />
         </>
       );

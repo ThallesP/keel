@@ -7,6 +7,8 @@ import type { InfraNodeType, NodeStatus } from "../types";
 import { IconTile } from "./icons";
 import { NodeToolbar } from "./node-toolbar";
 
+export const STACK_DEPTH = 3;
+
 type Props = {
   id: string;
   type: InfraNodeType;
@@ -15,7 +17,6 @@ type Props = {
   subtitle?: React.ReactNode;
   status: NodeStatus;
   replicas?: number;
-  running?: number;
   selected: boolean;
   /** Status line(s). */
   children: React.ReactNode;
@@ -35,14 +36,12 @@ export function NodeShell({
   subtitle,
   status,
   replicas = 1,
-  running = replicas,
   selected,
   children,
   footer,
 }: Props) {
   const { renamingId, setRenamingId } = useRenaming();
-  const sheets = Math.min(replicas, 3) - 1;
-  const isMissingCopies = status === "error" && running < replicas;
+  const sheets = Math.min(replicas, STACK_DEPTH) - 1;
   return (
     <div
       className={cn(
@@ -63,7 +62,7 @@ export function NodeShell({
           className={cn(
             "pointer-events-none absolute -inset-px rounded-[10px] border border-line bg-bg",
             i === 0 ? "-z-10 translate-y-1" : "-z-20 translate-y-2",
-            isMissingCopies && i === sheets - 1 && "border-dashed border-danger/60 bg-transparent",
+            status === "pending" && "border-dashed",
           )}
         />
       ))}

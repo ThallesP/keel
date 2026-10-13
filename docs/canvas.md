@@ -96,7 +96,7 @@ Railway-style: the icon says what the node is, so there is no `Service · Docker
 - **Selected**: border `1.5px --color-primary`, ring `0 0 0 3px rgba(31,75,255,.14)`, handles switch to primary border.
 - Icon tile: 26px, 7px radius, `#F0F2F5` background, 14px stroke icon in `--color-ink`.
 - Status line glyph: 6px dot, green healthy, blue deploying (pulsing), red error, grey stopped, grey outline pending. Always one dot.
-- **Replicas** (`NodeShell` `replicas`/`running`): the card is a stack of copies. 2 replicas draw one sheet behind it, 3 or more draw two, never more. Sheets are full width, straight down, 4px apart (4px and 8px below the card), like a deck seen from the side. A stacked card keeps only its hairline shadow; the soft one would smear over the sheets. Sheets are the card's own background and border, no content. Past three the stack can't say how many, so the status line adds a faint mono `×N` (`● Online ×8`). On a crash with copies missing the back sheet turns dashed danger and the line says `Crashed · 2 of 3 up`. The exact `running/desired` count stays in the panel. Single-replica nodes, volumes and groups have no stack.
+- **Replicas** (`NodeShell` `replicas`/`running`): the card is a stack of copies. 2 replicas draw one sheet behind it, 3 or more draw two, never more. Sheets are full width, straight down, 4px apart (4px and 8px below the card), like a deck seen from the side. A stacked card keeps only its hairline shadow; the soft one would smear over the sheets. Sheets are the card's own background and border, no content. Past three the stack can't say how many, so the status line adds a faint mono `×N` (`● Online ×8`). A never-shipped (`pending`) card's sheets are dashed like the card. Crashes don't count copies on the card: `running` only counts the newest revision's tasks, so after a rolled-back Ship it would say none are up while the old spec still serves. The exact count stays in the panel. Single-replica nodes, volumes and groups have no stack.
 
 ### Types (v1)
 
@@ -111,15 +111,15 @@ Add more later (queue, cron, static site). Every type is the same shell with a d
 
 ### Node states
 
-| state     | status line                                                                                                         | border           |
-| --------- | ------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| healthy   | `● Online` (success), `×N` past three replicas                                                                      | default          |
-| done      | `✓ Completed 4s ago` (success; one-shot image, nothing running)                                                     | default          |
-| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses)                                                              | default          |
-| error     | `● Crashed · 2 of 3 up` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
-| stopping  | `● Stopping…` (faint, dot pulses)                                                                                   | default          |
-| stopped   | `● Stopped 2h ago` (faint)                                                                                          | default          |
-| pending   | `○ Not deployed` (faint)                                                                                            | dashed           |
+| state     | status line                                                                                             | border           |
+| --------- | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| healthy   | `● Online` (success), `×N` past three replicas                                                          | default          |
+| done      | `✓ Completed 4s ago` (success; one-shot image, nothing running)                                         | default          |
+| deploying | `● Deploying · <step> <elapsed>` (primary, dot pulses)                                                  | default          |
+| error     | `● Crashed` (danger) + `crash loop · exit 137 (OOM)` on a `--color-danger-soft` pill with a "Logs" link | `--color-danger` |
+| stopping  | `● Stopping…` (faint, dot pulses)                                                                       | default          |
+| stopped   | `● Stopped 2h ago` (faint)                                                                              | default          |
+| pending   | `○ Not deployed` (faint)                                                                                | dashed           |
 
 ## Variable references (replaces edges)
 

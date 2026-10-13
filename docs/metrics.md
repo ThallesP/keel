@@ -33,6 +33,7 @@ SQLite, migration `0002_metrics.sql`:
 
 - `service_metrics`: one row per task per tick, kept 3 hours (`domain.RawRetention`). The 15m and 1h ranges read it.
 - `service_metrics_hourly`: per service per hour, replicas summed per tick, then the hour's average CPU and network and peak memory. The `metrics.rollup` job rewrites the current and previous hour from raw samples every minute, so the newest bucket lags at most a minute. Kept 7 days (`domain.MetricsRetention`, the longest range the page offers). The 24h and 7d ranges, whose buckets are whole hours, read only this: 20 services over 7 days is ~3k rows instead of ~800k raw ones (1.3 s per query on raw, measured in review).
+- `environment_metrics_hourly`: the same per environment, with every service summed per tick before the hour is averaged, so a service that ran part of an hour counts only for the ticks it ran. The 24h and 7d totals read it; a total scoped to one service is that service's own hourly row.
 - `server_metrics`: one row per server per tick, kept 3 hours; only the latest sample of the last minute is ever read.
 
 The `metrics.prune` job runs hourly. The dashboard polls 15m and 1h every 15 s, 24h and 7d every minute.

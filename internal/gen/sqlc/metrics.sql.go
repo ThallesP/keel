@@ -171,6 +171,15 @@ func (q *Queries) MetricsNodeExists(ctx context.Context, id string) (int64, erro
 	return count, err
 }
 
+const metricsPruneEnvironmentHourly = `-- name: MetricsPruneEnvironmentHourly :exec
+DELETE FROM environment_metrics_hourly WHERE hour < ?
+`
+
+func (q *Queries) MetricsPruneEnvironmentHourly(ctx context.Context, hour int64) error {
+	_, err := q.db.ExecContext(ctx, metricsPruneEnvironmentHourly, hour)
+	return err
+}
+
 const metricsPruneHourly = `-- name: MetricsPruneHourly :exec
 DELETE FROM service_metrics_hourly WHERE hour < ?
 `
@@ -237,6 +246,40 @@ func (q *Queries) MetricsRecentPlacements(ctx context.Context, arg MetricsRecent
 		return nil, err
 	}
 	return items, nil
+}
+
+const metricsRollupEnvironmentHours = `-- name: MetricsRollupEnvironmentHours :exec
+INSERT INTO environment_metrics_hourly (environment_id, hour, cpu_cores, memory_bytes, rx_bytes_per_sec, tx_bytes_per_sec)
+SELECT
+  environment_id,
+  CAST(at / 3600000 AS INTEGER) * 3600000 AS hour,
+  CAST(AVG(cpu_cores) AS REAL),
+  CAST(MAX(memory_bytes) AS REAL),
+  CAST(AVG(rx_bytes_per_sec) AS REAL),
+  CAST(AVG(tx_bytes_per_sec) AS REAL)
+FROM (
+  SELECT
+    n.environment_id AS environment_id,
+    m.at AS at,
+    SUM(m.cpu_cores) AS cpu_cores,
+    SUM(m.memory_bytes) AS memory_bytes,
+    SUM(m.rx_bytes_per_sec) AS rx_bytes_per_sec,
+    SUM(m.tx_bytes_per_sec) AS tx_bytes_per_sec
+  FROM service_metrics m
+  JOIN nodes n ON n.id = m.node_id
+  WHERE m.at >= ?1
+  GROUP BY n.environment_id, m.at
+)
+WHERE true
+GROUP BY environment_id, hour
+ON CONFLICT (environment_id, hour) DO UPDATE SET
+  cpu_cores = excluded.cpu_cores, memory_bytes = excluded.memory_bytes,
+  rx_bytes_per_sec = excluded.rx_bytes_per_sec, tx_bytes_per_sec = excluded.tx_bytes_per_sec
+`
+
+func (q *Queries) MetricsRollupEnvironmentHours(ctx context.Context, sinceMs int64) error {
+	_, err := q.db.ExecContext(ctx, metricsRollupEnvironmentHours, sinceMs)
+	return err
 }
 
 const metricsRollupHours = `-- name: MetricsRollupHours :exec
@@ -505,20 +548,9 @@ SELECT
   CAST(MAX(memory_bytes) AS REAL) AS memory_bytes,
   CAST(AVG(rx_bytes_per_sec) AS REAL) AS rx_bytes_per_sec,
   CAST(AVG(tx_bytes_per_sec) AS REAL) AS tx_bytes_per_sec
-FROM (
-  SELECT
-    h.hour AS hour,
-    SUM(h.cpu_cores) AS cpu_cores,
-    SUM(h.memory_bytes) AS memory_bytes,
-    SUM(h.rx_bytes_per_sec) AS rx_bytes_per_sec,
-    SUM(h.tx_bytes_per_sec) AS tx_bytes_per_sec
-  FROM service_metrics_hourly h
-  JOIN nodes n ON n.id = h.node_id
-  WHERE n.environment_id = ?2
-    AND (CAST(?3 AS TEXT) = '' OR h.node_id = ?3)
-    AND h.hour >= ?4 AND h.hour < ?5
-  GROUP BY h.hour
-)
+FROM environment_metrics_hourly
+WHERE environment_id = ?2
+  AND hour >= ?3 AND hour < ?4
 GROUP BY bucket
 ORDER BY bucket
 `
@@ -526,7 +558,6 @@ ORDER BY bucket
 type MetricsTotalBucketsHourlyParams struct {
 	BinMs         int64
 	EnvironmentID string
-	NodeID        string
 	FromMs        int64
 	ToMs          int64
 }
@@ -543,7 +574,6 @@ func (q *Queries) MetricsTotalBucketsHourly(ctx context.Context, arg MetricsTota
 	rows, err := q.db.QueryContext(ctx, metricsTotalBucketsHourly,
 		arg.BinMs,
 		arg.EnvironmentID,
-		arg.NodeID,
 		arg.FromMs,
 		arg.ToMs,
 	)

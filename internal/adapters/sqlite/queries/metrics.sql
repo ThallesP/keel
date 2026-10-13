@@ -107,6 +107,34 @@ WHERE n.environment_id = sqlc.arg(environment_id)
 GROUP BY h.node_id, bucket
 ORDER BY h.node_id, bucket;
 
+-- name: MetricsRollupEnvironmentHours :exec
+INSERT INTO environment_metrics_hourly (environment_id, hour, cpu_cores, memory_bytes, rx_bytes_per_sec, tx_bytes_per_sec)
+SELECT
+  environment_id,
+  CAST(at / 3600000 AS INTEGER) * 3600000 AS hour,
+  CAST(AVG(cpu_cores) AS REAL),
+  CAST(MAX(memory_bytes) AS REAL),
+  CAST(AVG(rx_bytes_per_sec) AS REAL),
+  CAST(AVG(tx_bytes_per_sec) AS REAL)
+FROM (
+  SELECT
+    n.environment_id AS environment_id,
+    m.at AS at,
+    SUM(m.cpu_cores) AS cpu_cores,
+    SUM(m.memory_bytes) AS memory_bytes,
+    SUM(m.rx_bytes_per_sec) AS rx_bytes_per_sec,
+    SUM(m.tx_bytes_per_sec) AS tx_bytes_per_sec
+  FROM service_metrics m
+  JOIN nodes n ON n.id = m.node_id
+  WHERE m.at >= sqlc.arg(since_ms)
+  GROUP BY n.environment_id, m.at
+)
+WHERE true
+GROUP BY environment_id, hour
+ON CONFLICT (environment_id, hour) DO UPDATE SET
+  cpu_cores = excluded.cpu_cores, memory_bytes = excluded.memory_bytes,
+  rx_bytes_per_sec = excluded.rx_bytes_per_sec, tx_bytes_per_sec = excluded.tx_bytes_per_sec;
+
 -- name: MetricsTotalBucketsHourly :many
 SELECT
   CAST(hour / sqlc.arg(bin_ms) AS INTEGER) * sqlc.arg(bin_ms) AS bucket,
@@ -114,20 +142,9 @@ SELECT
   CAST(MAX(memory_bytes) AS REAL) AS memory_bytes,
   CAST(AVG(rx_bytes_per_sec) AS REAL) AS rx_bytes_per_sec,
   CAST(AVG(tx_bytes_per_sec) AS REAL) AS tx_bytes_per_sec
-FROM (
-  SELECT
-    h.hour AS hour,
-    SUM(h.cpu_cores) AS cpu_cores,
-    SUM(h.memory_bytes) AS memory_bytes,
-    SUM(h.rx_bytes_per_sec) AS rx_bytes_per_sec,
-    SUM(h.tx_bytes_per_sec) AS tx_bytes_per_sec
-  FROM service_metrics_hourly h
-  JOIN nodes n ON n.id = h.node_id
-  WHERE n.environment_id = sqlc.arg(environment_id)
-    AND (CAST(sqlc.arg(node_id) AS TEXT) = '' OR h.node_id = sqlc.arg(node_id))
-    AND h.hour >= sqlc.arg(from_ms) AND h.hour < sqlc.arg(to_ms)
-  GROUP BY h.hour
-)
+FROM environment_metrics_hourly
+WHERE environment_id = sqlc.arg(environment_id)
+  AND hour >= sqlc.arg(from_ms) AND hour < sqlc.arg(to_ms)
 GROUP BY bucket
 ORDER BY bucket;
 
@@ -154,6 +171,9 @@ DELETE FROM server_metrics WHERE at < ?;
 
 -- name: MetricsPruneHourly :exec
 DELETE FROM service_metrics_hourly WHERE hour < ?;
+
+-- name: MetricsPruneEnvironmentHourly :exec
+DELETE FROM environment_metrics_hourly WHERE hour < ?;
 
 -- name: MetricsGetDashboard :one
 SELECT panels FROM dashboards WHERE environment_id = ?;

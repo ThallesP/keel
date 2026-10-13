@@ -47,9 +47,12 @@ func (t *tx) ServiceBuckets(q app.BucketQuery) ([]app.ServiceBucketRow, error) {
 }
 
 func (t *tx) TotalBuckets(q app.BucketQuery) ([]app.ServiceBucketRow, error) {
+	if q.Hourly && q.NodeID != "" {
+		return t.ServiceBuckets(q)
+	}
 	if q.Hourly {
 		rows, err := t.q.MetricsTotalBucketsHourly(t.ctx, sqlc.MetricsTotalBucketsHourlyParams{
-			BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, NodeID: q.NodeID, FromMs: q.From, ToMs: q.To,
+			BinMs: q.BinMs, EnvironmentID: q.EnvironmentID, FromMs: q.From, ToMs: q.To,
 		})
 		return bucketRows(rows, func(r sqlc.MetricsTotalBucketsHourlyRow) app.ServiceBucketRow {
 			return app.ServiceBucketRow{Bucket: r.Bucket, CPUCores: r.CpuCores, MemoryBytes: r.MemoryBytes, RxBytesPerSec: r.RxBytesPerSec, TxBytesPerSec: r.TxBytesPerSec}
@@ -108,7 +111,10 @@ func (t *tx) DeployMarks(environmentID string, from, to int64) ([]domain.DeployM
 }
 
 func (t *tx) RollupMetrics(since int64) error {
-	return t.q.MetricsRollupHours(t.ctx, since)
+	if err := t.q.MetricsRollupHours(t.ctx, since); err != nil {
+		return err
+	}
+	return t.q.MetricsRollupEnvironmentHours(t.ctx, since)
 }
 
 func (t *tx) PruneMetrics(rawBefore, hourlyBefore int64) error {
@@ -118,7 +124,10 @@ func (t *tx) PruneMetrics(rawBefore, hourlyBefore int64) error {
 	if err := t.q.MetricsPruneServers(t.ctx, rawBefore); err != nil {
 		return err
 	}
-	return t.q.MetricsPruneHourly(t.ctx, hourlyBefore)
+	if err := t.q.MetricsPruneHourly(t.ctx, hourlyBefore); err != nil {
+		return err
+	}
+	return t.q.MetricsPruneEnvironmentHourly(t.ctx, hourlyBefore)
 }
 
 func (t *tx) DashboardOf(environmentID string) ([]domain.Panel, error) {

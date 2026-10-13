@@ -99,6 +99,15 @@ type Environment struct {
 	CreatedAt    int64
 }
 
+type EnvironmentMetricsHourly struct {
+	EnvironmentID string
+	Hour          int64
+	CpuCores      float64
+	MemoryBytes   float64
+	RxBytesPerSec float64
+	TxBytesPerSec float64
+}
+
 type Invitation struct {
 	ID             string
 	OrganizationID string

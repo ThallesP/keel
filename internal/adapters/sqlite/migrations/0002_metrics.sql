@@ -28,6 +28,19 @@ CREATE TABLE service_metrics_hourly (
 ) WITHOUT ROWID;
 CREATE INDEX service_metrics_hourly_by_time ON service_metrics_hourly(hour);
 
+-- Per environment per hour: every service summed per tick first, so a service that ran part of
+-- the hour counts only for the ticks it ran. The 24h and 7d totals read these.
+CREATE TABLE environment_metrics_hourly (
+  environment_id   TEXT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
+  hour             INTEGER NOT NULL,
+  cpu_cores        REAL NOT NULL,
+  memory_bytes     REAL NOT NULL,
+  rx_bytes_per_sec REAL NOT NULL,
+  tx_bytes_per_sec REAL NOT NULL,
+  PRIMARY KEY (environment_id, hour)
+) WITHOUT ROWID;
+CREATE INDEX environment_metrics_hourly_by_time ON environment_metrics_hourly(hour);
+
 -- One row per Swarm node (a server) per sample: host totals, not only Keel's tasks.
 CREATE TABLE server_metrics (
   server_id          TEXT NOT NULL,

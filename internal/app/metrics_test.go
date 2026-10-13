@@ -121,13 +121,17 @@ func TestMetricsHourlyRanges(t *testing.T) {
 	ingest(thisHour+120_000, app.TaskSample{NodeID: obsNodeAPI, Task: "t1", CPUCores: 1.5, MemoryBytes: 100})
 	e.app.RollupMetricsNow(ctx)
 	got, _ = e.app.MetricsOverview(ctx, e.member, "env", domain.Range24h, obsNodeAPI)
-	if now := got.Services[0].Buckets[23]; *now.CPUCores != 1 || *now.MemoryBytes != 300 {
-		t.Fatalf("this hour after a second rollup = %+v", now)
+	if now := got.Services[0].Buckets[23]; *now.CPUCores != 1 || *now.MemoryBytes != 300 || *got.Total[23].CPUCores != 1 {
+		t.Fatalf("this hour after a second rollup = %+v, total %+v", now, got.Total[23])
+	}
+	got, _ = e.app.MetricsOverview(ctx, e.member, "env", domain.Range24h, "")
+	if total := got.Total[23]; *total.CPUCores != 1.125 || *total.MemoryBytes != 310 {
+		t.Fatalf("total of this hour with the worker in one tick of two = %+v, want 1.125 cores", total)
 	}
 
 	e.now += domain.MetricsRetention.Milliseconds()
 	e.app.PruneMetricsNow(ctx)
-	if n := e.count(t, `SELECT COUNT(*) FROM service_metrics_hourly`); n != 0 {
+	if n := e.count(t, `SELECT (SELECT COUNT(*) FROM service_metrics_hourly) + (SELECT COUNT(*) FROM environment_metrics_hourly)`); n != 0 {
 		t.Fatalf("hourly rows after 7 days = %d", n)
 	}
 }

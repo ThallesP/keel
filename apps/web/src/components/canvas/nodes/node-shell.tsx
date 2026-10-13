@@ -47,7 +47,9 @@ export function NodeShell({
     <div
       className={cn(
         "relative flex w-[220px] flex-col rounded-[10px] border bg-bg",
-        "shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]",
+        sheets > 0
+          ? "shadow-[0_1px_2px_rgba(11,18,32,0.05)]"
+          : "shadow-[0_1px_2px_rgba(11,18,32,0.05),0_4px_12px_rgba(11,18,32,0.04)]",
         status === "error" ? "border-danger" : "border-line",
         status === "pending" && "border-dashed",
         selected &&
@@ -59,8 +61,8 @@ export function NodeShell({
           key={i}
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-y-0 rounded-[10px] border border-line bg-bg",
-            i === 0 ? "-z-10 inset-x-2 translate-y-[5px]" : "-z-20 inset-x-4 translate-y-[10px]",
+            "pointer-events-none absolute inset-0 rounded-[10px] border border-line bg-bg",
+            i === 0 ? "-z-10 translate-y-1" : "-z-20 translate-y-2",
             isMissingCopies && i === sheets - 1 && "border-dashed border-danger/60 bg-transparent",
           )}
         />

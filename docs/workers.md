@@ -2,7 +2,7 @@
 
 > How Keel runs user containers across one or many servers. Decided 2026-09-13 after evaluating per-node agents, Restate/Temporal, Nomad and k3s. Read this before touching `internal/app/{swarm,observe,reconcile,events}.go`, `internal/adapters/swarm`, `internal/agent` or the node join flow. UI lives in [`canvas.md`](./canvas.md).
 
-> **Go port.** Convex, the Bun worker and `scripts/deploy-worker.sh` are replaced: the control plane is `keel serve` and the per-node process is `keel agent`, one Go binary ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md)). Convex actions, mutations, crons and `scheduler.runAfter` became use cases in `internal/app` and in-memory jobs (`internal/adapters/jobs`), which the start-up `Recover` pass re-derives on every start. Decisions and rationale below are unchanged; the dated Status entries at the end are history and keep the names of their time.
+> **Go port.** Convex, the Bun worker and `scripts/deploy-worker.sh` are replaced: the control plane is `keel serve` and the per-node process is `keel agent`, one Go binary ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md)). Convex actions, mutations, crons and `scheduler.runAfter` became use cases in `internal/app`, durable workflows for what must survive a restart (deploy, apply, remove; `internal/app/workflows.go`) and in-memory jobs (`internal/adapters/jobs`) for coalesced sweeps and crons, which the start-up `Recover` pass re-arms on every start. Decisions and rationale below are unchanged; the dated Status entries at the end are history and keep the names of their time.
 
 ## Decision
 
@@ -51,7 +51,7 @@ Facts:
 - The image ships no `docker` CLI. Use the moby client over `DOCKER_HOST` (default `unix:///var/run/docker.sock`), never shell out to `docker`.
 - Nothing is installed at run time: the client is compiled in (Convex needed `dockerode` and `ssh2` as external packages, fetched from npm on the first push).
 - Instead of Convex's 10-minute, 16-concurrent node actions, every Docker call carries its own deadline (an apply 15 min because pulls are slow, in `apply` in `internal/app/swarm.go`; scans and removals 1 min, `dockerCallDeadline` in `internal/app/deploy_state.go`) and the applies of one node run one at a time. Never block a job on a build.
-- SQLite is a single writer (one write connection on `$KEEL_DATA_DIR/keel.db`), so an install runs one `keel serve`; pending jobs live in memory, die with the process and are re-derived by the start-up `Recover` pass. Control plane is one box. Running containers survive a control-plane outage, new deploys do not.
+- SQLite is a single writer (one write connection on `$KEEL_DATA_DIR/keel.db`), so an install runs one `keel serve`. Deploys, applies and removals are workflow runs in that file and resume where they stopped when `keel serve` comes back; jobs (observe scans, proxy syncs) live in memory and are re-derived by the start-up `Recover` pass. Control plane is one box. Running containers survive a control-plane outage; a deploy in flight waits for it.
 
 Security: mounting the Docker socket gives `keel serve` root-equivalent access to the control-plane host. Only use cases and jobs call the Swarm port (`app.Swarm`, `internal/app/ports_deploy.go`); HTTP handlers never touch adapters. Never expose a route that takes a raw image, command, or mount. `keel proxy`, which parses internet traffic, never gets the socket. The `keel` container is trusted infrastructure at the same tier as the host.
 
@@ -179,10 +179,10 @@ if !found {
 	err = a.Swarm.UpdateService(ctx, version, spec) // POST /services/svc-<id>/update?version=…
 }
 
-// remove (ScheduleRemoveService): a.Swarm.RemoveService(ctx, nodeID), a missing service is fine
+// remove (the `remove` workflow, runRemove): a.Swarm.RemoveService(ctx, nodeID), retried; a missing service is fine
 ```
 
-User actions map to `desired` writes followed by an apply job queued once the write commits (`scheduleApply` in `internal/app/swarm.go`, was `ctx.scheduler.runAfter(0, internal.swarm.apply, ...)`). Applies of one node run one at a time in order, and each re-reads `desired.revision` first: one superseded by a newer ship skips (`superseded by revision N`) instead of applying the older revision last.
+User actions map to `desired` writes and a deployment whose `deploy` workflow run is created in the same transaction (`beginDeployment` in `internal/app/deployments.go`, was `ctx.scheduler.runAfter(0, internal.swarm.apply, ...)`). The run starts one `apply` run per node (`runApply` in `internal/app/swarm.go`). Applies of one node run one at a time in order (`durable.Concurrency(1)` partitioned by node), and each re-reads `desired.revision` first: one superseded by a newer ship skips (`superseded by revision N`) instead of applying the older revision last, and one still pulling when the newer ship starts its apply is cancelled.
 
 | User action | `desired` change                   |
 | ----------- | ---------------------------------- |
@@ -210,11 +210,11 @@ Event-driven. No cron. The per-node agent POSTs each Docker event (`type=contain
 
 Observe logs through `log/slog` (text on stderr, `docker compose -p keel logs keel`) and only on failure: `observeNode`, `observe (full sweep)`, `observeServers` or `schedule observe`, with `node` and `err` attributes. A scan that works writes the node and says nothing, and so does an event.
 
-The only timer left is `timeoutDeployment` (`internal/app/reconcile.go`), a `Jobs.After` job keyed `timeout:<deployment id>` that `beginDeployment` (`internal/app/deployments.go`) queues at +5min per deployment. If the deployment is still running (task `pending` because no node can schedule it, a container that exits 0 and is never restarted, a pull that hangs) every unfinished step fails and the node gets `applyError`. One scheduled check per deployment, not polling. Jobs are in memory, so `Recover` re-arms the timeout of every running deployment at max(now, start + 5min) and re-queues the applies that never reached Swarm.
+The only timer left is the deploy timeout. After starting its applies, the `deploy` run (`runDeploy` in `internal/app/deployments.go`) waits for the signal `settled` with a 5-minute `durable.Await`; `reconcile` and `patchStep` send it after the commit that takes the deployment out of `running`. If the wait times out, `timeoutDeployment` (`internal/app/reconcile.go`) runs: when the deployment is still running (task `pending` because no node can schedule it, a container that exits 0 and is never restarted, a pull that hangs) every unfinished step fails and the node gets `applyError`. One saved deadline per deployment, not polling. The deadline is in the database, so a restart keeps it (an overdue one fires as soon as `keel serve` is back), and applies that never reached Swarm run again on start; nothing re-arms them by hand.
 
 Measured on the dev box: Ship of a cached `nginx:alpine` goes "service created" → `success` in 3.2s (`container start` event at +2.2s, scan at +2.7s). Redeploy of `postgres:16` completes at +9s, gated by Swarm's `updatestate: completed` at +8.6s (5s Monitor after the new task starts).
 
-`apply` has two related changes: it skips the registry when `ImageCached` succeeds and the deployment was a Ship (`pull: false`; explicit Redeploy passes `pull: true`), and it re-reads the node (`wantedRevision`) right before `createOrUpdate` and once more right after, removing the service it just created if the node was deleted in between. `RemoveNode` (`internal/app/nodes.go`) deletes the row before scheduling the removal (`ScheduleRemoveService`), so that read is authoritative.
+`apply` has two related changes: it skips the registry when `ImageCached` succeeds and the deployment was a Ship (`pull: false`; explicit Redeploy passes `pull: true`), and it re-reads the node (`wantedRevision`) right before `createOrUpdate` and once more right after, removing the service it just created if the node was deleted in between. `RemoveNode` (`internal/app/nodes.go`) deletes the row and creates the `remove` run in the same transaction, so that read is authoritative and a restart never orphans the service.
 
 Crash-loop: Swarm gives up after `MaxAttempts`. Task shows `failed`, `observe` flags `crashloop` with the exit error, canvas shows red. Matches Railway's "Crashed".
 
@@ -226,10 +226,10 @@ Node death: Swarm reschedules unpinned tasks itself. Pinned tasks sit `pending` 
 
 Swarm runs images, does not make them. Two pieces still needed, not designed yet:
 
-- **Build.** BuildKit on the control plane, or a build service pinned there. Kicked off from a `keel serve` job, result pushed to the registry, then `apply` with the new tag. Jobs are in memory and die with the process, so the job starts the build and a callback or poll finishes it.
+- **Build.** BuildKit on the control plane, or a build service pinned there. A workflow in `keel serve`: start the build, `durable.Await` its completion (a callback or the build job's `complete` seen by observe), push to the registry, then `apply` with the new tag.
 - **Registry.** Workers need to pull the image. `registry:2` as a Swarm service on the control plane, reachable over the tailnet. Image tags are `<tailnet-ip>:5000/svc-<id>:<revision>`.
 
-Cross-node choreography (rolling a revision across pinned nodes one at a time, health check between) is a control-plane workflow: patch `desired` on node 1, wait until observe records `observed.revision`, patch node 2. `keel serve` is the loop, Swarm is the hands. There is no durable workflow engine yet (ARCHITECTURE "Use cases": in-memory jobs plus `Recover`), so this needs one, or a state row that `Recover` resumes from.
+Cross-node choreography (rolling a revision across pinned nodes one at a time, health check between) is a control-plane workflow: patch `desired` on node 1, wait until observe records `observed.revision`, patch node 2. `keel serve` is the loop, Swarm is the hands. It is a durable workflow like `deploy` (ARCHITECTURE "Use cases"): one step per node, a `durable.Await` on observe's signal between them.
 
 ## Networking notes
 

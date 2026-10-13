@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThallesP/durable"
+
 	"github.com/ThallesP/keel/internal/domain"
 )
 
@@ -45,19 +47,20 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	}
 
 	now := a.Now()
+	run := deployRun{DeploymentID: domain.NewID()}
 	steps := make([]domain.DeployStep, 0, len(affected)+1)
 	names := make([]string, 0, len(affected))
-	for i := range affected {
-		n := &affected[i]
+	for _, n := range affected {
 		n.Desired.Revision++
 		n.Dirty = false
 		n.ShippedAt = now
 		n.ApplyError = ""
-		if err := tx.UpdateNode(*n); err != nil {
+		if err := tx.UpdateNode(n); err != nil {
 			return "", err
 		}
 		steps = append(steps, domain.DeployStep{NodeID: n.ID, Label: n.Name, Status: domain.StepPending})
 		names = append(names, n.Name)
+		run.Applies = append(run.Applies, applyRequest{NodeID: n.ID, DeploymentID: run.DeploymentID, Revision: n.Desired.Revision, Pull: opts.Refresh})
 	}
 	steps = append(steps, domain.DeployStep{Label: healthStepLabel, Status: domain.StepPending})
 
@@ -71,7 +74,7 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 		word = "deploy"
 	}
 	d := domain.Deployment{
-		ID:            domain.NewID(),
+		ID:            run.DeploymentID,
 		EnvironmentID: envID,
 		Message:       word + " " + strings.Join(names, ", "),
 		Status:        domain.DeploymentRunning,
@@ -81,15 +84,46 @@ func (a *App) beginDeployment(tx Tx, ch *Changes, scope EnvScope, opts ShipOptio
 	if err := tx.InsertDeployment(d); err != nil {
 		return "", err
 	}
+	if err := startRun(a, tx, ch, a.flows.deploy, deployRunID(d.ID), run); err != nil {
+		return "", err
+	}
 	ch.Environment(scope.Project.OrganizationID, envID)
 	deploymentChanged(ch, scope.Project.OrganizationID, d)
-	ch.AfterCommit(func() {
-		for _, n := range affected {
-			a.scheduleApply(applyRequest{nodeID: n.ID, deploymentID: d.ID, revision: n.Desired.Revision, pull: opts.Refresh})
-		}
-		a.scheduleDeploymentTimeout(d.ID, deployTimeout)
-	})
 	return d.ID, nil
+}
+
+type deployRun struct {
+	DeploymentID string
+	Applies      []applyRequest
+}
+
+func deployRunID(deploymentID string) string { return "deploy:" + deploymentID }
+
+func (a *App) runDeploy(ctx durable.Context, run deployRun) (struct{}, error) {
+	for _, req := range run.Applies {
+		err := durable.Do(ctx, "apply "+req.NodeID, func(ctx context.Context) error {
+			return a.startApply(ctx, req)
+		})
+		if err != nil {
+			return struct{}{}, err
+		}
+	}
+	_, err := durable.Await[struct{}](ctx, "settled", a.deploy.timeout)
+	if !errors.Is(err, durable.ErrTimeout) {
+		return struct{}{}, err
+	}
+	return struct{}{}, durable.Do(ctx, "time out", func(ctx context.Context) error {
+		return a.timeoutDeployment(ctx, run.DeploymentID)
+	}, durable.Retry(5, time.Second))
+}
+
+func (a *App) deploymentSettled(ch *Changes, deploymentID string) {
+	ch.AfterCommit(func() {
+		err := a.Workflows.Signal(context.Background(), deployRunID(deploymentID), "settled", struct{}{})
+		if err != nil && !errors.Is(err, durable.ErrNotFound) {
+			a.Log.Error("deployment settled", "deployment", deploymentID, "err", err)
+		}
+	})
 }
 
 func (a *App) ShipEnvironment(ctx context.Context, actor domain.Actor, environmentID string, opts ShipOptions) (string, error) {
@@ -208,6 +242,7 @@ func (a *App) patchStep(tx Tx, ch *Changes, deploymentID, nodeID string, change 
 	}
 	if change == stepFailed && d.Status == domain.DeploymentRunning {
 		d.Status, d.FinishedAt = domain.DeploymentFailed, now
+		a.deploymentSettled(ch, d.ID)
 	}
 	if err := tx.UpdateDeployment(d, appended); err != nil {
 		return err
@@ -227,10 +262,4 @@ func (a *App) writeStep(ctx context.Context, deploymentID, nodeID string, change
 	if err != nil {
 		a.Log.Error("deployment step", "deployment", deploymentID, "node", nodeID, "err", err)
 	}
-}
-
-func (a *App) scheduleDeploymentTimeout(deploymentID string, delay time.Duration) {
-	a.Jobs.After("timeout:"+deploymentID, delay, func(ctx context.Context) {
-		a.timeoutDeployment(ctx, deploymentID)
-	})
 }

@@ -418,6 +418,11 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 		if err := tx.DeleteNode(id); err != nil {
 			return err
 		}
+		if node.Desired != nil {
+			if err := startRun(a, tx, ch, a.flows.remove, "remove:"+id, removeRun{NodeID: id}); err != nil {
+				return err
+			}
+		}
 		ch.Environment(scope.Project.OrganizationID, node.EnvironmentID)
 		ch.Node(scope.Project.OrganizationID, node.EnvironmentID, id)
 		ch.AfterCommit(func() {
@@ -425,7 +430,6 @@ func (a *App) RemoveNode(ctx context.Context, actor domain.Actor, id string) err
 				a.ScheduleProxySync()
 			}
 			if node.Desired != nil {
-				a.ScheduleRemoveService(id)
 				a.ScheduleObserve(id)
 			}
 		})

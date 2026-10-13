@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ThallesP/durable"
+
 	"github.com/ThallesP/keel/internal/adapters/jobs"
 	"github.com/ThallesP/keel/internal/adapters/realtime"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
@@ -81,7 +83,9 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, lo
 	defer func() { err = errors.Join(err, store.Close()) }()
 
 	sched := jobs.New(log)
-	a := app.New(app.App{Store: store, Config: cfg, Log: log, Jobs: sched})
+	flows := durable.New(store.Workflows(), durable.Logger(log), durable.Workers(64),
+		durable.ShutdownGrace(ShutdownTimeout-jobsCancelGrace))
+	a := app.New(app.App{Store: store, Config: cfg, Log: log, Jobs: sched, Workflows: flows})
 	closers, err := wireAdapters(a, log)
 	if err != nil {
 		return err
@@ -101,6 +105,13 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, lo
 		"site", cfg.SiteURL, "dashboard", web != nil)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
+	flowsCtx, stopFlows := context.WithCancel(ctx)
+	flowsDone := make(chan struct{})
+	var flowsErr error
+	go func() {
+		flowsErr = flows.Run(flowsCtx)
+		close(flowsDone)
+	}()
 	sched.After("recover", 0, a.Recover)
 
 	var serveErr error
@@ -108,12 +119,17 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, lo
 	case <-ctx.Done():
 	case err := <-errc:
 		serveErr = fmt.Errorf("serve: %w", err)
+	case <-flowsDone:
+		if flowsErr != nil {
+			serveErr = fmt.Errorf("workflows: %w", flowsErr)
+		}
 	}
 
 	log.Info("keel serve: shutting down")
 	deadline := time.Now().Add(ShutdownTimeout)
 	shutdown, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
+	stopFlows()
 	if err := srv.Shutdown(shutdown); err != nil {
 		log.Error("keel serve: http shutdown", "err", err)
 	}
@@ -124,6 +140,11 @@ func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, lo
 		if err := sched.Wait(shutdown); err != nil {
 			log.Error("keel serve: cancelled jobs did not return in time", "err", err)
 		}
+	}
+	select {
+	case <-flowsDone:
+	case <-shutdown.Done():
+		log.Error("keel serve: workflow steps did not return in time")
 	}
 	rtCtx, cancelRT := context.WithTimeout(context.Background(), realtimeCloseTimeout)
 	defer cancelRT()

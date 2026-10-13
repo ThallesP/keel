@@ -178,7 +178,7 @@ function Editor({
         type="button"
         disabled={!valid}
         onClick={() => void submit()}
-        className="flex h-7 shrink-0 items-center gap-1.5 rounded-sm bg-primary px-2.5 text-2xs font-medium text-on-primary hover:bg-primary-strong disabled:bg-surface-2 disabled:text-faint"
+        className="flex h-7 shrink-0 items-center gap-1.5 rounded-sm bg-primary-fill px-2.5 text-2xs font-medium text-on-primary hover:bg-primary-strong disabled:bg-surface-2 disabled:text-faint"
       >
         {initial ? "Save" : "Add"}
         <Kbd className="text-current opacity-70">↵</Kbd>

@@ -71,7 +71,7 @@ function ShipButton() {
       onClick={ship}
       className={cn(
         "flex h-[30px] items-center gap-[7px] rounded-md pr-3 pl-2.5 text-sm font-medium text-on-primary",
-        failed ? "bg-danger hover:bg-danger-strong" : "bg-primary hover:bg-primary-strong",
+        failed ? "bg-danger hover:bg-danger-strong" : "bg-primary-fill hover:bg-primary-strong",
       )}
     >
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>

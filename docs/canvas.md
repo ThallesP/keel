@@ -69,7 +69,7 @@ Icon-only vertical nav. Top: Canvas (active), Observability (requests and logs i
 
 ### Groups
 
-A dashed rounded rect (`1px dashed`, primary at 30% (`border-primary/30`), 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
+A dashed rounded rect (`1px dashed --color-group-line`, 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
 
 ## Nodes
 
@@ -198,8 +198,7 @@ Copy these into `packages/ui/src/styles/globals.css` (Tailwind v4 `@theme`). The
   --color-danger-strong: #c93333;
   --color-danger-soft: #fde8e8;
   --color-on-danger-soft: #b32626;
-  --color-ink-dark: #0a1a4a; /* blueprint theme ground */
-  --color-blueprint: #0f2a7a; /* blueprint theme canvas */
+  --color-group-line: #b9c4e6;
 
   --font-sans: "Inter Variable", Inter, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;

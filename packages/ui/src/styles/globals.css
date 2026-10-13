@@ -73,7 +73,7 @@
   --ansi-blue: #7b97ff;
   --ansi-magenta: #d28be0;
   --ansi-cyan: #4fc3d4;
-  --latency-p50: #3a58e8;
+  --latency-p50: #2b42b0;
   --latency-p99: #c9d3ff;
   --lamp-shade: #454e5f;
   --lamp-rim-off: #5b6577;
@@ -101,6 +101,7 @@
   --color-tone-plum: #c78aa8;
   --color-tone-teal: #78b6c6;
   --color-tone-olive: #c4b26e;
+  --color-group-line: #2c3656;
 }
 @theme inline {
   --font-sans: "Inter Variable", sans-serif;
@@ -165,8 +166,7 @@
   --color-tone-plum: #8a4f6e;
   --color-tone-teal: #3c7a8a;
   --color-tone-olive: #8a7a3c;
-  --color-ink-dark: #0a1a4a;
-  --color-blueprint: #0f2a7a;
+  --color-group-line: #b9c4e6;
   --text-2xs: 11px;
   --text-2xs--line-height: 14px;
 }

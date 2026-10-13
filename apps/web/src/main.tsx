@@ -26,7 +26,13 @@ const router = createRouter({
   context: { queryClient },
   Wrap: function WrapComponent({ children }: { children: React.ReactNode }) {
     return (
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem
+        disableTransitionOnChange
+        scriptProps={{ type: "application/json" }}
+      >
         <QueryClientProvider client={queryClient}>
           <RealtimeProvider>{children}</RealtimeProvider>
         </QueryClientProvider>

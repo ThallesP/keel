@@ -10,7 +10,7 @@ export const GroupNode = memo(function GroupNode({ data, selected }: NodeProps<G
     <div
       className={cn(
         "h-full w-full rounded-[14px] border border-dashed bg-primary/[0.03] px-3.5 py-2.5",
-        selected ? "border-primary" : "border-primary/30",
+        selected ? "border-primary" : "border-group-line",
       )}
     >
       <span className="text-2xs font-semibold tracking-[0.06em] text-primary uppercase">

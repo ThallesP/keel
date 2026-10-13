@@ -61,7 +61,7 @@ export function NodeShell({
           key={i}
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-0 rounded-[10px] border border-line bg-bg",
+            "pointer-events-none absolute -inset-px rounded-[10px] border border-line bg-bg",
             i === 0 ? "-z-10 translate-y-1" : "-z-20 translate-y-2",
             isMissingCopies && i === sheets - 1 && "border-dashed border-danger/60 bg-transparent",
           )}

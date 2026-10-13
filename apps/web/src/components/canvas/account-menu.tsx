@@ -42,10 +42,10 @@ export function AccountMenu() {
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-2xs font-normal text-muted-foreground">
-              Theme
-            </DropdownMenuLabel>
             <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+              <DropdownMenuLabel className="text-2xs font-normal text-muted-foreground">
+                Theme
+              </DropdownMenuLabel>
               <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>

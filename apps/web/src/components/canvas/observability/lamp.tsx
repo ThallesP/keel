@@ -153,10 +153,10 @@ function Lamp({ on }: { on: boolean }) {
       className="absolute top-0 left-1/2 -translate-x-1/2"
     >
       <line x1="40" y1="0" x2="40" y2="30" stroke="#c5cad3" strokeWidth="1" />
-      <rect x="36.5" y="28" width="7" height="5.5" rx="1.2" fill="#1f2633" />
-      <path d="M34 33h12l14 18.5c-6 2-13 3-20 3s-14-1-20-3z" fill="#1f2633" />
+      <rect x="36.5" y="28" width="7" height="5.5" rx="1.2" fill="var(--lamp-shade)" />
+      <path d="M34 33h12l14 18.5c-6 2-13 3-20 3s-14-1-20-3z" fill="var(--lamp-shade)" />
       <g className={on ? "keel-flicker" : undefined}>
-        <ellipse cx="40" cy="51.6" rx="19" ry="2.4" fill={on ? "#fbe3a0" : "#2b3240"} />
+        <ellipse cx="40" cy="51.6" rx="19" ry="2.4" fill={on ? "#fbe3a0" : "var(--lamp-rim-off)"} />
         <circle cx="40" cy="54" r="5.5" fill={on ? "#fff4cf" : "#dfe2e7"} />
       </g>
     </svg>

@@ -43,6 +43,8 @@
   --ansi-cyan: #1b7f8f;
   --latency-p50: #86a0ff;
   --latency-p99: #0d2585;
+  --lamp-shade: #1f2633;
+  --lamp-rim-off: #2b3240;
 }
 
 .dark {
@@ -73,6 +75,8 @@
   --ansi-cyan: #4fc3d4;
   --latency-p50: #3a58e8;
   --latency-p99: #c9d3ff;
+  --lamp-shade: #454e5f;
+  --lamp-rim-off: #5b6577;
 
   --color-bg: #151a23;
   --color-canvas: #0b0d12;

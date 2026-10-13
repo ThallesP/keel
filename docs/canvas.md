@@ -69,7 +69,7 @@ Icon-only vertical nav. Top: Canvas (active), Observability (requests and logs i
 
 ### Groups
 
-A dashed rounded rect (`1px dashed #B9C4E6`, 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
+A dashed rounded rect (`1px dashed`, primary at 30% (`border-primary/30`), 14px radius, 3% primary tint) with an uppercase 11px label top-left. Used for logical grouping (e.g. "Workers", "Data"). Nodes dragged inside become children and move with the group. In React Flow this is a node with `type: "group"` and children set `parentId` + `extent: "parent"`.
 
 ## Nodes
 
@@ -223,7 +223,7 @@ Mood word: **hypertext**. Hyperlink blue accent on a white ground (light) or a n
 
 ### Dark (default theme)
 
-Dark is the default; Light and System are the other picks, in the avatar menu (`account-menu.tsx`). `next-themes` puts `dark` or `light` on `<html>` and stores the pick in `localStorage.theme`; an inline script in `apps/web/index.html` applies it before the first paint, so neither theme flashes the other. The `.dark` block in `globals.css` gives every token above a dark value, so components never branch on the theme: anything that needs a colour reads a token. Layering, darkest first: canvas `#0b0d12` (React Flow's pane is pointed at `--color-canvas` in `canvas.css`), then page and chrome `--background`, then cards and floating surfaces `--color-bg` `#151a23`, lines `#252b36`. The accent brightens to `#4d6dff` for contrast and `--color-primary-strong` stays the darker blue under white text (Shipping pill, hover). Theme-aware colours that are not Tailwind tokens live as plain variables next to them: `--ansi-*` (terminal colours in log lines), `--latency-p50`/`--latency-p99` (the latency chart ramp, inverted in dark so p99 stays the loudest). Service and replica hues in log streams are `--color-tone-{indigo,green,brown,plum,teal,olive}`.
+Dark is the default; Light and System are the other picks, in the avatar menu (`account-menu.tsx`). `next-themes` puts `dark` or `light` on `<html>` and stores the pick in `localStorage.theme`; an inline script in `apps/web/index.html` applies it before the first paint, so neither theme flashes the other. The `.dark` block in `globals.css` gives every token above a dark value, so components never branch on the theme: anything that needs a colour reads a token. Layering, darkest first: canvas `#0b0d12` (React Flow's pane is pointed at `--color-canvas` in `canvas.css`), then page and chrome `--background`, then cards and floating surfaces `--color-bg` `#151a23`, lines `#252b36`. The accent brightens to `#4d6dff` for contrast and `--color-primary-strong` stays the darker blue under white text (Shipping pill, hover). Theme-aware colours that are not Tailwind tokens live as plain variables next to them: `--ansi-*` (terminal colours in log lines), `--latency-p50`/`--latency-p99` (the latency chart ramp, inverted in dark so p99 stays the loudest), `--lamp-shade`/`--lamp-rim-off` (Observability's lamp, lighter graphite in dark so the shade doesn't vanish). Service and replica hues in log streams are `--color-tone-{indigo,green,brown,plum,teal,olive}`.
 
 ## React Flow mapping
 

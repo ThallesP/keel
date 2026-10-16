@@ -21,7 +21,7 @@ func (s *Swarm) ImageCached(ctx context.Context, image string) (bool, error) {
 }
 
 func (s *Swarm) PullImage(ctx context.Context, image string) error {
-	resp, err := s.cli.ImagePull(ctx, image, client.ImagePullOptions{})
+	resp, err := s.cli.ImagePull(ctx, image, client.ImagePullOptions{RegistryAuth: s.authFor(image)})
 	if err != nil {
 		return err
 	}
@@ -40,12 +40,15 @@ func (s *Swarm) ServiceVersion(ctx context.Context, nodeID string) (uint64, bool
 }
 
 func (s *Swarm) CreateService(ctx context.Context, spec app.ServiceSpec) error {
-	_, err := s.cli.ServiceCreate(ctx, client.ServiceCreateOptions{Spec: toSpec(spec)})
+	opts := client.ServiceCreateOptions{Spec: toSpec(spec), EncodedRegistryAuth: s.authFor(spec.Image)}
+	_, err := s.cli.ServiceCreate(ctx, opts)
 	return err
 }
 
 func (s *Swarm) UpdateService(ctx context.Context, version uint64, spec app.ServiceSpec) error {
-	opts := client.ServiceUpdateOptions{Spec: toSpec(spec), Version: swarm.Version{Index: version}}
+	opts := client.ServiceUpdateOptions{
+		Spec: toSpec(spec), Version: swarm.Version{Index: version}, EncodedRegistryAuth: s.authFor(spec.Image),
+	}
 	_, err := s.cli.ServiceUpdate(ctx, serviceName(spec.NodeID), opts)
 	return err
 }

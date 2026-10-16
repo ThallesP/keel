@@ -224,10 +224,10 @@ Node death: Swarm reschedules unpinned tasks itself. Pinned tasks sit `pending` 
 
 ## Builds and registry
 
-Swarm runs images, does not make them. Two pieces still needed, not designed yet:
+Swarm runs images, does not make them.
 
-- **Build.** BuildKit on the control plane, or a build service pinned there. Kicked off from a `keel serve` job, result pushed to the registry, then `apply` with the new tag. Jobs are in memory and die with the process, so the job starts the build and a callback or poll finishes it.
-- **Registry.** Workers need to pull the image. `registry:2` as a Swarm service on the control plane, reachable over the tailnet. Image tags are `<tailnet-ip>:5000/svc-<id>:<revision>`.
+- **Registry.** Done: zot on the control plane at `<tailnet-ip>:5000`, Keel's own CA, credentials passed to Swarm with every service create/update. See [`registry.md`](./registry.md).
+- **Build.** Not built. Direction (2026-10-16): no dedicated builder that sits idle, no cloud VMs. The developer's machine builds (`keel` runs Railpack against the local BuildKit and pushes to the registry over the tailnet); when no such machine is around (a git push, an agent at 3am), a one-shot `buildkitd` job runs on the server with the most free memory, capped and at low CPU priority, its cache kept in the registry; with no room anywhere the build waits and says so. Watch for arm64 laptops building for amd64 servers (emulated, several times slower). Builds outlive any request, so a job starts the build and a callback or poll finishes it, streaming into `deployment_log` as a Build step before Pull. GitHub Actions stay opt-in: the action pushes to GHCR with `GITHUB_TOKEN` and Keel polls GHCR (outbound only).
 
 Cross-node choreography (rolling a revision across pinned nodes one at a time, health check between) is a control-plane workflow: patch `desired` on node 1, wait until observe records `observed.revision`, patch node 2. `keel serve` is the loop, Swarm is the hands. There is no durable workflow engine yet (ARCHITECTURE "Use cases": in-memory jobs plus `Recover`), so this needs one, or a state row that `Recover` resumes from.
 

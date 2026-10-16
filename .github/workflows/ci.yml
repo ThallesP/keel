@@ -104,6 +104,7 @@ jobs:
         run: |
           jq -e '.ok == true and .url == "http://" + env.KEEL_ADDR and .apiUrl == .url' first.json
           jq -e '.version == "ci" and .stateDir == "/opt/keel" and (.publicIp | type) == "string" and (.warnings | type) == "array"' first.json
+          jq -e '.registry == env.KEEL_ADDR + ":5000"' first.json
       - name: Sign up and sign in against the installed control plane
         run: |
           site="http://$KEEL_ADDR"
@@ -162,6 +163,23 @@ jobs:
           jq -e '.code == "USAGE"' unconfirmed.json
           keel service delete api --yes | jq -e '.ok and .deleted'
           keel service list | jq -e '.services == []'
+      - name: An image pushed after keel registry login deploys from the install's registry
+        run: |
+          export KEEL_CONFIG_DIR="$RUNNER_TEMP/keel-config"
+          keel() { "$RUNNER_TEMP/keel" "$@"; }
+          reg="$KEEL_ADDR:5000"
+          # install.sh made this server's Docker trust the registry's CA, so login only logs in.
+          keel registry login | jq -e --arg reg "$reg" '.ok and .registry == $reg and .username == "keel" and .caPath == "/etc/docker/certs.d/" + $reg + "/ca.crt"'
+          docker pull -q nginx:alpine
+          docker tag nginx:alpine "$reg/ci-app/web:1"
+          docker push -q "$reg/ci-app/web:1"
+          # Nothing on this server is logged in or has the image any more: the pull has to use the
+          # credentials keel serve hands to Docker and Swarm.
+          docker logout "$reg"
+          docker rmi "$reg/ci-app/web:1"
+          keel service create web --image "$reg/ci-app/web:1" --port 80 | jq -e '.ok'
+          keel ship | jq -e '.ok'
+          [ "$(docker service ls --filter label=keel.service --format '{{.Image}} {{.Replicas}}')" = "$reg/ci-app/web:1 1/1" ]
       - name: keel proxy answers serve on the shared admin socket, listens on nothing yet, and has no Docker socket
         run: |
           # The admin socket lives in the proxy-admin volume; read it from the host.
@@ -177,7 +195,7 @@ jobs:
           [[ -n "$mounts" && "$mounts" != *docker.sock* ]]
       - name: Re-run is idempotent and keeps the data
         run: |
-          secrets() { sudo grep -E '^KEEL_WORKER_TOKEN=' /opt/keel/.env | sha256sum; }
+          secrets() { sudo grep -E '^KEEL_(WORKER_TOKEN|REGISTRY_PASSWORD)=' /opt/keel/.env | sha256sum; sudo sha256sum /opt/keel/registry/ca.crt /opt/keel/registry/tls.crt; }
           before=$(secrets)
           sudo -E ./install.sh > second.json
           jq -e '.ok == true' second.json
@@ -193,4 +211,5 @@ jobs:
           sudo docker compose -p keel ps || true
           sudo docker compose -p keel logs --tail 200 || true
           sudo docker service ps keel-agent --no-trunc || true
+          sudo docker service ls || true
           sudo docker service logs keel-agent --tail 100 || true

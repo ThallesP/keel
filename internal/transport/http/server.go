@@ -77,6 +77,7 @@ func (s *Server) Register(h huma.API) {
 	s.registerDeploy(h)
 	s.registerObservability(h)
 	s.registerIngress(h)
+	s.registerRegistry(h)
 }
 
 func OpenAPI(version string) *huma.OpenAPI {

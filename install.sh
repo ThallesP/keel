@@ -7,9 +7,11 @@
 # JSON object ({"ok":true,...} or {"ok":false,"error":...}). Every failure exits non-zero with
 # an `error:` line and, when there is one, a `fix:` line.
 #
-# Optional environment (all of it is non-interactive except a Tailscale login without a key):
+# Optional environment (all of it is non-interactive except a Tailscale login without a key, and
+# turning on HTTPS for the tailnet when it is off and someone is at the terminal):
 #   KEEL_TAILSCALE_AUTHKEY  tskey-auth-... to join the tailnet without a browser login
-#   KEEL_ADDR               Bind to this IP instead of the tailnet IP; skips Tailscale (LAN, CI)
+#   KEEL_ADDR               Bind to this IP instead of the tailnet IP; skips Tailscale and
+#                           HTTPS (LAN, CI)
 #   KEEL_PUBLIC_IP          This server's public IPv4 (default: detected). Names the default
 #                           https://<service>-<id>.<ip>.sslip.io domains of exposed services
 #   KEEL_ACME_EMAIL         Email for certificates; adds ZeroSSL after Let's Encrypt
@@ -111,6 +113,62 @@ ensure_tailscale() {
   KEEL_ADDR=$(tailscale ip -4 | head -1)
   [ -n "$KEEL_ADDR" ] || die "no tailnet IPv4 address" "check 'tailscale status'"
   log "tailnet address $KEEL_ADDR"
+  order_docker_after_tailscale
+}
+
+# keel publishes on the tailnet IP only, so Docker must not restore it before tailscale0 has that
+# address (a reboot used to leave it Exited, #35). The wait gets a timeout: tailscale-wait-online
+# is a oneshot with none, and a tailnet that never comes up would otherwise hold Docker forever.
+order_docker_after_tailscale() {
+  if ! systemctl cat tailscale-online.target >/dev/null 2>&1; then
+    log "no tailscale-online.target (older Tailscale or no systemd): Docker is not ordered after Tailscale"
+    return
+  fi
+  mkdir -p /etc/systemd/system/docker.service.d /etc/systemd/system/tailscale-wait-online.service.d
+  printf '[Unit]\nWants=tailscale-online.target\nAfter=tailscale-online.target\n' \
+    >/etc/systemd/system/docker.service.d/10-wait-tailscale.conf
+  printf '[Service]\nTimeoutStartSec=90s\n' \
+    >/etc/systemd/system/tailscale-wait-online.service.d/10-keel-timeout.conf
+  systemctl daemon-reload
+}
+
+# This server's MagicDNS name when the tailnet has HTTPS certificates on, else empty.
+cert_domain() {
+  tailscale status --json 2>/dev/null | sed -n '/"CertDomains": \[/{n;s/^[[:space:]]*"\([^"]*\)".*/\1/p;q;}'
+}
+
+# Someone at the terminal can turn HTTPS on now; an agent (KEEL_JSON=1) gets the link as a warning
+# and the next run picks it up.
+wait_for_https() {
+  [ "${KEEL_JSON:-}" != 1 ] && [ -t 2 ] && (: </dev/tty) 2>/dev/null || return 1
+  log "turn on HTTPS for your tailnet (once, for every server in it): open https://login.tailscale.com/admin/dns and select Enable HTTPS"
+  log "waiting up to 15 minutes; press Enter to continue without HTTPS"
+  local _
+  for _ in $(seq 1 180); do
+    [ -n "$(cert_domain)" ] && return 0
+    read -r -t 5 _ </dev/tty && return 1
+  done
+  return 1
+}
+
+# The dashboard over HTTPS on this server's MagicDNS name, through `tailscale serve` (tailnet only).
+# Browsers need a secure context (crypto.subtle, clipboard) and Axiom refuses http redirect URIs.
+ensure_https() {
+  SITE_URL="http://$KEEL_ADDR"; [ "$KEEL_WEB_PORT" = 80 ] || SITE_URL="$SITE_URL:$KEEL_WEB_PORT"
+  [ -z "$KEEL_ADDR_OVERRIDE" ] || return 0
+  local host
+  host=$(cert_domain)
+  if [ -z "$host" ] && wait_for_https; then
+    host=$(cert_domain)
+  fi
+  if [ -z "$host" ]; then
+    warn "HTTPS is off for this tailnet, so the dashboard stays on $SITE_URL and Sign in with Axiom will not work. Turn on HTTPS Certificates at https://login.tailscale.com/admin/dns, then re-run install.sh"
+    return
+  fi
+  tailscale serve --bg --https=443 "http://$KEEL_ADDR:$KEEL_WEB_PORT" >/dev/null ||
+    die "tailscale serve could not put the dashboard on https://$host" "tailscale serve status"
+  SITE_URL="https://$host"
+  log "dashboard on $SITE_URL (tailscale serve)"
 }
 
 # The address the internet reaches this server on: what exposed services' domains and ports
@@ -156,7 +214,10 @@ write_state() {
   fetch scripts/bootstrap-swarm.sh "$KEEL_DIR/scripts/bootstrap-swarm.sh" 755
 
   KEEL_WORKER_TOKEN=$(saved KEEL_WORKER_TOKEN); KEEL_WORKER_TOKEN=${KEEL_WORKER_TOKEN:-$(rand_hex)}
+  KEEL_REGISTRY_PASSWORD=$(saved KEEL_REGISTRY_PASSWORD); KEEL_REGISTRY_PASSWORD=${KEEL_REGISTRY_PASSWORD:-$(rand_hex)}
   save_state
+  mkdir -p "$KEEL_DIR/registry"
+  chmod 700 "$KEEL_DIR/registry"
 }
 
 save_state() {
@@ -165,8 +226,8 @@ save_state() {
     cat >"$ENV_FILE.tmp" <<EOF
 # Keel install state, written by install.sh. Secrets: keep this file private (0600).
 # KEEL_ADDR is derived (tailnet IP) unless KEEL_ADDR_OVERRIDE is set; KEEL_PUBLIC_IP likewise
-# (detected) unless KEEL_PUBLIC_IP_OVERRIDE is. KEEL_SITE_URL is derived from both KEEL_ADDR
-# and KEEL_WEB_PORT.
+# (detected) unless KEEL_PUBLIC_IP_OVERRIDE is. KEEL_SITE_URL is derived: the MagicDNS name over
+# HTTPS when the tailnet has HTTPS on, else KEEL_ADDR and KEEL_WEB_PORT.
 KEEL_ADDR='$KEEL_ADDR'
 KEEL_ADDR_OVERRIDE='$KEEL_ADDR_OVERRIDE'
 KEEL_PUBLIC_IP='$KEEL_PUBLIC_IP'
@@ -177,6 +238,7 @@ KEEL_WEB_PORT='$KEEL_WEB_PORT'
 KEEL_IMAGE_PREFIX='$KEEL_IMAGE_PREFIX'
 KEEL_SITE_URL='$KEEL_SITE_URL'
 KEEL_WORKER_TOKEN='$KEEL_WORKER_TOKEN'
+KEEL_REGISTRY_PASSWORD='$KEEL_REGISTRY_PASSWORD'
 EOF
     mv "$ENV_FILE.tmp" "$ENV_FILE"
   )
@@ -194,22 +256,51 @@ pull_images() {
   compose pull --quiet >&2 || die "could not pull the control-plane images" "check KEEL_VERSION and access to ghcr.io"
 }
 
+# keel serve writes the registry's CA, certificate, password file and config into
+# $KEEL_DIR/registry on start (docs/registry.md). It reissues the certificate when the tailnet IP
+# changed; zot then gets a restart so it serves the new one.
 start_control_plane() {
-  log "starting the control plane (keel serve, keel proxy)"
+  log "starting the control plane (keel serve, keel proxy, registry)"
+  local cert=$KEEL_DIR/registry/tls.crt before=""
+  [ -f "$cert" ] && before=$(sha256sum "$cert")
   compose up -d --wait --wait-timeout 180 --remove-orphans >&2 ||
-    die "the control plane did not become healthy" "docker compose -p keel logs keel proxy"
+    die "the control plane did not become healthy" "docker compose -p keel logs keel proxy registry"
+  if [ -n "$before" ] && [ "$before" != "$(sha256sum "$cert")" ]; then
+    compose restart registry >&2
+  fi
+}
+
+# Docker on this server trusts the registry's CA, so Swarm tasks scheduled here can pull from it.
+# Other servers need the same file (docs/registry.md).
+trust_registry() {
+  install -D -m 644 "$KEEL_DIR/registry/ca.crt" "/etc/docker/certs.d/$KEEL_ADDR:5000/ca.crt"
+}
+
+# curl against the dashboard URL. Over HTTPS it dials the tailnet IP directly (MagicDNS may not
+# resolve on this server) and retries while Tailscale fetches the first certificate.
+site() {
+  local path=$1 host=${SITE_URL#https://}
+  shift
+  if [ "$host" = "$SITE_URL" ]; then
+    curl -fsS "$@" "$SITE_URL$path"
+    return
+  fi
+  curl -fsS --resolve "$host:443:$KEEL_ADDR" --retry 18 --retry-delay 5 --retry-all-errors "$@" "$SITE_URL$path"
 }
 
 # keel serve creates and updates keel-agent (the per-node agent, a Swarm global service) itself.
 check_health() {
   log "checking health"
   local meta
-  meta=$(curl -fsS "$SITE_URL/api/meta") || die "the control plane is not answering on $SITE_URL" "docker compose -p keel logs keel"
+  meta=$(site /api/meta) || die "the control plane is not answering on $SITE_URL" "docker compose -p keel logs keel; tailscale serve status"
   [[ "$meta" == *"\"$SITE_URL\""* ]] || die "the control plane does not know its URL ($SITE_URL)" "docker compose -p keel logs keel"
-  curl -fsS -o /dev/null "$SITE_URL/" ||
+  site / -o /dev/null ||
     die "the dashboard is not served on $SITE_URL" "docker compose -p keel logs keel"
-  curl -fsS -o /dev/null -H @- "$SITE_URL/worker/config" <<<"Authorization: Bearer $KEEL_WORKER_TOKEN" ||
+  site /worker/config -o /dev/null -H @- <<<"Authorization: Bearer $KEEL_WORKER_TOKEN" ||
     die "the control plane does not accept the worker token" "re-run install.sh; it passes KEEL_WORKER_TOKEN to the control plane again"
+  curl -fsS -o /dev/null --retry 10 --retry-delay 1 --retry-all-errors --cacert "$KEEL_DIR/registry/ca.crt" \
+    -K - "https://$KEEL_ADDR:5000/v2/" <<<"user = \"keel:$KEEL_REGISTRY_PASSWORD\"" ||
+    die "the registry is not answering on $KEEL_ADDR:5000" "docker compose -p keel logs registry"
   local _ replicas=""
   for _ in $(seq 1 60); do
     replicas=$(docker service ls --filter name=keel-agent --format '{{.Replicas}}' | head -1)
@@ -235,26 +326,34 @@ main() {
   KEEL_PUBLIC_IP=$(saved KEEL_PUBLIC_IP)
   KEEL_ACME_EMAIL=${KEEL_ACME_EMAIL:-$(saved KEEL_ACME_EMAIL)}
 
+  local previous_url
+  previous_url=$(saved KEEL_SITE_URL)
+
   preflight
   ensure_docker
   ensure_tailscale
   detect_public_ip
-  SITE_URL="http://$KEEL_ADDR"; [ "$KEEL_WEB_PORT" = 80 ] || SITE_URL="$SITE_URL:$KEEL_WEB_PORT"
+  ensure_https
   # compose reads it from .env, but a KEEL_SITE_URL in the caller's environment would win there.
   KEEL_SITE_URL=$SITE_URL
   write_state
   start_swarm
   pull_images
   start_control_plane
+  trust_registry
   check_health
+  if [ -n "$previous_url" ] && [ "$previous_url" != "$SITE_URL" ]; then
+    warn "the dashboard moved from $previous_url to $SITE_URL: sign in there, and run keel login $SITE_URL again wherever the CLI used the old URL"
+  fi
 
-  printf '\n\033[1mKeel is running.\033[0m\n\n  Dashboard  %s\n  State      %s (secrets, 0600)\n\n' "$SITE_URL" "$ENV_FILE" >&2
+  printf '\n\033[1mKeel is running.\033[0m\n\n  Dashboard  %s\n  Registry   %s (keel registry login)\n  State      %s (secrets, 0600)\n\n' \
+    "$SITE_URL" "$KEEL_ADDR:5000" "$ENV_FILE" >&2
   printf 'Open the dashboard from any device on your tailnet and sign up.\nUpgrade: re-run the install command.\n' >&2
   printf '\nExposed services are served from %s: let ports 80 and 443 (TCP) through\nits firewall or router, plus each TCP/UDP port you expose.\n' "${KEEL_PUBLIC_IP:-this server}" >&2
   if [ "${KEEL_JSON:-}" = 1 ]; then
-    printf '{"ok":true,"url":%s,"apiUrl":%s,"version":%s,"stateDir":%s,"publicIp":%s,"warnings":%s}\n' \
+    printf '{"ok":true,"url":%s,"apiUrl":%s,"version":%s,"stateDir":%s,"publicIp":%s,"registry":%s,"warnings":%s}\n' \
       "$(json_str "$SITE_URL")" "$(json_str "$SITE_URL")" "$(json_str "$KEEL_VERSION")" \
-      "$(json_str "$KEEL_DIR")" "$(json_str "$KEEL_PUBLIC_IP")" "$(json_warnings)"
+      "$(json_str "$KEEL_DIR")" "$(json_str "$KEEL_PUBLIC_IP")" "$(json_str "$KEEL_ADDR:5000")" "$(json_warnings)"
   fi
 }
 

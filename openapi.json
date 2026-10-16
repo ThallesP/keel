@@ -1769,6 +1769,38 @@
         ],
         "type": "object"
       },
+      "Registry": {
+        "additionalProperties": false,
+        "properties": {
+          "ca": {
+            "description": "PEM certificate of the CA that signed the registry's certificate",
+            "type": "string"
+          },
+          "host": {
+            "description": "Registry address, the prefix of every image in it",
+            "examples": [
+              "100.64.0.7:5000"
+            ],
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "examples": [
+              "keel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "username",
+          "password",
+          "ca"
+        ],
+        "type": "object"
+      },
       "ServiceLogLine": {
         "additionalProperties": false,
         "properties": {
@@ -5119,6 +5151,38 @@
         "summary": "The project the dashboard opens first (created on first use)",
         "tags": [
           "canvas"
+        ]
+      }
+    },
+    "/api/registry": {
+      "get": {
+        "description": "What `keel registry login` hands to Docker. Any member of the organization may read it.",
+        "operationId": "getRegistryLogin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Credentials and CA for the install's image registry",
+        "tags": [
+          "registry"
         ]
       }
     },

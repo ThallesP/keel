@@ -18,6 +18,7 @@ import (
 	"github.com/ThallesP/keel/internal/adapters/realtime"
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
 	"github.com/ThallesP/keel/internal/app"
+	"github.com/ThallesP/keel/internal/registry"
 	transport "github.com/ThallesP/keel/internal/transport/http"
 )
 
@@ -51,6 +52,11 @@ func ConfigFromEnv(version string) app.Config {
 		DataDir:         Env("KEEL_DATA_DIR", "/data"),
 		AgentImage:      Env("KEEL_AGENT_IMAGE", ""),
 		AgentControlURL: strings.TrimRight(Env("KEEL_AGENT_CONTROL_URL", ""), "/"),
+		Registry: app.Registry{
+			Host:     Env("KEEL_REGISTRY", ""),
+			Username: registry.Username,
+			Password: Env("KEEL_REGISTRY_PASSWORD", ""),
+		},
 	}
 	if !cfg.AllowLocalSinks {
 		cfg.AxiomAuthURL, cfg.AxiomAPIURL = "", ""
@@ -62,11 +68,26 @@ func Run(ctx context.Context, opts Options) error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(log)
 	cfg := ConfigFromEnv(opts.Version)
+	if err := prepareRegistry(&cfg.Registry, Env("KEEL_REGISTRY_DIR", "/registry")); err != nil {
+		return err
+	}
 	ln, err := net.Listen("tcp", Env("KEEL_LISTEN", ":8080"))
 	if err != nil {
 		return err
 	}
 	return serveOn(ctx, ln, cfg, opts.Web, log)
+}
+
+func prepareRegistry(r *app.Registry, dir string) error {
+	if r.Host == "" {
+		return nil
+	}
+	ca, err := registry.Prepare(registry.Files{Dir: dir, Host: r.Host, Password: r.Password, Now: time.Now()})
+	if err != nil {
+		return err
+	}
+	r.CA = string(ca)
+	return nil
 }
 
 func serveOn(ctx context.Context, ln net.Listener, cfg app.Config, web fs.FS, log *slog.Logger) (err error) {

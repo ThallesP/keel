@@ -118,7 +118,7 @@ keel agent (on every Swarm node).`,
 		a.loginCmd(), a.logoutCmd(), a.whoamiCmd(), a.tokenCmd(),
 		a.statusCmd(), a.projectCmd(), a.linkCmd(), a.unlinkCmd(),
 		a.serviceCmd(), a.logsCmd(), a.varCmd(), a.runCmd(),
-		a.tracesCmd(), a.tracingCmd(),
+		a.tracesCmd(), a.tracingCmd(), a.registryCmd(),
 		a.shipCmd(), a.redeployCmd(), a.deploymentCmd(),
 	} {
 		cmd.GroupID = "cli"

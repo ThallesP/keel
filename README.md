@@ -156,6 +156,10 @@ The CLI is `internal/cli` (contract in [`docs/cli.md`](docs/cli.md)).
 
 [`ci.yml`](.github/workflows/ci.yml) runs the Go checks and the web typecheck and build, then runs `install.sh` end to end on a fresh runner, twice. It runs on every pull request, and as the first job of [`images.yml`](.github/workflows/images.yml), which builds the image on every push to `main` (`:latest`, `:sha-<short>`) and on `v*` tags and publishes it only when `ci.yml` passed.
 
+## Community
+
+Questions, ideas or just want to talk? Come say hi on [Discord](https://discord.gg/pF5wfWZMSH).
+
 ## License
 
 [MIT](LICENSE)

@@ -33,6 +33,8 @@ internal/
   serve/         wiring for `keel serve`: config from env, construct adapters, inject into app.
   agent/         `keel agent` (node side). Talks to serve over HTTP only.
   mesh/          the agent's optional embedded Tailscale node (tsnet, `KEEL_TS_AUTHKEY`).
+  registry/      files `keel serve` writes for the zot registry container on start: CA, certificate,
+                 htpasswd, config (`docs/registry.md`).
   proxy/         `keel proxy`: embedded Caddy + plugin modules.
   cli/           CLI commands, config, output, HTTP client (uses api/).
 cmd/keel/        main.go → cli.Execute(ctx, web.Dist()): the dashboard FS rides into `keel serve`

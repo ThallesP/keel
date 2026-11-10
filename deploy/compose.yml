@@ -4,8 +4,8 @@
 # driver) and `keel proxy` (the public edge). The per-node agent (`keel agent`, the global
 # service keel-agent) and user services are Swarm services that `keel serve` manages; they are
 # not part of this file.
-# `keel` binds KEEL_ADDR (the tailnet IP) only. The one public listener is `proxy`, and only for
-# what someone exposed (docs/networking.md).
+# `keel` and `registry` bind KEEL_ADDR (the tailnet IP) only. The one public listener is `proxy`,
+# and only for what someone exposed (docs/networking.md).
 
 name: keel
 
@@ -26,6 +26,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # keel-proxy's admin socket. Shared through this volume only.
       - proxy-admin:/run/keel-proxy
+      # The registry's CA, certificate, password file and zot config, written here on start.
+      - ./registry:/registry
     environment:
       KEEL_SITE_URL: ${KEEL_SITE_URL:?}
       KEEL_WORKER_TOKEN: ${KEEL_WORKER_TOKEN:?}
@@ -40,6 +42,9 @@ services:
       # serve creates and updates the keel-agent global service from the image it runs itself.
       KEEL_AGENT_IMAGE: ${KEEL_IMAGE_PREFIX:-ghcr.io/thallesp}/keel:${KEEL_VERSION:-latest}
       KEEL_AGENT_CONTROL_URL: http://${KEEL_ADDR}:${KEEL_WEB_PORT:-80}
+      # The image registry below: serve prepares its files and hands its credentials to Swarm.
+      KEEL_REGISTRY: ${KEEL_ADDR}:5000
+      KEEL_REGISTRY_PASSWORD: ${KEEL_REGISTRY_PASSWORD:?}
     # No depends_on: proxy. The dashboard stays up when the edge is down; the proxy resumes its
     # last config by itself, and serve re-syncs it.
     healthcheck:
@@ -77,6 +82,23 @@ services:
       interval: 5s
       start_period: 5s
 
+  # Image registry (zot), internal: Keel pushes what it builds here and every server pulls from it
+  # over the tailnet (docs/registry.md). TLS from Keel's own CA, which each server's Docker trusts
+  # through /etc/docker/certs.d; one account, `keel`. Keeps the 10 most recently pushed tags of
+  # each repository. No healthcheck: the image has no shell and an arch-specific binary path;
+  # install.sh probes /v2/ instead.
+  registry:
+    image: ghcr.io/project-zot/zot-minimal:v2.1.22
+    restart: unless-stopped
+    depends_on:
+      keel:
+        condition: service_healthy
+    ports:
+      - "${KEEL_ADDR:?}:5000:5000"
+    volumes:
+      - ./registry:/etc/zot:ro
+      - registry-data:/var/lib/registry
+
 networks:
   # The Swarm overlay user services run on, created by scripts/bootstrap-swarm.sh.
   keel:
@@ -87,3 +109,4 @@ volumes:
   proxy-admin:
   proxy-data:
   proxy-config:
+  registry-data:

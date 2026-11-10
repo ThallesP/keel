@@ -64,6 +64,8 @@ func TestUsageBeforeConnecting(t *testing.T) {
 		"traces api --since 1h --json":                                     output.CodeNotAuthenticated,
 		"tracing enable --json":                                            output.CodeUsage,
 		"tracing prompt --json":                                            output.CodeNotAuthenticated,
+		"registry login extra --json":                                      output.CodeUsage,
+		"registry login --json":                                            output.CodeNotAuthenticated,
 	} {
 		root := (&app{}).root()
 		root.SetArgs(strings.Fields(args))

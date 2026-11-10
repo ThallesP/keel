@@ -215,3 +215,9 @@ func (c *Client) ServiceDeployments(ctx context.Context, serviceID string) ([]De
 	}
 	return out, nil
 }
+
+func (c *Client) Registry(ctx context.Context) (api.Registry, error) {
+	var out api.Registry
+	err := c.call(ctx, http.MethodGet, "/api/registry", nil, nil, &out)
+	return out, err
+}

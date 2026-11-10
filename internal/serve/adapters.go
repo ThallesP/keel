@@ -26,7 +26,7 @@ var adapters = []adapter{
 }
 
 func wireSwarm(a *app.App) (func() error, error) {
-	s, err := swarm.New()
+	s, err := swarm.New(a.Config.Registry)
 	if err != nil {
 		return nil, err
 	}

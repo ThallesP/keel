@@ -9,6 +9,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/containerd/errdefs v1.0.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/distribution/reference v0.6.0
 	github.com/mholt/caddy-l4 v0.1.2
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.1
@@ -63,7 +64,6 @@ require (
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
 	github.com/dgraph-io/ristretto v0.2.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
-	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.8.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dunglas/go-urlpattern v1.0.0 // indirect

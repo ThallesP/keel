@@ -40,6 +40,7 @@ const (
 	CodeForbidden            = "FORBIDDEN"
 	CodeNotFound             = "NOT_FOUND"
 	CodeRateLimited          = "RATE_LIMITED"
+	CodeDocker               = "DOCKER_ERROR"
 )
 
 const (

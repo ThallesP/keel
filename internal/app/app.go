@@ -42,6 +42,14 @@ type Config struct {
 	DataDir         string
 	AgentImage      string
 	AgentControlURL string
+	Registry        Registry
+}
+
+type Registry struct {
+	Host     string
+	Username string
+	Password string
+	CA       string
 }
 
 func New(a App) *App {

@@ -22,6 +22,7 @@ type Tx interface {
 	DeployTx
 	ObservabilityTx
 	IngressTx
+	WorkflowsTx
 }
 
 type CoreTx interface {

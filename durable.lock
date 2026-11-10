@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "workflows": {
+    "apply": {
+      "input": {
+        "kind": "struct",
+        "fields": {
+          "DeploymentID": {
+            "kind": "string"
+          },
+          "NodeID": {
+            "kind": "string"
+          },
+          "Pull": {
+            "kind": "bool"
+          },
+          "Revision": {
+            "kind": "int"
+          }
+        }
+      },
+      "steps": {
+        "apply": {
+          "kind": "do"
+        }
+      }
+    },
+    "deploy": {
+      "input": {
+        "kind": "struct",
+        "fields": {
+          "Applies": {
+            "kind": "list",
+            "elem": {
+              "kind": "struct",
+              "fields": {
+                "DeploymentID": {
+                  "kind": "string"
+                },
+                "NodeID": {
+                  "kind": "string"
+                },
+                "Pull": {
+                  "kind": "bool"
+                },
+                "Revision": {
+                  "kind": "int"
+                }
+              }
+            }
+          },
+          "DeploymentID": {
+            "kind": "string"
+          }
+        }
+      },
+      "steps": {
+        "apply *": {
+          "kind": "do"
+        },
+        "settled": {
+          "kind": "await",
+          "type": {
+            "kind": "struct"
+          }
+        },
+        "time out": {
+          "kind": "do"
+        }
+      }
+    },
+    "remove": {
+      "input": {
+        "kind": "struct",
+        "fields": {
+          "NodeID": {
+            "kind": "string"
+          }
+        }
+      },
+      "steps": {
+        "remove service": {
+          "kind": "do"
+        }
+      }
+    }
+  }
+}

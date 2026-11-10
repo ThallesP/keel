@@ -4,16 +4,20 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/ThallesP/durable"
+	"github.com/ThallesP/durable/memstore"
 )
 
 type App struct {
-	Store  Store
-	Events Publisher
-	Conns  Connections
-	Jobs   Jobs
-	Config Config
-	Log    *slog.Logger
-	Now    func() int64
+	Store     Store
+	Events    Publisher
+	Conns     Connections
+	Jobs      Jobs
+	Workflows *durable.Engine
+	Config    Config
+	Log       *slog.Logger
+	Now       func() int64
 
 	Swarm Swarm
 	Logs  LogReader
@@ -25,6 +29,7 @@ type App struct {
 	deploy     *deployRuntime
 	ingress    *ingressState
 	authLimits *authLimiters
+	flows      workflows
 	ship       func(tx Tx, ch *Changes, scope EnvScope, opts ShipOptions) (string, error)
 }
 
@@ -57,8 +62,12 @@ func New(a App) *App {
 	if a.Log == nil {
 		a.Log = slog.Default()
 	}
-	a.deploy = &deployRuntime{observe: map[string]pendingScan{}, applies: map[string]*applyQueue{}}
+	if a.Workflows == nil {
+		a.Workflows = durable.New(memstore.New())
+	}
+	a.deploy = &deployRuntime{observe: map[string]pendingScan{}, applying: map[string]runningApply{}, timeout: deployTimeout}
 	a.ingress = &ingressState{}
+	a.flows = a.registerWorkflows()
 	a.ship = a.beginDeployment
 	a.authLimits = &authLimiters{
 		signIn:      newAuthAttempts(SignInAttempts, SignInWindow),

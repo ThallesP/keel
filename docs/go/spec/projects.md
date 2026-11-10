@@ -540,6 +540,8 @@ At `startedAt + 5 min`: if the deployment is missing or not `running` → no-op.
 
 Go: this job must survive restarts. On `serve` start, for every `running` deployment, re-arm the timeout at `max(now, startedAt + 5 min)` (the ARCHITECTURE recovery pass covers observes; add this).
 
+> **Go now:** the timeout is the `deploy` workflow run's 5-minute `durable.Await`, saved in the database, so nothing re-arms it (swarm-worker §10.3).
+
 ### 7.6 Deployment status as clients see it
 
 - Ship button: running → `Shipping… <done steps>/<all steps incl. health> <elapsed>`, not clickable; latest failed with at least one failed node step whose node still exists → `Retry`; else `Ship · N changes` / `Ship`.
@@ -674,7 +676,7 @@ return {revision, running: running.length, ...(oneShot && {completed: completed.
 
 The ARCHITECTURE `Jobs.After(key, …)` ("pending job with the same key wins") must be extended or wrapped to also replace a pending job that is due **later** than the new one. Key: `observe:<nodeId>`. Cancel the pending scan when the node is deleted.
 
-> **Go now:** wrapped, not extended: a map on `App` holds each node's pending scan (due time, settle count, generation) and every scan is its own job keyed `observe:<nodeId>:<gen>`; a job whose generation is no longer the node's current one does nothing. `ScheduleRemoveService` drops the node's entry.
+> **Go now:** wrapped, not extended: a map on `App` holds each node's pending scan (due time, settle count, generation) and every scan is its own job keyed `observe:<nodeId>:<gen>`; a job whose generation is no longer the node's current one does nothing. Scheduling a scan for a node that is gone (or has no `desired`) drops the node's entry.
 
 ### 8.7 Docker events ingestion (`POST /worker/events` → `events.ingest`)
 

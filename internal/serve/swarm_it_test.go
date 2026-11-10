@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -72,6 +74,18 @@ func (c *itClient) settle(env string) api.Deployment {
 	}
 	c.t.Fatal("deployment did not settle in 3 minutes")
 	return api.Deployment{}
+}
+
+func (c *itClient) waitLog(env string, texts ...string) {
+	c.t.Helper()
+	for range 600 {
+		d := call[api.DeploymentEnvelope](c, "GET", "/api/environments/"+env+"/deployments/latest", nil).Deployment
+		if d != nil && slices.ContainsFunc(d.Log, func(l api.DeployLogLine) bool { return slices.Contains(texts, l.Text) }) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	c.t.Fatalf("no deploy log line %q in 30 seconds", texts)
 }
 
 func (c *itClient) node(env, id string) api.NodeView {
@@ -184,4 +198,96 @@ func TestSwarmIT(t *testing.T) {
 		time.Sleep(time.Second)
 	}
 	t.Fatal("svc still there 30 s after delete")
+}
+
+func TestSwarmITDeployResumesAfterRestart(t *testing.T) {
+	host := os.Getenv("KEEL_IT_DOCKER_HOST")
+	if host == "" {
+		t.Skip("set KEEL_IT_DOCKER_HOST to a disposable Swarm manager to run")
+	}
+	t.Setenv("DOCKER_HOST", host)
+	saved, savedTimeout, savedGrace := adapters, ShutdownTimeout, jobsCancelGrace
+	adapters = []adapter{{"passwords", wirePasswords}, {"swarm", wireSwarm}}
+	ShutdownTimeout, jobsCancelGrace = 2*time.Second, time.Second
+	t.Cleanup(func() { adapters, ShutdownTimeout, jobsCancelGrace = saved, savedTimeout, savedGrace })
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	cfg := app.Config{Version: "it", SiteURL: "http://" + addr, WorkerToken: "it-token", DataDir: filepath.Join(t.TempDir(), "data")}
+	logs := &strings.Builder{}
+	log := slog.New(slog.NewTextHandler(logs, nil))
+	serve := func(ln net.Listener) func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		served := make(chan error, 1)
+		go func() { served <- serveOn(ctx, ln, cfg, nil, log) }()
+		var once sync.Once
+		return func() {
+			once.Do(func() {
+				cancel()
+				if err := <-served; err != nil {
+					t.Errorf("serveOn: %v", err)
+				}
+			})
+		}
+	}
+	stop := serve(ln)
+
+	t.Setenv("KEEL_URL", cfg.SiteURL)
+	t.Setenv("KEEL_WORKER_TOKEN", cfg.WorkerToken)
+	t.Setenv("KEEL_STATE", filepath.Join(t.TempDir(), "agent-state.json"))
+	agentCtx, stopAgent := context.WithCancel(context.Background())
+	agentDone := make(chan error, 1)
+	go func() { agentDone <- agent.Main(agentCtx) }()
+
+	docker, err := client.New(client.WithHost(host))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	t.Cleanup(func() {
+		stop()
+		stopAgent()
+		<-agentDone
+		if id != "" {
+			_, _ = docker.ServiceRemove(context.Background(), "svc-"+id, client.ServiceRemoveOptions{})
+		}
+		docker.Close()
+		if t.Failed() {
+			t.Logf("serve log:\n%s", logs.String())
+		}
+	})
+
+	c := &itClient{t: t, base: cfg.SiteURL}
+	c.token = call[api.SignedIn](c, "POST", "/api/auth/sign-up", api.SignUpRequest{Email: "it@example.com", Password: "correct horse battery", Name: "IT"}).Token
+	slug := call[api.DefaultProject](c, "POST", "/api/projects/default", nil).Slug
+	env := call[api.ProjectBySlug](c, "GET", "/api/projects/by-slug/"+slug, nil).Project.Environment.ID
+	id = call[api.CreatedNode](c, "POST", "/api/environments/"+env+"/nodes", api.CreateNodeRequest{
+		Type: "service", Name: fmt.Sprintf("restart-%d", time.Now().UnixNano()%100000), Image: new("httpd:alpine"), Port: new(80), Deploy: true,
+	}).ID
+	c.waitLog(env, "pulling httpd:alpine", "using cached httpd:alpine")
+	stop()
+
+	if ln, err = net.Listen("tcp", addr); err != nil {
+		t.Fatal(err)
+	}
+	stop = serve(ln)
+	d := c.settle(env)
+	if d.Status != "success" {
+		t.Fatalf("deploy across a restart: %+v", d)
+	}
+	created := 0
+	for _, l := range d.Log {
+		if strings.HasPrefix(l.Text, "service created") {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Fatalf("applied %d times: %+v", created, d.Log)
+	}
+	if v := c.node(env, id); v.Status != "healthy" || v.Running != 1 {
+		t.Fatalf("after the restart: %+v", v)
+	}
 }

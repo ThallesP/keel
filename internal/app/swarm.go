@@ -10,64 +10,65 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ThallesP/durable"
+
 	"github.com/ThallesP/keel/internal/domain"
 )
 
 type applyRequest struct {
-	nodeID       string
-	deploymentID string
-	revision     int
-	pull         bool
+	NodeID       string
+	DeploymentID string
+	Revision     int
+	Pull         bool
 }
 
-func (a *App) scheduleApply(req applyRequest) {
+func (a *App) startApply(ctx context.Context, req applyRequest) error {
+	a.supersedeApply(req)
+	_, err := a.flows.apply.Start(ctx, req, durable.WithID("apply:"+req.DeploymentID+":"+req.NodeID))
+	return err
+}
+
+func (a *App) supersedeApply(req applyRequest) {
 	rt := a.deploy
 	rt.mu.Lock()
-	q, draining := rt.applies[req.nodeID]
-	if !draining {
-		q = &applyQueue{}
-		rt.applies[req.nodeID] = q
-	}
-	q.queued = append(q.queued, req)
-	if q.running != nil && q.running.revision < req.revision {
-		q.running.cancel(errApplySuperseded)
-	}
-	rt.mu.Unlock()
-	if !draining {
-		a.Jobs.After("apply:"+req.nodeID, 0, func(ctx context.Context) { a.drainApplies(ctx, req.nodeID) })
+	defer rt.mu.Unlock()
+	if running, ok := rt.applying[req.NodeID]; ok && running.revision < req.Revision {
+		running.cancel(errApplySuperseded)
 	}
 }
 
-func (a *App) drainApplies(ctx context.Context, nodeID string) {
-	rt := a.deploy
-	for {
-		rt.mu.Lock()
-		q := rt.applies[nodeID]
-		if len(q.queued) == 0 || ctx.Err() != nil {
-			delete(rt.applies, nodeID)
-			rt.mu.Unlock()
-			return
-		}
-		req := q.queued[0]
-		q.queued = q.queued[1:]
-		applyCtx, cancel := context.WithCancelCause(ctx)
-		q.running = &runningApply{revision: req.revision, cancel: cancel}
-		rt.mu.Unlock()
-		a.safeApply(applyCtx, req)
-		cancel(nil)
-	}
+func (a *App) runApply(ctx durable.Context, req applyRequest) (struct{}, error) {
+	return struct{}{}, durable.Do(ctx, "apply", func(ctx context.Context) error {
+		return a.safeApply(ctx, req)
+	})
 }
 
-func (a *App) safeApply(ctx context.Context, req applyRequest) {
+func (a *App) safeApply(parent context.Context, req applyRequest) (err error) {
+	ctx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
+	release := a.holdApply(req, cancel)
+	defer release()
 	defer func() {
 		if r := recover(); r != nil {
-			a.Log.Error("apply panicked", "node", req.nodeID, "panic", r, "stack", string(debug.Stack()))
+			a.Log.Error("apply panicked", "node", req.NodeID, "panic", r, "stack", string(debug.Stack()))
 			record := context.WithoutCancel(ctx)
-			a.setApplyError(record, req.nodeID, "internal error")
-			a.writeStep(record, req.deploymentID, req.nodeID, stepFailed, "error: internal error")
+			a.setApplyError(record, req.NodeID, "internal error")
+			a.writeStep(record, req.DeploymentID, req.NodeID, stepFailed, "error: internal error")
 		}
 	}()
-	a.apply(ctx, req)
+	return a.apply(ctx, req)
+}
+
+func (a *App) holdApply(req applyRequest, cancel context.CancelCauseFunc) (release func()) {
+	rt := a.deploy
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.applying[req.NodeID] = runningApply{revision: req.Revision, cancel: cancel}
+	return func() {
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		delete(rt.applying, req.NodeID)
+	}
 }
 
 type applyInput struct {
@@ -78,18 +79,18 @@ type applyInput struct {
 
 func (a *App) loadApplyInput(ctx context.Context, req applyRequest) (in applyInput, ok bool, err error) {
 	err = a.read(ctx, func(tx Tx) error {
-		n, err := tx.Node(req.nodeID)
+		n, err := tx.Node(req.NodeID)
 		if errors.Is(err, ErrNoRow) {
 			return nil
 		}
 		if err != nil || n.Desired == nil {
 			return err
 		}
-		d, err := tx.Deployment(req.deploymentID)
+		d, err := tx.Deployment(req.DeploymentID)
 		if err != nil && !errors.Is(err, ErrNoRow) {
 			return err
 		}
-		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.nodeID && s.AppliedAt != 0 }) {
+		if slices.ContainsFunc(d.Steps, func(s domain.DeployStep) bool { return s.NodeID == req.NodeID && s.AppliedAt != 0 }) {
 			return nil
 		}
 		env, err := computeEnv(tx, n)
@@ -130,51 +131,50 @@ func deployEnvList(env map[string]string) []string {
 	return out
 }
 
-func (a *App) apply(parent context.Context, req applyRequest) {
+func (a *App) apply(parent context.Context, req applyRequest) error {
 	ctx, cancel := context.WithTimeout(parent, 15*time.Minute)
 	defer cancel()
 	record := context.WithoutCancel(parent)
-	id := req.nodeID
-	step := func(change stepChange, text string) { a.writeStep(record, req.deploymentID, id, change, text) }
+	id := req.NodeID
+	step := func(change stepChange, text string) { a.writeStep(record, req.DeploymentID, id, change, text) }
 	superseded := func(revision int) { step(stepFailed, "superseded by revision "+strconv.Itoa(revision)) }
-	fail := func(err error) {
+	fail := func(err error) error {
 		if errors.Is(context.Cause(parent), errApplySuperseded) {
 			rev, _, rerr := a.wantedRevision(record, id)
-			if rerr != nil || rev <= req.revision {
-				rev = req.revision + 1
+			if rerr != nil || rev <= req.Revision {
+				rev = req.Revision + 1
 			}
 			superseded(rev)
-			return
+			return nil
 		}
 		if parent.Err() != nil {
-			a.Log.Warn("apply interrupted by shutdown", "node", id, "deployment", req.deploymentID, "err", err)
-			return
+			a.Log.Warn("apply interrupted by shutdown", "node", id, "deployment", req.DeploymentID, "err", err)
+			return context.Cause(parent)
 		}
 		text := CompactText(err.Error(), 300)
 		a.setApplyError(record, id, text)
 		step(stepFailed, "error: "+text)
+		return nil
 	}
 
 	in, ok, err := a.loadApplyInput(ctx, req)
 	if err != nil {
-		fail(err)
-		return
+		return fail(err)
 	}
 	if !ok {
-		return
+		return nil
 	}
-	if in.desired.Revision > req.revision {
+	if in.desired.Revision > req.Revision {
 		superseded(in.desired.Revision)
-		return
+		return nil
 	}
 	image := in.desired.Image
 
 	cached, err := a.Swarm.ImageCached(ctx, image)
 	if err != nil {
-		fail(err)
-		return
+		return fail(err)
 	}
-	if cached && !req.pull {
+	if cached && !req.Pull {
 		step(stepRunning, "using cached "+image)
 	} else {
 		step(stepRunning, "pulling "+image)
@@ -186,22 +186,20 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		case cached:
 			step(stepLog, "pull failed ("+CompactText(err.Error(), 300)+"), using cached image")
 		default:
-			fail(err)
-			return
+			return fail(err)
 		}
 	}
 
 	rev, wanted, err := a.wantedRevision(ctx, id)
 	if err != nil {
-		fail(err)
-		return
+		return fail(err)
 	}
 	if !wanted {
-		return
+		return nil
 	}
-	if rev > req.revision {
+	if rev > req.Revision {
 		superseded(rev)
-		return
+		return nil
 	}
 
 	spec := ServiceSpec{
@@ -214,27 +212,25 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 	}
 	created, err := a.createOrUpdate(ctx, spec)
 	if err != nil {
-		fail(err)
-		return
+		return fail(err)
 	}
 	text := "service updated · revision " + strconv.Itoa(in.desired.Revision)
 	if created {
 		_, wanted, err = a.wantedRevision(ctx, id)
 		if err != nil {
-			fail(err)
-			return
+			return fail(err)
 		}
 		if !wanted {
 			if err := a.Swarm.RemoveService(ctx, id); err != nil {
-				fail(err)
+				return fail(err)
 			}
-			return
+			return nil
 		}
 		text = "service created · " + strconv.Itoa(in.desired.Replicas) + " replica(s)"
 	}
 	moved := false
 	err = a.write(record, func(tx Tx, ch *Changes) error {
-		if err := a.patchStep(tx, ch, req.deploymentID, id, stepApplied, text); err != nil {
+		if err := a.patchStep(tx, ch, req.DeploymentID, id, stepApplied, text); err != nil {
 			return err
 		}
 		scope, ok, err := ownedNode(tx, domain.SystemActor, id)
@@ -255,13 +251,13 @@ func (a *App) apply(parent context.Context, req applyRequest) {
 		return err
 	})
 	if err != nil {
-		fail(err)
-		return
+		return fail(err)
 	}
 	if moved {
 		a.ScheduleProxySync()
 	}
 	a.scheduleObserve(record, id, observeDebounce, 0)
+	return nil
 }
 
 func (a *App) createOrUpdate(ctx context.Context, spec ServiceSpec) (bool, error) {
@@ -304,16 +300,22 @@ func (a *App) setApplyError(ctx context.Context, nodeID, text string) {
 	}
 }
 
-func (a *App) ScheduleRemoveService(nodeID string) {
-	a.deploy.mu.Lock()
-	delete(a.deploy.observe, nodeID)
-	a.deploy.mu.Unlock()
-	a.Jobs.After("remove:"+nodeID, 0, func(ctx context.Context) {
-		dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
-		defer cancel()
-		if err := a.Swarm.RemoveService(dctx, nodeID); err != nil {
-			a.Log.Error("remove service", "node", nodeID, "err", err)
-		}
-		a.reconcileRunning(ctx, "")
-	})
+type removeRun struct {
+	NodeID string
+}
+
+func (a *App) runRemove(ctx durable.Context, run removeRun) (struct{}, error) {
+	return struct{}{}, durable.Do(ctx, "remove service", func(ctx context.Context) error {
+		return a.removeService(ctx, run.NodeID)
+	}, durable.Retry(8, 2*time.Second))
+}
+
+func (a *App) removeService(ctx context.Context, nodeID string) error {
+	dctx, cancel := context.WithTimeout(ctx, dockerCallDeadline)
+	defer cancel()
+	err := a.Swarm.RemoveService(dctx, nodeID)
+	if err != nil {
+		a.Log.Error("remove service", "node", nodeID, "err", err)
+	}
+	return err
 }

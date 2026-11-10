@@ -99,12 +99,14 @@ func (a *App) scheduleObserve(ctx context.Context, id string, delay time.Duratio
 		a.Log.Error("schedule observe", "node", id, "err", err)
 		return true
 	}
+	rt := a.deploy
+	rt.mu.Lock()
 	if !exists {
+		delete(rt.observe, id)
+		rt.mu.Unlock()
 		return false
 	}
-	rt := a.deploy
 	due := a.Now() + delay.Milliseconds()
-	rt.mu.Lock()
 	if p, ok := rt.observe[id]; ok && p.due <= due {
 		rt.mu.Unlock()
 		return true
@@ -147,7 +149,7 @@ func (a *App) observeNode(ctx context.Context, id string, settle int) {
 		if err != nil {
 			return err
 		}
-		return reconcile(tx, ch, envID, now)
+		return a.reconcile(tx, ch, envID, now)
 	})
 	if err != nil {
 		a.Log.Error("observeNode", "node", id, "err", err)
@@ -197,7 +199,7 @@ func (a *App) observeAll(ctx context.Context) {
 				return err
 			}
 		}
-		return reconcile(tx, ch, "", now)
+		return a.reconcile(tx, ch, "", now)
 	})
 	if err != nil {
 		a.Log.Error("observe (full sweep)", "err", err)

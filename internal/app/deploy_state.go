@@ -10,21 +10,17 @@ import (
 )
 
 type deployRuntime struct {
-	mu      sync.Mutex
-	seq     uint64
-	observe map[string]pendingScan
-	applies map[string]*applyQueue
+	mu       sync.Mutex
+	seq      uint64
+	observe  map[string]pendingScan
+	applying map[string]runningApply
+	timeout  time.Duration
 }
 
 type pendingScan struct {
 	due    int64
 	settle int
 	gen    uint64
-}
-
-type applyQueue struct {
-	queued  []applyRequest
-	running *runningApply
 }
 
 type runningApply struct {

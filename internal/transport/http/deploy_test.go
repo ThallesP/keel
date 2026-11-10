@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ThallesP/durable"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"github.com/ThallesP/keel/internal/adapters/sqlite"
@@ -59,7 +60,7 @@ func deployTestApp(t *testing.T, token string) (*app.App, *recordedJobs, domain.
 		t.Fatal(err)
 	}
 	jobs := &recordedJobs{}
-	a := app.New(app.App{Store: store, Jobs: jobs, Config: app.Config{WorkerToken: token},
+	a := app.New(app.App{Store: store, Jobs: jobs, Workflows: durable.New(store.Workflows()), Config: app.Config{WorkerToken: token},
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	return a, jobs, n
 }
@@ -167,7 +168,7 @@ func call(h http.Handler, method, path, body string) (int, deployResponse, strin
 }
 
 func TestDeploymentRoutes(t *testing.T) {
-	a, jobs, n := deployTestApp(t, "")
+	a, _, _ := deployTestApp(t, "")
 	member := deployAPI(a, domain.Actor{UserID: "u1", OrganizationID: "org"})
 	outsider := deployAPI(a, domain.Actor{UserID: "u2", OrganizationID: "org2"})
 	signedOut := deployAPI(a, domain.Actor{})
@@ -180,8 +181,8 @@ func TestDeploymentRoutes(t *testing.T) {
 	if code != 200 || id == "" {
 		t.Fatalf("ship: %d %s", code, raw)
 	}
-	if !jobs.has("apply:"+n.ID) || !jobs.has("timeout:"+id) {
-		t.Fatalf("jobs: %v", jobs.keys)
+	if info, err := a.Workflows.Get(context.Background(), "deploy:"+id); err != nil || info.Run.Status != durable.StatusPending {
+		t.Fatalf("deploy run: %+v %v", info.Run, err)
 	}
 	if code, body, _ := call(member, "POST", "/api/environments/env/deployments", `{}`); code != 409 || body.Code != "DEPLOYMENT_RUNNING" || body.Detail != "A deployment is already running" {
 		t.Fatalf("second ship: %d %v", code, body)

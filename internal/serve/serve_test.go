@@ -12,6 +12,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/ThallesP/durable"
 	"github.com/coder/websocket"
 
 	"github.com/ThallesP/keel/internal/adapters/jobs"
@@ -191,6 +192,59 @@ func TestShutdownCancelsJobsBeforeClosingDatabase(t *testing.T) {
 		}
 	default:
 		t.Fatal("serveOn returned before the cancelled job finished")
+	}
+}
+
+func TestShutdownStopsWorkflowsBeforeClosingDatabase(t *testing.T) {
+	savedTimeout, savedGrace := ShutdownTimeout, jobsCancelGrace
+	ShutdownTimeout, jobsCancelGrace = 400*time.Millisecond, 200*time.Millisecond
+	started, wrote := make(chan struct{}), make(chan error, 1)
+	built := make(chan *durable.Workflow[string, struct{}], 1)
+	saved := adapters
+	adapters = []adapter{{"workflow", func(a *app.App) (func() error, error) {
+		built <- durable.Register(a.Workflows, "blocks", func(ctx durable.Context, _ string) (struct{}, error) {
+			return struct{}{}, durable.Do(ctx, "block", func(ctx context.Context) error {
+				close(started)
+				<-ctx.Done()
+				time.Sleep(50 * time.Millisecond)
+				wrote <- a.Store.Write(context.WithoutCancel(ctx), func(app.Tx) error { return nil })
+				return ctx.Err()
+			})
+		})
+		return nil, nil
+	}}}
+	t.Cleanup(func() { adapters, ShutdownTimeout, jobsCancelGrace = saved, savedTimeout, savedGrace })
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- serveOn(ctx, ln, app.Config{Version: "dev", DataDir: t.TempDir()}, nil, slog.New(slog.DiscardHandler))
+	}()
+	if _, err := (<-built).Start(context.Background(), "x"); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serveOn: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveOn did not return")
+	}
+	select {
+	case err := <-wrote:
+		if err != nil {
+			t.Fatalf("the cancelled step could not record its outcome: %v", err)
+		}
+	default:
+		t.Fatal("serveOn returned before the cancelled step finished")
 	}
 }
 

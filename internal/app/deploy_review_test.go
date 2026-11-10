@@ -1,7 +1,6 @@
 package app_test
 
 import (
-	"context"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,12 +15,14 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api", image("big:1"))
 	b := w.addNode("worker", image("big:1"))
-	stopping, stop := context.WithCancel(context.Background())
-	w.jobs.ctx = stopping
-	w.swarm.pullErr["big:1"] = context.Canceled
-	w.swarm.onPull = func(string) { stop() }
+	pulling := make(chan string, 2)
+	w.swarm.onPull = func(string) { pulling <- "" }
+	w.swarm.blockedPulls = 2
+	w.start()
 	id := w.ship(app.ShipOptions{})
-	w.jobs.run()
+	<-pulling
+	<-pulling
+	w.stop()
 
 	d := w.deployment(id)
 	if d.Status != domain.DeploymentRunning || d.FinishedAt != 0 {
@@ -42,20 +43,26 @@ func TestApplyInterruptedByShutdown(t *testing.T) {
 	}
 
 	w.restart(app.Config{})
-	delete(w.swarm.pullErr, "big:1")
 	w.swarm.onPull = nil
+	w.start()
 	w.app.Recover(ctx)
+	w.flush()
 	w.jobs.advance(time.Second)
 	if d := w.deployment(id); d.Status != domain.DeploymentSuccess || len(w.swarm.creates) != 2 {
 		t.Fatalf("after restart: %s %s creates %d", d.Status, stepStatuses(d), len(w.swarm.creates))
 	}
 }
 
-func TestRecoverDoesNotApplyTwice(t *testing.T) {
+func TestRestartDoesNotApplyTwice(t *testing.T) {
 	w := newWorld(t)
 	w.addNode("api")
+	w.start()
 	id := w.ship(app.ShipOptions{})
+	w.flush()
+	w.restart(app.Config{})
+	w.start()
 	w.app.Recover(ctx)
+	w.flush()
 	w.jobs.advance(time.Second)
 	d := w.deployment(id)
 	if len(w.swarm.creates) != 1 || len(w.swarm.updates) != 0 {
@@ -75,12 +82,16 @@ func TestRecoverDoesNotApplyTwice(t *testing.T) {
 func TestDockerCallsHaveDeadlines(t *testing.T) {
 	w := newWorld(t)
 	a := w.addNode("api")
+	w.start()
 	w.ship(app.ShipOptions{})
+	w.flush()
 	w.jobs.advance(time.Second)
 	w.app.IngestWorkerEvents(ctx, []app.DockerEvent{{Type: "node"}}, true)
 	w.jobs.run()
-	w.deleteNode(a.ID)
-	w.app.ScheduleRemoveService(a.ID)
+	if err := w.app.RemoveNode(ctx, w.member, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	w.flush()
 	w.app.Recover(ctx)
 	w.jobs.advance(time.Second)
 	if len(w.swarm.creates) != 1 || len(w.swarm.removed) != 1 {

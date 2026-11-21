@@ -120,8 +120,8 @@ const obsGetSink = `-- name: ObsGetSink :one
 SELECT id, organization_id, kind, domain, dataset, traces, token, org, created_at FROM log_sinks WHERE organization_id = ?
 `
 
-// Observability: log sinks, Sign in with Axiom state, OTLP ingest keys
-// (docs/go/spec/observability.md). ASCII only.
+// Observability: log sinks, Sign in with Axiom state, OTLP ingest keys.
+// ASCII only.
 func (q *Queries) ObsGetSink(ctx context.Context, organizationID string) (LogSink, error) {
 	row := q.db.QueryRowContext(ctx, obsGetSink, organizationID)
 	var i LogSink

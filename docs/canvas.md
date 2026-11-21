@@ -260,7 +260,7 @@ Node `position` is written on drag end (debounced), never on every move.
 
 ## Where to start (in this repo)
 
-Stack: Vite + React 19 + TanStack Router (`apps/web`), `keel serve` (Go, `internal/`, [`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md); was Convex in `packages/backend`), shadcn in `packages/ui`, Tailwind v4, Bun + Turborepo.
+Stack: Vite + React 19 + TanStack Router (`apps/web`), `keel serve` (Go, `internal/`; was Convex in `packages/backend`), shadcn in `packages/ui`, Tailwind v4, Bun + Turborepo.
 
 1. `bun add @xyflow/react -F web`. Import `@xyflow/react/dist/style.css` once in `apps/web/src/index.css`.
 2. Add the tokens above to `packages/ui/src/styles/globals.css`. Load Inter Variable and JetBrains Mono (Fontsource or Google Fonts).
@@ -273,7 +273,7 @@ Stack: Vite + React 19 + TanStack Router (`apps/web`), `keel serve` (Go, `intern
    - `bottom-panel/panel.tsx`, `tabs/deployments.tsx`, `variables.tsx`, `logs.tsx`
    - `topbar.tsx`, `rail.tsx`, `status-bar.tsx`
 5. Start with **static fixture data** (the six-node graph from the mockup: trigger-ish webhook → api → postgres / redis). Get the canvas, shell, edges, selection, panel looking right before wiring the backend.
-6. ~~Then Convex: schema above, `nodes.list`, `nodes.move`, `edges.connect`, `deployments.start`. Subscribe with `useQuery`; the canvas re-renders from the DB.~~ Done 2026-09-14 (`packages/backend/convex/{projects,environments,nodes,edges,variables,deployments}.ts`, `apps/web/src/components/canvas/{mapping,actions,use-data}.ts*`). Node `status` is derived server-side from `desired`/`observed`, not stored (`domain.DeriveStatus`, `internal/domain/status.go`). In Go these are `internal/app/{projects,environments,nodes,variables,deployments}.go` behind `/api`, which the dashboard reads through hooks generated from `openapi.json`, refetched when the WebSocket names their path (ARCHITECTURE "Dashboard", "Realtime").
+6. ~~Then Convex: schema above, `nodes.list`, `nodes.move`, `edges.connect`, `deployments.start`. Subscribe with `useQuery`; the canvas re-renders from the DB.~~ Done 2026-09-14 (`packages/backend/convex/{projects,environments,nodes,edges,variables,deployments}.ts`, `apps/web/src/components/canvas/{mapping,actions,use-data}.ts*`). Node `status` is derived server-side from `desired`/`observed`, not stored (`domain.DeriveStatus`, `internal/domain/status.go`). In Go these are `internal/app/{projects,environments,nodes,variables,deployments}.go` behind `/api`, which the dashboard reads through hooks generated from `openapi.json`, refetched when the WebSocket names their path.
 7. ~~Ship flow last. Fake the build log with a timer before there is a real builder.~~ Done 2026-09-14. No fake log: the Deployments tab streams the lines `apply` (`internal/app/swarm.go`: pull, create/update) and the reconcile after each observe (`internal/app/reconcile.go`: replicas running) append to the deployment (`deployment_log`). There is still no builder; everything is image-based.
 
 Order matters: shell → edges → panel → data → deploy.

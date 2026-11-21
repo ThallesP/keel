@@ -2,7 +2,7 @@
 
 > Where container logs go and where the Logs tab and the Observability page read them from (decided 2026-09-20), where the Observability page reads OpenTelemetry traces from (2026-10-03, [Traces](#traces)), and how services get spans there (2026-10-04, [Getting spans in](#getting-spans-in)). Read this before touching `internal/app/{logs,logs_docker,sinks,axiom,traces,traces_parse,otlp,tracing,tracing_prompt,observability}.go`, `internal/adapters/axiom`, `internal/agent/{logs,sink,axiom}.go` or `components/canvas/observability`. The agent itself is in [`workers.md`](./workers.md).
 
-> **Go port.** The Convex functions named here before (`convex/logs.ts`, `traces.ts`, `otlp.ts`, `tracing*.ts`, `logSinks.ts`, `logProviders/*`, `traceProviders/*`) are use cases in `internal/app` behind `keel serve`'s HTTP API, and the Bun worker's log shipper (`apps/worker/src/logs.ts`, `sinks/*`) is `keel agent` (`internal/agent`). See [`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md) and, per function, [`docs/go/spec/INDEX.md`](./go/spec/INDEX.md) §1.4. Decisions, the event shape and product behaviour are unchanged; dated Verified notes keep the names of their time.
+> **Go port.** The Convex functions named here before (`convex/logs.ts`, `traces.ts`, `otlp.ts`, `tracing*.ts`, `logSinks.ts`, `logProviders/*`, `traceProviders/*`) are use cases in `internal/app` behind `keel serve`'s HTTP API, and the Bun worker's log shipper (`apps/worker/src/logs.ts`, `sinks/*`) is `keel agent` (`internal/agent`). Decisions, the event shape and product behaviour are unchanged; dated Verified notes keep the names of their time.
 
 ## Decision
 

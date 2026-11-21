@@ -14,8 +14,8 @@ const authAnyUser = `-- name: AuthAnyUser :one
 SELECT EXISTS (SELECT 1 FROM users) AS found
 `
 
-// Auth area: users, sessions, organizations, members, invitations, device codes
-// (docs/go/spec/auth-orgs.md). ASCII only.
+// Auth area: users, sessions, organizations, members, invitations, device codes.
+// ASCII only.
 func (q *Queries) AuthAnyUser(ctx context.Context) (bool, error) {
 	row := q.db.QueryRowContext(ctx, authAnyUser)
 	var found bool

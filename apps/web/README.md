@@ -111,7 +111,7 @@ Every non-2xx throws `ApiError` (`@/lib/api`):
 
 ```ts
 err.status; // 409
-err.code; // "NAME_TAKEN" (docs/go/ARCHITECTURE.md "Errors"); RFC 8628 `error` on device endpoints
+err.code; // "NAME_TAKEN" (`domain.Code*`); RFC 8628 `error` on device endpoints
 err.message; // `Project "web" already exists` (problem `detail`; `error_description` on device endpoints)
 err.problem; // the RFC 9457 body, when it is one
 

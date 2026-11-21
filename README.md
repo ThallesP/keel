@@ -132,7 +132,7 @@ In development `keel serve` listens on `127.0.0.1:3400` with its database in `./
 
 `keel serve` manages the `keel-agent` global service only when `KEEL_AGENT_IMAGE` is set (an install sets it to its own image).
 
-Checks: `gofmt -l`, `go vet ./...`, `go test ./...`, `bun run check-types`, `bun run check` (Oxlint + Oxfmt). The architecture and the porting specs are in [docs/go](docs/go/ARCHITECTURE.md).
+Checks: `gofmt -l`, `go vet ./...`, `go test ./...`, `bun run check-types`, `bun run check` (Oxlint + Oxfmt).
 
 ### Layout
 

@@ -18,7 +18,7 @@ export const INVALIDATE_HEADER = "Keel-Invalidate";
 /**
  * A non-2xx API answer. `message` is the sentence to show (the problem's `detail`, which the
  * server keeps identical to the Convex error texts), `code` the stable code (`NOT_FOUND`,
- * `NAME_TAKEN`, … see docs/go/ARCHITECTURE.md "Errors"). The device-login endpoints answer the
+ * `NAME_TAKEN`, … from `domain.Code*`). The device-login endpoints answer the
  * RFC 8628 shape instead of a problem; then `code` is its `error` (`authorization_pending`, …)
  * and `message` its `error_description`.
  */

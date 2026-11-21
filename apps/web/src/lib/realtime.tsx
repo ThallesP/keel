@@ -1,6 +1,6 @@
 // The dashboard's WebSocket: one centrifuge connection per tab to `/api/ws` that turns server
 // pushes into TanStack Query refetches. Components never touch it; they call generated hooks and
-// stay fresh (docs/go/ARCHITECTURE.md "Realtime"; protocol in internal/adapters/realtime).
+// stay fresh (protocol in internal/adapters/realtime).
 //
 // - Signed-out tabs open no socket. The connection follows the session query (`GET /api/me`): it
 //   opens when there is a user and is replaced when the user or organization changes, because

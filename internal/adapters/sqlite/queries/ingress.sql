@@ -1,5 +1,4 @@
--- Ingress area (docs/go/spec/proxy-ingress.md). Endpoints are written with CoreInsertEndpoint
--- through ReplaceEndpoints; these are the lookups expose, the proxy sync and cert reports need.
+-- Ingress area. Endpoints are written with CoreInsertEndpoint through ReplaceEndpoints; these are the lookups expose, the proxy sync and cert reports need.
 
 -- name: IngressHasVariable :one
 SELECT EXISTS (SELECT 1 FROM variables WHERE node_id = ? AND key = ?);

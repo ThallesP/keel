@@ -33,7 +33,7 @@ export default defineConfig({
       suspense: {},
       // Every query key starts with the resolved request path (`/api/environments/abc/nodes`),
       // then the query parameters object when the operation has any: realtime topics and
-      // Keel-Invalidate name path prefixes (docs/go/ARCHITECTURE.md, "Realtime").
+      // Keel-Invalidate name path prefixes (internal/adapters/realtime).
       queryKey: ({ node }) => {
         const p = (node.path ?? "").replace(/\{([^}]+)\}/g, (_, n) => "${path." + n + "}");
         const hasQuery = node.parameters.some((x) => x.in === "query");

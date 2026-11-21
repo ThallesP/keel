@@ -2,7 +2,7 @@
 
 > How Keel runs user containers across one or many servers. Decided 2026-09-13 after evaluating per-node agents, Restate/Temporal, Nomad and k3s. Read this before touching `internal/app/{swarm,observe,reconcile,events}.go`, `internal/adapters/swarm`, `internal/agent` or the node join flow. UI lives in [`canvas.md`](./canvas.md).
 
-> **Go port.** Convex, the Bun worker and `scripts/deploy-worker.sh` are replaced: the control plane is `keel serve` and the per-node process is `keel agent`, one Go binary ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md)). Convex actions, mutations, crons and `scheduler.runAfter` became use cases in `internal/app` and in-memory jobs (`internal/adapters/jobs`), which the start-up `Recover` pass re-derives on every start. Decisions and rationale below are unchanged; the dated Status entries at the end are history and keep the names of their time.
+> **Go port.** Convex, the Bun worker and `scripts/deploy-worker.sh` are replaced: the control plane is `keel serve` and the per-node process is `keel agent`, one Go binary. Convex actions, mutations, crons and `scheduler.runAfter` became use cases in `internal/app` and in-memory jobs (`internal/adapters/jobs`), which the start-up `Recover` pass re-derives on every start. Decisions and rationale below are unchanged; the dated Status entries at the end are history and keep the names of their time.
 
 ## Decision
 
@@ -229,7 +229,7 @@ Swarm runs images, does not make them. Two pieces still needed, not designed yet
 - **Build.** BuildKit on the control plane, or a build service pinned there. Kicked off from a `keel serve` job, result pushed to the registry, then `apply` with the new tag. Jobs are in memory and die with the process, so the job starts the build and a callback or poll finishes it.
 - **Registry.** Workers need to pull the image. `registry:2` as a Swarm service on the control plane, reachable over the tailnet. Image tags are `<tailnet-ip>:5000/svc-<id>:<revision>`.
 
-Cross-node choreography (rolling a revision across pinned nodes one at a time, health check between) is a control-plane workflow: patch `desired` on node 1, wait until observe records `observed.revision`, patch node 2. `keel serve` is the loop, Swarm is the hands. There is no durable workflow engine yet (ARCHITECTURE "Use cases": in-memory jobs plus `Recover`), so this needs one, or a state row that `Recover` resumes from.
+Cross-node choreography (rolling a revision across pinned nodes one at a time, health check between) is a control-plane workflow: patch `desired` on node 1, wait until observe records `observed.revision`, patch node 2. `keel serve` is the loop, Swarm is the hands. There is no durable workflow engine yet (in-memory jobs plus `Recover`), so this needs one, or a state row that `Recover` resumes from.
 
 ## Networking notes
 
@@ -287,7 +287,7 @@ The canvas drives Swarm end-to-end. `services` is gone; deployable nodes (`servi
 
 ## Status (Go port)
 
-`keel serve` and `keel agent` replace the Convex functions, `apps/worker` and `scripts/deploy-worker.sh` named in the entries above. Where they went: `convex/swarm.ts` → `internal/app/swarm.go` (apply, remove) and `internal/app/observe.go` (`observeNode`, `observeAll`, `observeServers`) over `internal/adapters/swarm`; `convex/events.ts` and the `/worker/events` route of `convex/http.ts` → `internal/app/events.go` and `internal/transport/http/deploy_raw.go`; `reconcile.ts` → `internal/app/reconcile.go`; `deployments.ts` → `internal/app/deployments.go`; `apps/worker/src/*` → `internal/agent/*`. Per-function map: [`docs/go/spec/INDEX.md`](./go/spec/INDEX.md). What changed in the gotchas above:
+`keel serve` and `keel agent` replace the Convex functions, `apps/worker` and `scripts/deploy-worker.sh` named in the entries above. Where they went: `convex/swarm.ts` → `internal/app/swarm.go` (apply, remove) and `internal/app/observe.go` (`observeNode`, `observeAll`, `observeServers`) over `internal/adapters/swarm`; `convex/events.ts` and the `/worker/events` route of `convex/http.ts` → `internal/app/events.go` and `internal/transport/http/deploy_raw.go`; `reconcile.ts` → `internal/app/reconcile.go`; `deployments.ts` → `internal/app/deployments.go`; `apps/worker/src/*` → `internal/agent/*`. What changed in the gotchas above:
 
 - Agent release: no deploy script. `keel serve` creates or updates `keel-agent` on every start when `KEEL_AGENT_IMAGE` is set (compose sets it to the control plane's own image), pinned by digest when Docker knows one and never resolved against a registry by Swarm. A locally built image on more than one node still needs a registry for the others to pull it.
 - The agent's `KEEL_URL` is `KEEL_AGENT_CONTROL_URL` (compose: `http://<KEEL_ADDR>:<KEEL_WEB_PORT>`), else `KEEL_SITE_URL`. One listener for the dashboard, the API and the worker routes; no `:3211`.

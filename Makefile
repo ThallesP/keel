@@ -1,4 +1,4 @@
-# Keel: one Go binary (cmd/keel) with the dashboard (apps/web) embedded. See docs/go/ARCHITECTURE.md.
+# Keel: one Go binary (cmd/keel) with the dashboard (apps/web) embedded.
 #
 #   make dev        keel serve on 127.0.0.1:3400 with its state in ./.keel. In another terminal run
 #                   the dashboard with `bun run dev:web` (Vite on http://127.0.0.1:3001); Vite

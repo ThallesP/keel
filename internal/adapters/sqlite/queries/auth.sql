@@ -1,5 +1,5 @@
--- Auth area: users, sessions, organizations, members, invitations, device codes
--- (docs/go/spec/auth-orgs.md). ASCII only.
+-- Auth area: users, sessions, organizations, members, invitations, device codes.
+-- ASCII only.
 
 -- name: AuthAnyUser :one
 SELECT EXISTS (SELECT 1 FROM users) AS found;

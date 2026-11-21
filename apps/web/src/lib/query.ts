@@ -4,7 +4,7 @@
 //
 // Query keys come from the generated hooks: key[0] is the resolved request path
 // (`/api/environments/abc/nodes`), key[1] the query parameters object when there are any.
-// A topic is a path prefix (`/api/environments/abc`); docs/go/ARCHITECTURE.md, "Realtime".
+// A topic is a path prefix (`/api/environments/abc`) (internal/adapters/realtime).
 import { type Query, QueryClient } from "@tanstack/react-query";
 
 import { type Me, getMeQueryKey, getMeQueryOptions } from "@/gen/api";

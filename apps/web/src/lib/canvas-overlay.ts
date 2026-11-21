@@ -1,4 +1,4 @@
-// The canvas's optimistic overlay (docs/go/spec/web-data.md §7, §8.5). No React here;
+// The canvas's optimistic overlay. No React here;
 // components/canvas/actions.tsx owns one per environment and use-synced-graph.ts reads it.
 //
 // React Flow already shows a drag or a delete locally. Until the write settles, a refetch of

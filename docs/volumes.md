@@ -91,7 +91,7 @@ Downtime is the final pass plus container boot. The warm loop makes the final pa
 
 ### Steps as a control-plane workflow
 
-There is no durable workflow engine in `keel serve` yet: jobs are in memory and die with the process ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Use cases"). So each step must be recorded in the `migrations` row before it runs, and the start-up `Recover` pass must resume or abort a migration from its `step`. `awaitEvent` below means: wait until observe (`internal/app/observe.go`) records that state (it was the Convex workflow primitive).
+There is no durable workflow engine in `keel serve` yet: jobs are in memory and die with the process. So each step must be recorded in the `migrations` row before it runs, and the start-up `Recover` pass must resume or abort a migration from its `step`. `awaitEvent` below means: wait until observe (`internal/app/observe.go`) records that state (it was the Convex workflow primitive).
 
 ```
 migrateVolume(volumeId, toNodeId)
@@ -142,7 +142,7 @@ A writer must stop for a consistent final pass. True zero needs a Postgres strea
 
 ## Schema
 
-Written in the Convex validators it was designed in. In Go it lands as a new migration in `internal/adapters/sqlite/migrations/`, nested objects as columns or child tables ([`docs/go/ARCHITECTURE.md`](./go/ARCHITECTURE.md), "Data").
+Written in the Convex validators it was designed in. In Go it lands as a new migration in `internal/adapters/sqlite/migrations/`, nested objects as columns or child tables.
 
 ```ts
 volumes: defineTable({

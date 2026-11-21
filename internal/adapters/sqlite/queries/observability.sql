@@ -1,5 +1,5 @@
--- Observability: log sinks, Sign in with Axiom state, OTLP ingest keys
--- (docs/go/spec/observability.md). ASCII only.
+-- Observability: log sinks, Sign in with Axiom state, OTLP ingest keys.
+-- ASCII only.
 
 -- name: ObsGetSink :one
 SELECT * FROM log_sinks WHERE organization_id = ?;

@@ -30,8 +30,7 @@ type IngressHasVariableParams struct {
 	Key    string
 }
 
-// Ingress area (docs/go/spec/proxy-ingress.md). Endpoints are written with CoreInsertEndpoint
-// through ReplaceEndpoints; these are the lookups expose, the proxy sync and cert reports need.
+// Ingress area. Endpoints are written with CoreInsertEndpoint through ReplaceEndpoints; these are the lookups expose, the proxy sync and cert reports need.
 func (q *Queries) IngressHasVariable(ctx context.Context, arg IngressHasVariableParams) (bool, error) {
 	row := q.db.QueryRowContext(ctx, ingressHasVariable, arg.NodeID, arg.Key)
 	var exists bool

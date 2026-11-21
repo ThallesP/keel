@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 
 /** Glyph + wordmark. The topbar's; the auth pages show it above the form. */
 export function Logo({ className }: { className?: string }) {

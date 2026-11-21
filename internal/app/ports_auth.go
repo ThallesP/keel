@@ -20,7 +20,6 @@ type AuthTx interface {
 	AuthMembership(userID string) (domain.Member, error)
 	AuthInsertMember(m domain.Member) error
 	AuthCountMembers(organizationID string) (int64, error)
-	AuthMembers(organizationID string) ([]MemberAccount, error)
 	AuthIsMemberByEmail(organizationID, email string) (bool, error)
 
 	AuthInvitation(id string) (domain.Invitation, error)
@@ -28,7 +27,6 @@ type AuthTx interface {
 	AuthSetInvitationStatus(id string, from, to domain.InvitationStatus) (bool, error)
 	AuthCancelPendingInvitations(organizationID, email string, now int64) error
 	AuthCountPendingInvitations(organizationID string, now int64) (int64, error)
-	AuthPendingInvitations(organizationID string, now int64) ([]domain.Invitation, error)
 
 	AuthDeviceCodeByHash(hash string) (domain.DeviceCode, error)
 	AuthDeviceCodeByUserCode(userCode string) (domain.DeviceCode, error)
@@ -43,12 +41,6 @@ type AuthTx interface {
 type Credentials struct {
 	User         domain.User
 	PasswordHash string
-}
-
-type MemberAccount struct {
-	domain.Member
-	Email string
-	Name  string
 }
 
 type Passwords interface {

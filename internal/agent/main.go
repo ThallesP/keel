@@ -3,9 +3,8 @@ package agent
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
-
-	"github.com/ThallesP/keel/internal/mesh"
 )
 
 func Main(ctx context.Context) error {
@@ -19,10 +18,5 @@ func Main(ctx context.Context) error {
 		return err
 	}
 	defer docker.Close()
-	controlPlane, closeMesh, err := mesh.Open(ctx, log)
-	if err != nil {
-		return err
-	}
-	defer closeMesh()
-	return New(cfg, docker, controlPlane, log).Run(ctx)
+	return New(cfg, docker, http.DefaultClient, log).Run(ctx)
 }

@@ -194,21 +194,7 @@ func TestAuthHTTPAccounts(t *testing.T) {
 	if missing.status != 200 || missing.raw != "{\"invitation\":null}\n" {
 		t.Fatalf("missing lookup: %d %s", missing.status, missing.raw)
 	}
-	list := h.do(authReq{method: "GET", path: "/api/organization/invitations", bearer: token})
-	if len(authBody[api.Invitations](t, list).Invitations) != 1 {
-		t.Fatalf("list: %s", list.raw)
-	}
-	members := h.do(authReq{method: "GET", path: "/api/organization/members", bearer: token})
-	if len(authBody[api.Members](t, members).Members) != 1 {
-		t.Fatalf("members: %s", members.raw)
-	}
-	del := h.do(authReq{method: "DELETE", path: "/api/organization/invitations/" + inv.ID, bearer: token})
-	if del.status != 204 {
-		t.Fatalf("cancel: %d %s", del.status, del.raw)
-	}
-	del = h.do(authReq{method: "DELETE", path: "/api/organization/invitations/nope", bearer: token})
-	authExpect(t, del, 404, "NOT_FOUND", "Invitation not found")
-	anon := h.do(authReq{method: "GET", path: "/api/organization/members"})
+	anon := h.do(authReq{method: "POST", path: "/api/organization/invitations", origin: h.srv.URL, body: map[string]string{"email": "x@example.com"}})
 	authExpect(t, anon, 401, "NOT_AUTHENTICATED", "Not authenticated")
 
 	out := h.do(authReq{method: "POST", path: "/api/auth/sign-out", cookie: token, origin: h.srv.URL})
@@ -260,7 +246,7 @@ func TestAuthHTTPCSRF(t *testing.T) {
 			t.Errorf("%s: %v %s", c.name, r.header, r.raw)
 		}
 	}
-	if r := h.do(authReq{method: "GET", path: "/api/organization/invitations", cookie: token}); r.status != 200 {
+	if r := h.do(authReq{method: "GET", path: "/api/projects", cookie: token}); r.status != 200 {
 		t.Fatalf("GET with cookie: %d %s", r.status, r.raw)
 	}
 }

@@ -159,11 +159,6 @@ func TestAuthSignUpFoundsThenInvites(t *testing.T) {
 	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub != nil {
 		t.Fatalf("spent invitation still shows: %+v", pub)
 	}
-	members, err := f.app.ListMembers(f.ctx, sa)
-	if err != nil || len(members) != 2 || members[0].Email != "founder@example.com" || members[0].Role != "owner" ||
-		members[1].Email != "second@example.com" || members[1].Role != "member" {
-		t.Fatalf("members: %+v %v", members, err)
-	}
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "again@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
 	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 }
@@ -185,9 +180,6 @@ func TestAuthSignUpWithExpiredInvitation(t *testing.T) {
 	}
 	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "late@example.com", Password: "correct-horse-battery", InvitationID: inv.ID})
 	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
-	if invs, _ := f.app.ListInvitations(f.ctx, oa); len(invs) != 0 {
-		t.Fatalf("expired invitation listed: %+v", invs)
-	}
 }
 
 func TestAuthSignIn(t *testing.T) {
@@ -305,7 +297,6 @@ func TestAuthSessionLifetime(t *testing.T) {
 func TestAuthInvitationRules(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
-	org := owner.OrganizationID
 
 	inv, err := f.app.CreateInvitation(f.ctx, owner, "admin@example.com", "admin")
 	if err != nil {
@@ -342,30 +333,10 @@ func TestAuthInvitationRules(t *testing.T) {
 	if pub, _ := f.app.GetInvitation(f.ctx, first.ID); pub != nil {
 		t.Fatal("re-invite left the first link standing")
 	}
-	invs, err := f.app.ListInvitations(f.ctx, member)
-	if err != nil || len(invs) != 1 || invs[0].ID != second.ID || invs[0].Role != "admin" || invs[0].InviterID != owner.UserID {
-		t.Fatalf("list: %+v %v", invs, err)
+	secondStands, err := f.app.GetInvitation(f.ctx, second.ID)
+	if err != nil || secondStands == nil {
+		t.Fatalf("re-invite: %+v %v", secondStands, err)
 	}
-
-	err = f.app.CancelInvitation(f.ctx, member, second.ID)
-	canvasWantErr(t, err, domain.CodeForbidden, "You are not allowed to cancel this invitation")
-	err = f.app.CancelInvitation(f.ctx, owner, "unknown")
-	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
-	f.events.take(org)
-	if err := f.app.CancelInvitation(f.ctx, admin, second.ID); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.events.take(org); strings.Join(got, ",") != "/api/organization" {
-		t.Fatalf("cancel published %v", got)
-	}
-	if invs, _ := f.app.ListInvitations(f.ctx, owner); len(invs) != 0 {
-		t.Fatalf("cancelled invitation listed: %+v", invs)
-	}
-	if err := f.app.CancelInvitation(f.ctx, owner, second.ID); err != nil {
-		t.Fatalf("cancelling twice: %v", err)
-	}
-	_, err = f.app.SignUp(f.ctx, app.SignUpInput{Email: "x@example.com", Password: "correct-horse-battery", InvitationID: second.ID})
-	canvasWantErr(t, err, domain.CodeForbidden, "Sign-up is by invitation. Ask a member for an invite link.")
 }
 
 func TestAuthInvitationLimit(t *testing.T) {
@@ -439,10 +410,6 @@ func TestAuthAcceptInvitation(t *testing.T) {
 func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	f := authSetup(t)
 	owner := f.actor(f.signUp("owner@example.com", "").Token)
-	inv, err := f.app.CreateInvitation(f.ctx, owner, "guest@example.com", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	f.exec(`INSERT INTO organizations (id, name, slug, created_at) VALUES ('orgb', 'Other', 'other', 1)`)
 	f.insertUser("ub", "b@example.com", "b-password-123")
 	f.exec(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES ('mb', 'orgb', 'ub', 'owner', 1)`)
@@ -455,17 +422,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 		t.Fatalf("b: %+v", b)
 	}
 
-	if invs, err := f.app.ListInvitations(f.ctx, b); err != nil || len(invs) != 0 {
-		t.Fatalf("b sees invitations: %+v %v", invs, err)
-	}
-	if ms, err := f.app.ListMembers(f.ctx, b); err != nil || len(ms) != 1 || ms[0].UserID != "ub" {
-		t.Fatalf("b sees members: %+v %v", ms, err)
-	}
-	err = f.app.CancelInvitation(f.ctx, b, inv.ID)
-	canvasWantErr(t, err, domain.CodeNotFound, "Invitation not found")
-	if pub, _ := f.app.GetInvitation(f.ctx, inv.ID); pub == nil {
-		t.Fatal("b's cancel touched the invitation")
-	}
 	me, _ := f.app.GetMe(f.ctx, b)
 	if me.Organization == nil || me.Organization.ID != "orgb" {
 		t.Fatalf("b's me: %+v", me.Organization)
@@ -484,11 +440,6 @@ func TestAuthForeignOrganizationIsMissing(t *testing.T) {
 	err = f.app.DecideDeviceLogin(f.ctx, b, start.UserCode, true)
 	authWantRefusal(t, err, 403, "access_denied", "You are not authorized to approve this device authorization")
 
-	_, err = f.app.ListMembers(f.ctx, domain.Actor{})
-	canvasWantErr(t, err, domain.CodeNotAuthenticated, "Not authenticated")
-	f.insertUser("loner", "loner@example.com", "loner-password")
-	_, err = f.app.ListInvitations(f.ctx, domain.Actor{UserID: "loner"})
-	canvasWantErr(t, err, domain.CodeNoOrganization, domain.MsgNoOrganization)
 }
 
 func TestAuthDeviceLogin(t *testing.T) {

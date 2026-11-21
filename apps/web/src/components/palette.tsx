@@ -1,5 +1,5 @@
-import { Dialog, DialogContent, DialogTitle } from "@my-better-t-app/ui/components/dialog";
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { Dialog, DialogContent, DialogTitle } from "@keel/ui/components/dialog";
+import { cn } from "@keel/ui/lib/utils";
 import { ChevronRight, CornerDownLeft } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 

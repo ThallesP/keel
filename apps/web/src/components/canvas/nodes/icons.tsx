@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { Code, Database, HardDrive, Layers, type LucideIcon } from "lucide-react";
 
 import type { InfraNodeType } from "../types";

@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 
 export function LegendKey({
   swatch,

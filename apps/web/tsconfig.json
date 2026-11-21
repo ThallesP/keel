@@ -12,7 +12,7 @@
     "rootDirs": ["."],
     "paths": {
       "@/*": ["./src/*"],
-      "@my-better-t-app/ui/*": ["../../packages/ui/src/*"]
+      "@keel/ui/*": ["../../packages/ui/src/*"]
     }
   }
 }

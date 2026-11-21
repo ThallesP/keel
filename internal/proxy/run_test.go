@@ -25,7 +25,7 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 	useAutosave(t)
 	sock := filepath.Join(t.TempDir(), "admin.sock")
 
-	stop := startEdge(t, Options{Socket: sock, Resume: true})
+	stop := startEdge(t, Options{Socket: sock})
 	client := keelcaddy.New(sock, "")
 	ctx := context.Background()
 
@@ -55,7 +55,7 @@ func TestRunServesAdminAndResumes(t *testing.T) {
 		t.Fatalf("autosave: %s %v", b, err)
 	}
 
-	stop = startEdge(t, Options{Socket: sock, Resume: true})
+	stop = startEdge(t, Options{Socket: sock})
 	echoThrough(t, port)
 	if err := client.LoadApps(ctx, []byte(`{}`)); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestRunResumeFallsBackWhenTheLastConfigNoLongerLoads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stop := startEdge(t, Options{Socket: sock, Resume: true})
+	stop := startEdge(t, Options{Socket: sock})
 	client := keelcaddy.New(sock, "")
 	port := freePort(t)
 	apps := l4Apps(port, echoServer(t))

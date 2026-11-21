@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import type { ReactNode } from "react";
 
 export function TooltipRow({

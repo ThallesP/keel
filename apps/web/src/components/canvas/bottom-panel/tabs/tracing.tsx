@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { Lock } from "lucide-react";
 
 import { useGetNodeTracing, useSetNodeTracing } from "@/gen/api";

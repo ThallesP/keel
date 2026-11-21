@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 

@@ -451,9 +451,6 @@
             ],
             "type": "string"
           },
-          "sha": {
-            "type": "string"
-          },
           "startedAt": {
             "format": "int64",
             "type": "integer"
@@ -889,49 +886,6 @@
         },
         "type": "object"
       },
-      "Invitation": {
-        "additionalProperties": false,
-        "properties": {
-          "createdAt": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "email": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          },
-          "inviterId": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "accepted",
-              "canceled"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "email",
-          "role",
-          "status",
-          "inviterId",
-          "expiresAt",
-          "createdAt"
-        ],
-        "type": "object"
-      },
       "InvitationLookup": {
         "additionalProperties": false,
         "properties": {
@@ -948,21 +902,6 @@
         },
         "required": [
           "invitation"
-        ],
-        "type": "object"
-      },
-      "Invitations": {
-        "additionalProperties": false,
-        "properties": {
-          "invitations": {
-            "items": {
-              "$ref": "#/components/schemas/Invitation"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "invitations"
         ],
         "type": "object"
       },
@@ -1128,60 +1067,6 @@
         "required": [
           "user",
           "organization"
-        ],
-        "type": "object"
-      },
-      "Member": {
-        "additionalProperties": false,
-        "properties": {
-          "createdAt": {
-            "description": "When they joined (unix ms)",
-            "format": "int64",
-            "type": "integer"
-          },
-          "email": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "role": {
-            "enum": [
-              "owner",
-              "admin",
-              "member"
-            ],
-            "type": "string"
-          },
-          "userId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "userId",
-          "email",
-          "name",
-          "role",
-          "createdAt"
-        ],
-        "type": "object"
-      },
-      "Members": {
-        "additionalProperties": false,
-        "properties": {
-          "members": {
-            "items": {
-              "$ref": "#/components/schemas/Member"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "members"
         ],
         "type": "object"
       },
@@ -4749,35 +4634,6 @@
       }
     },
     "/api/organization/invitations": {
-      "get": {
-        "operationId": "listInvitations",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Invitations"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "summary": "Pending invitations of your organization",
-        "tags": [
-          "auth"
-        ]
-      },
       "post": {
         "description": "The invite link is `\u003cdashboard origin\u003e/invite/\u003cid\u003e`; it works once, for that email, for a week. Inviting the same email again cancels the previous link. Nothing is mailed.",
         "operationId": "createInvitation",
@@ -4814,42 +4670,6 @@
           }
         },
         "summary": "Invite someone by email (owners and admins)",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/organization/invitations/{id}": {
-      "delete": {
-        "operationId": "cancelInvitation",
-        "parameters": [
-          {
-            "description": "Invitation id (the secret in the invite link)",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "description": "Invitation id (the secret in the invite link)",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "summary": "Cancel a pending invitation (owners and admins)",
         "tags": [
           "auth"
         ]
@@ -4946,37 +4766,6 @@
         "summary": "Connect a pasted Axiom API token as the organization's sink",
         "tags": [
           "observability"
-        ]
-      }
-    },
-    "/api/organization/members": {
-      "get": {
-        "operationId": "listMembers",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Members"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        },
-        "summary": "Members of your organization",
-        "tags": [
-          "auth"
         ]
       }
     },

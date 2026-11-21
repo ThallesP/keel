@@ -4,8 +4,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@my-better-t-app/ui/components/dropdown-menu";
-import { cn } from "@my-better-t-app/ui/lib/utils";
+} from "@keel/ui/components/dropdown-menu";
+import { cn } from "@keel/ui/lib/utils";
 import { NodeToolbar as FlowNodeToolbar, Position, useReactFlow } from "@xyflow/react";
 import {
   AlignLeft,

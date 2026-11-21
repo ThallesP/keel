@@ -29,8 +29,6 @@ type (
 		Body      api.AuthSuccess
 	}
 	authMeOutput          struct{ Body api.Me }
-	authMembersOutput     struct{ Body api.Members }
-	authInvitationsOutput struct{ Body api.Invitations }
 	authCreateInvInput    struct{ Body api.CreateInvitationRequest }
 	authCreateInvOutput   struct{ Body api.CreatedInvitation }
 	authInvitationIDInput struct {
@@ -148,37 +146,6 @@ func (s *Server) registerAuth(h huma.API) {
 	})
 
 	op(h, huma.Operation{
-		OperationID: "listMembers", Method: http.MethodGet, Path: "/api/organization/members", Tags: authTags,
-		Summary: "Members of your organization",
-	}, func(ctx context.Context, _ *struct{}) (*authMembersOutput, error) {
-		ms, err := s.app.ListMembers(ctx, ActorFrom(ctx))
-		if err != nil {
-			return nil, err
-		}
-		out := api.Members{Members: make([]api.Member, 0, len(ms))}
-		for _, m := range ms {
-			out.Members = append(out.Members, api.Member{ID: m.ID, UserID: m.UserID, Email: m.Email, Name: m.Name, Role: m.Role, CreatedAt: m.CreatedAt})
-		}
-		return &authMembersOutput{Body: out}, nil
-	})
-
-	op(h, huma.Operation{
-		OperationID: "listInvitations", Method: http.MethodGet, Path: "/api/organization/invitations", Tags: authTags,
-		Summary: "Pending invitations of your organization",
-	}, func(ctx context.Context, _ *struct{}) (*authInvitationsOutput, error) {
-		invs, err := s.app.ListInvitations(ctx, ActorFrom(ctx))
-		if err != nil {
-			return nil, err
-		}
-		out := api.Invitations{Invitations: make([]api.Invitation, 0, len(invs))}
-		for _, i := range invs {
-			out.Invitations = append(out.Invitations, api.Invitation{ID: i.ID, Email: i.Email, Role: i.Role,
-				Status: i.Status, InviterID: i.InviterID, ExpiresAt: i.ExpiresAt, CreatedAt: i.CreatedAt})
-		}
-		return &authInvitationsOutput{Body: out}, nil
-	})
-
-	op(h, huma.Operation{
 		OperationID: "createInvitation", Method: http.MethodPost, Path: "/api/organization/invitations", Tags: authTags,
 		Summary:     "Invite someone by email (owners and admins)",
 		Description: "The invite link is `<dashboard origin>/invite/<id>`; it works once, for that email, for a week. Inviting the same email again cancels the previous link. Nothing is mailed.",
@@ -188,16 +155,6 @@ func (s *Server) registerAuth(h huma.API) {
 			return nil, err
 		}
 		return &authCreateInvOutput{Body: api.CreatedInvitation{ID: inv.ID, Email: inv.Email, Role: inv.Role, ExpiresAt: inv.ExpiresAt}}, nil
-	})
-
-	op(h, huma.Operation{
-		OperationID: "cancelInvitation", Method: http.MethodDelete, Path: "/api/organization/invitations/{id}", Tags: authTags,
-		Summary: "Cancel a pending invitation (owners and admins)", DefaultStatus: http.StatusNoContent,
-	}, func(ctx context.Context, in *authInvitationIDInput) (*struct{}, error) {
-		if err := s.app.CancelInvitation(ctx, ActorFrom(ctx), in.ID); err != nil {
-			return nil, err
-		}
-		return nil, nil
 	})
 
 	op(h, huma.Operation{

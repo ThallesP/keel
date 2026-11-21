@@ -29,7 +29,6 @@ type DeployLogLine struct {
 type Deployment struct {
 	ID            string                  `json:"id"`
 	EnvironmentID string                  `json:"environmentId"`
-	Sha           string                  `json:"sha,omitempty"`
 	Message       string                  `json:"message" example:"ship api, postgres"`
 	Status        domain.DeploymentStatus `json:"status" enum:"running,success,failed"`
 	StartedAt     int64                   `json:"startedAt"`

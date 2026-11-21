@@ -28,7 +28,6 @@
 8 apps/web/src/components/canvas/nodes/node-toolbar.tsx
 5 apps/web/src/components/canvas/nodes/service-node.tsx
 1 apps/web/src/components/canvas/nodes/volume-node.tsx
-1 apps/web/src/components/canvas/not-wired.ts
 16 apps/web/src/components/canvas/observability/axiom-gate.tsx
 7 apps/web/src/components/canvas/observability/chrome.tsx
 12 apps/web/src/components/canvas/observability/correlate.ts
@@ -63,13 +62,13 @@
 23 apps/web/src/lib/canvas-overlay.ts
 7 apps/web/src/lib/panel-write.ts
 52 apps/web/src/lib/query.ts
-34 apps/web/src/lib/realtime.tsx
+25 apps/web/src/lib/realtime.tsx
 31 apps/web/src/lib/session.tsx
 2 apps/web/src/main.tsx
 1 apps/web/src/routes/__root.tsx
 2 apps/web/src/routes/_auth/axiom/callback.tsx
 10 apps/web/src/routes/_auth/device.tsx
-10 apps/web/src/routes/_auth/p/$projectId.tsx
+9 apps/web/src/routes/_auth/p/$projectId.tsx
 1 apps/web/src/routes/_auth/route.tsx
 10 apps/web/src/routes/invite.$invitationId.tsx
 7 apps/web/vite.config.ts

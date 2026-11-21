@@ -1,4 +1,4 @@
-import { Toaster } from "@my-better-t-app/ui/components/sonner";
+import { Toaster } from "@keel/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
@@ -14,7 +14,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootComponent,
   head: () => ({
     meta: [{ title: "keel" }, { name: "description", content: "Deploy canvas" }],
-    links: [{ rel: "icon", href: "/favicon.ico" }],
   }),
 });
 

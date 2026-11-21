@@ -8,7 +8,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@my-better-t-app/ui/components/dropdown-menu";
+} from "@keel/ui/components/dropdown-menu";
 import { useTheme } from "next-themes";
 import { useState } from "react";
 

@@ -21,9 +21,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp?: ()
         await auth.signIn({ email: value.email, password: value.password });
       } catch (err) {
         toast.error(errorMessage(err));
-        return;
       }
-      toast.success("Sign in successful");
     },
     validators: {
       onSubmit: z.object({

@@ -41,13 +41,13 @@ export function formatLogTime(ms: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
 
-/** Span/request duration in ms: 0.0042 → "4µs", 4.2 → "4.20ms", 42.3 → "42.3ms", 1234 → "1.23s" */
+/** Span/request duration in ms: 0.0042 → "4µs", 4.2 → "4.2ms", 42 → "42ms", 1234 → "1.23s" */
 export function formatDuration(ms: number): string {
   if (ms < 1) return `${Math.round(ms * 1000)}µs`;
-  if (ms < 10) return `${ms.toFixed(2)}ms`;
-  if (ms < 100) return `${ms.toFixed(1)}ms`;
+  if (ms < 10) return `${Number(ms.toFixed(2))}ms`;
+  if (ms < 100) return `${Number(ms.toFixed(1))}ms`;
   if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < 60_000) return `${Number((ms / 1000).toFixed(2))}s`;
   return formatElapsed(ms);
 }
 

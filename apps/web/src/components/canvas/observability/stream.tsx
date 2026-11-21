@@ -118,7 +118,7 @@ export function EventStream({
                   req
                 </span>
               ) : (
-                e.ref && <span className="text-[10px] text-primary">trace</span>
+                e.ref && <span className="text-primary">trace</span>
               )}
             </span>
             {e.kind === "request" ? <RequestText trace={e.trace} /> : <LineText line={e.line} />}

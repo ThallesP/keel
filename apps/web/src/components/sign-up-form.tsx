@@ -42,7 +42,6 @@ export default function SignUpForm({
         toast.error(errorMessage(err));
         return;
       }
-      toast.success("Sign up successful");
       onSuccess?.();
     },
     validators: {

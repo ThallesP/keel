@@ -23,9 +23,9 @@ const tabs: { id: PanelTab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
-/** Settings holds networking (everything Swarm runs) and tracing (services); volumes have neither. */
+/** Logs and Settings (networking, tracing) belong to what Swarm runs; a volume has neither. */
 const tabsFor = (node: InfraNode) =>
-  node.type === "volume" ? tabs.filter((t) => t.id !== "settings") : tabs;
+  node.type === "volume" ? tabs.filter((t) => t.id !== "logs" && t.id !== "settings") : tabs;
 
 function metaFor(node: InfraNode): string {
   switch (node.type) {
@@ -47,7 +47,7 @@ function TabContent({ node, tab }: { node: InfraNode; tab: PanelTab }) {
     case "variables":
       return <VariablesTab node={node} />;
     case "logs":
-      return <LogsTab node={node} />;
+      return node.type === "volume" ? null : <LogsTab node={node} />;
     case "settings":
       return node.type === "volume" ? null : <SettingsTab node={node} />;
   }

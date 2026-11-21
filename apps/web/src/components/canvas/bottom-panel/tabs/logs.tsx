@@ -5,7 +5,7 @@ import { type LogReplica, type LogTail, type ServiceLogLine, useTailNodeLogs } f
 import { errorMessage } from "@/lib/api";
 
 import { formatLogTime } from "../../format";
-import type { InfraNode } from "../../types";
+import type { RuntimeNode } from "../../types";
 import { FollowingBadge, LogStream } from "../log-stream";
 import { PanelMain } from "../panel-frame";
 
@@ -67,7 +67,7 @@ function rawText(l: ServiceLogLine) {
 }
 
 type BodyProps = {
-  node: InfraNode;
+  node: RuntimeNode;
   data: LogTail | null;
   error: string | null;
   raw: boolean;
@@ -78,7 +78,6 @@ function LogBody({ node, data, error, raw, following }: BodyProps) {
   const replicas = data?.replicas;
   const label = useMemo(() => replicaLabels(replicas ?? []), [replicas]);
   if (error) return <p className="text-xs text-danger">{error}</p>;
-  if (node.type === "volume") return <p className="text-xs text-faint">Volumes have no logs.</p>;
   if (data === null) {
     return (
       <p className="text-xs text-faint">
@@ -103,22 +102,18 @@ function LogBody({ node, data, error, raw, following }: BodyProps) {
   );
 }
 
-export function LogsTab({ node }: { node: InfraNode }) {
-  const deployable = node.type !== "volume";
+export function LogsTab({ node }: { node: RuntimeNode }) {
   const [raw, setRaw] = useState(false);
   const [following, setFollowing] = useState(true);
-  const { data, error } = useServiceLogs(node.id, deployable && node.data.status !== "pending");
-  const running = node.type !== "volume" ? node.data.running : 0;
+  const { data, error } = useServiceLogs(node.id, node.data.status !== "pending");
+  const { running } = node.data;
 
   return (
     <PanelMain className="gap-1">
       <div className="flex items-center justify-between pb-1.5 text-2xs">
-        <span className="flex items-center gap-2.5 font-mono">
-          <span className="font-medium text-ink">svc-{node.id.slice(0, 8)}</span>
-          <span className="text-faint">
-            {running} {running === 1 ? "replica" : "replicas"} · last {TAIL} lines
-            {data?.source === "axiom" && " · via Axiom"}
-          </span>
+        <span className="font-mono text-faint">
+          {running} {running === 1 ? "replica" : "replicas"} · last {TAIL} lines
+          {data?.source === "axiom" && " · via Axiom"}
         </span>
         <span className="flex items-center gap-3.5">
           <button

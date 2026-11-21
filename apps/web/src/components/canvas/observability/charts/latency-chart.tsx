@@ -19,8 +19,6 @@ const RAMP = {
 const PERCENTILES = ["p99", "p95", "p50"] as const;
 const LEGEND = ["p50", "p95", "p99"] as const;
 
-const axisDuration = (ms: number) => formatDuration(ms).replace(/\.0+(?=[^\d.])/, "");
-
 export function LatencyChart({ buckets, bucketMs, hover, onHover }: ChartProps) {
   const [ref, width] = useWidth();
   const top = Math.max(0, ...buckets.map((b) => b.p99 ?? b.p95 ?? b.p50 ?? 0));
@@ -52,7 +50,7 @@ export function LatencyChart({ buckets, bucketMs, hover, onHover }: ChartProps) 
           <svg width={width} height={HEIGHT} aria-hidden className="block">
             <Grid
               width={width}
-              ticks={ticks.map((t) => [BASE - y(t), t ? axisDuration(t) : "0"])}
+              ticks={ticks.map((t) => [BASE - y(t), t ? formatDuration(t) : "0"])}
             />
             {LEGEND.map((p) => (
               <Series

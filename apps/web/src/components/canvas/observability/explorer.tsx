@@ -331,9 +331,7 @@ function Overview({
         <section className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between px-5">
             <SectionLabel>Events</SectionLabel>
-            <span className="text-2xs text-faint">
-              {counts(events)} · newest first · every row opens its trace or context
-            </span>
+            <span className="text-2xs text-faint">{counts(events)}</span>
           </div>
           {events.length === 0 ? (
             <p className="px-5 text-xs text-faint">

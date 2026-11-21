@@ -37,7 +37,11 @@ function Subtitle({ data }: { data: ServiceData }) {
         </span>
       );
     default:
-      return data.image ? <span className="font-mono">{data.image}</span> : null;
+      return data.image ? (
+        <span className="block truncate text-left font-mono [direction:rtl]" title={data.image}>
+          <bdi>{data.image}</bdi>
+        </span>
+      ) : null;
   }
 }
 

@@ -7,7 +7,6 @@ import { EndpointAddress } from "../../endpoint-address";
 import { formatElapsed, timeAgo } from "../../format";
 import { toDeployment } from "../../mapping";
 import { SectionLabel } from "../../primitives";
-import { statusLabel } from "../../status";
 import { useCanvasDispatch } from "../../store";
 import type { Deployment, InfraNode, NodeStatus } from "../../types";
 import { useDeploymentLink } from "../../use-deployment-link";
@@ -68,7 +67,7 @@ function StatusPill({ pill, className }: { pill: Pill; className?: string }) {
 function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
   const facts: React.ReactNode[] = [];
   if (node.type === "volume") {
-    facts.push(`${node.data.sizeGb} GB`, "not mounted in v1");
+    facts.push(`${node.data.sizeGb} GB`, "not mounted");
   } else {
     const d = node.data;
     facts.push(
@@ -102,9 +101,11 @@ function MetaStrip({ node, now }: { node: InfraNode; now: number }) {
           </span>
         ))}
       </span>
-      <span className={cn("max-w-1/2 shrink-0 truncate", error && "text-danger")} title={error}>
-        {error ?? statusLabel[node.data.status]}
-      </span>
+      {error && (
+        <span className="max-w-1/2 shrink-0 truncate text-danger" title={error}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

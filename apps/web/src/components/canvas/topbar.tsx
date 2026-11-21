@@ -97,10 +97,7 @@ export function Topbar() {
         <span className="text-md text-line">/</span>
         <ProjectSwitcher />
         <span className="text-md text-line">/</span>
-        <span className="flex h-6 items-center gap-1.5 rounded-md border border-line px-2 text-xs font-medium text-ink">
-          <span className="size-1.5 rounded-full bg-success" />
-          {environmentName}
-        </span>
+        <span className="text-sm text-muted-foreground">{environmentName}</span>
       </div>
       <div className="flex items-center gap-2.5">
         <ShipButton />

@@ -67,7 +67,7 @@ export function NetworkingSection({ node }: { node: RuntimeNode }) {
   return (
     <section className="shrink-0 border-b border-line">
       <div className="flex items-center gap-6 px-5 py-3">
-        <div className="min-w-0 flex-1 pl-2">
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-ink">Public networking</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
         </div>
@@ -98,7 +98,7 @@ function EndpointRow({ nodeId, endpoint: e }: { nodeId: string; endpoint: Endpoi
   const status = e.state === "failed" && e.error ? e.error : stateLabel[e.protocol][e.state];
   return (
     <div className="flex h-8 items-center gap-3 border-t border-line/60 px-5 font-mono text-xs">
-      <span className="flex min-w-0 flex-1 items-center gap-3 pl-2">
+      <span className="flex min-w-0 flex-1 items-center gap-3">
         <span className={chipClass}>{label}</span>
         <EndpointAddress endpoint={e} />
         <span className="shrink-0 text-faint">→ :{e.port}</span>
@@ -151,7 +151,7 @@ function AddEndpoint({
         if (e.key === "Escape") onDone();
       }}
     >
-      <div className="flex items-center gap-2 pl-2">
+      <div className="flex items-center gap-2">
         <div className="flex shrink-0 rounded-sm border border-line p-0.5" role="radiogroup">
           {PROTOCOLS.map((p) => (
             <button
@@ -215,7 +215,7 @@ function AddEndpoint({
         </button>
       </div>
       {protocol === "http" && domain.trim() !== "" && (
-        <p className="mt-1.5 pl-2 text-2xs text-muted-foreground">
+        <p className="mt-1.5 text-2xs text-muted-foreground">
           Point <span className="font-mono text-ink">{domain.trim()}</span> at{" "}
           <span className="font-mono text-ink">{target}</span> with an A record. The certificate
           follows once it resolves.

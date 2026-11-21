@@ -39,7 +39,7 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
   return (
     <section className="shrink-0 border-b border-line">
       <div className="flex items-center gap-6 px-5 py-3">
-        <div className="min-w-0 flex-1 pl-2">
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-ink">Tracing</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
         </div>
@@ -56,7 +56,7 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
             }
             className={cn(
               "relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-50",
-              enabled ? "bg-primary" : "bg-line",
+              enabled ? "bg-primary-fill" : "bg-faint/50",
             )}
           >
             <span
@@ -76,7 +76,7 @@ export function TracingSection({ nodeId }: { nodeId: string }) {
           >
             <span
               className={cn(
-                "flex w-52 shrink-0 items-center gap-1.5 truncate pl-2",
+                "flex w-52 shrink-0 items-center gap-1.5 truncate",
                 v.overridden ? "text-faint line-through" : "text-muted-foreground",
               )}
             >

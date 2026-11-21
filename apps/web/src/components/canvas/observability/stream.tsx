@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { useEffect, useRef } from "react";
 
 import type { EnvironmentLogLine, TraceSummary } from "@/gen/api";

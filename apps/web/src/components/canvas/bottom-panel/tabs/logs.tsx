@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { useMemo, useState } from "react";
 
 import { type LogReplica, type LogTail, type ServiceLogLine, useTailNodeLogs } from "@/gen/api";

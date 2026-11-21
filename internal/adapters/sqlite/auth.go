@@ -96,21 +96,6 @@ func (t *tx) AuthCountMembers(organizationID string) (int64, error) {
 	return t.q.AuthCountMembers(t.ctx, organizationID)
 }
 
-func (t *tx) AuthMembers(organizationID string) ([]app.MemberAccount, error) {
-	rows, err := t.q.AuthListMembers(t.ctx, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]app.MemberAccount, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, app.MemberAccount{
-			Member: domain.Member{ID: r.ID, OrganizationID: r.OrganizationID, UserID: r.UserID, Role: domain.Role(r.Role), CreatedAt: r.CreatedAt},
-			Email:  r.Email, Name: r.Name,
-		})
-	}
-	return out, nil
-}
-
 func (t *tx) AuthIsMemberByEmail(organizationID, email string) (bool, error) {
 	return t.q.AuthIsMemberByEmail(t.ctx, sqlc.AuthIsMemberByEmailParams{OrganizationID: organizationID, Email: email})
 }
@@ -141,18 +126,6 @@ func (t *tx) AuthCancelPendingInvitations(organizationID, email string, now int6
 
 func (t *tx) AuthCountPendingInvitations(organizationID string, now int64) (int64, error) {
 	return t.q.AuthCountPendingInvitations(t.ctx, sqlc.AuthCountPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
-}
-
-func (t *tx) AuthPendingInvitations(organizationID string, now int64) ([]domain.Invitation, error) {
-	rows, err := t.q.AuthListPendingInvitations(t.ctx, sqlc.AuthListPendingInvitationsParams{OrganizationID: organizationID, ExpiresAt: now})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.Invitation, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, authInvitationOf(r))
-	}
-	return out, nil
 }
 
 func (t *tx) AuthDeviceCodeByHash(hash string) (domain.DeviceCode, error) {

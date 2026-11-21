@@ -101,7 +101,6 @@ export function toDeployment(d: ApiDeployment): Deployment {
   const multi = steps.filter((s) => s.nodeId).length > 1;
   return {
     id: d.id,
-    sha: d.sha,
     message: d.message,
     status: d.status,
     startedAt: d.startedAt,

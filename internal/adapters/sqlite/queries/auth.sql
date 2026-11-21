@@ -45,12 +45,6 @@ INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES (?, 
 -- name: AuthCountMembers :one
 SELECT COUNT(*) FROM members WHERE organization_id = ?;
 
--- name: AuthListMembers :many
-SELECT m.id, m.organization_id, m.user_id, m.role, m.created_at, u.email, u.name
-FROM members m JOIN users u ON u.id = m.user_id
-WHERE m.organization_id = ?
-ORDER BY m.created_at, m.id;
-
 -- name: AuthIsMemberByEmail :one
 SELECT EXISTS (
   SELECT 1 FROM members m JOIN users u ON u.id = m.user_id
@@ -75,11 +69,6 @@ WHERE organization_id = ? AND email = ? AND status = 'pending' AND expires_at >=
 -- name: AuthCountPendingInvitations :one
 SELECT COUNT(*) FROM invitations
 WHERE organization_id = ? AND status = 'pending' AND expires_at >= ?;
-
--- name: AuthListPendingInvitations :many
-SELECT * FROM invitations
-WHERE organization_id = ? AND status = 'pending' AND expires_at >= ?
-ORDER BY created_at, id;
 
 -- name: AuthGetDeviceCodeByHash :one
 SELECT * FROM device_codes WHERE device_code_hash = ?;

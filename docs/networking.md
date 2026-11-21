@@ -11,7 +11,7 @@ This is a step back from "no user ever opens an inbound port". The tunnel produc
 
 ## Decision
 
-- **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) and the `keel` overlay ride the tailnet, see `workers.md`. The per-node agent (`keel agent`) makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing (through the host's `tailscaled`, or with `KEEL_TS_AUTHKEY` through an embedded ephemeral tsnet node, `internal/mesh`).
+- **Mesh:** Tailscale. Host `tailscaled` on every server. Swarm control traffic (2377, 7946, 4789) and the `keel` overlay ride the tailnet, see `workers.md`. The per-node agent (`keel agent`) makes one outbound HTTP call per Docker event to the control plane's tailnet address and listens on nothing (through the host's `tailscaled`).
 - **Public ingress:** `keel-proxy`, one container on the control plane (`proxy` in `deploy/compose.yml`, running `keel proxy`). HTTPS by hostname on 80/443 with automatic certificates; raw TCP on any other port, raw UDP on any port (80 and 443 included: the HTTPS server holds only their TCP side). It dials `svc-<id>:<port>` over the overlay, so a service on any server, and every replica, is reachable.
 - **Proxy:** Caddy 2.11 + [caddy-l4](https://github.com/mholt/caddy-l4) + our plugin, embedded as libraries in `keel proxy` (`internal/proxy`, was `apps/proxy`). `keel serve` owns its whole configuration and pushes it through the admin API (`internal/adapters/caddy`).
 - **Default domain:** `https://<service>-<hash6>.<public-ip-dashed>.sslip.io` (sslip.io resolves to the IP inside the name; `hash6` = FNV of the node id, so two projects' `api` never collide and renames keep the URL). When the public IP changes, `keel serve`'s start-up pass (`recoverIngress` in `internal/app/proxy.go`) moves default domains to the new one, keeping the name. Custom domains: any name with an A record to the control plane's public IP.
@@ -41,7 +41,7 @@ A container's published ports are fixed at create time, so a proxy behind `ports
 - **The admin API is a unix socket** in a volume shared with the `keel` container only (`proxy-admin`, mode 0600; `KEEL_PROXY_SOCKET`). Nothing on the overlay can reach it.
 - Upstreams resolve at connection time through Docker's DNS, so redeploys, rescheduling and replica changes never touch the proxy. A stopped service answers 502 (HTTP) or closes the connection (TCP).
 
-`keel proxy --resume` (the default, as `caddy run --resume` was): after a restart the proxy serves the last config `keel serve` pushed (autosaved in the `proxy-config` volume). Certificates and ACME accounts live in `proxy-data`.
+`keel proxy` resumes (as `caddy run --resume` did): after a restart the proxy serves the last config `keel serve` pushed (autosaved in the `proxy-config` volume). Certificates and ACME accounts live in `proxy-data`.
 
 ## Endpoints
 

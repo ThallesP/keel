@@ -28,7 +28,5 @@ func proxyCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.Socket, "socket", serve.Env("KEEL_PROXY_SOCKET", caddy.DefaultSocket), "admin socket (KEEL_PROXY_SOCKET)")
-	cmd.Flags().StringVar(&opts.ConfigFile, "config", "", "base config file instead of the built-in one")
-	cmd.Flags().BoolVar(&opts.Resume, "resume", true, "serve the last pushed config (Caddy's autosave) when there is one")
 	return cmd
 }

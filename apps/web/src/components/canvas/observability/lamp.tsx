@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { ChevronRight } from "lucide-react";
 
 import { CopyPrompt } from "../copy-prompt";

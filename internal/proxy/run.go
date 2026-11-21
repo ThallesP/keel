@@ -27,9 +27,7 @@ import (
 )
 
 type Options struct {
-	Socket     string
-	ConfigFile string
-	Resume     bool
+	Socket string
 }
 
 func Run(ctx context.Context, opts Options) error {
@@ -65,29 +63,21 @@ func Run(ctx context.Context, opts Options) error {
 func prepareACME() {
 	version, _ := caddy.Version()
 	certmagic.UserAgent = "Caddy/" + strings.TrimPrefix(version, "v")
-	if ua, ok := os.LookupEnv("USERAGENT"); ok {
-		certmagic.UserAgent = ua + " " + certmagic.UserAgent
-	}
 	certmagic.DefaultACME.Agreed = true
 }
 
 func initialConfig(opts Options) (config []byte, resumed bool, err error) {
-	if opts.Resume {
-		config, err = os.ReadFile(caddy.ConfigAutosavePath)
-		if err == nil {
-			return config, true, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, false, err
-		}
+	config, err = os.ReadFile(caddy.ConfigAutosavePath)
+	if err == nil {
+		return config, true, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, false, err
 	}
 	config, err = startConfig(opts)
 	return config, false, err
 }
 
 func startConfig(opts Options) ([]byte, error) {
-	if opts.ConfigFile != "" {
-		return os.ReadFile(opts.ConfigFile)
-	}
 	return json.Marshal(caddy.Config{Admin: &caddy.AdminConfig{Listen: "unix/" + opts.Socket + "|0600"}})
 }

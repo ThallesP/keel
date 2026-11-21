@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { Panel, useReactFlow } from "@xyflow/react";
 import { Plus, Search } from "lucide-react";
 import { useCallback, useRef, useState } from "react";

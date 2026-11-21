@@ -1,13 +1,13 @@
-import { Button } from "@my-better-t-app/ui/components/button";
+import { Button } from "@keel/ui/components/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@my-better-t-app/ui/components/dialog";
-import { Input } from "@my-better-t-app/ui/components/input";
-import { Label } from "@my-better-t-app/ui/components/label";
+} from "@keel/ui/components/dialog";
+import { Input } from "@keel/ui/components/input";
+import { Label } from "@keel/ui/components/label";
 import { useState } from "react";
 import { toast } from "sonner";
 

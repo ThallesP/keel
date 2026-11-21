@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { useReactFlow } from "@xyflow/react";
 import { Braces, Eye, EyeOff, Link2, Lock, LockOpen, Pencil, Plus, Trash2 } from "lucide-react";

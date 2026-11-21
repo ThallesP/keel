@@ -1,5 +1,5 @@
-import { Button } from "@my-better-t-app/ui/components/button";
-import { Input } from "@my-better-t-app/ui/components/input";
+import { Button } from "@keel/ui/components/button";
+import { Input } from "@keel/ui/components/input";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";

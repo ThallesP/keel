@@ -28,17 +28,14 @@ FROM node:24-slim AS web
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY --from=prune /app/out/json/ .
-# Lifecycle scripts (the root postinstall runs varlock codegen) need sources not copied yet.
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
 # The API document the dashboard's client is generated from (kubb.config.ts reads
 # ../../openapi.json; `bun run build` runs `kubb generate` first). turbo prune copies workspace
 # packages only, so it comes straight from the build context.
 COPY openapi.json ./
 ENV NODE_ENV=production KUBB_DISABLE_TELEMETRY=1
-# varlock generates src/gen/env.ts from .env.schema, while the app still has one.
 RUN cd apps/web \
-    && if [ -f .env.schema ]; then bun x varlock codegen; fi \
     && bun run build \
     && test -f dist/index.html
 

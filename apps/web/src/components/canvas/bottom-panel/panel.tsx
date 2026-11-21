@@ -1,4 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { useNodes } from "@xyflow/react";
 import { Suspense } from "react";

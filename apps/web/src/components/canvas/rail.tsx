@@ -1,10 +1,8 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
+import { cn } from "@keel/ui/lib/utils";
 import { getRouteApi } from "@tanstack/react-router";
-import { Activity, Braces, ChartLine, Settings, Workflow, type LucideIcon } from "lucide-react";
+import { Activity, Settings, Workflow, type LucideIcon } from "lucide-react";
 
-import { notWired } from "./not-wired";
-
-type Item = { label: string; icon: LucideIcon; active?: boolean; onClick?: () => void };
+type Item = { label: string; icon: LucideIcon; active: boolean; onClick: () => void };
 
 const route = getRouteApi("/_auth/p/$projectId");
 
@@ -15,7 +13,7 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
       aria-label={label}
       aria-current={active ? "page" : undefined}
       title={label}
-      onClick={() => !active && (onClick ?? (() => notWired(label)))()}
+      onClick={() => !active && onClick()}
       className={cn(
         "flex size-8 items-center justify-center rounded-md",
         active
@@ -30,7 +28,7 @@ function RailButton({ label, icon: Icon, active, onClick }: Item) {
 
 /**
  * Canvas, Observability (requests and logs in one stream) and Settings are views of the same
- * project (`?view=`); the rest are still mockup.
+ * project (`?view=`).
  */
 export function Rail() {
   const { view } = route.useSearch();
@@ -47,8 +45,6 @@ export function Rail() {
       active: view === "observability",
       onClick: () => show("observability"),
     },
-    { label: "Metrics", icon: ChartLine },
-    { label: "Variables", icon: Braces },
   ];
   return (
     <nav className="flex w-[52px] shrink-0 flex-col items-center justify-between border-r border-line bg-bg py-3">

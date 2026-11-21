@@ -25,27 +25,6 @@ func foundOrganization(tx Tx, ch *Changes, ownerID string, now int64) error {
 	return nil
 }
 
-func (a *App) ListMembers(ctx context.Context, actor domain.Actor) ([]MemberAccount, error) {
-	if err := actor.RequireMember(); err != nil {
-		return nil, err
-	}
-	var out []MemberAccount
-	err := a.read(ctx, func(tx Tx) (err error) { out, err = tx.AuthMembers(actor.OrganizationID); return })
-	return out, err
-}
-
-func (a *App) ListInvitations(ctx context.Context, actor domain.Actor) ([]domain.Invitation, error) {
-	if err := actor.RequireMember(); err != nil {
-		return nil, err
-	}
-	var out []domain.Invitation
-	err := a.read(ctx, func(tx Tx) (err error) {
-		out, err = tx.AuthPendingInvitations(actor.OrganizationID, a.Now())
-		return
-	})
-	return out, err
-}
-
 func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email string, role domain.Role) (domain.Invitation, error) {
 	if err := actor.RequireMember(); err != nil {
 		return domain.Invitation{}, err
@@ -90,32 +69,6 @@ func (a *App) CreateInvitation(ctx context.Context, actor domain.Actor, email st
 		return nil
 	})
 	return inv, err
-}
-
-func (a *App) CancelInvitation(ctx context.Context, actor domain.Actor, id string) error {
-	if err := actor.RequireMember(); err != nil {
-		return err
-	}
-	return a.write(ctx, func(tx Tx, ch *Changes) error {
-		inv, err := tx.AuthInvitation(id)
-		if errors.Is(err, ErrNoRow) || (err == nil && inv.OrganizationID != actor.OrganizationID) {
-			return domain.NotFound(domain.MsgInvitationNotFound)
-		}
-		if err != nil {
-			return err
-		}
-		if !actor.Role.CanManageInvitations() {
-			return domain.E(domain.CodeForbidden, "You are not allowed to cancel this invitation")
-		}
-		if !inv.Standing(a.Now()) {
-			return nil
-		}
-		if _, err := tx.AuthSetInvitationStatus(inv.ID, domain.InvitationPending, domain.InvitationCanceled); err != nil {
-			return err
-		}
-		ch.Organization(inv.OrganizationID)
-		return nil
-	})
 }
 
 type PublicInvitation struct {

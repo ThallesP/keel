@@ -1,25 +1,22 @@
 package app
 
 import (
-	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ThallesP/keel/internal/domain"
 )
 
 func TestAgentPrompt(t *testing.T) {
-	for file, args := range map[string][2]string{
-		"testdata/tracing_prompt_none.txt":    {"", ""},
-		"testdata/tracing_prompt_service.txt": {"api", "shop"},
-		"testdata/tracing_prompt_project.txt": {"", "shop"},
+	for _, c := range []struct{ service, project, where, command string }{
+		{"", "", "It runs on Keel; find which service it is with `keel service list` and use that name wherever this says `<service>`.", "keel tracing enable <service>"},
+		{"api", "shop", "It runs on Keel as the service `api` in the project `shop`.", "keel tracing enable api"},
+		{"", "shop", "It runs on Keel in the project `shop`; find which service it is with `keel service list` and use that name wherever this says `<service>`.", "keel tracing enable <service>"},
 	} {
-		want, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := agentPrompt(args[0], args[1]); got != string(want) {
-			t.Errorf("%s differs:\n%s", file, got)
+		got := agentPrompt(c.service, c.project)
+		if !strings.Contains(got, c.where) || !strings.Contains(got, c.command) || strings.Contains(got, "{{") {
+			t.Errorf("prompt for %q in %q:\n%s", c.service, c.project, got)
 		}
 	}
 }

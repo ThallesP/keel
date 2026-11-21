@@ -90,7 +90,6 @@ export type DeployStep = {
 
 export type Deployment = {
   id: string;
-  sha?: string;
   message: string;
   status: ApiDeployment["status"];
   startedAt: number;

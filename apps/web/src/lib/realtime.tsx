@@ -28,37 +28,17 @@ import type { Me } from "@/gen/api";
 
 import { invalidateAll, invalidateTopics, markSignedOut, meQueryOptions } from "./query";
 
-/** Close code: the session is gone (terminal). */
-export const CLOSE_SIGNED_OUT = 4501;
-
 /** Client-side batching of invalidation topics (web-data.md §9.1). */
 const BATCH_MS = 50;
 /** Delay before reopening after a terminal close that is not "signed out". */
 const RETRY_TERMINAL_MS = 5_000;
 
-/**
- * - `idle`: no socket (signed out, or the session is still loading).
- * - `connecting`: opening, or reconnecting after a drop.
- * - `connected`: live; pushes arrive.
- * - `disconnected`: closed for good until something changes (a terminal close).
- */
-export type RealtimeStatus = "idle" | "connecting" | "connected" | "disconnected";
-
 type RealtimeContextValue = {
-  status: RealtimeStatus;
   /** Drops the connection and opens a new one (the server re-reads the session). */
   reconnect: () => void;
 };
 
-const RealtimeContext = createContext<RealtimeContextValue>({
-  status: "idle",
-  reconnect: () => {},
-});
-
-/** `ws://host/api/ws` or `wss://…`, on the page's own origin. */
-export function realtimeUrl(loc: Location = window.location): string {
-  return `${loc.protocol === "https:" ? "wss:" : "ws:"}//${loc.host}/api/ws`;
-}
+const RealtimeContext = createContext<RealtimeContextValue>({ reconnect: () => {} });
 
 type Publication = { type?: unknown; topics?: unknown };
 
@@ -73,7 +53,6 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   // Changing user or organization needs a new connection.
   const identity = sessionIdentity(me);
 
-  const [status, setStatus] = useState<RealtimeStatus>("idle");
   const [epoch, setEpoch] = useState(0);
   const reconnect = useCallback(() => setEpoch((n) => n + 1), []);
   // The first connect of the tab's life finds the cache fresh (queries fetched as the page
@@ -94,31 +73,26 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       void invalidateTopics(queryClient, topics);
     };
 
-    const centrifuge = new Centrifuge(realtimeUrl(), {
+    const { protocol, host } = window.location;
+    const centrifuge = new Centrifuge(`${protocol === "https:" ? "wss:" : "ws:"}//${host}/api/ws`, {
       name: "keel-web",
       minReconnectDelay: 500,
       maxReconnectDelay: 10_000,
     });
 
-    centrifuge.on("connecting", () => {
-      if (!closed) setStatus("connecting");
-    });
     centrifuge.on("connected", () => {
       if (closed) return;
-      setStatus("connected");
       if (everConnected.current) void invalidateAll(queryClient);
       everConnected.current = true;
     });
     centrifuge.on("disconnected", (ctx: DisconnectedContext) => {
       if (closed) return;
-      if (ctx.code === CLOSE_SIGNED_OUT) {
-        setStatus("disconnected");
+      if (ctx.code === 4501) {
         void markSignedOut(queryClient); // identity becomes null; this effect cleans up
         return;
       }
       // A terminal close we did not ask for (centrifuge reconnects on its own for 4001, 3xxx
       // shutdown / server error and transport drops): try again later.
-      setStatus("connecting");
       retryTimer = setTimeout(() => {
         if (!closed) centrifuge.connect();
       }, RETRY_TERMINAL_MS);
@@ -141,19 +115,11 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
   }, [identity, epoch, queryClient]);
 
-  const value = useMemo(
-    () => ({ status: identity ? status : "idle", reconnect }),
-    [identity, status, reconnect],
-  );
+  const value = useMemo(() => ({ reconnect }), [reconnect]);
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
 }
 
-/** The socket's state and a way to force a new connection. */
+/** A way to force a new connection. */
 export function useRealtime(): RealtimeContextValue {
   return useContext(RealtimeContext);
-}
-
-/** The socket's state: `idle` (signed out), `connecting`, `connected`, `disconnected`. */
-export function useRealtimeStatus(): RealtimeStatus {
-  return useContext(RealtimeContext).status;
 }

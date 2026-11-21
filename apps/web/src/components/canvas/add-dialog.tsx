@@ -1,11 +1,10 @@
-import { Container, GitBranch } from "lucide-react";
+import { Container } from "lucide-react";
 import { useMemo } from "react";
 
 import { Palette, type PalettePage } from "@/components/palette";
 
 import type { CreateOptions } from "./actions";
 import { NodeTypeIcon } from "./nodes/icons";
-import { notWired } from "./not-wired";
 import type { InfraNodeType } from "./types";
 
 /** What a new node runs; `type` decides the shell, the rest the container. */
@@ -32,14 +31,6 @@ function pages(pick: (choice: AddChoice) => void): PalettePage {
     submitHint: "Docker image · ships right away",
     submitIcon: <Container size={14} strokeWidth={1.5} aria-hidden />,
     items: [
-      {
-        id: "github",
-        label: "GitHub repo",
-        hint: "Build from source · coming soon",
-        icon: <GitBranch size={14} strokeWidth={1.5} aria-hidden />,
-        disabled: true,
-        onSelect: () => notWired("GitHub repo"),
-      },
       {
         id: "nginx",
         label: "nginx",
@@ -71,7 +62,7 @@ function pages(pick: (choice: AddChoice) => void): PalettePage {
       {
         id: "service",
         label: "Service",
-        hint: "Docker image or GitHub repo",
+        hint: "Docker image",
         icon: <NodeTypeIcon type="service" />,
         onSelect: () => service,
       },

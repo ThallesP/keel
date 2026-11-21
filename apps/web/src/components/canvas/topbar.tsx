@@ -1,5 +1,4 @@
-import { cn } from "@my-better-t-app/ui/lib/utils";
-import { ChevronDown } from "lucide-react";
+import { cn } from "@keel/ui/lib/utils";
 import { useCallback, useMemo } from "react";
 
 import { useListNodes } from "@/gen/api";
@@ -9,7 +8,6 @@ import { AccountMenu } from "./account-menu";
 import { useCanvasActions } from "./actions";
 import { useEnvironment } from "./environment";
 import { formatElapsed } from "./format";
-import { notWired } from "./not-wired";
 import { Kbd, Spinner } from "./primitives";
 import { ProjectSwitcher } from "./project-switcher";
 import { useLatestDeployment, useSummary } from "./use-data";
@@ -99,15 +97,10 @@ export function Topbar() {
         <span className="text-md text-line">/</span>
         <ProjectSwitcher />
         <span className="text-md text-line">/</span>
-        <button
-          type="button"
-          onClick={() => notWired("Environment switcher")}
-          className="flex h-6 items-center gap-1.5 rounded-md border border-line pr-2 pl-1.5 text-xs font-medium text-ink hover:bg-surface-2"
-        >
+        <span className="flex h-6 items-center gap-1.5 rounded-md border border-line px-2 text-xs font-medium text-ink">
           <span className="size-1.5 rounded-full bg-success" />
           {environmentName}
-          <ChevronDown size={10} strokeWidth={1.6} className="text-muted-foreground" aria-hidden />
-        </button>
+        </span>
       </div>
       <div className="flex items-center gap-2.5">
         <ShipButton />

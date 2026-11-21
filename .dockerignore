@@ -1,42 +1,14 @@
 **/node_modules
 .git
-
 **/dist
-**/build
-**/.next
-**/.nuxt
-**/.output
-**/.svelte-kit
-**/.astro
 **/.turbo
-.turbo
-
-**/.wrangler
-**/.alchemy
-**/.expo
-**/.vercel
 *.log
-
 Dockerfile
-**/Dockerfile
-docker-compose.yml
-
-# Env value files stay out of COPY layers; runtime env comes from compose env_file,
-# build-time configuration uses BuildKit secrets; public values use build args
 **/.env
 **/.env.*
-!**/.env.example
 !**/.env.schema
-
-local.db
-local.db-*
-.data
-
-# Agent worktrees (full repo copies) and tool state
 .claude
 .agents
-
-# keel serve state (KEEL_DATA_DIR in dev: make dev) and local binaries
 .keel
 **/keel.db*
 bin

@@ -142,7 +142,6 @@ internal/     domain, app (use cases), adapters (SQLite, Swarm, Caddy, Axiom), t
               serve, agent, proxy, cli
 apps/
   web/        dashboard (React, TanStack Router, React Flow canvas), embedded into the binary
-  fumadocs/   docs site
 packages/
   ui/         shared shadcn/ui components
 Dockerfile    the image, ghcr.io/thallesp/keel

@@ -45,19 +45,6 @@ type AuthSuccess struct {
 	Success bool `json:"success"`
 }
 
-type Member struct {
-	ID        string      `json:"id"`
-	UserID    string      `json:"userId"`
-	Email     string      `json:"email"`
-	Name      string      `json:"name"`
-	Role      domain.Role `json:"role" enum:"owner,admin,member"`
-	CreatedAt int64       `json:"createdAt" doc:"When they joined (unix ms)"`
-}
-
-type Members struct {
-	Members []Member `json:"members"`
-}
-
 type CreateInvitationRequest struct {
 	Email string      `json:"email"`
 	Role  domain.Role `json:"role,omitempty" doc:"owner, admin or member (default)"`
@@ -68,20 +55,6 @@ type CreatedInvitation struct {
 	Email     string      `json:"email"`
 	Role      domain.Role `json:"role"`
 	ExpiresAt int64       `json:"expiresAt" doc:"unix ms"`
-}
-
-type Invitation struct {
-	ID        string                  `json:"id"`
-	Email     string                  `json:"email"`
-	Role      domain.Role             `json:"role"`
-	Status    domain.InvitationStatus `json:"status" enum:"pending,accepted,canceled"`
-	InviterID string                  `json:"inviterId"`
-	ExpiresAt int64                   `json:"expiresAt"`
-	CreatedAt int64                   `json:"createdAt"`
-}
-
-type Invitations struct {
-	Invitations []Invitation `json:"invitations"`
 }
 
 type PublicInvitation struct {

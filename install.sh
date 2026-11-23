@@ -25,7 +25,7 @@
 #   KEEL_PULL=0             Do not pull images (use images already present locally)
 # Values you pass are saved in $KEEL_DIR/.env and reused by later runs.
 #
-# See README.md, "Install", for what this touches and how to uninstall.
+# See docs/install.md for what this touches and how to uninstall.
 set -Eeuo pipefail
 
 WARNINGS=()

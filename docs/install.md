@@ -1,0 +1,102 @@
+# Installing Keel
+
+On a fresh Linux server (amd64 or arm64, 2 GB RAM or more):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ThallesP/keel/main/install.sh | sudo bash
+```
+
+If the server isn't on your tailnet yet, the installer prints a Tailscale login link and waits. When it finishes, it prints the dashboard URL (`http://<tailnet-ip>`). Open it from any device on your tailnet and sign up.
+
+To put services on the internet, let ports 80 and 443 (TCP) reach this server: its cloud firewall, `ufw`, or a port-forward on your router. Each TCP or UDP port you expose later (a database, a game server) needs the same. The dashboard and its API stay tailnet-only either way.
+
+You need a Tailscale account (the free plan works). Reading [install.sh](../install.sh) before piping it to a shell is a good habit; it is one file.
+
+## What the installer does
+
+1. Installs Docker ([get.docker.com](https://get.docker.com)) and Tailscale ([tailscale.com/install.sh](https://tailscale.com/install.sh)) if they are missing, and joins the tailnet. Looks up the server's public IPv4 (`api.ipify.org`), which names the HTTPS domains of exposed services.
+2. Writes its state to `/opt/keel`. `.env` (mode 0600) holds generated secrets and settings; `compose.yml` defines the control plane.
+3. Initialises Docker Swarm on the tailnet address and creates the `keel` overlay network.
+4. Starts the control plane with Docker Compose (`docker compose -p keel`): two containers from one image, `ghcr.io/thallesp/keel`.
+   - `keel`: `keel serve`, the dashboard and its API. Its SQLite database lives in the `keel_keel-data` volume; it has the Docker socket mounted, because it drives Swarm.
+   - `proxy`: `keel proxy` ([Caddy](https://caddyserver.com) with [caddy-l4](https://github.com/mholt/caddy-l4)), the public way in to exposed services. It listens on nothing until you expose something and never gets the Docker socket; see [docs/networking.md](networking.md).
+5. `keel serve` runs its schema migrations, syncs the proxy and starts the `keel-agent` global service: one agent per server, forwarding Docker events and shipping container logs.
+6. Checks that everything answers, then prints the URL.
+
+The control plane's own ports bind to the tailnet IP only:
+
+| Port | What                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------ |
+| 80   | Dashboard and API, plus the routes agents, the proxy and traced services call (`/worker`, `/proxy`, `/otlp`) |
+
+Swarm's ports (2377, 7946, 4789) are on the tailnet as well. The proxy binds the server's other addresses (never the tailnet one, never loopback): 80 and 443 once a service has an HTTPS endpoint, and each TCP/UDP port you expose. The first account created owns the install; after that, sign-up is by invitation only (account menu → Invite people).
+
+## Upgrade
+
+Re-run the install command. It is idempotent: secrets are kept, the image is pulled again, and `keel serve` updates the agent on every server itself.
+
+The Convex-era Keel does not upgrade to this one. On a server that still has its `keel_convex-data` volume, the installer stops before changing anything, and its `fix:` line says how to remove the old install once your services are off it.
+
+Pin a version with `KEEL_VERSION` (an image tag such as `1.2.3` or `sha-abc1234`). The pin is remembered by later runs.
+
+## Options
+
+All optional. Values you pass are saved in `/opt/keel/.env` and reused by later runs.
+
+| Variable                 | Default            |                                                                                                                                                                                                                                 |
+| ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KEEL_TAILSCALE_AUTHKEY` | –                  | `tskey-auth-…` [auth key](https://login.tailscale.com/admin/settings/keys) to join the tailnet without a browser login                                                                                                          |
+| `KEEL_VERSION`           | `latest`           | Tag of the `keel` image                                                                                                                                                                                                         |
+| `KEEL_PUBLIC_IP`         | detected           | The server's public IPv4: what exposed services' domains and ports point at (behind NAT, the router's). Detected again on every run unless you set it; if detection fails, the last value is kept. Default domains move with it |
+| `KEEL_ACME_EMAIL`        | –                  | Email for HTTPS certificates. Adds ZeroSSL after Let's Encrypt, so the shared sslip.io quota running out does not stop new domains                                                                                              |
+| `KEEL_ACME_CA`           | –                  | Testing only: ACME directory that replaces every certificate issuer (e.g. Let's Encrypt staging). Not saved: pass it on every run that wants it                                                                                 |
+| `KEEL_WEB_PORT`          | `80`               | Dashboard port                                                                                                                                                                                                                  |
+| `KEEL_JSON`              | –                  | `1`: print one JSON result object on stdout (progress stays on stderr)                                                                                                                                                          |
+| `KEEL_ADDR`              | tailnet IP         | Bind to this IP instead and skip Tailscale (LAN or CI only; not what you want in production). The dashboard then holds port 80 on that address, so HTTPS endpoints fail there unless `KEEL_WEB_PORT` moves it                   |
+| `KEEL_DIR`               | `/opt/keel`        | State directory                                                                                                                                                                                                                 |
+| `KEEL_REF`               | `main`             | Git ref that `compose.yml` and the Swarm bootstrap script are fetched from                                                                                                                                                      |
+| `KEEL_SRC`               | –                  | Use a local checkout instead of fetching (development)                                                                                                                                                                          |
+| `KEEL_IMAGE_PREFIX`      | `ghcr.io/thallesp` | Image registry and namespace                                                                                                                                                                                                    |
+| `KEEL_PULL`              | `1`                | `0`: use images already present locally                                                                                                                                                                                         |
+
+Pass them to the root side of the pipe: `curl -fsSL … | sudo KEEL_VERSION=1.2.3 bash`.
+
+## Uninstall
+
+```bash
+sudo docker compose -p keel --env-file /opt/keel/.env -f /opt/keel/compose.yml down   # control plane
+sudo docker service rm keel-agent                                                      # per-node agent
+sudo docker service ls -q --filter label=keel.service | xargs -r sudo docker service rm  # your services
+```
+
+Data is kept: the database (`keel_keel-data`), the proxy's certificates (`keel_proxy-data`) and your services' volumes. Remove them with `docker volume rm` and delete `/opt/keel` to start from scratch. Leave the Swarm with `docker swarm leave --force` only if nothing else uses it.
+
+## Troubleshooting
+
+The installer stops at the first problem and prints an `error:` line plus a `fix:` line. Re-running it after fixing the problem is always safe.
+
+- **Logs:** `sudo docker compose -p keel logs keel proxy` for the control plane, and `sudo docker service logs keel-agent` for the agents.
+- **An exposed service says "Open ports 80 and 443…":** the certificate authority could not reach the server. Check the firewall or router; the endpoint turns live by itself once it can.
+
+## Install with an agent
+
+Everything above works unattended. Give your agent (Claude Code, Codex, etc.) shell access to the server and this:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ThallesP/keel/main/install.sh \
+  | sudo KEEL_TAILSCALE_AUTHKEY=tskey-auth-... KEEL_JSON=1 bash
+```
+
+The contract:
+
+- **Output:** stdout is exactly one JSON object and progress goes to stderr.
+  - Success prints `{"ok":true,"url":…,"apiUrl":…,"version":…,"stateDir":"/opt/keel","publicIp":…,"warnings":[]}` and exits 0. `publicIp` is `""` when it could not be detected. `apiUrl` equals `url`. `warnings` repeats every `warning:` line of the run.
+  - Failure prints `{"ok":false,"error":…,"fix":…,"warnings":[…]}` and exits non-zero. `fix` is the next step to try.
+- **Without `KEEL_TAILSCALE_AUTHKEY`:** if the server is not on a tailnet yet, the installer prints a login URL on stderr and waits up to 15 minutes. Relay the URL to a human.
+- **Idempotent:** re-running is safe, never rotates secrets, and is also how you upgrade.
+- **Verify:**
+  ```bash
+  curl -fsS "$url/api/meta"                                       # control plane: name, version, siteUrl
+  sudo docker compose -p keel ps                                  # keel, proxy: healthy
+  sudo docker service ls --filter name=keel-agent                 # replicas n/n
+  ```

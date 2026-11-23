@@ -2,7 +2,7 @@
 
 Self-hosted deploy platform. An alternative to Coolify and Dokploy, built around the UI and the deploy experience.
 
-![Adding a service on the Keel canvas: pick an image, it deploys and goes online next to the api, Postgres and Redis](docs/demo.gif)
+https://github.com/user-attachments/assets/a52d9b97-5b08-43c3-a404-429828682d59
 
 - **Canvas first.** A project is a canvas: services, databases and caches are nodes, and variables wire them together.
 - **Multi-server by default.** Docker Swarm under the hood; a single server is a first-class cluster.
